@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from freyja.config import settings
 from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
+from freyja.router import RouteRequest, router
 
 app = FastAPI(
     title="Freyja Director",
@@ -13,6 +14,7 @@ app = FastAPI(
 
 ollama = OllamaClient()
 openrouter = OpenRouterClient()
+router.register_clients(ollama, openrouter)
 
 
 @app.get("/")
@@ -89,54 +91,24 @@ async def openrouter_chat(request: ChatRequest) -> dict[str, str]:
     }
 
 
-class RouteRequest(BaseModel):
-    prompt: str
-    provider: str = "auto"
-    model: str | None = None
-
-
 @app.post("/route")
-async def route(request: RouteRequest) -> dict[str, str]:
-    if request.provider not in {"local", "cloud", "auto"}:
+async def route(request: RouteRequest) -> dict:
+    result = await router.execute(request)
+    if result.decision.provider == "error":
+        raise HTTPException(status_code=400, detail=result.decision.reason)
+    if not result.response:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid provider '{request.provider}'. Use local, cloud, or auto.",
+            status_code=503,
+            detail=result.decision.public_error_message or "No approved provider is currently available.",
         )
-
-    if request.provider == "local":
-        response = await ollama.chat(prompt=request.prompt, model=request.model)
-        if "error" in response:
-            raise HTTPException(status_code=503, detail=response["error"])
-        return {
-            "provider": "ollama",
-            "model": response.get("model", ""),
-            "response": response.get("message", {}).get("content", ""),
-        }
-
-    if request.provider == "cloud":
-        response = await openrouter.chat(prompt=request.prompt, model=request.model)
-        if "error" in response:
-            raise HTTPException(status_code=503, detail=response["error"])
-        return {
-            "provider": "openrouter",
-            "model": response.get("model", ""),
-            "response": response.get("response", ""),
-        }
-
-    response = await ollama.chat(prompt=request.prompt, model=request.model)
-    if "error" not in response:
-        return {
-            "provider": "ollama",
-            "model": response.get("model", ""),
-            "response": response.get("message", {}).get("content", ""),
-        }
-
-    response = await openrouter.chat(prompt=request.prompt, model=request.model)
-    if "error" in response:
-        raise HTTPException(status_code=503, detail=response["error"])
-
     return {
-        "provider": "openrouter",
-        "model": response.get("model", ""),
-        "response": response.get("response", ""),
+        "provider": result.decision.provider,
+        "model": result.decision.model,
+        "response": result.response,
+        "reason": result.decision.reason,
+        "privacy_classification": result.decision.privacy_classification,
+        "estimated_cost_usd": result.decision.estimated_cost_usd,
+        "limitation_notice": result.decision.limitation_notice,
+        "fallback_attempts": result.decision.fallback_attempts,
+        "request_id": result.decision.request_id,
     }

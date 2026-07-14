@@ -173,4 +173,24 @@ def test_route_auto_returns_503_when_both_fail() -> None:
         response = client.post("/route", json={"prompt": "Say hello", "provider": "auto"})
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "OpenRouter API key not configured"
+    detail = response.json()["detail"]
+    assert detail == "No approved provider is currently available."
+
+
+def test_route_503_does_not_expose_credentials() -> None:
+    with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_ollama, patch(
+        "freyja.openrouter_client.OpenRouterClient.chat", new_callable=AsyncMock
+    ) as mock_openrouter:
+        mock_ollama.return_value = {"error": "Authorization: Bearer sk-secret-12345"}
+        mock_openrouter.return_value = {"error": "Authorization: Bearer sk-cloud-67890"}
+        response = client.post("/route", json={"prompt": "large prompt", "provider": "auto", "task_type": "coding"})
+
+    assert response.status_code == 503
+    body = response.json()
+    detail = body["detail"]
+    assert detail == "No approved provider is currently available."
+    raw = str(body)
+    assert "sk-" not in raw
+    assert "Bearer" not in raw
+    assert "Authorization" not in raw
+    assert "secret" not in raw.lower()
