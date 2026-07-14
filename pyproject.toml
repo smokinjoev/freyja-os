@@ -7,7 +7,7 @@ name = "freyja-os"
 version = "0.1.0"
 description = "A locally controlled personal-agent orchestration platform."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi",
     "httpx",
