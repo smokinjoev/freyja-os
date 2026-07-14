@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from freyja.config import settings
+from freyja.memory import memory_router
 from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
 from freyja.router import RouteRequest, router
@@ -15,6 +16,8 @@ app = FastAPI(
 ollama = OllamaClient()
 openrouter = OpenRouterClient()
 router.register_clients(ollama, openrouter)
+
+app.include_router(memory_router)
 
 
 @app.get("/")

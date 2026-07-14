@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     local_max_prompt_chars: int = 8000
     openrouter_allowlist: str = Field(default="", alias="OPENROUTER_ALLOWLIST")
 
+    memory_enabled: bool = True
+    memory_database_path: str = "/Users/freyja/freyja-os/data/freyja.db"
+    memory_max_messages_per_conversation: int = 1000
+    memory_retention_days: int = 90
+
     @property
     def approved_openrouter_models(self) -> list[str]:
         if not self.openrouter_allowlist:

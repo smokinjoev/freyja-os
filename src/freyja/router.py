@@ -5,6 +5,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from freyja.config import settings
+from freyja.memory import store as memory_store
+from freyja.memory.models import AppendMessageRequest, CreateConversationRequest
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,7 @@ class RouteRequest(BaseModel):
     privacy: str | None = None
     tools_required: bool = False
     context_size: int = 0
+    conversation_id: str | None = None
 
 
 class RoutingDecision(BaseModel):
@@ -432,6 +435,7 @@ class Router:
 
             content = response.get("message", {}).get("content", "")
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
+            await self._record_memory(request, decision, content)
             return RoutingResult(decision=decision, response=content)
 
         if decision.provider == "openrouter":
@@ -455,12 +459,58 @@ class Router:
                 return RoutingResult(decision=decision, response="")
 
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
+            response_text = response.get("response", "")
+            await self._record_memory(request, decision, response_text)
             return RoutingResult(
                 decision=decision,
-                response=response.get("response", ""),
+                response=response_text,
             )
 
+        await self._record_memory(request, decision, "")
         return RoutingResult(decision=decision, response="")
+
+    async def _record_memory(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        response_text: str,
+    ) -> None:
+        if not request.conversation_id:
+            return
+        try:
+            store = memory_store.get_active_store()
+            store.create_conversation(CreateConversationRequest(conversation_id=request.conversation_id))
+            store.append_message(
+                AppendMessageRequest(
+                    conversation_id=request.conversation_id,
+                    role="user",
+                    content=request.prompt,
+                    provider=None,
+                    model=None,
+                    request_id=decision.request_id,
+                    metadata={
+                        "task_type": request.task_type,
+                        "provider": request.provider,
+                        "privacy_classification": decision.privacy_classification,
+                    },
+                )
+            )
+            store.append_message(
+                AppendMessageRequest(
+                    conversation_id=request.conversation_id,
+                    role="assistant",
+                    content=response_text,
+                    provider=decision.provider,
+                    model=decision.model,
+                    request_id=decision.request_id,
+                    metadata={
+                        "estimated_cost_usd": decision.estimated_cost_usd,
+                        "fallback_attempts": len(decision.fallback_attempts),
+                    },
+                )
+            )
+        except Exception:
+            logger.exception("Memory recording failed for conversation %s", request.conversation_id)
 
     async def _try_openrouter_fallback(
         self,
