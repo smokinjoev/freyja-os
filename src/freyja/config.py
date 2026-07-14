@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     memory_max_messages_per_conversation: int = 1000
     memory_retention_days: int = 90
 
+    tools_enabled: bool = True
+    tools_default_timeout_seconds: int = 30
+    tools_audit_log_enabled: bool = True
+
     @property
     def approved_openrouter_models(self) -> list[str]:
         if not self.openrouter_allowlist:

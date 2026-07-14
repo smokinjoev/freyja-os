@@ -1,0 +1,346 @@
+import logging
+from unittest.mock import patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from freyja.config import settings
+from freyja.main import app
+from freyja.memory.models import AppendMessageRequest, CreateConversationRequest
+from freyja.memory.store import MemoryStore, set_store
+from freyja.tools.builtin import register_builtin_tools
+from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLevel
+from freyja.tools.registry import DisabledToolRegistry, ToolRegistry, get_registry, set_registry
+
+
+@pytest.fixture
+def registry(monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
+    monkeypatch.setattr(settings, "tools_enabled", True)
+    r = ToolRegistry(default_timeout_seconds=5, audit_enabled=False)
+    set_registry(r)
+    yield r
+    set_registry(None)
+
+
+@pytest.fixture
+def disabled_registry(monkeypatch: pytest.MonkeyPatch) -> DisabledToolRegistry:
+    monkeypatch.setattr(settings, "tools_enabled", False)
+    d = DisabledToolRegistry()
+    set_registry(d)
+    yield d
+    set_registry(None)
+
+
+@pytest.fixture
+def client() -> TestClient:
+    return TestClient(app)
+
+
+def test_register_and_list_tools(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(
+        name="echo",
+        description="Echoes arguments",
+        input_schema={"type": "object", "properties": {"value": {"type": "string"}}},
+        output_schema={"type": "object", "properties": {"value": {"type": "string"}}},
+    )
+
+    async def echo(request: ToolExecutionRequest) -> dict:
+        return {"value": request.arguments.get("value")}
+
+    registry.register(definition, echo)
+    tools = registry.list_tools()
+    assert len(tools) == 1
+    assert tools[0].name == "echo"
+
+
+def test_register_duplicate_rejected(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(name="unique", description="One only")
+
+    async def noop(request: ToolExecutionRequest) -> dict:
+        return {}
+
+    registry.register(definition, noop)
+    with pytest.raises(ValueError, match="already registered"):
+        registry.register(definition, noop)
+
+
+def test_unregister(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(name="tmp", description="Temporary")
+
+    async def noop(request: ToolExecutionRequest) -> dict:
+        return {}
+
+    registry.register(definition, noop)
+    assert registry.unregister("tmp") is True
+    assert registry.unregister("tmp") is False
+    assert registry.get_tool("tmp") is None
+
+
+def test_discovery(registry: ToolRegistry) -> None:
+    assert registry.list_tools() == []
+    register_builtin_tools(registry)
+    names = {t.name for t in registry.list_tools()}
+    assert names == {"system_health", "list_models", "recall_conversation"}
+
+
+def test_disable_tool_rejects_execution(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(name="gate", description="Gated")
+
+    async def noop(request: ToolExecutionRequest) -> dict:
+        return {}
+
+    registry.register(definition, noop)
+    registry.set_enabled("gate", False)
+    result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="gate")))
+    assert result.success is False
+    assert result.error_code == "tool_disabled"
+    assert result.public_error_message == "Tool is currently disabled."
+
+
+def test_unknown_tool_rejected(registry: ToolRegistry) -> None:
+    result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="missing")))
+    assert result.success is False
+    assert result.error_code == "tool_not_found"
+    assert result.public_error_message == "Tool not found."
+
+
+def test_input_validation(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(
+        name="greet",
+        description="Greets a user",
+        input_schema={
+            "type": "object",
+            "required": ["name"],
+            "properties": {"name": {"type": "string"}},
+        },
+    )
+
+    async def greet(request: ToolExecutionRequest) -> dict:
+        return {"message": f"Hello, {request.arguments['name']}"}
+
+    registry.register(definition, greet)
+    result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="greet")))
+    assert result.success is False
+    assert result.error_code == "validation_error"
+    assert "Missing required argument" in result.public_error_message
+
+    result = asyncio_run(
+        registry.execute(ToolExecutionRequest(tool_name="greet", arguments={"name": 123}))
+    )
+    assert result.success is False
+    assert "type string" in result.public_error_message
+
+
+def test_successful_execution(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(
+        name="add",
+        description="Adds two numbers",
+        input_schema={
+            "type": "object",
+            "required": ["a", "b"],
+            "properties": {"a": {"type": "integer"}, "b": {"type": "integer"}},
+        },
+    )
+
+    async def add(request: ToolExecutionRequest) -> dict:
+        return {"sum": request.arguments["a"] + request.arguments["b"]}
+
+    registry.register(definition, add)
+    result = asyncio_run(
+        registry.execute(ToolExecutionRequest(tool_name="add", arguments={"a": 2, "b": 3}))
+    )
+    assert result.success is True
+    assert result.output == {"sum": 5}
+    assert result.request_id
+
+
+def test_timeout_handling(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(
+        name="slow",
+        description="Sleeps",
+        timeout_seconds=0,
+    )
+
+    async def slow(request: ToolExecutionRequest) -> dict:
+        import asyncio
+
+        await asyncio.sleep(5)
+        return {}
+
+    registry.register(definition, slow)
+    result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="slow")))
+    assert result.success is False
+    assert result.error_code == "tool_timeout"
+    assert result.public_error_message == "Tool execution timed out."
+
+
+def test_exception_isolation(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(name="boom", description="Raises")
+
+    async def boom(request: ToolExecutionRequest) -> dict:
+        raise RuntimeError("secret internals")
+
+    registry.register(definition, boom)
+    result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="boom")))
+    assert result.success is False
+    assert result.error_code == "tool_error"
+    assert "secret internals" not in result.public_error_message
+    assert result.public_error_message == "Tool execution failed."
+
+
+def test_request_id_propagation(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(name="id_echo", description="Echoes request id")
+
+    async def id_echo(request: ToolExecutionRequest) -> dict:
+        return {"id": request.request_id}
+
+    registry.register(definition, id_echo)
+    request = ToolExecutionRequest(tool_name="id_echo", request_id="req-abc-123")
+    result = asyncio_run(registry.execute(request))
+    assert result.request_id == "req-abc-123"
+
+
+def test_audit_redaction(registry: ToolRegistry, caplog: pytest.LogCaptureFixture) -> None:
+    registry._audit_enabled = True
+
+    definition = ToolDefinition(name="leak", description="Leaks secrets")
+
+    async def leak(request: ToolExecutionRequest) -> dict:
+        return {"secret": request.arguments.get("secret")}
+
+    registry.register(definition, leak)
+    with caplog.at_level(logging.INFO, logger="freyja.tools.registry"):
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="leak",
+                    arguments={"secret": "sk-12345", "normal": "hello"},
+                )
+            )
+        )
+    assert result.success is True
+    assert result.output["secret"] == "sk-12345"
+    records = [r for r in caplog.records if r.message.startswith("{")]
+    assert records
+    log_text = records[0].message
+    assert "sk-12345" not in log_text
+    assert "<redacted>" in log_text
+    assert "hello" in log_text
+
+
+def test_disabled_registry_rejects_all(disabled_registry: DisabledToolRegistry) -> None:
+    result = asyncio_run(disabled_registry.execute(ToolExecutionRequest(tool_name="anything")))
+    assert result.success is False
+    assert result.error_code == "tool_disabled"
+    assert result.public_error_message == "Tool execution is globally disabled."
+
+
+def test_builtin_system_health(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="system_health")))
+    assert result.success is True
+    assert "director" in result.output
+    assert "ollama" in result.output
+    assert "openrouter" in result.output
+    assert "memory" in result.output
+
+
+def test_builtin_list_models(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    register_builtin_tools(registry)
+    with patch(
+        "freyja.tools.builtin._ollama_tags",
+        return_value={"models": [{"name": "qwen2.5:1.5b"}]},
+    ):
+        result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="list_models")))
+    assert result.success is True
+    assert result.output["models"] == [{"name": "qwen2.5:1.5b"}]
+
+
+def test_builtin_recall_conversation(registry: ToolRegistry, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from freyja.memory.store import is_memory_enabled
+
+    monkeypatch.setattr(settings, "memory_enabled", True)
+    monkeypatch.setattr(settings, "memory_database_path", str(tmp_path / "tools_recall.db"))
+    store = MemoryStore(database_path=str(tmp_path / "tools_recall.db"))
+    store.initialize()
+    store.create_conversation(CreateConversationRequest(conversation_id="conv-1"))
+    store.append_message(
+        AppendMessageRequest(
+            conversation_id="conv-1", role="user", content="hello", provider="ollama"
+        )
+    )
+    monkeypatch.setattr(settings, "tools_default_timeout_seconds", 5)
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="recall_conversation",
+                arguments={"conversation_id": "conv-1", "limit": 10},
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["conversation_id"] == "conv-1"
+    assert result.output["count"] == 1
+
+
+def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    response = client.get("/tools")
+    assert response.status_code == 200
+    tools = response.json()["tools"]
+    assert len(tools) == 3
+
+
+def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    response = client.get("/tools/system_health")
+    assert response.status_code == 200
+    assert response.json()["name"] == "system_health"
+
+    response = client.get("/tools/nonexistent")
+    assert response.status_code == 404
+
+
+def test_api_execute_tool(client: TestClient, registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    register_builtin_tools(registry)
+    with patch("freyja.tools.builtin._ollama_healthy", return_value=True), patch(
+        "freyja.tools.builtin._openrouter_healthy", return_value=True
+    ):
+        response = client.post("/tools/system_health/execute")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["tool_name"] == "system_health"
+
+
+def test_api_execute_unknown_tool(client: TestClient, registry: ToolRegistry) -> None:
+    response = client.post("/tools/unknown/execute")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Tool not found."
+
+
+def test_api_execute_disabled_tool(client: TestClient, registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    registry.set_enabled("system_health", False)
+    response = client.post("/tools/system_health/execute")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Tool is currently disabled."
+
+
+def test_api_execute_validation_error(client: TestClient, registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    response = client.post(
+        "/tools/recall_conversation/execute",
+        json={"arguments": {"limit": "not-an-int"}},
+    )
+    assert response.status_code == 400
+    assert "Missing required argument" in response.json()["detail"]
+
+
+# Helper to run async tool implementations in synchronous tests.
+import asyncio as _asyncio
+
+
+def asyncio_run(coro):
+    return _asyncio.run(coro)
