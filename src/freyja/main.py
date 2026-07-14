@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from freyja.config import settings
 from freyja.ollama_client import OllamaClient
+from freyja.openrouter_client import OpenRouterClient
 
 app = FastAPI(
     title="Freyja Director",
@@ -11,6 +12,7 @@ app = FastAPI(
 )
 
 ollama = OllamaClient()
+openrouter = OpenRouterClient()
 
 
 @app.get("/")
@@ -62,3 +64,79 @@ async def chat(request: ChatRequest) -> dict[str, str]:
     content = message.get("content", "")
 
     return {"model": response.get("model", ""), "response": content}
+
+
+@app.get("/openrouter/health")
+async def openrouter_health() -> dict[str, bool | str]:
+    healthy = await openrouter.healthy()
+    return {
+        "openrouter_reachable": healthy,
+        "base_url": settings.openrouter_base_url,
+        "key_configured": bool(settings.openrouter_api_key),
+    }
+
+
+@app.post("/openrouter/chat")
+async def openrouter_chat(request: ChatRequest) -> dict[str, str]:
+    response = await openrouter.chat(prompt=request.prompt, model=request.model)
+
+    if "error" in response:
+        raise HTTPException(status_code=503, detail=response["error"])
+
+    return {
+        "model": response.get("model", ""),
+        "response": response.get("response", ""),
+    }
+
+
+class RouteRequest(BaseModel):
+    prompt: str
+    provider: str = "auto"
+    model: str | None = None
+
+
+@app.post("/route")
+async def route(request: RouteRequest) -> dict[str, str]:
+    if request.provider not in {"local", "cloud", "auto"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid provider '{request.provider}'. Use local, cloud, or auto.",
+        )
+
+    if request.provider == "local":
+        response = await ollama.chat(prompt=request.prompt, model=request.model)
+        if "error" in response:
+            raise HTTPException(status_code=503, detail=response["error"])
+        return {
+            "provider": "ollama",
+            "model": response.get("model", ""),
+            "response": response.get("message", {}).get("content", ""),
+        }
+
+    if request.provider == "cloud":
+        response = await openrouter.chat(prompt=request.prompt, model=request.model)
+        if "error" in response:
+            raise HTTPException(status_code=503, detail=response["error"])
+        return {
+            "provider": "openrouter",
+            "model": response.get("model", ""),
+            "response": response.get("response", ""),
+        }
+
+    response = await ollama.chat(prompt=request.prompt, model=request.model)
+    if "error" not in response:
+        return {
+            "provider": "ollama",
+            "model": response.get("model", ""),
+            "response": response.get("message", {}).get("content", ""),
+        }
+
+    response = await openrouter.chat(prompt=request.prompt, model=request.model)
+    if "error" in response:
+        raise HTTPException(status_code=503, detail=response["error"])
+
+    return {
+        "provider": "openrouter",
+        "model": response.get("model", ""),
+        "response": response.get("response", ""),
+    }
