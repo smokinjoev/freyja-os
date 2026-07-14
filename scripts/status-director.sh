@@ -24,8 +24,8 @@ echo "LaunchAgent: ${PLIST_NAME}"
 echo "Service domain: ${SERVICE_DOMAIN}"
 
 LABEL="${PLIST_NAME%.plist}"
-SERVICE_INFO=$(launchctl list "${LABEL}" 2>/dev/null || true)
-if [[ -n "${SERVICE_INFO}" ]] && echo "${SERVICE_INFO}" | grep -q '"Label"'; then
+# launchctl list from root cannot see gui-domain services; print can.
+if SERVICE_INFO=$(launchctl print "${SERVICE_DOMAIN}/${LABEL}" 2>/dev/null); then
     echo "State: loaded"
     echo "${SERVICE_INFO}" | sed 's/^/  /'
 else
