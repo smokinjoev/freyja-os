@@ -39,6 +39,10 @@ class AgentPolicy:
         self._prohibited_operations = set(self._config.get("prohibited_operations", []))
         self._read_only_builtin_tools = set(self._config.get("read_only_builtin_tools", []))
         self._smith_read_only_tools = set(self._config.get("smith_read_only_tools", []))
+        self._write_pilot_allowed_tools = set(self._config.get("write_pilot_allowed_tools", []))
+        self._write_pilot_sandbox = Path(
+            self._config.get("write_pilot_sandbox", "/Users/freyja/freyja-os/docs/smith-pilot")
+        ).expanduser().resolve()
         self._max_retries = int(self._config.get("max_retries", settings.agent_smith_max_retries))
         self._secret_patterns = [
             re.compile(pattern) for pattern in self._config.get("secret_patterns", [r"\.env$", r"(^|/)secrets?(/|$)", r"\.pem$", r"\.key$", r"\.pfx$"])
@@ -74,6 +78,14 @@ class AgentPolicy:
     @property
     def smith_read_only_tools(self) -> set[str]:
         return self._smith_read_only_tools
+
+    @property
+    def write_pilot_allowed_tools(self) -> set[str]:
+        return self._write_pilot_allowed_tools
+
+    @property
+    def write_pilot_sandbox(self) -> Path:
+        return self._write_pilot_sandbox
 
     def check_tool_permitted(self, tool_name: str, risk_level: ToolRiskLevel) -> PolicyCheckResult:
         if tool_name in self._prohibited_operations:
@@ -187,6 +199,118 @@ class AgentPolicy:
         if self._audit_enabled:
             logger.info(record)
         return record
+
+    def check_write_pilot_path(self, requested_path: str, *, repo_root: Path | None = None) -> PolicyCheckResult:
+        """Validate a target path for the approved-write pilot.
+
+        The path must be a repository-relative path under the configured
+        write_pilot_sandbox, must not be absolute, must not contain parent
+        traversal, must not be hidden, must be a Markdown file, must not be a
+        symlink, and must not match protected secret patterns. Symlink
+        resolution is deliberately avoided; containment is checked against
+        the logical path components.
+        """
+        if not requested_path:
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason="Write-pilot target path is empty.",
+            )
+        if " " in requested_path:
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' contains multiple path components.",
+            )
+        if requested_path.startswith("-"):
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' looks like an option argument.",
+            )
+        if requested_path.startswith(("/", "\\")):
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' is absolute; only repository-relative paths are allowed.",
+            )
+        path_obj = Path(requested_path)
+        if ".." in path_obj.parts:
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' contains parent directory traversal.",
+            )
+        if requested_path.endswith("/") or requested_path.endswith("\\"):
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' is a directory, not a file.",
+            )
+        if path_obj.name.startswith(".") or any(part.startswith(".") for part in path_obj.parts):
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' is hidden or contains hidden components.",
+            )
+        if path_obj.suffix.lower() != ".md":
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' is not a Markdown (.md) file.",
+            )
+
+        root = (repo_root or self._allowed_root).resolve()
+        try:
+            # Use .absolute() rather than .resolve() so symlinks are not followed
+            # and can be rejected before containment checks.
+            target = (root / requested_path).absolute()
+        except (OSError, ValueError):
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' is not a valid filesystem path.",
+            )
+
+        # Reject any component that is a symlink before checking containment.
+        for parent in target.parents:
+            if parent == root:
+                break
+            if parent.is_symlink():
+                return PolicyCheckResult(
+                    decision=PolicyDecision.DENY,
+                    reason=f"Path '{requested_path}' traverses a symlink.",
+                )
+        if target.is_symlink():
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' is a symlink, which is not allowed.",
+            )
+
+        sandbox = self._write_pilot_sandbox.resolve()
+        try:
+            target.relative_to(sandbox)
+        except ValueError:
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=(
+                    f"Path '{requested_path}' is outside the write-pilot sandbox "
+                    f"'{sandbox}'."
+                ),
+            )
+        if self._is_secret_path(target):
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Path '{requested_path}' matches a protected secret pattern.",
+            )
+        return PolicyCheckResult(decision=PolicyDecision.ALLOW)
+
+    def check_write_pilot_tool(self, tool_name: str) -> PolicyCheckResult:
+        if tool_name in self._prohibited_operations:
+            return PolicyCheckResult(
+                decision=PolicyDecision.DENY,
+                reason=f"Tool '{tool_name}' is prohibited for the write-pilot.",
+            )
+        if tool_name in self._write_pilot_allowed_tools:
+            return PolicyCheckResult(decision=PolicyDecision.ALLOW)
+        return PolicyCheckResult(
+            decision=PolicyDecision.DENY,
+            reason=(
+                f"Tool '{tool_name}' is not in the write-pilot allowlist: "
+                f"{sorted(self._write_pilot_allowed_tools)}."
+            ),
+        )
 
     def _is_secret_path(self, target: Path) -> bool:
         path_str = str(target)

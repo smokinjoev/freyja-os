@@ -27,10 +27,20 @@ auto_allowed_operations:
   - no-op
   - summarize
 
+# Tools allowed during the approved-write pilot (bounded to write_pilot_sandbox).
+write_pilot_allowed_tools:
+  - write_pilot_file_write
+  - write_pilot_git_add
+  - write_pilot_git_commit
+
+# Sandbox directory for the Agent Smith approved-write pilot.
+write_pilot_sandbox: /Users/freyja/freyja-os/docs/smith-pilot
+
 # Operations that require explicit human approval before execution.
 approval_required_operations:
   - git_commit
   - bounded_file_write
+  - git_add
   - restart_freyja_director
   - dependency_change
 

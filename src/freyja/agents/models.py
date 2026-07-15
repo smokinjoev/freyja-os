@@ -27,6 +27,21 @@ class TaskStatus(StrEnum):
     LOOP_DETECTED = "loop_detected"
 
 
+class WritePilotState(StrEnum):
+    PLANNED = "planned"
+    AWAITING_PATH_APPROVAL = "awaiting_path_approval"
+    AWAITING_CONTENT_APPROVAL = "awaiting_content_approval"
+    WRITTEN = "written"
+    VALIDATED = "validated"
+    AWAITING_STAGE_APPROVAL = "awaiting_stage_approval"
+    STAGED = "staged"
+    AWAITING_COMMIT_APPROVAL = "awaiting_commit_approval"
+    COMMITTED = "committed"
+    VERIFIED = "verified"
+    FAILED = "failed"
+    ROLLED_BACK = "rolled_back"
+
+
 class ApprovalStatus(StrEnum):
     NOT_REQUIRED = "not_required"
     REQUIRED = "required"
@@ -87,6 +102,73 @@ class SmithStepResult(BaseModel):
     audit_record: dict[str, Any] | None = None
     duration_ms: int | None = None
     actor: str = "agent_smith"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WritePilotRequest(BaseModel):
+    objective: str
+    target_path: str
+    proposed_content: str
+    commit_message: str
+    actor: str = "agent_smith"
+    request_id: str | None = None
+
+
+class WritePilotStateTransition(BaseModel):
+    from_state: str
+    to_state: str
+    action: str
+    outcome: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WritePilotApprovalRecord(BaseModel):
+    approval_type: str
+    request_id: str
+    target_path: str | None = None
+    approved: bool
+    actor: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ApprovalCallback:
+    """One-time approval token returned by an approval callback."""
+
+    def __init__(
+        self,
+        approval_type: str,
+        request_id: str,
+        approved: bool,
+        target_path: str | None = None,
+        commit_message: str | None = None,
+    ) -> None:
+        self.approval_type = approval_type
+        self.request_id = request_id
+        self.approved = approved
+        self.target_path = target_path
+        self.commit_message = commit_message
+
+
+class WritePilotResult(BaseModel):
+    request_id: str
+    status: str
+    state: str = "planned"
+    message: str
+    objective: str
+    target_path: str
+    wrote_content: bool = False
+    staged: bool = False
+    committed: bool = False
+    rolled_back: bool = False
+    commit_hash: str | None = None
+    original_content: str | None = None
+    final_content: str | None = None
+    diff: str | None = None
+    approvals: list[dict[str, Any]] = Field(default_factory=list)
+    state_transitions: list[dict[str, Any]] = Field(default_factory=list)
+    audit_records: list[dict[str, Any]] = Field(default_factory=list)
+    actor: str = "agent_smith"
+    duration_ms: int | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

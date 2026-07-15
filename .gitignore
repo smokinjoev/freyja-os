@@ -24,3 +24,6 @@ data/*
 .vscode/
 .idea/
 .backups/
+
+# Qwen session/configuration state
+.qwen/

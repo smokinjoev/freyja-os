@@ -2,19 +2,39 @@
 loop detection, retry limits, and sanitized audit persistence.
 """
 
+import hashlib
 import json
 import logging
 import re
+import subprocess
 import time
+import uuid
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from freyja.config import settings
 from freyja.tools.errors import ToolNotFoundError
-from freyja.tools.models import ToolExecutionRequest, ToolRiskLevel
+from freyja.tools.models import ToolExecutionRequest, ToolExecutionResult, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
 
-from .models import AuditEvent, ObjectiveClass, SmithPlan, SmithRunSummary, SmithStepResult, SmithTask, TaskStatus
+from .models import (
+    AuditEvent,
+    ApprovalCallback,
+    ObjectiveClass,
+    SmithPlan,
+    SmithRunSummary,
+    SmithStepResult,
+    SmithTask,
+    TaskStatus,
+    WritePilotRequest,
+    WritePilotResult,
+    WritePilotState,
+    WritePilotStateTransition,
+    WritePilotApprovalRecord,
+)
+
 from .policy import AgentPolicy
 from .smith import PolicyViolationError, SmithOrchestrator
 
@@ -195,6 +215,49 @@ class SmithRuntime:
         self._audit("run_dry", summary.status, request_id=request_id, actor=actor, summary=summary.model_dump(mode="json"))
         self._persist_audit_records()
         return summary
+
+    async def run_write_pilot(
+        self,
+        objective: str,
+        target_path: str,
+        proposed_content: str,
+        commit_message: str,
+        actor: str | None = None,
+        request_id: str | None = None,
+        approval_callback: Callable[..., Awaitable[ApprovalCallback]] | None = None,
+    ) -> WritePilotResult:
+        """Execute a strictly bounded Agent Smith approved-write pilot.
+
+        The write pilot may only modify a single Markdown file under
+        ``docs/smith-pilot/``.  Each mutating action requires a separate,
+        one-time approval via ``approval_callback``:
+
+        1. target file path,
+        2. exact proposed content,
+        3. staging the approved file,
+        4. commit message and commit execution.
+
+        Approvals cannot be reused across requests, paths, or actions.  On any
+        failure before a successful commit, the original file state is restored
+        and the approved target is unstaged; unrelated working-tree state is left
+        untouched.  Audit records are sanitized and never include the proposed
+        content.
+        """
+        start = time.monotonic()
+        actor = actor or "agent_smith"
+        request_id = request_id or self._new_request_id()
+        result = _WritePilotRun(
+            runtime=self,
+            objective=objective,
+            target_path=target_path,
+            proposed_content=proposed_content,
+            commit_message=commit_message,
+            actor=actor,
+            request_id=request_id,
+            approval_callback=approval_callback,
+            start=start,
+        )
+        return await result.execute()
 
     async def run_read_only(
         self,
@@ -873,6 +936,307 @@ def _sanitize_for_audit(value: Any) -> Any:
             return "<redacted>"
         return value
     return value
+
+
+class _WritePilotRun:
+    """State-machine executor for a single Agent Smith approved-write pilot."""
+
+    def __init__(
+        self,
+        runtime: SmithRuntime,
+        objective: str,
+        target_path: str,
+        proposed_content: str,
+        commit_message: str,
+        actor: str,
+        request_id: str,
+        approval_callback: "ApprovalCallback | None",
+        start: float,
+    ) -> None:
+        self._runtime = runtime
+        self._objective = objective
+        self._target_path = target_path
+        self._proposed_content = proposed_content
+        self._commit_message = commit_message
+        self._actor = actor
+        self._request_id = request_id
+        self._approval_callback = approval_callback
+        self._start = start
+        self._state = WritePilotState.PLANNED
+        self._repo_root = Path(
+            getattr(runtime, "_repo_root_for_write_pilot", None)
+            or Path(__file__).resolve().parents[3]
+        ).resolve()
+        self._approvals: list[dict[str, Any]] = []
+        self._transitions: list[dict[str, Any]] = []
+        self._audit_records: list[dict[str, Any]] = []
+        self._original_content: str | None = None
+        self._backup_path: Path | None = None
+        self._file_existed = False
+        self._final_content: str | None = None
+        self._commit_hash: str | None = None
+        self._tool_results: list[ToolExecutionResult] = []
+        self._rolled_back = False
+
+    async def execute(self) -> WritePilotResult:
+        if not settings.agent_smith_enabled:
+            return self._finish("blocked", "Agent Smith is disabled.")
+        if not settings.agent_smith_write_pilot_enabled:
+            return self._finish("blocked", "Agent Smith write-pilot mode is disabled.")
+
+        self._audit("write_pilot", "started")
+
+        # 1. Path approval
+        path_check = self._runtime.policy.check_write_pilot_path(self._target_path, repo_root=self._repo_root)
+        if path_check.decision.value == "deny":
+            return await self._fail(path_check.reason)
+        self._transition(WritePilotState.AWAITING_PATH_APPROVAL)
+        approved = await self._request_approval("path", target_path=self._target_path)
+        if not approved:
+            return await self._fail("Path approval denied.")
+
+        # 2. Content approval
+        self._transition(WritePilotState.AWAITING_CONTENT_APPROVAL)
+        approved = await self._request_approval("content", target_path=self._target_path)
+        if not approved:
+            return await self._fail("Content approval denied.")
+
+        # 3. Write
+        original_target = self._repo_root / self._target_path
+        self._file_existed = original_target.exists()
+        if self._file_existed:
+            self._original_content = original_target.read_text(encoding="utf-8")
+        write_result = await self._run_tool("write_pilot_file_write", {
+            "target_path": self._target_path,
+            "content": self._proposed_content,
+            "repo_root": str(self._repo_root),
+        })
+        if not write_result.success or not write_result.output.get("success"):
+            error = write_result.output.get("error") or write_result.public_error_message or "write failed"
+            return await self._fail(f"Write failed: {error}")
+        self._backup_path = write_result.output.get("backup_path")
+        self._final_content = self._proposed_content
+        self._transition(WritePilotState.WRITTEN)
+
+        # 4. Validate
+        validation = self._validate_write()
+        if not validation["ok"]:
+            return await self._fail(f"Validation failed: {validation['reason']}")
+        self._transition(WritePilotState.VALIDATED)
+
+        # 5. Stage approval
+        self._transition(WritePilotState.AWAITING_STAGE_APPROVAL)
+        approved = await self._request_approval("stage", target_path=self._target_path)
+        if not approved:
+            return await self._fail("Stage approval denied.", rolled_back=True, transition_to_rolled_back=False)
+
+        stage_result = await self._run_tool("write_pilot_git_add", {
+            "target_path": self._target_path,
+            "repo_root": str(self._repo_root),
+        })
+        if not stage_result.success or not stage_result.output.get("success"):
+            error = stage_result.output.get("error") or stage_result.public_error_message or "stage failed"
+            return await self._fail(f"Stage failed: {error}")
+        self._transition(WritePilotState.STAGED)
+
+        # 6. Commit approval
+        self._transition(WritePilotState.AWAITING_COMMIT_APPROVAL)
+        approved = await self._request_approval("commit", target_path=self._target_path, commit_message=self._commit_message)
+        if not approved:
+            return await self._fail("Commit approval denied.", rolled_back=True, transition_to_rolled_back=False)
+
+        commit_result = await self._run_tool("write_pilot_git_commit", {
+            "message": self._commit_message,
+            "repo_root": str(self._repo_root),
+            "target_path": self._target_path,
+        })
+        if not commit_result.success or not commit_result.output.get("success"):
+            error = commit_result.output.get("error") or commit_result.public_error_message or "commit failed"
+            return await self._fail(f"Commit failed: {error}", rolled_back=False)
+        self._commit_hash = commit_result.output.get("commit_hash")
+        self._transition(WritePilotState.COMMITTED)
+
+        # 7. Verify
+        self._transition(WritePilotState.VERIFIED)
+        self._audit("write_pilot", "verified", commit_hash=self._commit_hash)
+        return self._finish("complete", "Write pilot completed and committed.")
+
+    async def _request_approval(self, approval_type: str, **context: Any) -> bool:
+        record = WritePilotApprovalRecord(
+            approval_type=approval_type,
+            request_id=self._request_id,
+            target_path=context.get("target_path"),
+            approved=False,
+            actor=self._actor,
+        )
+        self._approvals.append(record.model_dump(mode="json"))
+        if self._approval_callback is None:
+            return False
+        token = await self._approval_callback(approval_type, self._request_id, context)
+        if token is None or not token.approved:
+            return False
+        if token.request_id != self._request_id:
+            return False
+        if token.approval_type != approval_type:
+            return False
+        if approval_type in {"path", "content", "stage"} and token.target_path != self._target_path:
+            return False
+        self._approvals[-1]["approved"] = True
+        self._audit("approval", "approved", approval_type=approval_type)
+        return True
+
+    async def _run_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolExecutionResult:
+        tool_check = self._runtime.policy.check_write_pilot_tool(tool_name)
+        if tool_check.decision.value == "deny":
+            return self._tool_error(tool_name, tool_check.reason or "tool denied")
+        request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=self._request_id,
+            actor=self._actor,
+        )
+        result = await self._runtime._orchestrator.registry.execute(request)
+        self._tool_results.append(result)
+        self._audit("tool", "success" if result.success else "failure", tool_name=tool_name)
+        return result
+
+    def _tool_error(self, tool_name: str, message: str) -> ToolExecutionResult:
+        return ToolExecutionResult(
+            success=False,
+            tool_name=tool_name,
+            output={"error": message, "blocked": True},
+            error_code="policy_violation",
+            public_error_message=message,
+            duration_ms=0,
+            request_id=self._request_id,
+        )
+
+    def _validate_write(self) -> dict[str, Any]:
+        target = self._repo_root / self._target_path
+        if not target.exists():
+            return {"ok": False, "reason": "target file does not exist after write"}
+        try:
+            target.relative_to(self._runtime.policy.write_pilot_sandbox)
+        except ValueError:
+            return {"ok": False, "reason": "target escaped the write-pilot sandbox"}
+        try:
+            proc = subprocess.run(
+                ["git", "diff", "--check", "--", self._target_path],
+                cwd=self._repo_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if proc.returncode != 0:
+                return {"ok": False, "reason": "git diff --check reported whitespace errors"}
+        except Exception as exc:
+            return {"ok": False, "reason": f"git diff --check failed: {exc}"}
+        # Ensure only the approved file changed
+        try:
+            status_proc = subprocess.run(
+                ["git", "status", "--short", "--", self._target_path],
+                cwd=self._repo_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if status_proc.returncode != 0:
+                return {"ok": False, "reason": "git status failed"}
+        except Exception as exc:
+            return {"ok": False, "reason": f"git status failed: {exc}"}
+        return {"ok": True}
+
+    async def _rollback(self, *, transition_to_rolled_back: bool = True) -> None:
+        target = self._repo_root / self._target_path
+        try:
+            if self._file_existed:
+                if self._original_content is not None:
+                    target.write_text(self._original_content, encoding="utf-8")
+            else:
+                if target.exists():
+                    target.unlink()
+            # Unstage only the approved target
+            subprocess.run(
+                ["git", "restore", "--staged", "--", self._target_path],
+                cwd=self._repo_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if transition_to_rolled_back:
+                self._transition(WritePilotState.ROLLED_BACK)
+            self._rolled_back = True
+            self._audit("rollback", "completed")
+        except Exception as exc:
+            self._audit("rollback", "failure", error=str(exc))
+
+    def _transition(self, to_state: WritePilotState) -> None:
+        transition = WritePilotStateTransition(
+            from_state=self._state.value,
+            to_state=to_state.value,
+            action="state_transition",
+            outcome="ok",
+        )
+        self._transitions.append(transition.model_dump(mode="json"))
+        self._state = to_state
+
+    async def _fail(self, message: str, *, rolled_back: bool = True, transition_to_rolled_back: bool = True) -> WritePilotResult:
+        should_rollback = (
+            rolled_back
+            and self._state not in {
+                WritePilotState.ROLLED_BACK,
+                WritePilotState.PLANNED,
+                WritePilotState.AWAITING_PATH_APPROVAL,
+                WritePilotState.AWAITING_CONTENT_APPROVAL,
+            }
+            and not self._rolled_back
+        )
+        if should_rollback:
+            await self._rollback(transition_to_rolled_back=transition_to_rolled_back)
+        return self._finish("failed", message)
+
+    def _finish(self, status: str, message: str) -> WritePilotResult:
+        duration_ms = _elapsed_ms(self._start)
+        self._audit("write_pilot", status, message=message)
+        self._runtime._audit_records.extend(self._audit_records)
+        self._runtime._persist_audit_records()
+        return WritePilotResult(
+            request_id=self._request_id,
+            status=status,
+            state=self._state.value,
+            message=message,
+            objective=self._objective,
+            target_path=self._target_path,
+            wrote_content=self._final_content is not None,
+            staged=self._state.value in {WritePilotState.STAGED.value, WritePilotState.AWAITING_COMMIT_APPROVAL.value, WritePilotState.COMMITTED.value, WritePilotState.VERIFIED.value},
+            committed=self._commit_hash is not None,
+            rolled_back=self._rolled_back,
+            commit_hash=self._commit_hash,
+            original_content="<redacted>" if self._original_content is not None else None,
+            final_content="<redacted>" if self._final_content is not None else None,
+            diff=None,
+            approvals=self._approvals,
+            state_transitions=self._transitions,
+            audit_records=[_sanitize_for_audit(record) for record in self._audit_records],
+            actor=self._actor,
+            duration_ms=duration_ms,
+        )
+
+    def _audit(self, action: str, outcome: str, **details: Any) -> dict[str, Any]:
+        record = {
+            "event_id": str(uuid.uuid4()),
+            "request_id": self._request_id,
+            "actor": self._actor,
+            "action": action,
+            "outcome": outcome,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "details": _sanitize_for_audit(details),
+        }
+        self._audit_records.append(record)
+        return record
+
+    def _tool_error(self, tool_name: str, message: str) -> "ToolExecutionResult":
+        from freyja.tools.models import ToolExecutionResult
 
 
 def _elapsed_ms(start: float) -> int:

@@ -138,6 +138,15 @@ class SmithReadOnlyRequest(BaseModel):
     request_id: str | None = None
 
 
+class SmithWritePilotRequest(BaseModel):
+    objective: str
+    target_path: str
+    proposed_content: str
+    commit_message: str
+    actor: str = "agent_smith"
+    request_id: str | None = None
+
+
 @app.post("/agents/smith/dry-run")
 async def smith_dry_run(request: SmithDryRunRequest) -> dict[str, Any]:
     if not settings.agent_smith_enabled or not settings.agent_smith_dry_run_enabled:
@@ -164,3 +173,23 @@ async def smith_read_only(request: SmithReadOnlyRequest) -> dict[str, Any]:
         request_id=request.request_id,
     )
     return summary.model_dump(mode="json")
+
+
+@app.post("/agents/smith/write-pilot")
+async def smith_write_pilot(request: SmithWritePilotRequest) -> dict[str, Any]:
+    if not settings.agent_smith_enabled or not settings.agent_smith_write_pilot_enabled:
+        raise HTTPException(
+            status_code=404 if not settings.agent_smith_enabled else 403,
+            detail="Agent Smith write-pilot mode is not enabled.",
+        )
+    runtime = SmithRuntime()
+    result = await runtime.run_write_pilot(
+        objective=request.objective,
+        target_path=request.target_path,
+        proposed_content=request.proposed_content,
+        commit_message=request.commit_message,
+        actor=request.actor,
+        request_id=request.request_id,
+        approval_callback=None,
+    )
+    return result.model_dump(mode="json")

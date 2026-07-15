@@ -263,6 +263,147 @@ async def _compile_project_implementation(request: ToolExecutionRequest) -> dict
         return {"error": str(exc)}
 
 
+async def _write_pilot_file_write_implementation(request: ToolExecutionRequest) -> dict:
+    """Write a single file atomically inside the approved write-pilot sandbox.
+
+    Requires ``target_path`` (repository-relative) and ``content``.  Creates a
+    restrictive before-state backup at ``<target>.bak.<timestamp>`` adjacent to
+    the target, writes the new content to a temporary file, then renames it into
+    place.  Returns a sanitized result with no secrets.
+    """
+    args = request.arguments or {}
+    target_path = args.get("target_path")
+    content = args.get("content")
+    repo_root = args.get("repo_root")
+
+    if not target_path:
+        return {"error": "Missing required argument: target_path"}
+    if content is None:
+        return {"error": "Missing required argument: content"}
+
+    root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[3]
+
+    # Local sandbox validation using the provided repo root; do not load a
+    # fresh policy that would ignore the runtime/test repository.
+    path_obj = Path(target_path)
+    if not target_path or path_obj.is_absolute() or ".." in path_obj.parts:
+        return {"error": f"Invalid write-pilot target path: {target_path}", "blocked": True}
+    if path_obj.suffix.lower() != ".md":
+        return {"error": f"Path '{target_path}' is not a Markdown (.md) file.", "blocked": True}
+    target = (root / target_path).resolve(strict=False)
+    sandbox = (root / "docs" / "smith-pilot").resolve()
+    try:
+        target.relative_to(sandbox)
+    except ValueError:
+        return {"error": f"Path '{target_path}' is outside the write-pilot sandbox '{sandbox}'.", "blocked": True}
+    if target.is_symlink() or any(p.is_symlink() for p in target.parents if p != root):
+        return {"error": f"Path '{target_path}' is a symlink or traverses a symlink.", "blocked": True}
+
+    backup_path: Path | None = None
+    existed = target.exists()
+    original_mode = target.stat().st_mode if existed else 0o644
+
+    try:
+        import time
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        backup_path = target.with_suffix(f"{target.suffix}.bak.{timestamp}")
+        if existed:
+            backup_path.write_bytes(target.read_bytes())
+
+        tmp_path = target.with_suffix(f"{target.suffix}.tmp")
+        tmp_path.write_text(content, encoding="utf-8")
+        tmp_path.chmod(original_mode)
+        tmp_path.replace(target)
+        return {
+            "success": True,
+            "target_path": target_path,
+            "wrote_new_file": not existed,
+            "backup_path": str(backup_path.relative_to(root)) if backup_path else None,
+        }
+    except Exception as exc:
+        return {"error": f"Failed to write {target_path}: {exc}", "success": False}
+
+
+async def _write_pilot_git_add_implementation(request: ToolExecutionRequest) -> dict:
+    """Stage a single, explicitly approved repository-relative file.
+
+    Uses a fixed argv with ``--`` separators and never stages wildcards or ``.``.
+    """
+    args = request.arguments or {}
+    target_path = args.get("target_path")
+    repo_root = args.get("repo_root")
+
+    if not target_path:
+        return {"error": "Missing required argument: target_path"}
+
+    root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[3]
+    try:
+        proc = subprocess.run(
+            ["git", "add", "--", target_path],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return {
+            "success": proc.returncode == 0,
+            "target_path": target_path,
+            "returncode": proc.returncode,
+            "stderr": proc.stderr.strip() if proc.stderr else None,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "success": False}
+
+
+async def _write_pilot_git_commit_implementation(request: ToolExecutionRequest) -> dict:
+    """Commit staged changes with an explicitly approved message.
+
+    Uses a fixed argv, no shell, and returns the resulting commit hash.
+    If ``target_path`` is provided, only that path is committed.
+    """
+    args = request.arguments or {}
+    message = args.get("message")
+    repo_root = args.get("repo_root")
+    target_path = args.get("target_path")
+
+    if not message:
+        return {"error": "Missing required argument: message"}
+
+    root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[3]
+    argv = ["git", "commit", "-m", message]
+    if target_path:
+        argv.extend(["--", target_path])
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        commit_hash = None
+        if proc.returncode == 0:
+            hash_proc = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if hash_proc.returncode == 0:
+                commit_hash = hash_proc.stdout.strip()
+        return {
+            "success": proc.returncode == 0,
+            "commit_hash": commit_hash,
+            "returncode": proc.returncode,
+            "stderr": proc.stderr.strip() if proc.stderr else None,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "success": False}
+
+
 async def _validate_diff_implementation(request: ToolExecutionRequest) -> dict:
     """Validate that uncommitted changes are safe for Agent Smith operations.
 
@@ -361,6 +502,12 @@ _SMITH_READ_ONLY_TOOL_NAMES = (
     "validate_diff",
 )
 
+_SMITH_WRITE_PILOT_TOOL_NAMES = (
+    "write_pilot_file_write",
+    "write_pilot_git_add",
+    "write_pilot_git_commit",
+)
+
 
 def register_smith_read_only_tools(registry: ToolRegistry) -> None:
     _assert_registration_consistent(registry, _SMITH_READ_ONLY_TOOL_NAMES)
@@ -435,4 +582,101 @@ def register_smith_read_only_tools(registry: ToolRegistry) -> None:
             tags=["smith", "diff", "validation"],
         ),
         _validate_diff_implementation,
+    )
+
+
+def register_smith_write_pilot_tools(registry: ToolRegistry) -> None:  # Fixed to sync
+    _assert_registration_consistent(registry, _SMITH_WRITE_PILOT_TOOL_NAMES)
+    if _registration_is_complete(registry, _SMITH_WRITE_PILOT_TOOL_NAMES):
+        return
+    registry.register(
+        ToolDefinition(
+            name="write_pilot_file_write",
+            description="Atomically write a single approved Markdown file inside the write-pilot sandbox.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["target_path", "content"],
+                "properties": {
+                    "target_path": {"type": "string"},
+                    "content": {"type": "string"},
+                    "repo_root": {"type": "string"},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "success": {"type": "boolean"},
+                    "target_path": {"type": "string"},
+                    "wrote_new_file": {"type": "boolean"},
+                    "backup_path": {"type": ["string", "null"]},
+                    "error": {"type": ["string", "null"]},
+                    "blocked": {"type": "boolean"},
+                },
+            },
+            risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+            enabled=False,
+            timeout_seconds=30,
+            tags=["smith", "write-pilot", "file"],
+        ),
+        _write_pilot_file_write_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="write_pilot_git_add",
+            description="Stage a single, explicitly approved repository-relative file.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["target_path"],
+                "properties": {
+                    "target_path": {"type": "string"},
+                    "repo_root": {"type": "string"},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "success": {"type": "boolean"},
+                    "target_path": {"type": "string"},
+                    "returncode": {"type": "integer"},
+                    "error": {"type": ["string", "null"]},
+                },
+            },
+            risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+            enabled=False,
+            timeout_seconds=30,
+            tags=["smith", "write-pilot", "git"],
+        ),
+        _write_pilot_git_add_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="write_pilot_git_commit",
+            description="Commit staged changes with an explicitly approved message and optional target path.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["message"],
+                "properties": {
+                    "message": {"type": "string"},
+                    "repo_root": {"type": "string"},
+                    "target_path": {"type": "string"},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "success": {"type": "boolean"},
+                    "commit_hash": {"type": ["string", "null"]},
+                    "returncode": {"type": "integer"},
+                    "error": {"type": ["string", "null"]},
+                },
+            },
+            risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+            enabled=False,
+            timeout_seconds=30,
+            tags=["smith", "write-pilot", "git"],
+        ),
+        _write_pilot_git_commit_implementation,
     )
