@@ -33,6 +33,13 @@ app.include_router(tools_router)
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
 
+# Enable the three approved write-pilot tools only when Smith write-pilot
+# mode is enabled. They remain disabled by default so that a simple flag
+# toggle is required before any write-pilot tool can be invoked.
+if settings.agent_smith_enabled and settings.agent_smith_write_pilot_enabled:
+    for _tool_name in ("write_pilot_file_write", "write_pilot_git_add", "write_pilot_git_commit"):
+        get_registry().set_enabled(_tool_name, True)
+
 
 @app.get("/")
 async def root() -> dict[str, str]:
