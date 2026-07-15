@@ -15,6 +15,7 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
     ESCALATED = "escalated"
     APPROVAL_REQUIRED = "approval_required"
+    LOOP_DETECTED = "loop_detected"
 
 
 class ApprovalStatus(StrEnum):
@@ -75,6 +76,8 @@ class SmithStepResult(BaseModel):
     error: str | None = None
     approval_required: bool = False
     audit_record: dict[str, Any] | None = None
+    duration_ms: int | None = None
+    actor: str = "agent_smith"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -86,9 +89,12 @@ class SmithRunSummary(BaseModel):
     failed_tasks: int
     escalated_tasks: int
     approval_required_count: int
+    loop_detected_count: int = 0
     status: str
     message: str
     audit_records: list[dict[str, Any]] = Field(default_factory=list)
+    actor: str = "agent_smith"
+    duration_ms: int | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

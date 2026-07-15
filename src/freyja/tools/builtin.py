@@ -46,7 +46,26 @@ async def _recall_conversation_implementation(request: ToolExecutionRequest) -> 
     }
 
 
+_BUILTIN_TOOL_NAMES = ("system_health", "list_models", "recall_conversation")
+
+
+def _registration_is_complete(registry: ToolRegistry, names: tuple[str, ...]) -> bool:
+    return all(registry.get_tool(name) is not None for name in names)
+
+
+def _assert_registration_consistent(registry: ToolRegistry, names: tuple[str, ...]) -> None:
+    present = {name for name in names if registry.get_tool(name) is not None}
+    if present and present != set(names):
+        missing = set(names) - present
+        raise RuntimeError(
+            f"Tool registration is inconsistent: present={sorted(present)}, missing={sorted(missing)}"
+        )
+
+
 def register_builtin_tools(registry: ToolRegistry) -> None:
+    _assert_registration_consistent(registry, _BUILTIN_TOOL_NAMES)
+    if _registration_is_complete(registry, _BUILTIN_TOOL_NAMES):
+        return
     registry.register(
         ToolDefinition(
             name="system_health",
@@ -334,7 +353,19 @@ async def _validate_diff_implementation(request: ToolExecutionRequest) -> dict:
     }
 
 
+_SMITH_READ_ONLY_TOOL_NAMES = (
+    "repository_status",
+    "repository_diff_summary",
+    "run_test_suite",
+    "compile_project",
+    "validate_diff",
+)
+
+
 def register_smith_read_only_tools(registry: ToolRegistry) -> None:
+    _assert_registration_consistent(registry, _SMITH_READ_ONLY_TOOL_NAMES)
+    if _registration_is_complete(registry, _SMITH_READ_ONLY_TOOL_NAMES):
+        return
     registry.register(
         ToolDefinition(
             name="repository_status",

@@ -1,6 +1,9 @@
+from typing import Any
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from freyja.agents.runtime import SmithRuntime
 from freyja.config import settings
 from freyja.memory import memory_router
 from freyja.ollama_client import OllamaClient
@@ -121,3 +124,21 @@ async def route(request: RouteRequest) -> dict:
         "fallback_attempts": result.decision.fallback_attempts,
         "request_id": result.decision.request_id,
     }
+
+
+class SmithDryRunRequest(BaseModel):
+    objective: str
+    actor: str = "agent_smith"
+    request_id: str | None = None
+
+
+@app.post("/agents/smith/dry-run")
+async def smith_dry_run(request: SmithDryRunRequest) -> dict[str, Any]:
+    if not settings.agent_smith_enabled or not settings.agent_smith_dry_run_enabled:
+        raise HTTPException(
+            status_code=404 if not settings.agent_smith_enabled else 403,
+            detail="Agent Smith dry-run mode is not enabled.",
+        )
+    runtime = SmithRuntime()
+    summary = await runtime.run_dry(request.objective, actor=request.actor, request_id=request.request_id)
+    return summary.model_dump(mode="json")

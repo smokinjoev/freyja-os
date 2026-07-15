@@ -38,9 +38,13 @@ class Settings(BaseSettings):
     tools_audit_log_enabled: bool = True
 
     agent_smith_enabled: bool = False
+    agent_smith_dry_run_enabled: bool = False
     agent_smith_policy_path: str = "config/agent-smith-policy.yaml"
     agent_smith_max_retries: int = 3
+    agent_smith_dry_run_max_retries: int = 2
+    agent_smith_max_steps: int = 20
     agent_smith_audit_enabled: bool = True
+    agent_smith_audit_log_path: str = "/Users/freyja/freyja-os/logs/agent-smith-audit.jsonl"
 
     @property
     def approved_openrouter_models(self) -> list[str]:

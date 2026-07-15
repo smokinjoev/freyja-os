@@ -15,6 +15,7 @@ from .models import (
     TaskStatus,
 )
 from .policy import AgentPolicy
+from .runtime import SmithRuntime
 from .smith import PolicyViolationError, SmithOrchestrator, ToolInvocationError
 
 
@@ -34,6 +35,7 @@ __all__ = [
     "SmithOrchestrator",
     "SmithPlan",
     "SmithRunSummary",
+    "SmithRuntime",
     "SmithStepResult",
     "SmithTask",
     "TaskStatus",
