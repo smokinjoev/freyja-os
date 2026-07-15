@@ -11,6 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
 from freyja.agents import (
     AgentPolicy,
@@ -21,6 +22,8 @@ from freyja.agents import (
     WritePilotState,
     register_smith_tools,
 )
+from freyja.agents.approval_provider import PersistentApprovalProvider
+from freyja.agents.approval_store import SmithApprovalStore
 from freyja.config import settings
 from freyja.main import app
 from freyja.tools.builtin import register_smith_write_pilot_tools
@@ -932,6 +935,97 @@ def test_write_pilot_endpoint_403_when_write_pilot_disabled(test_client_write_pi
     assert response.status_code == 403
 
 
+def test_approval_admin_list_requires_loopback(test_client_write_pilot_enabled, monkeypatch):
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_write_pilot_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", True)
+    response = test_client_write_pilot_enabled.get(
+        "/agents/smith/approvals",
+        headers={"X-Forwarded-For": "192.0.2.1"},
+    )
+    assert response.status_code == 403
+
+
+def test_approval_admin_404_when_smith_disabled(test_client_write_pilot_enabled, monkeypatch):
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "agent_smith_enabled", False)
+    monkeypatch.setattr(settings, "agent_smith_write_pilot_enabled", False)
+    monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", False)
+    response = test_client_write_pilot_enabled.get("/agents/smith/approvals")
+    assert response.status_code == 404
+
+
+def test_approval_admin_403_when_write_pilot_disabled(test_client_write_pilot_enabled, monkeypatch):
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_write_pilot_enabled", False)
+    monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", False)
+    response = test_client_write_pilot_enabled.get("/agents/smith/approvals")
+    assert response.status_code == 403
+
+
+def test_approval_admin_unknown_approval_id(test_client_write_pilot_enabled, monkeypatch):
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_write_pilot_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", False)
+    response = test_client_write_pilot_enabled.get("/agents/smith/approvals/no-such-id")
+    assert response.status_code == 404
+
+
+def test_approval_lifecycle_via_endpoints(test_client_write_pilot_enabled, monkeypatch, tmp_path):
+    from freyja.config import settings
+
+    db_path = tmp_path / "approvals.sqlite3"
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_write_pilot_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_approval_db_path", str(db_path))
+    monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", False)
+
+    # Create a pending approval via the write-pilot endpoint.
+    response = test_client_write_pilot_enabled.post(
+        "/agents/smith/write-pilot",
+        json={
+            "objective": "add note",
+            "target_path": "docs/smith-pilot/note.md",
+            "proposed_content": "# note\n",
+            "commit_message": "add note",
+            "request_id": "req-api",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"]["state"] == "awaiting_path_approval"
+
+    list_resp = test_client_write_pilot_enabled.get("/agents/smith/approvals")
+    assert list_resp.status_code == 200
+    approvals = list_resp.json()["approvals"]
+    assert any(a["request_id"] == "req-api" and a["action"] == "path" for a in approvals)
+    path_approval = next(a for a in approvals if a["request_id"] == "req-api" and a["action"] == "path")
+
+    approve_resp = test_client_write_pilot_enabled.post(
+        f"/agents/smith/approvals/{path_approval['id']}/approve",
+        json={"actor": "operator-1"},
+    )
+    assert approve_resp.status_code == 200
+    assert approve_resp.json()["status"] == "approved"
+
+    deny_resp = test_client_write_pilot_enabled.post(
+        f"/agents/smith/approvals/{path_approval['id']}/deny",
+        json={"reason": "already approved"},
+    )
+    assert deny_resp.status_code == 409
+
+    get_resp = test_client_write_pilot_enabled.get(f"/agents/smith/approvals/{path_approval['id']}")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["status"] == "approved"
+
+
 def test_write_pilot_endpoint_rejects_non_markdown(test_client_write_pilot_enabled, monkeypatch):
     from freyja.config import settings
 
@@ -948,8 +1042,159 @@ def test_write_pilot_endpoint_rejects_non_markdown(test_client_write_pilot_enabl
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "failed"
-    assert "Markdown" in body["message"]
+    assert body["result"]["status"] == "failed"
+    assert "Markdown" in body["result"]["message"]
+
+
+# ---------------------------------------------------------------------------
+# Strict loopback guard tests
+# ---------------------------------------------------------------------------
+
+
+def _request_with_client(host: str | None, port: int = 12345):
+    from starlette.requests import Request
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/agents/smith/approvals",
+        "headers": [],
+        "client": (host, port) if host else None,
+        "server": ("testserver", 80),
+    }
+    return Request(scope)
+
+
+@pytest.mark.parametrize(
+    "host,should_pass",
+    [
+        ("127.0.0.1", True),
+        ("127.255.255.255", True),
+        ("::1", True),
+        ("192.0.2.1", False),
+        ("2001:db8::1", False),
+        ("localhost", False),
+        ("not-an-ip", False),
+        ("", False),
+    ],
+)
+def test_approval_admin_loopback_strictness(monkeypatch, host, should_pass):
+    from freyja.config import settings
+    from freyja.main import _require_loopback
+
+    monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", True)
+    request = _request_with_client(host or "")
+    if should_pass:
+        _require_loopback(request)
+    else:
+        with pytest.raises(HTTPException) as exc_info:
+            _require_loopback(request)
+        assert exc_info.value.status_code == 403
+
+
+def test_approval_admin_spoofed_forwarded_header_rejected(test_client_write_pilot_enabled, monkeypatch):
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_write_pilot_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", True)
+    response = test_client_write_pilot_enabled.get(
+        "/agents/smith/approvals",
+        headers={
+            "X-Forwarded-For": "192.0.2.1",
+            "Forwarded": "for=192.0.2.2",
+        },
+    )
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Resume payload mismatch tests
+# ---------------------------------------------------------------------------
+
+
+def _create_pending_path_approval(test_client_write_pilot_enabled, monkeypatch, tmp_path):
+    from freyja.config import settings
+
+    db_path = tmp_path / "approvals.sqlite3"
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_write_pilot_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_approval_db_path", str(db_path))
+    monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", False)
+
+    create_resp = test_client_write_pilot_enabled.post(
+        "/agents/smith/write-pilot",
+        json={
+            "objective": "add note",
+            "target_path": "docs/smith-pilot/note.md",
+            "proposed_content": "# note\n",
+            "commit_message": "add note",
+            "request_id": "req-mismatch",
+        },
+    )
+    assert create_resp.status_code == 200
+    approval = next(
+        a for a in create_resp.json()["pending_approvals"]
+        if a["request_id"] == "req-mismatch" and a["action"] == "path"
+    )
+    return approval, db_path
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("request_id", "req-other"),
+        ("target_path", "docs/smith-pilot/other.md"),
+        ("proposed_content", "# other\n"),
+        ("commit_message", "other message"),
+    ],
+)
+def test_resume_payload_mismatch_returns_409(
+    test_client_write_pilot_enabled,
+    monkeypatch,
+    tmp_path,
+    field,
+    value,
+):
+    approval, _db = _create_pending_path_approval(test_client_write_pilot_enabled, monkeypatch, tmp_path)
+    base = {
+        "request_id": "req-mismatch",
+        "approval_id": approval["id"],
+        "objective": "add note",
+        "target_path": "docs/smith-pilot/note.md",
+        "proposed_content": "# note\n",
+        "commit_message": "add note",
+    }
+    base[field] = value
+    response = test_client_write_pilot_enabled.post("/agents/smith/write-pilot/resume", json=base)
+    assert response.status_code == 409
+    assert "mismatch" in response.json()["detail"].lower()
+
+
+def test_resume_payload_correct_reaches_runtime(
+    test_client_write_pilot_enabled,
+    monkeypatch,
+    tmp_path,
+):
+    approval, _db = _create_pending_path_approval(test_client_write_pilot_enabled, monkeypatch, tmp_path)
+    approve_resp = test_client_write_pilot_enabled.post(
+        f"/agents/smith/approvals/{approval['id']}/approve",
+        json={"actor": "operator"},
+    )
+    assert approve_resp.status_code == 200
+    response = test_client_write_pilot_enabled.post(
+        "/agents/smith/write-pilot/resume",
+        json={
+            "request_id": "req-mismatch",
+            "approval_id": approval["id"],
+            "objective": "add note",
+            "target_path": "docs/smith-pilot/note.md",
+            "proposed_content": "# note\n",
+            "commit_message": "add note",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["result"]["state"] == "awaiting_content_approval"
 
 
 # ---------------------------------------------------------------------------

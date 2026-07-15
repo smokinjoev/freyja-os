@@ -22,6 +22,8 @@ from freyja.tools.registry import ToolRegistry
 from .models import (
     AuditEvent,
     ApprovalCallback,
+    ApprovalRecord,
+    ApprovalRecordStatus,
     ObjectiveClass,
     SmithPlan,
     SmithRunSummary,
@@ -30,6 +32,7 @@ from .models import (
     TaskStatus,
     WritePilotRequest,
     WritePilotResult,
+    WritePilotResultWithApprovals,
     WritePilotState,
     WritePilotStateTransition,
     WritePilotApprovalRecord,
@@ -258,6 +261,86 @@ class SmithRuntime:
             start=start,
         )
         return await result.execute()
+
+    async def run_write_pilot_with_provider(
+        self,
+        objective: str,
+        target_path: str,
+        proposed_content: str,
+        commit_message: str,
+        actor: str | None = None,
+        request_id: str | None = None,
+        provider: "PersistentApprovalProvider | None" = None,
+    ) -> "WritePilotResultWithApprovals":
+        """Run the write pilot using a persistent approval provider.
+
+        The run creates pending approval records for each gate and halts at the
+        first gate that is not yet approved.  The caller must then approve the
+        returned ``approval_id`` and call ``resume_write_pilot`` with the same
+        ``request_id`` and ``approval_id`` to advance the workflow.
+        """
+        from .approval_provider import PersistentApprovalProvider
+
+        resolved_provider = provider or PersistentApprovalProvider()
+        self._approval_provider_for_write_pilot = resolved_provider
+        result = await self.run_write_pilot(
+            objective=objective,
+            target_path=target_path,
+            proposed_content=proposed_content,
+            commit_message=commit_message,
+            actor=actor,
+            request_id=request_id,
+            approval_callback=resolved_provider.approval_callback,
+        )
+        pending = [
+            a for a in resolved_provider.store.list_pending()
+            if a.request_id == result.request_id
+        ]
+        return WritePilotResultWithApprovals(
+            result=result,
+            pending_approvals=[a.model_dump(mode="json") for a in pending],
+            provider=resolved_provider,
+        )
+
+    async def resume_write_pilot(
+        self,
+        request_id: str,
+        approval_id: str,
+        objective: str,
+        target_path: str,
+        proposed_content: str,
+        commit_message: str,
+        actor: str | None = None,
+        provider: "PersistentApprovalProvider | None" = None,
+    ) -> "WritePilotResultWithApprovals":
+        """Resume a write-pilot run after an approval has been granted.
+
+        The provider consumes the approved record exactly once.  If the approved
+        gate is not the next expected gate, the approval is rejected.  The run
+        then continues until completion or the next awaiting gate.
+        """
+        from .approval_provider import PersistentApprovalProvider, make_resume_callback
+
+        resolved_provider = provider or PersistentApprovalProvider()
+        callback = make_resume_callback(resolved_provider, approval_id=approval_id, actor=actor or "agent_smith")
+        result = await self.run_write_pilot(
+            objective=objective,
+            target_path=target_path,
+            proposed_content=proposed_content,
+            commit_message=commit_message,
+            actor=actor,
+            request_id=request_id,
+            approval_callback=callback,
+        )
+        pending = [
+            a for a in resolved_provider.store.list_pending()
+            if a.request_id == request_id
+        ]
+        return WritePilotResultWithApprovals(
+            result=result,
+            pending_approvals=[a.model_dump(mode="json") for a in pending],
+            provider=resolved_provider,
+        )
 
     async def run_read_only(
         self,
@@ -961,10 +1044,14 @@ class _WritePilotRun:
         self._actor = actor
         self._request_id = request_id
         self._approval_callback = approval_callback
+        self._provider: "PersistentApprovalProvider | None" = getattr(
+            runtime, "_approval_provider_for_write_pilot", None
+        )
         self._start = start
         self._state = WritePilotState.PLANNED
         self._repo_root = Path(
             getattr(runtime, "_repo_root_for_write_pilot", None)
+            or getattr(runtime.policy, "_allowed_root", None)
             or Path(__file__).resolve().parents[3]
         ).resolve()
         self._approvals: list[dict[str, Any]] = []
@@ -1070,9 +1157,16 @@ class _WritePilotRun:
             actor=self._actor,
         )
         self._approvals.append(record.model_dump(mode="json"))
+        # Ensure every gate has the full write-pilot context so the provider can
+        # store content and commit-message hashes for early resume validation.
+        provider_context = dict(context)
+        provider_context.setdefault("content", self._proposed_content)
+        provider_context.setdefault("commit_message", self._commit_message)
+        if self._provider is not None:
+            await self._provider.request_approval(approval_type, self._request_id, provider_context)
         if self._approval_callback is None:
             return False
-        token = await self._approval_callback(approval_type, self._request_id, context)
+        token = await self._approval_callback(approval_type, self._request_id, provider_context)
         if token is None or not token.approved:
             return False
         if token.request_id != self._request_id:

@@ -1,5 +1,19 @@
+import os
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_state_dir() -> Path:
+    """Return a user-scoped external state directory outside the repository."""
+    home = Path.home()
+    xdg_state = os.environ.get("XDG_STATE_HOME")
+    if xdg_state:
+        base = Path(xdg_state)
+    else:
+        base = home / ".local" / "state"
+    return base / "freyja"
 
 
 class Settings(BaseSettings):
@@ -47,6 +61,9 @@ class Settings(BaseSettings):
     agent_smith_max_steps: int = 20
     agent_smith_audit_enabled: bool = True
     agent_smith_audit_log_path: str = "/Users/freyja/freyja-os/logs/agent-smith-audit.jsonl"
+    agent_smith_approval_ttl_seconds: int = 900
+    agent_smith_approval_db_path: str = str(_default_state_dir() / "smith-approvals.sqlite3")
+    agent_smith_approval_loopback_only: bool = True
 
     @property
     def approved_openrouter_models(self) -> list[str]:

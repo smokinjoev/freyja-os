@@ -5,7 +5,10 @@ from freyja.tools.iris_maintenance import register_smith_controlled_tools
 
 from .models import (
     ApprovalCallback,
+    ApprovalRecord,
+    ApprovalRecordStatus,
     ApprovalStatus,
+    ApprovalStoreError,
     AuditEvent,
     ObjectiveClass,
     PolicyCheckResult,
@@ -34,7 +37,10 @@ def register_smith_tools(registry) -> None:
 __all__ = [
     "AgentPolicy",
     "ApprovalCallback",
+    "ApprovalRecord",
+    "ApprovalRecordStatus",
     "ApprovalStatus",
+    "ApprovalStoreError",
     "AuditEvent",
     "ObjectiveClass",
     "PolicyCheckResult",

@@ -172,6 +172,12 @@ class WritePilotResult(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class WritePilotResultWithApprovals(BaseModel):
+    result: WritePilotResult
+    pending_approvals: list[dict[str, Any]] = Field(default_factory=list)
+    provider: Any = Field(default=None, exclude=True)
+
+
 class SmithRunSummary(BaseModel):
     request_id: str
     objective: str
@@ -189,6 +195,42 @@ class SmithRunSummary(BaseModel):
     metadata: dict[str, Any] | None = None
     plan: SmithPlan | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ApprovalRecordStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    EXPIRED = "expired"
+    CONSUMED = "consumed"
+    CANCELLED = "cancelled"
+
+
+class ApprovalRecord(BaseModel):
+    id: str
+    request_id: str
+    action: str
+    target_path: str
+    content_hash: str | None = None
+    commit_message_hash: str | None = None
+    status: ApprovalRecordStatus = ApprovalRecordStatus.PENDING
+    summary: str = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    resolved_at: datetime | None = None
+    resolved_by: str | None = None
+    denial_reason: str | None = None
+    consumed_at: datetime | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApprovalStoreError(Exception):
+    """Raised when an approval-store invariant is violated."""
+
+    def __init__(self, message: str, status_code: int = 500) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
 
 
 class PolicyDecision(StrEnum):
