@@ -281,11 +281,18 @@ async def test_reason_describes_decision_not_provider_exception(router: Router, 
     assert "sk-" not in reason
 
 
-def test_approved_allowlist_empty() -> None:
-    s = Settings()
+def test_approved_allowlist_empty(monkeypatch) -> None:
+    monkeypatch.delenv("OPENROUTER_ALLOWLIST", raising=False)
+    s = Settings(_env_file=None)
     assert s.approved_openrouter_models == []
 
 
 def test_approved_allowlist_parsing() -> None:
-    s = Settings(OPENROUTER_ALLOWLIST="a/b, c/d ,")
+    s = Settings(OPENROUTER_ALLOWLIST="a/b, c/d ,", _env_file=None)
     assert s.approved_openrouter_models == ["a/b", "c/d"]
+
+
+def test_approved_allowlist_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_ALLOWLIST", "openai/gpt-4o-mini,anthropic/claude-3.5-haiku")
+    s = Settings()
+    assert s.approved_openrouter_models == ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku"]

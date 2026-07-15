@@ -207,6 +207,34 @@ async def test_orchestrator_run_test_objective(orchestrator, policy):
 
 
 @pytest.mark.anyio
+async def test_decompose_negated_commit_does_not_emit_commit_task(orchestrator):
+    plan = await orchestrator.inspect("do not commit the current changes")
+    assert not any(task.metadata.get("tool") == "git_commit" for task in plan.tasks)
+
+
+@pytest.mark.anyio
+async def test_decompose_commit_after_contrast_marker_emits_commit_task(orchestrator):
+    plan = await orchestrator.inspect("do not commit yet, but commit the changes later")
+    commit_tasks = [task for task in plan.tasks if task.metadata.get("tool") == "git_commit"]
+    assert commit_tasks
+    assert all(task.approval_status == ApprovalStatus.REQUIRED for task in commit_tasks)
+
+
+@pytest.mark.anyio
+async def test_decompose_positive_commit_task_requires_approval(orchestrator):
+    plan = await orchestrator.inspect("commit the latest changes")
+    commit_tasks = [task for task in plan.tasks if task.metadata.get("tool") == "git_commit"]
+    assert commit_tasks
+    assert all(task.approval_status == ApprovalStatus.REQUIRED for task in commit_tasks)
+
+
+@pytest.mark.anyio
+async def test_decompose_negated_commit_with_then_positive_is_blocked(orchestrator):
+    plan = await orchestrator.inspect("never commit, then show repository status")
+    assert not any(task.metadata.get("tool") == "git_commit" for task in plan.tasks)
+
+
+@pytest.mark.anyio
 async def test_retryable_failure_then_success(registry, policy_with_extra_tools):
     attempts = 0
 

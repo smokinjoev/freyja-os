@@ -14,9 +14,10 @@ fi
 PROJECT_DIR="/Users/freyja/freyja-os"
 ENV_FILE="${PROJECT_DIR}/.env"
 RESTART_SCRIPT="${PROJECT_DIR}/scripts/restart-director.sh"
-BACKUP_DIR="${PROJECT_DIR}/.backups"
+BACKUP_DIR="/Users/freyja/.local/state/freyja/backups"
 
 mkdir -p "${BACKUP_DIR}"
+chmod 0700 "${BACKUP_DIR}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
     echo "Error: environment file not found at ${ENV_FILE}" >&2
@@ -34,9 +35,10 @@ if grep -qE '^\s*AGENT_SMITH_WRITE_ENABLED\s*=\s*(true|1|yes)' "${ENV_FILE}" 2>/
     exit 1
 fi
 
-# Preserve backup with timestamp.
+# Preserve backup with timestamp outside the repository; never print contents.
 BACKUP_FILE="${BACKUP_DIR}/env.agent-smith-read-only-$(date +%Y%m%d-%H%M%S).bak"
 cp -p "${ENV_FILE}" "${BACKUP_FILE}"
+chmod 0600 "${BACKUP_FILE}"
 echo "Backup created: ${BACKUP_FILE}"
 
 # Update only approved Smith flags; never enable write tools or package installation.

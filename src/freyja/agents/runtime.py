@@ -691,27 +691,70 @@ class SmithRuntime:
         return str(uuid.uuid4())
 
 
+_CONTRAST_MARKERS = frozenset({"but", "however", "then", "and then"})
+
+_NEGATION_PATTERNS = [
+    # Strip a single negated clause up to the next clause boundary so that
+    # "do not A, B, or C." cannot leak prohibited verbs into classification,
+    # while contrast markers such as "but", "however", "then", and "and then"
+    # terminate the negated clause so later positive instructions are visible.
+    re.compile(r"\b(do\s+not|don'?t|never|no)\b[^.!?;]*?(?:(?:,\s*)?(?:but|however|then|and\s+then)\b|(?=[.!?;])|[.!?;]|$)"),
+]
+
+
+def _strip_negated_phrases(objective: str) -> str:
+    """Remove negated instruction clauses so their prohibited keywords are not matched.
+
+    Negation is clause-scoped: a contrast marker (but/however/then/and then)
+    ends the negated clause, so a positive instruction after the marker is still
+    visible to classification. This keeps "Do not inspect only; commit the
+    changes instead." classified as a prohibited write objective.
+    """
+    result = objective.lower()
+    for pattern in _NEGATION_PATTERNS:
+        result = pattern.sub("", result)
+    return result
+
+
+def _strip_read_only_action_verbs(objective: str) -> str:
+    """Remove 'run' when it precedes an approved inspection/validation/diagnostics verb.
+
+    This prevents read-only requests like 'run compile validation' or
+    'run test suite' from being misclassified as privileged shell commands.
+    """
+    result = objective
+    allowed_next = _INSPECTION_KEYWORDS | _VALIDATION_KEYWORDS | _DIAGNOSTICS_KEYWORDS
+    for kw in allowed_next:
+        pattern = re.compile(rf"\brun\s+{re.escape(kw)}\b")
+        result = pattern.sub(kw, result)
+    return result
+
+
 def _classify_objective(objective: str) -> ObjectiveClass:
     """Classify an objective before read-only execution begins.
 
-    Order matters: write and privileged keywords are checked first so they
-    always take precedence over inspection/validation/diagnostics keywords.
+    Negated safety instructions such as "do not modify" or "no secret
+    access" are ignored. Write and privileged keywords are checked next so
+    they take precedence over inspection/validation/diagnostics keywords.
     If no decisive category is matched, the objective is ambiguous.
     """
     lowered = objective.lower()
-    words = frozenset(re.findall(r"[a-z]+", lowered))
+    neutralized = _strip_read_only_action_verbs(_strip_negated_phrases(lowered))
+    words = frozenset(re.findall(r"[a-z]+", neutralized))
 
-    if any(kw in lowered for kw in _PROHIBITED_WRITE_KEYWORDS) or _PROHIBITED_WRITE_KEYWORDS & words:
+    single_write = {kw for kw in _PROHIBITED_WRITE_KEYWORDS if len(kw.split()) == 1}
+    multiword_write = {kw for kw in _PROHIBITED_WRITE_KEYWORDS if len(kw.split()) > 1 and kw in neutralized}
+    if multiword_write or any(re.search(rf"\b{re.escape(kw)}\b", neutralized) for kw in single_write):
         return ObjectiveClass.PROHIBITED_WRITE
 
-    multiword_privileged = {kw for kw in _PROHIBITED_PRIVILEGED_KEYWORDS if len(kw.split()) > 1 and kw in lowered}
+    multiword_privileged = {kw for kw in _PROHIBITED_PRIVILEGED_KEYWORDS if len(kw.split()) > 1 and kw in neutralized}
     single_privileged = {kw for kw in _PROHIBITED_PRIVILEGED_KEYWORDS if len(kw.split()) == 1}
-    if multiword_privileged or (single_privileged & words):
+    if multiword_privileged or any(re.search(rf"\b{re.escape(kw)}\b", neutralized) for kw in single_privileged):
         return ObjectiveClass.PROHIBITED_PRIVILEGED
 
-    inspection_count = sum(1 for kw in _INSPECTION_KEYWORDS if kw in lowered)
-    validation_count = sum(1 for kw in _VALIDATION_KEYWORDS if kw in lowered)
-    diagnostics_count = sum(1 for kw in _DIAGNOSTICS_KEYWORDS if kw in lowered)
+    inspection_count = sum(1 for kw in _INSPECTION_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", lowered))
+    validation_count = sum(1 for kw in _VALIDATION_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", lowered))
+    diagnostics_count = sum(1 for kw in _DIAGNOSTICS_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", lowered))
     total_score = inspection_count + validation_count + diagnostics_count
 
     if total_score > 0 and total_score >= len(words) * 0.25:

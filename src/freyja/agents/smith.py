@@ -3,6 +3,7 @@ retry/escalate, approval gating, and summarisation.
 """
 
 import logging
+import re
 from typing import Any, Awaitable, Callable
 
 from freyja.tools.errors import ToolNotFoundError
@@ -212,7 +213,22 @@ class SmithOrchestrator:
         self._approval_callbacks[operation] = callback
 
     def _decompose(self, objective: str) -> list[SmithTask]:
-        if "commit" in objective.lower() or "git commit" in objective.lower():
+        lowered = objective.lower()
+
+        # Only treat an objective as a commit request if the commit keyword is
+        # not inside a negated instruction such as "do not commit". The negated
+        # clause is stripped up to the next clause boundary, including contrast
+        # markers like "but/however/then/and then", so later positive
+        # instructions remain visible.
+        def _contains_unnegated_commit(text: str) -> bool:
+            stripped = re.sub(
+                r"\b(do\s+not|don'?t|never|no)\b[^.!?;]*?(?:(?:,\s*)?(?:but|however|then|and\s+then)\b|(?=[.!?;])|[.!?;]|$)",
+                "",
+                text.lower(),
+            )
+            return "commit" in stripped
+
+        if ("commit" in lowered or "git commit" in lowered) and _contains_unnegated_commit(objective):
             return [
                 SmithTask(
                     description="Review repository status",
@@ -224,20 +240,49 @@ class SmithOrchestrator:
                     approval_status=ApprovalStatus.REQUIRED,
                 ),
             ]
-        if "test" in objective.lower():
-            return [
-                SmithTask(
-                    description="Run project test suite",
-                    metadata={"tool": "run_test_suite"},
-                ),
-            ]
-        if "compile" in objective.lower() or "build" in objective.lower():
-            return [
-                SmithTask(
-                    description="Compile project sources",
-                    metadata={"tool": "compile_project"},
-                ),
-            ]
+
+        tasks: list[SmithTask] = []
+        if any(kw in lowered for kw in ("status", "inspect", "repository", "repo", "health", "report")):
+            tasks.append(SmithTask(
+                description="Report repository status",
+                metadata={"tool": "repository_status"},
+            ))
+        if any(kw in lowered for kw in ("diff", "changes")):
+            tasks.append(SmithTask(
+                description="Summarize repository diff",
+                metadata={"tool": "repository_diff_summary"},
+            ))
+        if any(kw in lowered for kw in ("compile", "build", "validate")):
+            tasks.append(SmithTask(
+                description="Compile project sources",
+                metadata={"tool": "compile_project"},
+            ))
+        if any(kw in lowered for kw in ("diff validation", "validate diff", "validate_diff")):
+            tasks.append(SmithTask(
+                description="Validate working tree diff",
+                metadata={"tool": "validate_diff"},
+            ))
+        if any(kw in lowered for kw in ("test", "pytest")):
+            tasks.append(SmithTask(
+                description="Run project test suite",
+                metadata={"tool": "run_test_suite"},
+            ))
+        if any(kw in lowered for kw in ("health", "diagnose", "system")):
+            tasks.append(SmithTask(
+                description="Check system health",
+                metadata={"tool": "system_health"},
+            ))
+
+        if len(tasks) == 1:
+            return tasks
+
+        if tasks:
+            tasks.append(SmithTask(
+                description="Produce final summary",
+                metadata={"tool": "no-op"},
+            ))
+            return tasks
+
         return [
             SmithTask(
                 description=f"Inspect objective: {objective}",

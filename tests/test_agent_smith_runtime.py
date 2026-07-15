@@ -769,6 +769,44 @@ async def test_run_read_only_repository_unchanged(runtime, tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_run_read_only_negated_write_objective_allows_inspection(runtime):
+    summary = await runtime.run_read_only("do not commit; show repository status")
+    assert summary.status in {"complete", "incomplete"}
+    assert summary.metadata.get("classification") != "prohibited_write"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_contrast_marker_resurrects_write_block(runtime):
+    summary = await runtime.run_read_only("do not inspect only; commit the changes instead")
+    assert summary.status == "blocked"
+    assert summary.total_tasks == 0
+    assert summary.metadata.get("classification") == "prohibited_write"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_negated_privileged_objective_is_safe(runtime):
+    summary = await runtime.run_read_only("never restart the director")
+    assert summary.status in {"complete", "incomplete", "ambiguous"}
+    assert summary.metadata.get("classification") != "prohibited_privileged"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_positive_write_remains_blocked(runtime):
+    summary = await runtime.run_read_only("commit the latest changes")
+    assert summary.status == "blocked"
+    assert summary.total_tasks == 0
+    assert summary.metadata.get("classification") == "prohibited_write"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_positive_privileged_remains_blocked(runtime):
+    summary = await runtime.run_read_only("restart the director service")
+    assert summary.status == "blocked"
+    assert summary.total_tasks == 0
+    assert summary.metadata.get("classification") == "prohibited_privileged"
+
+
+@pytest.mark.asyncio
 async def test_run_read_only_read_only_allowlist_unchanging():
     from freyja.agents.runtime import _READ_ONLY_ALLOWLIST
 
