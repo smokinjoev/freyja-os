@@ -1,0 +1,69 @@
+agent_smith:
+  enabled: false
+  description: "Agent Smith maintenance bot policy for the Freyja-OS repository."
+
+allowed_root: /Users/freyja/freyja-os
+
+read_only_builtin_tools:
+  - system_health
+  - list_models
+  - recall_conversation
+
+smith_read_only_tools:
+  - repository_status
+  - repository_diff_summary
+  - run_test_suite
+  - compile_project
+
+# Operations that Agent Smith may perform automatically without approval.
+auto_allowed_operations:
+  - repository_status
+  - repository_diff_summary
+  - run_test_suite
+  - compile_project
+  - inspect
+  - no-op
+  - summarize
+
+# Operations that require explicit human approval before execution.
+approval_required_operations:
+  - git_commit
+  - dependency_change
+  - service_restart
+  - file_modification
+
+# Operations that are strictly prohibited for Agent Smith.
+prohibited_operations:
+  - git_push
+  - git_force_push
+  - git_reset
+  - git_clean
+  - git_rebase
+  - destructive_git_operation
+  - arbitrary_shell
+  - arbitrary_filesystem_write
+  - package_installation
+  - service_termination
+  - credential_access
+  - secret_extraction
+  - outside_root_access
+
+max_retries: 3
+
+secret_patterns:
+  - "\\.env$"
+  - "(^|/)secrets?(/|$)"
+  - "\\.pem$"
+  - "\\.key$"
+  - "\\.pfx$"
+  - "\\.p12$"
+  - "\\.crt$"
+  - "token"
+  - "api_key"
+  - "password"
+
+# Loop detection configuration.
+loop_detection:
+  consecutive_identical_fingerprints: 4
+  pair_repetitions: 2
+  recent_window: 6

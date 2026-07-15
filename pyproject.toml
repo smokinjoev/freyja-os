@@ -12,6 +12,7 @@ dependencies = [
     "fastapi",
     "httpx",
     "pydantic-settings",
+    "pyyaml",
     "uvicorn",
 ]
 

@@ -1,3 +1,7 @@
+import os
+import subprocess
+from pathlib import Path
+
 from freyja.memory.store import get_active_store
 from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
@@ -149,3 +153,151 @@ def _memory_enabled() -> bool:
     from freyja.memory.store import is_memory_enabled
 
     return is_memory_enabled()
+
+
+async def _repository_status_implementation(request: ToolExecutionRequest) -> dict:
+    repo_root = Path(__file__).resolve().parents[3]
+    try:
+        status_proc = subprocess.run(
+            ["git", "status", "--short", "--branch"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        diff_proc = subprocess.run(
+            ["git", "diff", "--stat"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return {
+            "repository_root": str(repo_root),
+            "branch_status": status_proc.stdout.strip(),
+            "diff_summary": diff_proc.stdout.strip(),
+            "git_available": status_proc.returncode == 0,
+        }
+    except Exception as exc:
+        return {"repository_root": str(repo_root), "error": str(exc)}
+
+
+async def _repository_diff_summary_implementation(request: ToolExecutionRequest) -> dict:
+    repo_root = Path(__file__).resolve().parents[3]
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "--stat"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return {
+            "repository_root": str(repo_root),
+            "diff_summary": proc.stdout.strip(),
+            "git_available": proc.returncode == 0,
+        }
+    except Exception as exc:
+        return {"repository_root": str(repo_root), "error": str(exc)}
+
+
+async def _run_test_suite_implementation(request: ToolExecutionRequest) -> dict:
+    repo_root = Path(__file__).resolve().parents[3]
+    venv_bin = os.path.join(repo_root, ".venv", "bin")
+    pytest_path = os.path.join(venv_bin, "pytest")
+    try:
+        proc = subprocess.run(
+            [pytest_path, "-q", "--tb=short", "--ignore=tests/test_agent_smith.py"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=110,
+        )
+        return {
+            "returncode": proc.returncode,
+            "passed": proc.returncode == 0,
+            "stdout_tail": "\n".join(proc.stdout.strip().splitlines()[-20:]),
+            "stderr_tail": "\n".join(proc.stderr.strip().splitlines()[-20:]),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+async def _compile_project_implementation(request: ToolExecutionRequest) -> dict:
+    repo_root = Path(__file__).resolve().parents[3]
+    try:
+        proc = subprocess.run(
+            ["python", "-m", "compileall", str(repo_root / "src")],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return {
+            "returncode": proc.returncode,
+            "passed": proc.returncode == 0,
+            "stdout": proc.stdout.strip(),
+            "stderr": proc.stderr.strip(),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def register_smith_read_only_tools(registry: ToolRegistry) -> None:
+    registry.register(
+        ToolDefinition(
+            name="repository_status",
+            description="Read-only git status and branch summary for the repository.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=30,
+            tags=["smith", "git", "status"],
+        ),
+        _repository_status_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="repository_diff_summary",
+            description="Read-only summary of uncommitted repository changes.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=30,
+            tags=["smith", "git", "diff"],
+        ),
+        _repository_diff_summary_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="run_test_suite",
+            description="Run the project pytest suite and return results.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=120,
+            tags=["smith", "tests"],
+        ),
+        _run_test_suite_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="compile_project",
+            description="Compile all project Python sources to verify syntax.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=60,
+            tags=["smith", "compile"],
+        ),
+        _compile_project_implementation,
+    )

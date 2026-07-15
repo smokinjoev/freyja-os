@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     tools_default_timeout_seconds: int = 30
     tools_audit_log_enabled: bool = True
 
+    agent_smith_enabled: bool = False
+    agent_smith_policy_path: str = "config/agent-smith-policy.yaml"
+    agent_smith_max_retries: int = 3
+    agent_smith_audit_enabled: bool = True
+
     @property
     def approved_openrouter_models(self) -> list[str]:
         if not self.openrouter_allowlist:
