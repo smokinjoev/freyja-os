@@ -132,6 +132,12 @@ class SmithDryRunRequest(BaseModel):
     request_id: str | None = None
 
 
+class SmithReadOnlyRequest(BaseModel):
+    objective: str
+    actor: str = "agent_smith"
+    request_id: str | None = None
+
+
 @app.post("/agents/smith/dry-run")
 async def smith_dry_run(request: SmithDryRunRequest) -> dict[str, Any]:
     if not settings.agent_smith_enabled or not settings.agent_smith_dry_run_enabled:
@@ -141,4 +147,20 @@ async def smith_dry_run(request: SmithDryRunRequest) -> dict[str, Any]:
         )
     runtime = SmithRuntime()
     summary = await runtime.run_dry(request.objective, actor=request.actor, request_id=request.request_id)
+    return summary.model_dump(mode="json")
+
+
+@app.post("/agents/smith/read-only")
+async def smith_read_only(request: SmithReadOnlyRequest) -> dict[str, Any]:
+    if not settings.agent_smith_enabled or not settings.agent_smith_read_only_enabled:
+        raise HTTPException(
+            status_code=404 if not settings.agent_smith_enabled else 403,
+            detail="Agent Smith read-only mode is not enabled.",
+        )
+    runtime = SmithRuntime()
+    summary = await runtime.run_read_only(
+        request.objective,
+        actor=request.actor,
+        request_id=request.request_id,
+    )
     return summary.model_dump(mode="json")

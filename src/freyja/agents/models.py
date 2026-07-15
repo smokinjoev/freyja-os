@@ -8,6 +8,15 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class ObjectiveClass(StrEnum):
+    INSPECTION = "inspection"
+    VALIDATION = "validation"
+    DIAGNOSTICS = "diagnostics"
+    PROHIBITED_WRITE = "prohibited_write"
+    PROHIBITED_PRIVILEGED = "prohibited_privileged"
+    AMBIGUOUS = "ambiguous"
+
+
 class TaskStatus(StrEnum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
@@ -95,6 +104,7 @@ class SmithRunSummary(BaseModel):
     audit_records: list[dict[str, Any]] = Field(default_factory=list)
     actor: str = "agent_smith"
     duration_ms: int | None = None
+    metadata: dict[str, Any] | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

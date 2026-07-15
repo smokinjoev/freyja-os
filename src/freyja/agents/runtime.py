@@ -4,6 +4,7 @@ loop detection, retry limits, and sanitized audit persistence.
 
 import json
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ from freyja.tools.errors import ToolNotFoundError
 from freyja.tools.models import ToolExecutionRequest, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
 
-from .models import AuditEvent, SmithPlan, SmithRunSummary, SmithStepResult, SmithTask, TaskStatus
+from .models import AuditEvent, ObjectiveClass, SmithPlan, SmithRunSummary, SmithStepResult, SmithTask, TaskStatus
 from .policy import AgentPolicy
 from .smith import PolicyViolationError, SmithOrchestrator
 
@@ -28,6 +29,93 @@ _DRY_RUN_READ_ONLY_TOOLS = frozenset(
         "compile_project",
         "run_test_suite",
         "validate_diff",
+    }
+)
+
+_READ_ONLY_ALLOWLIST = _DRY_RUN_READ_ONLY_TOOLS | {"system_health"}
+
+_PROHIBITED_WRITE_KEYWORDS = frozenset(
+    {
+        "commit",
+        "write",
+        "modify",
+        "edit",
+        "overwrite",
+        "patch",
+        "delete",
+        "remove",
+        "stage",
+        "add",
+    }
+)
+
+_PROHIBITED_PRIVILEGED_KEYWORDS = frozenset(
+    {
+        "restart",
+        "reboot",
+        "shutdown",
+        "terminate",
+        "kill",
+        "systemctl",
+        "launchctl",
+        "install",
+        "upgrade",
+        "update",
+        "deploy",
+        "shell",
+        "command",
+        "exec",
+        "run ",
+        "sudo",
+        "chmod",
+        "chown",
+        "password",
+        "secret",
+        "credential",
+        "token",
+        "api key",
+        "privilege",
+        "elevated",
+    }
+)
+
+_INSPECTION_KEYWORDS = frozenset(
+    {
+        "check",
+        "status",
+        "inspect",
+        "view",
+        "show",
+        "list",
+        "diff",
+        "summary",
+        "what",
+    }
+)
+
+_VALIDATION_KEYWORDS = frozenset(
+    {
+        "test",
+        "validate",
+        "verify",
+        "compile",
+        "build",
+        "lint",
+        "format",
+        "pytest",
+    }
+)
+
+_DIAGNOSTICS_KEYWORDS = frozenset(
+    {
+        "health",
+        "diagnose",
+        "debug",
+        "trace",
+        "error",
+        "failure",
+        "why is",
+        "what is wrong",
     }
 )
 
@@ -50,7 +138,7 @@ class SmithRuntime:
         self._max_retries = max_retries if max_retries is not None else int(settings.agent_smith_dry_run_max_retries)
         self._max_retries = max(self._max_retries, 1)
         self._audit_log_path = audit_log_path or str(settings.agent_smith_audit_log_path)
-        self._read_only_tools = read_only_tools or _DRY_RUN_READ_ONLY_TOOLS
+        self._read_only_tools = read_only_tools or _READ_ONLY_ALLOWLIST
         self._audit_records: list[dict[str, Any]] = []
         self._loop_fingerprints: list[str] = []
 
@@ -100,6 +188,143 @@ class SmithRuntime:
         self._audit("run_dry", summary.status, request_id=request_id, actor=actor, summary=summary.model_dump(mode="json"))
         self._persist_audit_records()
         return summary
+
+    async def run_read_only(
+        self,
+        objective: str,
+        actor: str | None = None,
+        request_id: str | None = None,
+    ) -> SmithRunSummary:
+        """Execute a read-only objective using only the approved read-only allowlist.
+
+        The public interface is ``run_read_only(objective, actor=None, request_id=None)``.
+        If ``actor`` is omitted, the audit trail records the run as ``agent_smith``.
+
+        * Classifies the objective and refuses ambiguous, write, or privileged requests
+          before invoking any tool.
+        * Only tools in ``_READ_ONLY_ALLOWLIST`` may be invoked.
+        * Controlled-write and privileged tools are explicitly denied.
+        * Sanitized audit records are persisted to the configured JSONL log.
+        """
+        start = time.monotonic()
+        request_id = request_id or self._new_request_id()
+        actor = actor or "agent_smith"
+        classification = _classify_objective(objective)
+
+        self._audit(
+            "run_read_only",
+            "started",
+            request_id=request_id,
+            actor=actor,
+            objective=objective,
+            classification=classification.value,
+        )
+
+        if classification == ObjectiveClass.AMBIGUOUS:
+            summary = _classification_summary(
+                request_id,
+                objective,
+                actor,
+                classification,
+                "Objective is ambiguous and cannot be executed in read-only mode.",
+                start,
+                self._audit_records,
+            )
+            self._audit("run_read_only", summary.status, request_id=request_id, actor=actor, summary=summary.model_dump(mode="json"))
+            self._persist_audit_records()
+            return summary
+
+        if classification in {ObjectiveClass.PROHIBITED_WRITE, ObjectiveClass.PROHIBITED_PRIVILEGED}:
+            summary = _classification_summary(
+                request_id,
+                objective,
+                actor,
+                classification,
+                f"Objective classified as {classification.value}; read-only execution refused.",
+                start,
+                self._audit_records,
+            )
+            self._audit("run_read_only", summary.status, request_id=request_id, actor=actor, summary=summary.model_dump(mode="json"))
+            self._persist_audit_records()
+            return summary
+
+        plan = await self._orchestrator.plan(objective, request_id=request_id)
+        steps_taken = 0
+        loop_detected = False
+
+        while not self._is_plan_terminal(plan) and steps_taken < self._max_steps:
+            task = plan.next_runnable_task()
+            if task is None:
+                break
+            tool_name = task.metadata.get("tool") or "no-op"
+            if not self._is_read_only_tool(tool_name):
+                result = self._deny_non_read_only_tool(task, plan.request_id, actor, tool_name)
+            else:
+                result = await self._execute_dry_step(task, plan.request_id, actor)
+            steps_taken += 1
+            self._loop_fingerprints.append(self._fingerprint(task, result))
+            if self._policy.detect_loop(self._loop_fingerprints):
+                loop_detected = True
+                task.status = TaskStatus.LOOP_DETECTED
+                self._audit(
+                    "loop_detected",
+                    "blocked",
+                    request_id=request_id,
+                    actor=actor,
+                    task_id=task.id,
+                )
+                break
+            self._update_task_status(task, result)
+
+        summary = self._summarize(plan, request_id, actor, loop_detected, steps_taken, start)
+        summary.message = self._read_only_message(summary, classification)
+        summary.metadata = {"classification": classification.value}
+        self._audit("run_read_only", summary.status, request_id=request_id, actor=actor, summary=summary.model_dump(mode="json"))
+        self._persist_audit_records()
+        return summary
+
+    def _is_read_only_tool(self, tool_name: str) -> bool:
+        if tool_name == "no-op":
+            return True
+        return tool_name in self._read_only_tools or tool_name in _READ_ONLY_ALLOWLIST
+
+    def _deny_non_read_only_tool(
+        self,
+        task: SmithTask,
+        request_id: str,
+        actor: str,
+        tool_name: str,
+    ) -> SmithStepResult:
+        task.status = TaskStatus.IN_PROGRESS
+        task.request_id = request_id
+        error = f"Tool '{tool_name}' is not in the read-only allowlist."
+        audit_record = self._record_step_audit(
+            request_id,
+            actor,
+            tool_name,
+            "denied",
+            task,
+            error=error,
+        )
+        return SmithStepResult(
+            task_id=task.id,
+            request_id=request_id,
+            tool_name=tool_name,
+            success=False,
+            attempts=1,
+            error=error,
+            audit_record=audit_record,
+            actor=actor,
+        )
+
+    def _read_only_message(self, summary: SmithRunSummary, classification: ObjectiveClass) -> str:
+        if summary.status == "loop_detected":
+            return "Read-only run terminated due to detected loop."
+        if summary.status in {"needs_attention", "incomplete"}:
+            return f"Read-only {classification.value} run completed with blocked or failed operations."
+        if summary.status == "complete":
+            return f"Read-only {classification.value} run completed successfully."
+        return summary.message
 
     async def _execute_dry_step(
         self,
@@ -464,6 +689,65 @@ class SmithRuntime:
         import uuid
 
         return str(uuid.uuid4())
+
+
+def _classify_objective(objective: str) -> ObjectiveClass:
+    """Classify an objective before read-only execution begins.
+
+    Order matters: write and privileged keywords are checked first so they
+    always take precedence over inspection/validation/diagnostics keywords.
+    If no decisive category is matched, the objective is ambiguous.
+    """
+    lowered = objective.lower()
+    words = frozenset(re.findall(r"[a-z]+", lowered))
+
+    if any(kw in lowered for kw in _PROHIBITED_WRITE_KEYWORDS) or _PROHIBITED_WRITE_KEYWORDS & words:
+        return ObjectiveClass.PROHIBITED_WRITE
+
+    multiword_privileged = {kw for kw in _PROHIBITED_PRIVILEGED_KEYWORDS if len(kw.split()) > 1 and kw in lowered}
+    single_privileged = {kw for kw in _PROHIBITED_PRIVILEGED_KEYWORDS if len(kw.split()) == 1}
+    if multiword_privileged or (single_privileged & words):
+        return ObjectiveClass.PROHIBITED_PRIVILEGED
+
+    inspection_count = sum(1 for kw in _INSPECTION_KEYWORDS if kw in lowered)
+    validation_count = sum(1 for kw in _VALIDATION_KEYWORDS if kw in lowered)
+    diagnostics_count = sum(1 for kw in _DIAGNOSTICS_KEYWORDS if kw in lowered)
+    total_score = inspection_count + validation_count + diagnostics_count
+
+    if total_score > 0 and total_score >= len(words) * 0.25:
+        if diagnostics_count >= inspection_count and diagnostics_count >= validation_count:
+            return ObjectiveClass.DIAGNOSTICS
+        if validation_count >= inspection_count:
+            return ObjectiveClass.VALIDATION
+        return ObjectiveClass.INSPECTION
+
+    return ObjectiveClass.AMBIGUOUS
+
+
+def _classification_summary(
+    request_id: str,
+    objective: str,
+    actor: str,
+    classification: ObjectiveClass,
+    message: str,
+    start: float,
+    audit_records: list[dict[str, Any]],
+) -> SmithRunSummary:
+    return SmithRunSummary(
+        request_id=request_id,
+        objective=objective,
+        total_tasks=0,
+        completed_tasks=0,
+        failed_tasks=0,
+        escalated_tasks=0,
+        approval_required_count=0,
+        status="blocked" if classification != ObjectiveClass.AMBIGUOUS else "ambiguous",
+        message=message,
+        audit_records=audit_records,
+        actor=actor,
+        duration_ms=_elapsed_ms(start),
+        metadata={"classification": classification.value},
+    )
 
 
 def _sanitize_for_audit(value: Any) -> Any:

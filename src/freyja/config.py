@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     agent_smith_enabled: bool = False
     agent_smith_dry_run_enabled: bool = False
+    agent_smith_read_only_enabled: bool = False
     agent_smith_policy_path: str = "config/agent-smith-policy.yaml"
     agent_smith_max_retries: int = 3
     agent_smith_dry_run_max_retries: int = 2

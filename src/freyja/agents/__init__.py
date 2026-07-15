@@ -6,6 +6,7 @@ from freyja.tools.iris_maintenance import register_smith_controlled_tools
 from .models import (
     ApprovalStatus,
     AuditEvent,
+    ObjectiveClass,
     PolicyCheckResult,
     PolicyDecision,
     SmithPlan,
@@ -29,6 +30,7 @@ __all__ = [
     "AgentPolicy",
     "ApprovalStatus",
     "AuditEvent",
+    "ObjectiveClass",
     "PolicyCheckResult",
     "PolicyDecision",
     "PolicyViolationError",
