@@ -244,6 +244,96 @@ async def _compile_project_implementation(request: ToolExecutionRequest) -> dict
         return {"error": str(exc)}
 
 
+async def _validate_diff_implementation(request: ToolExecutionRequest) -> dict:
+    """Validate that uncommitted changes are safe for Agent Smith operations.
+
+    Returns a structured safety report including:
+
+    * whether any secrets/env files were modified,
+    * whether any non-Python files or untrusted paths are touched,
+    * a sanitized diff stat with secret paths redacted,
+    * an overall ``safe_to_proceed`` boolean.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    secret_patterns = [
+        r"\.env",
+        r"(^|/)secrets?(/|$)",
+        r"\.pem$",
+        r"\.key$",
+        r"\.pfx$",
+        r"\.p12$",
+        r"\.crt$",
+        r"token",
+        r"api_key",
+        r"password",
+    ]
+    try:
+        status_proc = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        diff_proc = subprocess.run(
+            ["git", "diff", "--name-status", "--", ":!*.secret", ":!*.env"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as exc:
+        return {"repository_root": str(repo_root), "error": str(exc)}
+
+    raw_lines = status_proc.stdout.strip().splitlines()
+    changed_files: list[str] = []
+    secret_touched = False
+    non_python_touched = False
+
+    for line in raw_lines:
+        if not line.strip():
+            continue
+        # git status --short: XY filename or XY filename -> filename for renames.
+        parts = line.split()
+        if " -> " in line:
+            path_part = line.split(" -> ")[-1].strip()
+        else:
+            path_part = " ".join(parts[1:]).strip()
+        relative_path = Path(path_part)
+        changed_files.append(str(relative_path))
+        lowered = str(relative_path).lower()
+        if any(re.search(pattern, lowered) for pattern in secret_patterns):
+            secret_touched = True
+        if not any(
+            lowered.endswith(ext)
+            for ext in (".py", ".yaml", ".yml", ".json", ".md", ".txt", ".sh", ".gitignore")
+        ):
+            non_python_touched = True
+
+    safe_to_proceed = not secret_touched and not non_python_touched and changed_files
+
+    # Sanitize the public report: strip absolute paths and any secret-looking names.
+    sanitized_files = []
+    for path_str in changed_files:
+        name = Path(path_str).name
+        lowered = path_str.lower()
+        if any(re.search(pattern, lowered) for pattern in secret_patterns):
+            sanitized_files.append(f"<redacted secret path>/{name}")
+        else:
+            sanitized_files.append(path_str)
+
+    return {
+        "repository_root": str(repo_root),
+        "git_available": status_proc.returncode == 0,
+        "changed_files": sanitized_files,
+        "total_changes": len(changed_files),
+        "secret_touched": secret_touched,
+        "non_standard_touched": non_python_touched,
+        "safe_to_proceed": safe_to_proceed,
+        "diff_name_status": diff_proc.stdout.strip(),
+    }
+
+
 def register_smith_read_only_tools(registry: ToolRegistry) -> None:
     registry.register(
         ToolDefinition(
@@ -300,4 +390,18 @@ def register_smith_read_only_tools(registry: ToolRegistry) -> None:
             tags=["smith", "compile"],
         ),
         _compile_project_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="validate_diff",
+            description="Validate that uncommitted repository changes are safe before a Smith maintenance step.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=30,
+            tags=["smith", "diff", "validation"],
+        ),
+        _validate_diff_implementation,
     )

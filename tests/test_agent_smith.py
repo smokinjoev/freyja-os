@@ -58,8 +58,8 @@ auto_allowed_operations:
 approval_required_operations:
   - git_commit
   - dependency_change
-  - service_restart
-  - file_modification
+  - bounded_file_write
+  - restart_freyja_director
 prohibited_operations:
   - git_push
   - git_force_push
@@ -74,6 +74,7 @@ prohibited_operations:
   - credential_access
   - secret_extraction
   - outside_root_access
+  - execute_command
 max_retries: 3
 secret_patterns:
   - '\\.env$'
@@ -111,6 +112,7 @@ smith_read_only_tools:
   - repository_diff_summary
   - run_test_suite
   - compile_project
+  - validate_diff
   - flaky_tool
   - always_fail
 auto_allowed_operations:
@@ -118,14 +120,15 @@ auto_allowed_operations:
   - repository_diff_summary
   - run_test_suite
   - compile_project
+  - validate_diff
   - inspect
   - no-op
   - summarize
 approval_required_operations:
   - git_commit
   - dependency_change
-  - service_restart
-  - file_modification
+  - bounded_file_write
+  - restart_freyja_director
 prohibited_operations:
   - git_push
   - git_force_push
@@ -140,6 +143,7 @@ prohibited_operations:
   - credential_access
   - secret_extraction
   - outside_root_access
+  - execute_command
 max_retries: 3
 secret_patterns:
   - '\\.env$'
@@ -343,10 +347,10 @@ async def test_approval_callback_allows_operation(policy, registry):
         return True
 
     orchestrator = SmithOrchestrator(registry=registry, policy=policy, max_retries=3)
-    orchestrator.register_approval_callback("git_commit", approve)
+    orchestrator.register_approval_callback("dependency_change", approve)
     task = SmithTask(
-        description="commit changes",
-        metadata={"tool": "git_commit"},
+        description="update dependencies",
+        metadata={"tool": "dependency_change"},
         approval_status=ApprovalStatus.REQUIRED,
     )
     result = await orchestrator.execute_step(task, request_id="req-4")

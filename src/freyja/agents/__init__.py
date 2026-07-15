@@ -1,6 +1,7 @@
 """Public exports for the Agent Smith maintenance orchestrator."""
 
 from freyja.tools.builtin import register_smith_read_only_tools
+from freyja.tools.iris_maintenance import register_smith_controlled_tools
 
 from .models import (
     ApprovalStatus,
@@ -18,8 +19,9 @@ from .smith import PolicyViolationError, SmithOrchestrator, ToolInvocationError
 
 
 def register_smith_tools(registry) -> None:
-    """Register only the Smith-specific read-only tools."""
+    """Register Smith read-only and controlled maintenance tools."""
     register_smith_read_only_tools(registry)
+    register_smith_controlled_tools(registry)
 
 
 __all__ = [

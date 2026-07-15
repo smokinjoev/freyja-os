@@ -76,15 +76,21 @@ class AgentPolicy:
         return self._smith_read_only_tools
 
     def check_tool_permitted(self, tool_name: str, risk_level: ToolRiskLevel) -> PolicyCheckResult:
-        if tool_name in self._prohibited_operations or tool_name in self._approval_required:
+        if tool_name in self._prohibited_operations:
             return PolicyCheckResult(
                 decision=PolicyDecision.DENY,
-                reason=f"Tool '{tool_name}' is not permitted for Agent Smith.",
+                reason=f"Tool '{tool_name}' is prohibited for Agent Smith.",
             )
         if risk_level == ToolRiskLevel.READ_ONLY and (
             tool_name in self._read_only_builtin_tools or tool_name in self._smith_read_only_tools
         ):
             return PolicyCheckResult(decision=PolicyDecision.ALLOW)
+        if risk_level == ToolRiskLevel.CONTROLLED_WRITE and tool_name in self._approval_required:
+            return PolicyCheckResult(
+                decision=PolicyDecision.APPROVE,
+                reason=f"Tool '{tool_name}' requires explicit approval before execution.",
+                approval_required=True,
+            )
         return PolicyCheckResult(
             decision=PolicyDecision.DENY,
             reason=f"Tool '{tool_name}' is not in the Agent Smith whitelist or is not read-only.",

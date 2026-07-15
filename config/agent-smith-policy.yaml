@@ -14,6 +14,7 @@ smith_read_only_tools:
   - repository_diff_summary
   - run_test_suite
   - compile_project
+  - validate_diff
 
 # Operations that Agent Smith may perform automatically without approval.
 auto_allowed_operations:
@@ -21,6 +22,7 @@ auto_allowed_operations:
   - repository_diff_summary
   - run_test_suite
   - compile_project
+  - validate_diff
   - inspect
   - no-op
   - summarize
@@ -28,9 +30,9 @@ auto_allowed_operations:
 # Operations that require explicit human approval before execution.
 approval_required_operations:
   - git_commit
+  - bounded_file_write
+  - restart_freyja_director
   - dependency_change
-  - service_restart
-  - file_modification
 
 # Operations that are strictly prohibited for Agent Smith.
 prohibited_operations:
@@ -47,6 +49,7 @@ prohibited_operations:
   - credential_access
   - secret_extraction
   - outside_root_access
+  - execute_command
 
 max_retries: 3
 
