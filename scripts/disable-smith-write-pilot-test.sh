@@ -66,6 +66,18 @@ fi
 echo "Restarting Freyja Director..."
 "${RESTART_SCRIPT}"
 
+# Disable the three write-pilot tools in the registry.
+PYTHONPATH="${PROJECT_DIR}/src" "${PROJECT_DIR}/.venv/bin/python" -c "
+import sys
+sys.path.insert(0, '${PROJECT_DIR}/src')
+import freyja.main  # Registers tools at import time
+from freyja.tools.registry import get_registry
+registry = get_registry()
+for name in ('write_pilot_file_write', 'write_pilot_git_add', 'write_pilot_git_commit'):
+    registry.set_enabled(name, False)
+print('Write-pilot tools disabled in registry.')
+"
+
 # Verify endpoints after the Director comes back.
 for i in $(seq 1 30); do
     if curl -s --max-time 3 http://127.0.0.1:8000/health >/dev/null 2>&1; then
