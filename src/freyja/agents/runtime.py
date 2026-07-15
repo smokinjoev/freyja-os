@@ -322,6 +322,7 @@ class SmithRuntime:
         from .approval_provider import PersistentApprovalProvider, make_resume_callback
 
         resolved_provider = provider or PersistentApprovalProvider()
+        self._approval_provider_for_write_pilot = resolved_provider
         callback = make_resume_callback(resolved_provider, approval_id=approval_id, actor=actor or "agent_smith")
         result = await self.run_write_pilot(
             objective=objective,

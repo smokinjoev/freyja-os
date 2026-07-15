@@ -14,7 +14,7 @@ from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
 from freyja.router import RouteRequest, router
 from freyja.tools.api import tools_router
-from freyja.tools.builtin import register_builtin_tools
+from freyja.tools.builtin import register_builtin_tools, register_smith_write_pilot_tools
 from freyja.tools.registry import get_registry
 
 app = FastAPI(
@@ -31,6 +31,7 @@ app.include_router(memory_router)
 app.include_router(tools_router)
 
 register_builtin_tools(get_registry())
+register_smith_write_pilot_tools(get_registry())
 
 
 @app.get("/")

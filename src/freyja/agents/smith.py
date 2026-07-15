@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable
 
 from freyja.tools.errors import ToolNotFoundError
 from freyja.tools.models import ToolExecutionRequest
-from freyja.tools.registry import ToolRegistry
+from freyja.tools.registry import ToolRegistry, get_registry
 
 from .models import (
     ApprovalStatus,
@@ -35,7 +35,7 @@ class SmithOrchestrator:
         policy: AgentPolicy | None = None,
         max_retries: int | None = None,
     ) -> None:
-        self._registry = registry or ToolRegistry()
+        self._registry = registry or get_registry()
         self._policy = policy or AgentPolicy()
         self._max_retries = max_retries if max_retries is not None else self._policy.max_retries
         self._audit_records: list[dict[str, Any]] = []

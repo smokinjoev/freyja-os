@@ -1,0 +1,15 @@
+#!/bin/bash
+set -euo pipefail
+
+# Wrapper to invoke the Smith approval operator CLI using the project venv.
+
+PROJECT_DIR="/Users/freyja/freyja-os"
+VENV_PYTHON="${PROJECT_DIR}/.venv/bin/python"
+CLI_MODULE="freyja.cli.smith_approval"
+
+if [[ ! -x "${VENV_PYTHON}" ]]; then
+    echo "Error: project virtual environment not found at ${VENV_PYTHON}" >&2
+    exit 1
+fi
+
+PYTHONPATH="${PROJECT_DIR}/src" exec "${VENV_PYTHON}" -m "${CLI_MODULE}" "$@"
