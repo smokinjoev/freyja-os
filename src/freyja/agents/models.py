@@ -105,6 +105,7 @@ class SmithRunSummary(BaseModel):
     actor: str = "agent_smith"
     duration_ms: int | None = None
     metadata: dict[str, Any] | None = None
+    plan: SmithPlan | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

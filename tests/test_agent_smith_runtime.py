@@ -546,6 +546,17 @@ async def test_run_read_only_diagnostics_objective_completes(runtime):
 
 
 @pytest.mark.asyncio
+async def test_run_read_only_pilot3_mixed_health_service_is_diagnostics(runtime):
+    """Pilot 3: mixed health + service/process keywords classify as diagnostics."""
+    summary = await runtime.run_read_only("Check Director health, runtime config, and process status")
+
+    assert summary.status == "complete"
+    assert summary.metadata.get("classification") == "diagnostics"
+    task_tools = [task.metadata.get("tool") for task in summary.plan.tasks]
+    assert task_tools[0] == "system_health"
+
+
+@pytest.mark.asyncio
 async def test_run_read_only_rejects_write_objectives_before_execution(runtime):
     summary = await runtime.run_read_only("commit the latest changes")
 
@@ -773,6 +784,60 @@ async def test_run_read_only_negated_write_objective_allows_inspection(runtime):
     summary = await runtime.run_read_only("do not commit; show repository status")
     assert summary.status in {"complete", "incomplete"}
     assert summary.metadata.get("classification") != "prohibited_write"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_pilot2_test_validation_classifies_correctly(runtime, mock_run_test_suite):
+    """Pilot 2: 'run the project test suite' is a validation, not privileged."""
+    summary = await runtime.run_read_only("run the project test suite", actor="validator")
+    assert summary.status == "complete"
+    assert summary.metadata.get("classification") == "validation"
+    assert mock_run_test_suite._run_test_suite_calls
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_pilot2_compile_and_diff_classifies_correctly(runtime):
+    """Pilot 2: 'execute compile and diff checks' is validation, not privileged."""
+    summary = await runtime.run_read_only("execute compile and diff checks", actor="validator")
+    assert summary.status in {"complete", "incomplete"}
+    assert summary.metadata.get("classification") == "validation"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_pilot2_shell_command_stays_prohibited_privileged(runtime):
+    """Positive arbitrary 'run this shell command' remains prohibited privileged."""
+    summary = await runtime.run_read_only("run this shell command")
+    assert summary.status == "blocked"
+    assert summary.total_tasks == 0
+    assert summary.metadata.get("classification") == "prohibited_privileged"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_pilot2_arbitrary_command_stays_prohibited_privileged(runtime):
+    """Positive arbitrary 'execute an arbitrary command' remains prohibited privileged."""
+    summary = await runtime.run_read_only("execute an arbitrary command")
+    assert summary.status == "blocked"
+    assert summary.total_tasks == 0
+    assert summary.metadata.get("classification") == "prohibited_privileged"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_pilot7_negated_write_with_remaining_read_only_classifies_correctly(runtime):
+    """Negated write instruction plus explicit read-only intent classifies as validation."""
+    summary = await runtime.run_read_only(
+        "do not modify any files. execute compile and diff checks.", actor="validator"
+    )
+    assert summary.status in {"complete", "incomplete"}
+    assert summary.metadata.get("classification") == "validation"
+
+
+@pytest.mark.asyncio
+async def test_run_read_only_pilot7_test_then_commit_is_prohibited_write(runtime):
+    """'Run tests and then commit fixes' remains prohibited write after contrast marker."""
+    summary = await runtime.run_read_only("run tests and then commit fixes")
+    assert summary.status == "blocked"
+    assert summary.total_tasks == 0
+    assert summary.metadata.get("classification") == "prohibited_write"
 
 
 @pytest.mark.asyncio

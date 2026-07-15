@@ -63,9 +63,9 @@ _PROHIBITED_PRIVILEGED_KEYWORDS = frozenset(
         "update",
         "deploy",
         "shell",
-        "command",
         "exec",
         "run ",
+        "command",
         "sudo",
         "chmod",
         "chown",
@@ -78,6 +78,12 @@ _PROHIBITED_PRIVILEGED_KEYWORDS = frozenset(
         "elevated",
     }
 )
+
+# Density threshold for read-only classification. Lowered from 0.25 after
+# the Milestone 14 pilot showed that natural-language objectives with many
+# neutral words (e.g. "Check the Director service health endpoint...") were
+# incorrectly classified as ambiguous despite explicit read-only intent.
+_READ_ONLY_DENSITY_THRESHOLD = 0.15
 
 _INSPECTION_KEYWORDS = frozenset(
     {
@@ -185,6 +191,7 @@ class SmithRuntime:
             self._update_task_status(task, result)
 
         summary = self._summarize(plan, request_id, actor, loop_detected, steps_taken, start)
+        summary.plan = plan
         self._audit("run_dry", summary.status, request_id=request_id, actor=actor, summary=summary.model_dump(mode="json"))
         self._persist_audit_records()
         return summary
@@ -279,6 +286,7 @@ class SmithRuntime:
         summary = self._summarize(plan, request_id, actor, loop_detected, steps_taken, start)
         summary.message = self._read_only_message(summary, classification)
         summary.metadata = {"classification": classification.value}
+        summary.plan = plan
         self._audit("run_read_only", summary.status, request_id=request_id, actor=actor, summary=summary.model_dump(mode="json"))
         self._persist_audit_records()
         return summary
@@ -717,17 +725,51 @@ def _strip_negated_phrases(objective: str) -> str:
 
 
 def _strip_read_only_action_verbs(objective: str) -> str:
-    """Remove 'run' when it precedes an approved inspection/validation/diagnostics verb.
+    """Neutralize 'run', 'execute', and 'command' when they frame approved read-only actions.
 
-    This prevents read-only requests like 'run compile validation' or
-    'run test suite' from being misclassified as privileged shell commands.
+    This prevents read-only requests such as 'run the test suite', 'execute
+    compile and diff checks', or 'run a health check command' from being
+    misclassified as privileged shell commands, while keeping arbitrary
+    command requests prohibited.
     """
-    result = objective
+    result = objective.lower()
     allowed_next = _INSPECTION_KEYWORDS | _VALIDATION_KEYWORDS | _DIAGNOSTICS_KEYWORDS
+
+    # Single-word privileged keywords that must abort neutralization if they
+    # appear between 'run'/'execute' and the read-only keyword. This keeps
+    # phrases like "run this shell command" prohibited.
+    privileged_stoppers = {
+        kw.strip()
+        for kw in _PROHIBITED_PRIVILEGED_KEYWORDS
+        if len(kw.split()) == 1 and kw.strip() not in {"run", "execute"}
+    }
+    stopper_group = "|".join(re.escape(kw) for kw in privileged_stoppers)
+    kw_group = "|".join(re.escape(kw) for kw in allowed_next)
+
+    # Neutralize "run"/"execute" followed by up to five neutral words and then
+    # a read-only keyword (e.g. "run the project test suite",
+    # "execute compile and diff checks"). Abort if a privileged stopper is met first.
+    pattern = re.compile(
+        rf"\b(run|execute)\s+(?:(?!{stopper_group}\b)\b\w+\b\s+){{0,5}}?\b({kw_group})\b",
+        re.IGNORECASE,
+    )
+    result = pattern.sub(r"\2", result)
+
+    # "command" following read-only nouns (e.g. "health check command",
+    # "test command") is neutralized; standalone "command" stays privileged.
     for kw in allowed_next:
-        pattern = re.compile(rf"\brun\s+{re.escape(kw)}\b")
-        result = pattern.sub(kw, result)
+        result = re.sub(rf"\b{re.escape(kw)}(?:\s+check)?\s+command\b", kw, result)
     return result
+
+
+def _has_negated_write_language(objective: str) -> bool:
+    """Return True when a negated write instruction is present and stripped."""
+    lowered = objective.lower()
+    stripped = _strip_negated_phrases(lowered)
+    return stripped != lowered
+
+
+_DIAGNOSTICS_SERVICE_WORDS = frozenset({"service", "process", "endpoint", "runtime", "director"})
 
 
 def _classify_objective(objective: str) -> ObjectiveClass:
@@ -737,6 +779,12 @@ def _classify_objective(objective: str) -> ObjectiveClass:
     access" are ignored. Write and privileged keywords are checked next so
     they take precedence over inspection/validation/diagnostics keywords.
     If no decisive category is matched, the objective is ambiguous.
+
+    Negated write language plus a clear remaining read-only objective is
+    allowed to classify as the appropriate read-only category even when the
+    keyword density is below the normal threshold (Pilot 7). Mixed health
+    and service/process diagnostics are classified as diagnostics and
+    planned with system_health first (Pilot 3).
     """
     lowered = objective.lower()
     neutralized = _strip_read_only_action_verbs(_strip_negated_phrases(lowered))
@@ -755,10 +803,30 @@ def _classify_objective(objective: str) -> ObjectiveClass:
     inspection_count = sum(1 for kw in _INSPECTION_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", lowered))
     validation_count = sum(1 for kw in _VALIDATION_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", lowered))
     diagnostics_count = sum(1 for kw in _DIAGNOSTICS_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", lowered))
+    has_service = any(re.search(rf"\b{re.escape(kw)}\b", neutralized) for kw in _DIAGNOSTICS_SERVICE_WORDS)
+
+    # Mixed health/service-process objectives should classify as diagnostics even
+    # when plain inspection words outnumber core diagnostics words (Pilot 3).
+    if diagnostics_count > 0 and has_service:
+        diagnostics_count += sum(
+            1 for kw in _DIAGNOSTICS_SERVICE_WORDS if re.search(rf"\b{re.escape(kw)}\b", lowered)
+        )
+
     total_score = inspection_count + validation_count + diagnostics_count
 
-    if total_score > 0 and total_score >= len(words) * 0.25:
-        if diagnostics_count >= inspection_count and diagnostics_count >= validation_count:
+    if total_score == 0:
+        return ObjectiveClass.AMBIGUOUS
+
+    density = total_score / len(words)
+    has_negated_write = _has_negated_write_language(objective)
+    allows_fallback = density >= _READ_ONLY_DENSITY_THRESHOLD or has_negated_write
+    diagnostics_dominant = diagnostics_count >= inspection_count and diagnostics_count >= validation_count
+    service_diagnostics = diagnostics_dominant and has_service
+
+    if density >= _READ_ONLY_DENSITY_THRESHOLD or (has_negated_write and total_score >= 2):
+        if service_diagnostics:
+            return ObjectiveClass.DIAGNOSTICS
+        if diagnostics_dominant:
             return ObjectiveClass.DIAGNOSTICS
         if validation_count >= inspection_count:
             return ObjectiveClass.VALIDATION

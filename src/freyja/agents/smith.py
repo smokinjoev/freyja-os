@@ -242,7 +242,43 @@ class SmithOrchestrator:
             ]
 
         tasks: list[SmithTask] = []
-        if any(kw in lowered for kw in ("status", "inspect", "repository", "repo", "health", "report")):
+
+        # Diagnostics objectives that mention health/service/process should run
+        # system_health first, then add only necessary validation tools.
+        diagnostics_words = ("health", "diagnose", "system", "service", "process", "endpoint")
+        if any(kw in lowered for kw in diagnostics_words):
+            tasks.append(SmithTask(
+                description="Check system health",
+                metadata={"tool": "system_health"},
+            ))
+            if any(kw in lowered for kw in ("status", "inspect", "repository", "repo", "report", "diff")):
+                tasks.append(SmithTask(
+                    description="Report repository status",
+                    metadata={"tool": "repository_status"},
+                ))
+            if any(kw in lowered for kw in ("diff", "changes")):
+                tasks.append(SmithTask(
+                    description="Summarize repository diff",
+                    metadata={"tool": "repository_diff_summary"},
+                ))
+            if any(kw in lowered for kw in ("compile", "build", "validate")):
+                tasks.append(SmithTask(
+                    description="Compile project sources",
+                    metadata={"tool": "compile_project"},
+                ))
+            if any(kw in lowered for kw in ("test", "pytest")):
+                tasks.append(SmithTask(
+                    description="Run project test suite",
+                    metadata={"tool": "run_test_suite"},
+                ))
+            if len(tasks) > 1:
+                tasks.append(SmithTask(
+                    description="Produce final summary",
+                    metadata={"tool": "no-op"},
+                ))
+            return tasks
+
+        if any(kw in lowered for kw in ("status", "inspect", "repository", "repo", "report")):
             tasks.append(SmithTask(
                 description="Report repository status",
                 metadata={"tool": "repository_status"},
@@ -266,11 +302,6 @@ class SmithOrchestrator:
             tasks.append(SmithTask(
                 description="Run project test suite",
                 metadata={"tool": "run_test_suite"},
-            ))
-        if any(kw in lowered for kw in ("health", "diagnose", "system")):
-            tasks.append(SmithTask(
-                description="Check system health",
-                metadata={"tool": "system_health"},
             ))
 
         if len(tasks) == 1:
