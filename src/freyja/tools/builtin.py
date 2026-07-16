@@ -7,6 +7,7 @@ from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolImplementation, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
+from freyja.tools.local_host import register_local_host_tools
 from freyja.tools.weather import WeatherRequestType, classify_weather_request, get_weather
 
 
@@ -95,6 +96,11 @@ _BUILTIN_TOOL_NAMES = (
     "list_models",
     "recall_conversation",
     "get_weather",
+    "hostname",
+    "current_time",
+    "disk_usage",
+    "director_health",
+    "repository_status",
 )
 
 
@@ -115,6 +121,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
     _assert_registration_consistent(registry, _BUILTIN_TOOL_NAMES)
     if _registration_is_complete(registry, _BUILTIN_TOOL_NAMES):
         return
+    register_local_host_tools(registry)
     registry.register(
         ToolDefinition(
             name="get_weather",
@@ -271,33 +278,6 @@ def _memory_enabled() -> bool:
     from freyja.memory.store import is_memory_enabled
 
     return is_memory_enabled()
-
-
-async def _repository_status_implementation(request: ToolExecutionRequest) -> dict:
-    repo_root = Path(__file__).resolve().parents[3]
-    try:
-        status_proc = subprocess.run(
-            ["git", "status", "--short", "--branch"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        diff_proc = subprocess.run(
-            ["git", "diff", "--stat"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return {
-            "repository_root": str(repo_root),
-            "branch_status": status_proc.stdout.strip(),
-            "diff_summary": diff_proc.stdout.strip(),
-            "git_available": status_proc.returncode == 0,
-        }
-    except Exception as exc:
-        return {"repository_root": str(repo_root), "error": str(exc)}
 
 
 async def _repository_diff_summary_implementation(request: ToolExecutionRequest) -> dict:
@@ -601,7 +581,6 @@ async def _validate_diff_implementation(request: ToolExecutionRequest) -> dict:
 
 
 _SMITH_READ_ONLY_TOOL_NAMES = (
-    "repository_status",
     "repository_diff_summary",
     "run_test_suite",
     "compile_project",
@@ -619,20 +598,6 @@ def register_smith_read_only_tools(registry: ToolRegistry) -> None:
     _assert_registration_consistent(registry, _SMITH_READ_ONLY_TOOL_NAMES)
     if _registration_is_complete(registry, _SMITH_READ_ONLY_TOOL_NAMES):
         return
-    registry.register(
-        ToolDefinition(
-            name="repository_status",
-            description="Read-only git status and branch summary for the repository.",
-            version="1.0.0",
-            input_schema={"type": "object", "properties": {}},
-            output_schema={"type": "object", "properties": {}},
-            risk_level=ToolRiskLevel.READ_ONLY,
-            enabled=True,
-            timeout_seconds=30,
-            tags=["smith", "git", "status"],
-        ),
-        _repository_status_implementation,
-    )
     registry.register(
         ToolDefinition(
             name="repository_diff_summary",

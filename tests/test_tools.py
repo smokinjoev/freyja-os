@@ -81,7 +81,17 @@ def test_discovery(registry: ToolRegistry) -> None:
     assert registry.list_tools() == []
     register_builtin_tools(registry)
     names = {t.name for t in registry.list_tools()}
-    assert names == {"system_health", "list_models", "recall_conversation", "get_weather"}
+    assert names == {
+        "system_health",
+        "list_models",
+        "recall_conversation",
+        "get_weather",
+        "hostname",
+        "current_time",
+        "disk_usage",
+        "director_health",
+        "repository_status",
+    }
 
 
 def test_disable_tool_rejects_execution(registry: ToolRegistry) -> None:
@@ -290,7 +300,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 4
+    assert len(tools) == 9
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
