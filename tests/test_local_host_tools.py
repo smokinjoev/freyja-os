@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -107,23 +108,100 @@ class TestCurrentTimeTool:
 
 
 class TestDiskUsageTool:
+    @pytest.fixture(autouse=True)
+    def _repo_root(self):
+        self.repo_root = Path(__file__).resolve().parents[1]
+
     @pytest.mark.asyncio
     async def test_disk_usage_default_path(self, registry: ToolRegistry):
         req = ToolExecutionRequest(tool_name="disk_usage", arguments={})
         result = await registry.execute(req)
         assert result.success is True
-        assert result.output["path"] == str(Path(__file__).resolve().parents[1])
+        assert result.output["path"] == str(self.repo_root)
         assert result.output["success"] is True
 
     @pytest.mark.asyncio
-    async def test_disk_usage_disallowed_path(self, registry: ToolRegistry):
-        req = ToolExecutionRequest(tool_name="disk_usage", arguments={"path": "/etc"})
+    async def test_disk_usage_repo_root(self, registry: ToolRegistry):
+        req = ToolExecutionRequest(tool_name="disk_usage", arguments={"path": str(self.repo_root)})
         result = await registry.execute(req)
-        # Registry-level success means the tool executed without crashing.
         assert result.success is True
-        # Tool-level success reflects the policy check.
+        assert result.output["success"] is True
+        assert result.output["path"] == str(self.repo_root)
+
+    @pytest.mark.asyncio
+    async def test_disk_usage_normal_inside_repo(self, registry: ToolRegistry):
+        path = self.repo_root / "src"
+        req = ToolExecutionRequest(tool_name="disk_usage", arguments={"path": str(path)})
+        result = await registry.execute(req)
+        assert result.success is True
+        assert result.output["success"] is True
+        assert result.output["path"] == str(path.resolve())
+
+    @pytest.mark.asyncio
+    async def test_disk_usage_dotdot_traversal_outside_repo(self, registry: ToolRegistry):
+        path = self.repo_root / ".." / "etc"
+        req = ToolExecutionRequest(tool_name="disk_usage", arguments={"path": str(path)})
+        result = await registry.execute(req)
+        assert result.success is True
         assert result.output["success"] is False
-        assert "outside the allowed roots" in result.output["stderr"]
+        assert "outside the allowed repository root" in result.output["stderr"]
+
+    @pytest.mark.asyncio
+    async def test_disk_usage_symlink_inside_pointing_outside(self, registry: ToolRegistry, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        symlink = self.repo_root / f".tmp_symlink_outside_{uuid4().hex}"
+        try:
+            symlink.symlink_to(outside)
+            req = ToolExecutionRequest(tool_name="disk_usage", arguments={"path": str(symlink)})
+            result = await registry.execute(req)
+            assert result.success is True
+            assert result.output["success"] is False
+            assert "symlink" in result.output["stderr"].lower()
+        finally:
+            symlink.unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_disk_usage_symlink_chain_escapes_repo(self, registry: ToolRegistry, tmp_path):
+        outside = tmp_path / "outside_chain"
+        outside.mkdir()
+        link_a = tmp_path / "link_a"
+        link_b = self.repo_root / f".tmp_symlink_chain_{uuid4().hex}"
+        link_a.symlink_to(outside)
+        try:
+            link_b.symlink_to(link_a)
+            req = ToolExecutionRequest(tool_name="disk_usage", arguments={"path": str(link_b)})
+            result = await registry.execute(req)
+            assert result.success is True
+            assert result.output["success"] is False
+            assert "symlink" in result.output["stderr"].lower()
+        finally:
+            link_b.unlink(missing_ok=True)
+            link_a.unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_disk_usage_symlink_stays_inside_repo(self, registry: ToolRegistry):
+        target = self.repo_root / "src"
+        symlink = self.repo_root / f".tmp_symlink_inside_{uuid4().hex}"
+        try:
+            symlink.symlink_to(target)
+            req = ToolExecutionRequest(tool_name="disk_usage", arguments={"path": str(symlink)})
+            result = await registry.execute(req)
+            assert result.success is True
+            assert result.output["success"] is True
+            assert result.output["path"] == str(target.resolve())
+        finally:
+            symlink.unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_disk_usage_nonexistent_path_inside_repo(self, registry: ToolRegistry):
+        path = self.repo_root / f".tmp_nonexistent_{uuid4().hex}"
+        req = ToolExecutionRequest(tool_name="disk_usage", arguments={"path": str(path)})
+        result = await registry.execute(req)
+        assert result.success is True
+        # `df` may fail for a nonexistent path, but the policy check passes.
+        assert "outside" not in result.output["stderr"]
+        assert "symlink" not in result.output["stderr"].lower()
 
 
 class TestDirectorHealthTool:

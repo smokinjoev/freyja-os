@@ -149,22 +149,39 @@ async def _current_time_implementation(request: ToolExecutionRequest) -> dict[st
 
 async def _disk_usage_implementation(request: ToolExecutionRequest) -> dict[str, Any]:
     target = request.arguments.get("path", str(_REPO_ROOT))
-    path = Path(target).resolve()
     repo_root = _REPO_ROOT.resolve()
-    # Restrict to paths under the repository root to avoid arbitrary snooping.
-    if path != repo_root and not path.is_relative_to(repo_root):
+
+    try:
+        # Resolve the requested path fully, including any symlinks and ``..``
+        # segments.  If the fully resolved real path leaves the repository root,
+        # the request is rejected regardless of where the original path began.
+        real_path = Path(target).resolve(strict=False)
+    except (OSError, ValueError) as exc:
         return {
             "command": "",
             "stdout": "",
-            "stderr": f"Path '{target}' is outside the allowed roots",
+            "stderr": f"Path '{target}' cannot be resolved: {exc}",
             "exit_code": 1,
             "duration_ms": 0,
             "success": False,
         }
-    result = await _run_read_only_command("df", ["-h", str(path)])
+
+    try:
+        real_path.relative_to(repo_root)
+    except ValueError:
+        return {
+            "command": "",
+            "stdout": "",
+            "stderr": f"Path '{target}' is outside the allowed repository root",
+            "exit_code": 1,
+            "duration_ms": 0,
+            "success": False,
+        }
+
+    result = await _run_read_only_command("df", ["-h", str(real_path)])
     if result["success"]:
         return {
-            "path": str(path),
+            "path": str(real_path),
             **result,
         }
     return result
