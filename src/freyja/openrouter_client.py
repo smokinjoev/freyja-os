@@ -1,7 +1,7 @@
 import httpx
 
 from freyja.config import settings
-from freyja.system_prompt import FREYJA_SYSTEM_PROMPT
+from freyja.system_prompt import FREYJA_SYSTEM_PROMPT, FREYJA_TOOL_CALL_INSTRUCTION
 
 
 class OpenRouterClient:
@@ -35,17 +35,26 @@ class OpenRouterClient:
         except Exception:
             return False
 
-    async def chat(self, prompt: str, model: str | None = None) -> dict:
+    async def chat(
+        self,
+        prompt: str,
+        model: str | None = None,
+        tools_required: bool = False,
+    ) -> dict:
         target_model = model or self.model
         if not self.api_key:
             return {"error": "OpenRouter API key not configured"}
         if not target_model:
             return {"error": "No OpenRouter model configured"}
 
+        system_content = FREYJA_SYSTEM_PROMPT
+        if tools_required:
+            system_content = f"{FREYJA_SYSTEM_PROMPT}\n\n{FREYJA_TOOL_CALL_INSTRUCTION}"
+
         payload = {
             "model": target_model,
             "messages": [
-                {"role": "system", "content": FREYJA_SYSTEM_PROMPT},
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": prompt},
             ],
         }

@@ -1,3 +1,5 @@
+import json
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from unittest.mock import AsyncMock
@@ -6,6 +8,9 @@ import pytest
 
 from freyja.config import Settings, settings
 from freyja.router import RouteRequest, Router
+from freyja.tools.builtin import register_builtin_tools
+from freyja.tools.models import ToolDefinition
+from freyja.tools.registry import ToolRegistry
 
 
 @pytest.fixture
@@ -359,3 +364,307 @@ async def test_openrouter_fallback_avoids_sub_3b_chat(router: Router, reset_sett
     assert result.decision.provider == "openrouter"
     assert "openai/gpt-4o-mini" in result.decision.model
     assert result.response == "cloud hello"
+
+
+class TestToolLoop:
+    @pytest.fixture
+    def registry(self) -> ToolRegistry:
+        r = ToolRegistry(audit_enabled=False)
+        register_builtin_tools(r)
+        return r
+
+    @pytest.fixture
+    def router(self, registry: ToolRegistry) -> Router:
+        r = Router(registry=registry)
+        r.ollama_client = AsyncMock()
+        r.openrouter_client = AsyncMock()
+        return r
+
+    @pytest.fixture(autouse=True)
+    def _enable_tool_loop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "chat_max_tool_iterations", 3)
+
+    def _tool_call(self, name: str, arguments: dict[str, Any] | None = None) -> str:
+        args = arguments or {}
+        return f'<freyja_tool_call>{{"tool_name":"{name}","arguments":{json.dumps(args)}}}</freyja_tool_call>'
+
+    async def test_successful_single_tool_request_local(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "qwen2.5:7b", "message": {"content": self._tool_call("hostname")}}
+            return {"model": "qwen2.5:7b", "message": {"content": "The host is Iris."}}
+
+        router.ollama_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="What host am I on?", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.decision.provider == "ollama"
+        assert "Iris" in result.response or "iris" in result.response.lower()
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "hostname"
+        assert result.tool_results[0]["success"] is True
+        assert result.tool_results[0]["duration_ms"] is not None
+
+    async def test_tool_failure_returns_honest_error(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+
+        async def _flaky_tool(request: Any) -> dict[str, Any]:
+            raise RuntimeError("disk is gone")
+
+        registry.unregister("disk_usage")
+        registry.register(
+            ToolDefinition(
+                name="disk_usage",
+                description="Flaky disk usage for testing.",
+                input_schema={"type": "object", "properties": {}},
+                risk_level=registry.get_tool("disk_usage").risk_level if registry.get_tool("disk_usage") else "read_only",
+            ),
+            _flaky_tool,
+        )
+
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": self._tool_call("disk_usage")},
+        }
+
+        req = RouteRequest(prompt="Check disk usage.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.tool_results[0]["tool_name"] == "disk_usage"
+        assert result.tool_results[0]["success"] is False
+        assert result.tool_results[0]["error_code"] == "tool_error"
+        assert "failed" in result.response.lower()
+
+    async def test_invalid_arguments_rejected(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {
+                "content": self._tool_call("disk_usage", {"path": 123})
+            },
+        }
+
+        req = RouteRequest(prompt="Check disk usage.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "disk_usage"
+        assert result.tool_results[0]["success"] is False
+        assert result.tool_results[0]["error_code"] == "validation_error"
+        assert "Invalid arguments" in result.response
+
+    async def test_unknown_tool_rejected(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": self._tool_call("nonexistent_tool")},
+        }
+
+        req = RouteRequest(prompt="Do something weird.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.tool_results[0]["tool_name"] == "nonexistent_tool"
+        assert result.tool_results[0]["success"] is False
+        assert result.tool_results[0]["error_code"] == "tool_not_found"
+        assert "Unknown tool" in result.response
+
+    async def test_iteration_limit_exhaustion(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        monkeypatch.setattr(settings, "chat_max_tool_iterations", 2)
+        router.ollama_client.healthy.return_value = True
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": self._tool_call("hostname")},
+        }
+
+        req = RouteRequest(prompt="Keep asking tools.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert len(result.tool_results) == 2
+        assert all(entry["tool_name"] == "hostname" for entry in result.tool_results)
+        assert "iteration limit" in result.response.lower()
+
+    async def test_normal_response_no_tool(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": "Just a regular answer."},
+        }
+
+        req = RouteRequest(prompt="Say hi.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.response == "Just a regular answer."
+        assert result.tool_results == []
+
+    async def test_tool_loop_openrouter_path(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.ollama_client.healthy.return_value = False
+        router.openrouter_client.healthy.return_value = True
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "openai/gpt-4o-mini", "response": self._tool_call("current_time")}
+            return {"model": "openai/gpt-4o-mini", "response": "The time is now."}
+
+        router.openrouter_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="What time is it?", provider="cloud", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.decision.provider == "openrouter"
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "current_time"
+        assert result.tool_results[0]["success"] is True
+
+    async def test_oversized_tool_output_is_truncated(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        monkeypatch.setattr(settings, "chat_max_tool_output_chars", 50)
+        router.ollama_client.healthy.return_value = True
+
+        async def _big_output(request: Any) -> dict[str, Any]:
+            return {"data": "x" * 1000}
+
+        registry.unregister("hostname")
+        registry.register(
+            ToolDefinition(
+                name="hostname",
+                description="Big output test.",
+                input_schema={"type": "object", "properties": {}},
+            ),
+            _big_output,
+        )
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "qwen2.5:7b", "message": {"content": self._tool_call("hostname")}}
+            return {"model": "qwen2.5:7b", "message": {"content": "Got it."}}
+
+        router.ollama_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="Show me big data.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.response == "Got it."
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["success"] is True
+        second_call_prompt = router.ollama_client.chat.call_args_list[1][1]["prompt"]
+        assert '"truncated": true' in second_call_prompt.lower()
+
+    async def test_malformed_marker_is_stripped(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": "I think <freyja_tool_call>not valid json</freyja_tool_call> is the answer."},
+        }
+
+        req = RouteRequest(prompt="What is the answer?", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert "<freyja_tool_call>" not in result.response
+        assert result.tool_results == []
+
+    async def test_multiple_markers_use_first(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {
+                    "model": "qwen2.5:7b",
+                    "message": {
+                        "content": (
+                            self._tool_call("hostname") + " " + self._tool_call("current_time")
+                        )
+                    },
+                }
+            return {"model": "qwen2.5:7b", "message": {"content": "Used hostname only."}}
+
+        router.ollama_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="Ask two tools.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.response == "Used hostname only."
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "hostname"
+
+    @pytest.mark.parametrize("iterations", [0, -1, 1000])
+    async def test_iteration_config_boundaries(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry, iterations: int) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        monkeypatch.setattr(settings, "chat_max_tool_iterations", iterations)
+        router.ollama_client.healthy.return_value = True
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": self._tool_call("hostname")},
+        }
+
+        req = RouteRequest(prompt="Loop.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        if iterations <= 0:
+            assert len(result.tool_results) == 1
+            assert "iteration limit" in result.response.lower()
+        else:
+            # Hard upper cap of 50 prevents 1000 actual iterations.
+            assert len(result.tool_results) <= 50
+            assert "iteration limit" in result.response.lower()
+
+    async def test_tool_failure_grounds_final_answer(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+
+        async def _failing_tool(request: Any) -> dict[str, Any]:
+            raise RuntimeError("sensor offline")
+
+        registry.unregister("hostname")
+        registry.register(
+            ToolDefinition(
+                name="hostname",
+                description="Failing tool for grounding test.",
+                input_schema={"type": "object", "properties": {}},
+            ),
+            _failing_tool,
+        )
+
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": self._tool_call("hostname")},
+        }
+
+        req = RouteRequest(prompt="What host?", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.tool_results[0]["success"] is False
+        assert "failed" in result.response.lower()
+        assert "succeeded" not in result.response.lower()
+        assert "success" not in result.response.lower()

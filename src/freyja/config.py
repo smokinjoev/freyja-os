@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     agent_smith_approval_db_path: str = str(_default_state_dir() / "smith-approvals.sqlite3")
     agent_smith_approval_loopback_only: bool = True
 
+    chat_max_tool_iterations: int = 3
+    chat_max_tool_output_chars: int = 4000
+
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_allowed_user_ids: str = ""

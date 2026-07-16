@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import uuid
@@ -8,6 +9,8 @@ from pydantic import BaseModel, Field
 from freyja.config import settings
 from freyja.memory import store as memory_store
 from freyja.memory.models import AppendMessageRequest, CreateConversationRequest
+from freyja.tools.models import ToolExecutionRequest
+from freyja.tools.registry import ToolRegistry, get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ class RoutingResult(BaseModel):
     decision: RoutingDecision
     response: str
     latency_ms: int | None = None
+    tool_results: list[dict[str, Any]] = Field(default_factory=list)
 
 
 SANITIZED_TERMS = {"api key", "authorization", "bearer", "sk-"}
@@ -155,9 +159,10 @@ def _cloud_score(request: RouteRequest) -> int:
 
 
 class Router:
-    def __init__(self) -> None:
+    def __init__(self, registry: ToolRegistry | None = None) -> None:
         self.ollama_client: Any | None = None
         self.openrouter_client: Any | None = None
+        self._registry = registry or get_registry()
 
     def register_clients(self, ollama_client: Any, openrouter_client: Any) -> None:
         self.ollama_client = ollama_client
@@ -460,6 +465,13 @@ class Router:
                 decision.reason += "; ollama client unavailable"
                 decision.public_error_message = PUBLIC_ERROR_MESSAGES["ollama"]
                 return RoutingResult(decision=decision, response="")
+            if request.tools_required:
+                return await self._execute_with_tools(
+                    request,
+                    decision,
+                    self.ollama_client,
+                    self._registry,
+                )
             response = await self.ollama_client.chat(
                 prompt=request.prompt,
                 model=decision.model or None,
@@ -485,6 +497,13 @@ class Router:
                 decision.reason += "; openrouter client unavailable"
                 decision.public_error_message = PUBLIC_ERROR_MESSAGES["openrouter"]
                 return RoutingResult(decision=decision, response="")
+            if request.tools_required:
+                return await self._execute_with_tools(
+                    request,
+                    decision,
+                    self.openrouter_client,
+                    self._registry,
+                )
             response = await self.openrouter_client.chat(
                 prompt=request.prompt,
                 model=decision.model or None,
@@ -510,6 +529,239 @@ class Router:
 
         await self._record_memory(request, decision, "")
         return RoutingResult(decision=decision, response="")
+
+    async def _execute_with_tools(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        client: Any,
+        registry: ToolRegistry,
+    ) -> RoutingResult:
+        """Run a bounded read-only tool loop with a provider client.
+
+        The model is sent the original prompt. If its response contains a
+        ``<freyja_tool_call>...</freyja_tool_call>`` block, the requested tool
+        is validated and executed through the registry. The tool result is
+        appended to the conversation and the model is asked again, up to
+        ``settings.chat_max_tool_iterations`` times. The loop exits early when
+        the model returns a response without a tool-call block.
+        """
+        tool_history: list[dict[str, Any]] = []
+        max_iterations = min(max(1, settings.chat_max_tool_iterations), 50)
+        max_output_chars = max(0, settings.chat_max_tool_output_chars)
+
+        for iteration in range(max_iterations):
+            prompt_parts = [request.prompt]
+            for idx, entry in enumerate(tool_history, start=1):
+                serialized = self._serialize_tool_output(entry["output"], max_output_chars)
+                prompt_parts.append(
+                    f"\n\n[Tool result {idx}] {entry['tool_name']}: "
+                    f"success={entry['success']} output={serialized}"
+                )
+            if tool_history:
+                prompt_parts.append(
+                    "\n\nIf you need another read-only tool to answer, emit one "
+                    "<freyja_tool_call> block. Otherwise respond with your final answer."
+                )
+            prompt = "".join(prompt_parts)
+
+            response = await client.chat(
+                prompt=prompt,
+                model=decision.model or None,
+                tools_required=True,
+            )
+            if "error" in response:
+                return RoutingResult(
+                    decision=decision,
+                    response="",
+                    tool_results=list(tool_history),
+                )
+
+            content = self._extract_response_text(response, decision.provider)
+            tool_call = self._parse_tool_call(content)
+            clean_content = self._strip_tool_markers(content)
+
+            if tool_call is None:
+                return RoutingResult(
+                    decision=decision,
+                    response=clean_content,
+                    tool_results=list(tool_history),
+                )
+
+            tool_name = tool_call.get("tool_name")
+            if not isinstance(tool_name, str):
+                return RoutingResult(
+                    decision=decision,
+                    response=clean_content,
+                    tool_results=list(tool_history),
+                )
+            arguments = tool_call.get("arguments", {})
+            if not isinstance(arguments, dict):
+                arguments = {}
+
+            validation_errors = registry.validate_arguments(tool_name, arguments)
+            definition = registry.get_tool(tool_name)
+
+            if definition is None:
+                entry = self._tool_history_entry(
+                    tool_name=tool_name,
+                    success=False,
+                    output={},
+                    error_code="tool_not_found",
+                    public_error_message="Tool not found.",
+                )
+                tool_history.append(entry)
+                self._log_tool_execution(entry)
+                return RoutingResult(
+                    decision=decision,
+                    response=f"Unknown tool '{tool_name}'.",
+                    tool_results=list(tool_history),
+                )
+
+            if not definition.enabled:
+                entry = self._tool_history_entry(
+                    tool_name=tool_name,
+                    success=False,
+                    output={},
+                    error_code="tool_disabled",
+                    public_error_message=f"Tool '{tool_name}' is disabled.",
+                )
+                tool_history.append(entry)
+                self._log_tool_execution(entry)
+                return RoutingResult(
+                    decision=decision,
+                    response=f"Tool '{tool_name}' is currently disabled.",
+                    tool_results=list(tool_history),
+                )
+
+            if validation_errors:
+                entry = self._tool_history_entry(
+                    tool_name=tool_name,
+                    success=False,
+                    output={},
+                    error_code="validation_error",
+                    public_error_message="; ".join(validation_errors),
+                )
+                tool_history.append(entry)
+                self._log_tool_execution(entry)
+                return RoutingResult(
+                    decision=decision,
+                    response=f"Invalid arguments for '{tool_name}': {'; '.join(validation_errors)}",
+                    tool_results=list(tool_history),
+                )
+
+            execution_request = ToolExecutionRequest(
+                tool_name=tool_name,
+                arguments=arguments,
+                request_id=decision.request_id,
+                actor="freyja_router",
+            )
+            execution_result = await registry.execute(execution_request)
+
+            entry = self._tool_history_entry(
+                tool_name=tool_name,
+                success=execution_result.success,
+                output=execution_result.output,
+                error_code=execution_result.error_code,
+                public_error_message=execution_result.public_error_message,
+                duration_ms=execution_result.duration_ms,
+            )
+            tool_history.append(entry)
+            self._log_tool_execution(entry)
+
+            if not execution_result.success:
+                failure_response = (
+                    f"Tool '{tool_name}' failed"
+                    f" ({execution_result.error_code or 'unknown'}): "
+                    f"{execution_result.public_error_message or 'no details'}."
+                )
+                return RoutingResult(
+                    decision=decision,
+                    response=failure_response,
+                    tool_results=list(tool_history),
+                )
+
+        return RoutingResult(
+            decision=decision,
+            response="Tool iteration limit reached without a final answer.",
+            tool_results=list(tool_history),
+        )
+
+    def _extract_response_text(self, response: dict[str, Any], provider: str) -> str:
+        if provider == "ollama":
+            return response.get("message", {}).get("content", "")
+        return response.get("response", "")
+
+    def _parse_tool_call(self, content: str) -> dict[str, Any] | None:
+        match = re.search(
+            r"<freyja_tool_call>(.*?)</freyja_tool_call>",
+            content,
+            re.DOTALL,
+        )
+        if not match:
+            return None
+        try:
+            payload = json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return payload
+
+    def _strip_tool_markers(self, content: str) -> str:
+        return re.sub(
+            r"<freyja_tool_call>.*?</freyja_tool_call>",
+            "",
+            content,
+            flags=re.DOTALL,
+        ).strip()
+
+    def _serialize_tool_output(self, output: dict[str, Any], max_chars: int) -> str:
+        raw = json.dumps(output, default=str)
+        if max_chars <= 0 or len(raw) <= max_chars:
+            return raw
+        truncated = raw[:max_chars]
+        # Avoid cutting inside a JSON escape; rewind to the last safe boundary.
+        while truncated and truncated[-1] == "\\":
+            truncated = truncated[:-1]
+        return json.dumps(
+            {
+                "truncated": True,
+                "truncated_at": max_chars,
+                "partial_output": truncated,
+            }
+        )
+
+    def _tool_history_entry(
+        self,
+        tool_name: str,
+        success: bool,
+        output: dict[str, Any],
+        error_code: str | None = None,
+        public_error_message: str | None = None,
+        duration_ms: int | None = None,
+    ) -> dict[str, Any]:
+        entry: dict[str, Any] = {
+            "tool_name": tool_name,
+            "success": success,
+            "output": output,
+        }
+        if error_code is not None:
+            entry["error_code"] = error_code
+        if public_error_message is not None:
+            entry["public_error_message"] = public_error_message
+        if duration_ms is not None:
+            entry["duration_ms"] = duration_ms
+        return entry
+
+    def _log_tool_execution(self, entry: dict[str, Any]) -> None:
+        logger.info(
+            "tool_execution name=%s success=%s error_code=%s duration_ms=%s",
+            entry["tool_name"],
+            entry["success"],
+            entry.get("error_code") or "none",
+            entry.get("duration_ms") or "-",
+        )
 
     async def _record_memory(
         self,

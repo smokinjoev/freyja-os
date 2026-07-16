@@ -26,3 +26,13 @@ FREYJA_SYSTEM_PROMPT = (
     "(8) review the resulting changes; (9) do not commit until tests pass and explicit human "
     "approval is given."
 )
+
+FREYJA_TOOL_CALL_INSTRUCTION = (
+    "You may invoke a single registered read-only tool by emitting exactly one block: "
+    "<freyja_tool_call>{\"tool_name\":\"<tool_name>\",\"arguments\":{}}</freyja_tool_call>. "
+    "The arguments object must match the tool's JSON schema. "
+    "When you do not need a tool, or when you have enough information to answer, "
+    "respond normally with no such block. "
+    "If a tool returns a failure, your final answer must report the failure honestly and "
+    "must not claim the operation succeeded."
+)
