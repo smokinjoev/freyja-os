@@ -237,7 +237,7 @@ def test_pending_and_show_commands(
 
     approval_id = _find_pending_approval_id("req-list", enabled_client)
     capsys.readouterr()
-    code = _run_cli(["show", approval_id])
+    code = _run_cli(["show", f"--approval-id={approval_id}"])
     captured = capsys.readouterr()
     assert code == 0
     assert approval_id in captured.out
@@ -265,7 +265,7 @@ def test_approve_requires_explicit_confirmation(
 
     approval_id = _find_pending_approval_id("req-confirm", enabled_client)
     monkeypatch.setattr("builtins.input", lambda _: "no")
-    code = _run_cli(["approve", approval_id])
+    code = _run_cli(["approve", f"--approval-id={approval_id}"])
     assert code == 2
 
 
@@ -290,12 +290,96 @@ def test_approve_non_interactive_requires_explicit_actor(
     approval_id = _find_pending_approval_id("req-noninteractive", enabled_client)
 
     # --yes without explicit actor must fail.
-    code = _run_cli(["approve", approval_id, "--yes"])
+    code = _run_cli(["approve", f"--approval-id={approval_id}", "--yes"])
     assert code == 1
 
     # --yes with explicit actor succeeds.
-    code = _run_cli(["approve", approval_id, "--yes", "--actor", "operator-test"])
+    code = _run_cli(["approve", f"--approval-id={approval_id}", "--yes", "--actor", "operator-test"])
     assert code == 0
+
+
+def test_approve_accepts_id_starting_with_single_hyphen(
+    enabled_client,
+    tmp_path: Path,
+    monkeypatch,
+):
+    state_dir = tmp_path / "state"
+    content_path = _content_file(tmp_path)
+    _run_cli([
+        "--state-dir", str(state_dir),
+        "start", "--target", "docs/smith-pilot/operator-test.md",
+        "--content-file", str(content_path),
+        "--request-id", "req-hyphen",
+    ])
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_api_call(base_url: str, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        calls.append((method, path))
+        if method == "GET":
+            return {
+                "id": "-hyphen-id",
+                "action": "path",
+                "request_id": "req-hyphen",
+                "content_hash": "abc",
+            }
+        return {"action": "path", "request_id": "req-hyphen"}
+
+    monkeypatch.setattr(smith_approval, "_api_call", fake_api_call)
+
+    code = _run_cli(["approve", "--approval-id=-hyphen-id", "--yes", "--actor", "operator-test"])
+    assert code == 0
+    assert any("-hyphen-id" in p for _, p in calls)
+
+
+def test_approve_accepts_id_starting_with_double_hyphen(
+    enabled_client,
+    tmp_path: Path,
+    monkeypatch,
+):
+    state_dir = tmp_path / "state"
+    content_path = _content_file(tmp_path)
+    _run_cli([
+        "--state-dir", str(state_dir),
+        "start", "--target", "docs/smith-pilot/operator-test.md",
+        "--content-file", str(content_path),
+        "--request-id", "req-doublehyphen",
+    ])
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_api_call(base_url: str, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        calls.append((method, path))
+        if method == "GET":
+            return {
+                "id": "--double-hyphen-id",
+                "action": "path",
+                "request_id": "req-doublehyphen",
+                "content_hash": "abc",
+            }
+        return {"action": "path", "request_id": "req-doublehyphen"}
+
+    monkeypatch.setattr(smith_approval, "_api_call", fake_api_call)
+
+    code = _run_cli(["approve", "--approval-id=--double-hyphen-id", "--yes", "--actor", "operator-test"])
+    assert code == 0
+    assert any("--double-hyphen-id" in p for _, p in calls)
+
+
+def test_approve_missing_id_rejected() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        _run_cli(["approve", "--yes", "--actor", "operator-test"])
+    assert exc_info.value.code == 2
+
+
+def test_approve_unknown_option_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(*args, **kwargs) -> dict[str, Any]:
+        raise AssertionError("API call should not be reached on argparse failure")
+
+    monkeypatch.setattr(smith_approval, "_api_call", fail)
+    with pytest.raises(SystemExit) as exc_info:
+        _run_cli(["approve", "--approval-id", "some-id", "--yes", "--actor", "x", "--unknown-flag"])
+    assert exc_info.value.code == 2
 
 
 def test_deny_requires_actor_and_reason(
@@ -319,7 +403,7 @@ def test_deny_requires_actor_and_reason(
     approval_id = _find_pending_approval_id("req-deny", enabled_client)
 
     code = _run_cli([
-        "deny", approval_id, "--actor", "operator-test", "--reason", "operator declined",
+        "deny", f"--approval-id={approval_id}", "--actor", "operator-test", "--reason", "operator declined",
     ])
     assert code == 0
 
@@ -347,7 +431,7 @@ def test_resume_detects_changed_content_source(
 
     code = _run_cli([
         "--state-dir", str(state_dir),
-        "resume", "--request-id", "req-resume-change", "--approval-id", approval_id,
+        "resume", "--request-id", "req-resume-change", f"--approval-id={approval_id}",
     ])
     assert code == 1
 
@@ -548,12 +632,12 @@ def test_deny_then_resume_reports_denial(
     approval_id = _find_pending_approval_id("req-denied-resume", enabled_client)
 
     _run_cli([
-        "deny", approval_id, "--actor", "op", "--reason", "no",
+        "deny", f"--approval-id={approval_id}", "--actor", "op", "--reason", "no",
     ])
 
     code = _run_cli([
         "--state-dir", str(state_dir),
-        "resume", "--request-id", "req-denied-resume", "--approval-id", approval_id,
+        "resume", "--request-id", "req-denied-resume", f"--approval-id={approval_id}",
     ])
     assert code == 1
 

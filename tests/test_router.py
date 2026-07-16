@@ -48,7 +48,7 @@ def _settings_with_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_manual_local_override(router: Router) -> None:
     router.ollama_client.healthy.return_value = True
     router.ollama_client.chat.return_value = {
-        "model": "qwen2.5:1.5b",
+        "model": "qwen2.5:7b",
         "message": {"content": "local"},
     }
 
@@ -58,7 +58,7 @@ async def test_manual_local_override(router: Router) -> None:
     assert result.decision.provider == "ollama"
     assert result.decision.reason == "manual local override"
     assert result.response == "local"
-    router.ollama_client.chat.assert_awaited_once_with(prompt="hi", model="qwen2.5:1.5b")
+    router.ollama_client.chat.assert_awaited_once_with(prompt="hi", model="qwen2.5:7b")
 
 
 async def test_manual_cloud_override_allowed(router: Router, monkeypatch: pytest.MonkeyPatch, reset_settings) -> None:
@@ -296,3 +296,61 @@ def test_approved_allowlist_from_env(monkeypatch) -> None:
     monkeypatch.setenv("OPENROUTER_ALLOWLIST", "openai/gpt-4o-mini,anthropic/claude-3.5-haiku")
     s = Settings()
     assert s.approved_openrouter_models == ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku"]
+
+
+async def test_sub_3b_model_blocked_for_chat(router: Router, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:1.5b")
+    monkeypatch.setattr(settings, "ollama_chat_model", "qwen2.5:7b")
+    monkeypatch.setattr(settings, "ollama_classification_model", "qwen2.5:1.5b")
+    monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+    router.ollama_client.healthy.return_value = True
+    router.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "seven-bee"},
+    }
+
+    req = RouteRequest(prompt="hi")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "ollama"
+    assert "qwen2.5:7b" in result.decision.model
+    router.ollama_client.chat.assert_awaited_once()
+    _, kwargs = router.ollama_client.chat.call_args
+    assert "qwen2.5:1.5b" not in kwargs.get("model", "")
+
+
+async def test_1_5b_model_allowed_for_classification_only(router: Router, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:1.5b")
+    monkeypatch.setattr(settings, "ollama_chat_model", "qwen2.5:1.5b")
+    monkeypatch.setattr(settings, "ollama_classification_model", "qwen2.5:1.5b")
+    monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+    router.ollama_client.healthy.return_value = True
+    router.ollama_client.chat.return_value = {
+        "model": "qwen2.5:1.5b",
+        "message": {"content": "classified"},
+    }
+
+    req = RouteRequest(prompt="hi", provider="local", model="qwen2.5:1.5b")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "ollama"
+    assert result.decision.model == "qwen2.5:1.5b"
+
+
+async def test_openrouter_fallback_avoids_sub_3b_chat(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:1.5b")
+    monkeypatch.setattr(settings, "ollama_chat_model", "qwen2.5:7b")
+    monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+    monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+    router.ollama_client.chat.return_value = {"error": "Ollama down"}
+    router.openrouter_client.chat.return_value = {
+        "model": "openai/gpt-4o-mini",
+        "response": "cloud hello",
+    }
+
+    req = RouteRequest(prompt="hello", task_type="coding")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "openrouter"
+    assert "openai/gpt-4o-mini" in result.decision.model
+    assert result.response == "cloud hello"

@@ -21,7 +21,8 @@ _env_value() {
 
 _bool() {
     local value="${1:-}"
-    [[ "${value,,}" == "true" ]] || [[ "${value,,}" == "1" ]]
+    value=$(echo "${value}" | tr '[:upper:]' '[:lower:]')
+    [[ "${value}" == "true" ]] || [[ "${value}" == "1" ]]
 }
 
 echo "=== Freyja Telegram travel-mode verification ==="
@@ -105,10 +106,33 @@ fi
 
 echo ""
 echo "Latest gateway heartbeat:"
+HEARTBEAT_AGE=""
+HEARTBEAT_STATUS=""
 if [[ -f "${HEARTBEAT_FILE}" ]]; then
-    stat -f "%Sm" "${HEARTBEAT_FILE}"
+    read -r HEARTBEAT_STATUS HEARTBEAT_AGE < <(
+        "${PROJECT_DIR}/.venv/bin/python" -c "
+import json, sys, time
+path = sys.argv[1]
+threshold = 90
+try:
+    data = json.load(open(path))
+    now = time.time()
+    age = int(now - data.get('timestamp', 0))
+    status = data.get('last_poll_status', 'unknown')
+    if age > threshold:
+        print(f'stale {age}')
+    elif status != 'ok':
+        print(f'error {age} {status}')
+    else:
+        print(f'ok {age} {status}')
+except Exception as exc:
+    print(f'unreadable 0 {exc}')
+" "${HEARTBEAT_FILE}"
+    )
+    echo "${HEARTBEAT_STATUS}"
 else
     echo "none"
+    HEARTBEAT_STATUS="none"
 fi
 
 echo ""
@@ -146,6 +170,11 @@ fi
 
 if ! curl -fsS --max-time 3 http://127.0.0.1:8000/health >/dev/null 2>&1; then
     echo "UNSAFE: Director is not healthy."
+    ((UNSAFE++))
+fi
+
+if [[ "${HEARTBEAT_STATUS}" == "stale" ]] || [[ "${HEARTBEAT_STATUS}" == "none" ]]; then
+    echo "UNSAFE: Telegram gateway heartbeat is ${HEARTBEAT_STATUS}."
     ((UNSAFE++))
 fi
 

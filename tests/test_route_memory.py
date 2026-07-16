@@ -29,7 +29,7 @@ def isolated_store(tmp_path, monkeypatch):
 def test_route_with_conversation_id_persists_messages(isolated_store):
     with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat:
         mock_chat.return_value = {
-            "model": "qwen2.5:1.5b",
+            "model": "qwen2.5:7b",
             "message": {"role": "assistant", "content": "Hello from memory"},
         }
         response = client.post("/route", json={
@@ -45,7 +45,7 @@ def test_route_with_conversation_id_persists_messages(isolated_store):
     assert messages[0].content == "Say hello"
     assert messages[1].role == "assistant"
     assert messages[1].content == "Hello from memory"
-    assert messages[1].model == "qwen2.5:1.5b"
+    assert messages[1].model == "qwen2.5:7b"
 
 
 def test_route_without_conversation_id_does_not_persist(isolated_store):

@@ -7,6 +7,50 @@ from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolImplementation, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
+from freyja.tools.weather import WeatherRequestType, classify_weather_request, get_weather
+
+
+async def _get_weather_implementation(request: ToolExecutionRequest) -> dict:
+    import datetime as _datetime
+
+    args = request.arguments or {}
+    location = args.get("location", "")
+    request_type_arg = args.get("request_type", "current")
+    target_date_arg = args.get("target_date")
+    target_label = args.get("target_label", "")
+
+    try:
+        request_type = WeatherRequestType(request_type_arg)
+    except ValueError:
+        return {
+            "live_data_available": False,
+            "request_type": request_type_arg,
+            "location": location,
+            "target_label": target_label,
+            "summary": "Unsupported weather request type.",
+            "detail": "request_type must be 'current' or 'forecast'.",
+        }
+
+    target_date = None
+    if target_date_arg:
+        try:
+            target_date = _datetime.datetime.strptime(str(target_date_arg), "%Y-%m-%d").date()
+        except ValueError:
+            return {
+                "live_data_available": False,
+                "request_type": request_type_arg,
+                "location": location,
+                "target_label": target_label,
+                "summary": "Invalid forecast date.",
+                "detail": "target_date must be in YYYY-MM-DD format.",
+            }
+
+    return await get_weather(
+        location=location,
+        request_type=request_type,
+        target_date=target_date,
+        target_label=target_label,
+    )
 
 
 async def _system_health_implementation(request: ToolExecutionRequest) -> dict:
@@ -46,7 +90,12 @@ async def _recall_conversation_implementation(request: ToolExecutionRequest) -> 
     }
 
 
-_BUILTIN_TOOL_NAMES = ("system_health", "list_models", "recall_conversation")
+_BUILTIN_TOOL_NAMES = (
+    "system_health",
+    "list_models",
+    "recall_conversation",
+    "get_weather",
+)
 
 
 def _registration_is_complete(registry: ToolRegistry, names: tuple[str, ...]) -> bool:
@@ -66,6 +115,56 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
     _assert_registration_consistent(registry, _BUILTIN_TOOL_NAMES)
     if _registration_is_complete(registry, _BUILTIN_TOOL_NAMES):
         return
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description=(
+                "Return current weather or a forecast for a location. "
+                "request_type must be 'current' or 'forecast'; for forecast, "
+                "target_date and target_label should be supplied. Falls back safely if live data is not configured."
+            ),
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["location", "request_type"],
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "City or location, e.g. 'Aiken, South Carolina'.",
+                    },
+                    "request_type": {
+                        "type": "string",
+                        "enum": ["current", "forecast"],
+                        "description": "Whether to fetch current conditions or a forecast.",
+                    },
+                    "target_date": {
+                        "type": "string",
+                        "description": "ISO date (YYYY-MM-DD) for forecast requests.",
+                    },
+                    "target_label": {
+                        "type": "string",
+                        "description": "Human label for the forecast date, e.g. 'tomorrow'.",
+                    },
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "live_data_available": {"type": "boolean"},
+                    "request_type": {"type": "string"},
+                    "location": {"type": "string"},
+                    "target_label": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "detail": {"type": "string"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=20,
+            tags=["weather", "live-data"],
+        ),
+        _get_weather_implementation,
+    )
     registry.register(
         ToolDefinition(
             name="system_health",

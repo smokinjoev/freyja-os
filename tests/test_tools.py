@@ -80,7 +80,7 @@ def test_discovery(registry: ToolRegistry) -> None:
     assert registry.list_tools() == []
     register_builtin_tools(registry)
     names = {t.name for t in registry.list_tools()}
-    assert names == {"system_health", "list_models", "recall_conversation"}
+    assert names == {"system_health", "list_models", "recall_conversation", "get_weather"}
 
 
 def test_disable_tool_rejects_execution(registry: ToolRegistry) -> None:
@@ -289,7 +289,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 3
+    assert len(tools) == 4
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
@@ -326,6 +326,130 @@ def test_api_execute_disabled_tool(client: TestClient, registry: ToolRegistry) -
     response = client.post("/tools/system_health/execute")
     assert response.status_code == 400
     assert response.json()["detail"] == "Tool is currently disabled."
+
+
+def test_builtin_get_weather_safe_fallback(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", False)
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="get_weather",
+                arguments={"location": "Aiken, SC", "request_type": "current"},
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["live_data_available"] is False
+    assert "not configured" in result.output["summary"].lower()
+
+
+def test_builtin_get_weather_bad_request_type(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    monkeypatch.setattr(settings, "openweather_api_key", "fake-key")
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="get_weather",
+                arguments={"location": "Aiken, SC", "request_type": "next-month"},
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["live_data_available"] is False
+    assert "unsupported" in result.output["summary"].lower()
+
+
+def test_builtin_get_weather_missing_api_key(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    monkeypatch.setattr(settings, "openweather_api_key", "")
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="get_weather",
+                arguments={"location": "Aiken, SC", "request_type": "current"},
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["live_data_available"] is False
+    assert "not configured" in result.output["summary"].lower()
+
+
+def test_builtin_get_weather_provider_401(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    monkeypatch.setattr(settings, "openweather_api_key", "bad-key")
+    register_builtin_tools(registry)
+    import httpx
+
+    def _bad_request(*args, **kwargs):
+        request = httpx.Request("GET", "https://api.openweathermap.org/data/2.5/weather")
+        raise httpx.HTTPStatusError(
+            "401 Unauthorized",
+            request=request,
+            response=httpx.Response(401, text="Unauthorized", request=request),
+        )
+
+    with patch("httpx.AsyncClient.get", side_effect=_bad_request):
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="get_weather",
+                    arguments={"location": "Aiken, SC", "request_type": "current"},
+                )
+            )
+        )
+    assert result.success is True
+    assert result.output["live_data_available"] is False
+    assert result.output["detail"] == "HTTP 401"
+
+
+def test_builtin_get_weather_forecast_hits_forecast_endpoint(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    monkeypatch.setattr(settings, "openweather_api_key", "fake-key")
+    register_builtin_tools(registry)
+
+    captured: dict[str, Any] = {}
+    import httpx
+
+    def _capture_forecast(*args, **kwargs):
+        captured["url"] = str(args[0]) if args else kwargs.get("url", "")
+        request = httpx.Request("GET", captured["url"])
+        response_data = {
+            "city": {"name": "Aiken", "id": 12345},
+            "list": [
+                {
+                    "dt": 1784241600,
+                    "main": {"temp": 75, "feels_like": 74, "humidity": 60},
+                    "weather": [{"main": "Clear", "description": "clear sky"}],
+                }
+            ],
+        }
+        return httpx.Response(200, json=response_data, request=request)
+
+    with patch("httpx.AsyncClient.get", side_effect=_capture_forecast):
+        from datetime import date, timedelta
+        target = date(2026, 7, 16)
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="get_weather",
+                    arguments={
+                        "location": "Aiken, SC",
+                        "request_type": "forecast",
+                        "target_date": target.isoformat(),
+                        "target_label": "tomorrow",
+                    },
+                )
+            )
+        )
+    assert result.success is True
+    assert result.output["live_data_available"] is True
+    assert "forecast" in str(captured.get("url", ""))
+    assert result.output["request_type"] == "forecast"
+    assert result.output["target_label"] == "tomorrow"
 
 
 def test_api_execute_validation_error(client: TestClient, registry: ToolRegistry) -> None:

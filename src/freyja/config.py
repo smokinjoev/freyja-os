@@ -29,7 +29,10 @@ class Settings(BaseSettings):
     freyja_port: int = 8000
 
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen2.5:1.5b"
+    ollama_model: str = "qwen2.5:7b"
+    ollama_chat_model: str = "qwen2.5:7b"
+    ollama_classification_model: str = "qwen2.5:1.5b"
+    ollama_min_chat_parameters_b: int = 3
 
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -74,6 +77,9 @@ class Settings(BaseSettings):
     telegram_request_timeout_seconds: float = 30.0
     telegram_poll_interval_seconds: float = 5.0
     telegram_state_dir: str = str(_default_state_dir() / "telegram")
+
+    weather_tool_enabled: bool = False
+    openweather_api_key: str = ""
 
     @property
     def approved_openrouter_models(self) -> list[str]:

@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -109,6 +110,22 @@ def _classify_privacy(prompt: str, explicit: str | None) -> str:
     return "routine"
 
 
+def _model_parameter_count_b(model: str) -> int | None:
+    """Return the claimed parameter count in billions for a model name, or None."""
+    match = re.search(r"(\d+)(?:\.\d+)?[bB]", model)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def _meets_min_chat_capability(model: str) -> bool:
+    """Block sub-3B models from full conversational responses."""
+    params = _model_parameter_count_b(model)
+    if params is None:
+        return True
+    return params >= settings.ollama_min_chat_parameters_b
+
+
 def _routine_score(request: RouteRequest) -> int:
     score = 0
     task = (request.task_type or "").lower()
@@ -156,6 +173,20 @@ class Router:
             return False
         return await self.openrouter_client.healthy()
 
+    async def _ollama_has_model(self, model: str) -> bool:
+        try:
+            models = await self.ollama_client.list_local_models()
+            return model in models
+        except Exception:
+            return False
+
+    def _default_chat_model(self) -> str:
+        """Return the configured Ollama chat model."""
+        default = settings.ollama_model
+        if _meets_min_chat_capability(default):
+            return default
+        return settings.ollama_chat_model
+
     def _approved_model(self, requested: str | None) -> tuple[str, str]:
         approved = settings.approved_openrouter_models
         default_model = settings.openrouter_model
@@ -187,11 +218,15 @@ class Router:
         fallback_attempts: list[dict[str, Any]],
     ) -> RoutingDecision | None:
         """Try to keep sensitive data local; fall back to cloud only when local is unhealthy and cloud is allowed."""
+        local_model = request.model or settings.ollama_model
+        if not _meets_min_chat_capability(local_model):
+            local_model = settings.ollama_chat_model
+
         ollama_healthy = await self._ollama_healthy()
         if ollama_healthy:
             return RoutingDecision(
                 provider="ollama",
-                model=request.model or settings.ollama_model,
+                model=local_model,
                 reason="sensitive/private request with healthy local model",
                 privacy_classification="sensitive",
                 fallback_attempts=fallback_attempts,
@@ -202,7 +237,7 @@ class Router:
         if not settings.cloud_enabled:
             return RoutingDecision(
                 provider="ollama",
-                model=request.model or settings.ollama_model,
+                model=local_model,
                 reason="sensitive request defaults to local; cloud disabled",
                 privacy_classification="sensitive",
                 fallback_attempts=fallback_attempts,
@@ -212,7 +247,7 @@ class Router:
         if spent_this_month >= settings.openrouter_monthly_hard_limit:
             return RoutingDecision(
                 provider="ollama",
-                model=request.model or settings.ollama_model,
+                model=local_model,
                 reason="sensitive request defaults to local; hard budget reached",
                 privacy_classification="sensitive",
                 fallback_attempts=fallback_attempts,
@@ -222,7 +257,7 @@ class Router:
         if estimated_cost > settings.openrouter_per_request_limit:
             return RoutingDecision(
                 provider="ollama",
-                model=request.model or settings.ollama_model,
+                model=local_model,
                 reason="sensitive request defaults to local; per-request cost limit exceeded",
                 privacy_classification="sensitive",
                 fallback_attempts=fallback_attempts,
@@ -235,7 +270,7 @@ class Router:
             fallback_attempts.append(self._record_attempt("openrouter", "unhealthy"))
             return RoutingDecision(
                 provider="ollama",
-                model=request.model or settings.ollama_model,
+                model=local_model,
                 reason="sensitive request defaults to local; openrouter unhealthy",
                 privacy_classification="sensitive",
                 fallback_attempts=fallback_attempts,
@@ -248,7 +283,7 @@ class Router:
             fallback_attempts.append(self._record_attempt("openrouter", "no approved model"))
             return RoutingDecision(
                 provider="ollama",
-                model=request.model or settings.ollama_model,
+                model=local_model,
                 reason="sensitive request defaults to local; no approved cloud model",
                 privacy_classification="sensitive",
                 fallback_attempts=fallback_attempts,
@@ -285,9 +320,12 @@ class Router:
             )
 
         if request.provider == "local":
+            requested = request.model or settings.ollama_model
+            if not _meets_min_chat_capability(requested):
+                requested = settings.ollama_chat_model
             return RoutingDecision(
                 provider="ollama",
-                model=request.model or settings.ollama_model,
+                model=requested,
                 reason="manual local override",
                 privacy_classification=privacy,
                 estimated_cost_usd=0.0,
@@ -378,9 +416,13 @@ class Router:
         local_reason = "routine/sensitive request defaults to local"
         if reason_tail:
             local_reason += f"; {reason_tail}"
+        local_model = request.model or settings.ollama_model
+        if not _meets_min_chat_capability(local_model):
+            fallback_attempts.append(self._record_attempt("ollama", f"{local_model} below min chat capability"))
+            local_model = settings.ollama_chat_model
         return RoutingDecision(
             provider="ollama",
-            model=request.model or settings.ollama_model,
+            model=local_model,
             reason=local_reason,
             privacy_classification=privacy,
             fallback_attempts=fallback_attempts,
@@ -562,9 +604,12 @@ class Router:
             decision.public_error_message = PUBLIC_ERROR_MESSAGES["ollama"]
             return RoutingResult(decision=decision, response="")
         decision.fallback_attempts.append({"provider": "ollama", "outcome": "attempting fallback"})
+        fallback_model = request.model or settings.ollama_model
+        if not _meets_min_chat_capability(fallback_model):
+            fallback_model = settings.ollama_chat_model
         response = await self.ollama_client.chat(
             prompt=request.prompt,
-            model=request.model or settings.ollama_model or None,
+            model=fallback_model or None,
         )
         if "error" in response:
             raw_error = response["error"]
@@ -575,7 +620,7 @@ class Router:
         new_decision = RoutingDecision(
             request_id=decision.request_id,
             provider="ollama",
-            model=request.model or settings.ollama_model,
+            model=fallback_model,
             reason="fallback after cloud failure",
             privacy_classification=decision.privacy_classification,
             fallback_attempts=self._sanitize_fallback_attempts(decision.fallback_attempts),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -67,6 +68,7 @@ def settings(tmp_path) -> TelegramSettings:
 @pytest.fixture
 async def gateway(settings) -> AsyncIterator[TelegramGateway]:
     gw = TelegramGateway(settings=settings)
+    gw._record_heartbeat()
     yield gw
     await gw.close()
 
@@ -310,6 +312,88 @@ async def test_help_command(gateway):
 
 
 @pytest.mark.asyncio
+async def test_weather_query_returns_safe_fallback_when_unconfigured(gateway, monkeypatch):
+    monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", False)
+    update = _make_update(1, 123456, 123456, "private", "What is the weather tomorrow in Aiken, South Carolina?")
+    result = await gateway.handle(update)
+    assert result is not None
+    assert "live" in result.text.lower() or "configured" in result.text.lower()
+    assert "weather" in result.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_weather_now_invokes_current_conditions(gateway, monkeypatch):
+    monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
+    monkeypatch.setattr("freyja.config.settings.openweather_api_key", "fake-key")
+
+    captured_request = {}
+    async def _capture(request):
+        captured_request["request"] = request
+        return "Current weather for Aiken: sunny, 76°F."
+
+    with patch("connectors.telegram.gateway.weather_response_text", new_callable=AsyncMock, side_effect=_capture):
+        update = _make_update(1, 123456, 123456, "private", "What is the weather now in Aiken, South Carolina?")
+        result = await gateway.handle(update)
+
+    assert result is not None
+    assert captured_request["request"].request_type.value == "current"
+    assert captured_request["request"].target_label == "now"
+
+
+@pytest.mark.asyncio
+async def test_weather_tomorrow_invokes_forecast(gateway, monkeypatch):
+    monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
+    monkeypatch.setattr("freyja.config.settings.openweather_api_key", "fake-key")
+
+    captured_request = {}
+    async def _capture(request):
+        captured_request["request"] = request
+        return "Forecast for Aiken tomorrow: sunny."
+
+    with patch("connectors.telegram.gateway.weather_response_text", new_callable=AsyncMock, side_effect=_capture):
+        update = _make_update(1, 123456, 123456, "private", "What is the weather tomorrow in Aiken, South Carolina?")
+        result = await gateway.handle(update)
+
+    assert result is not None
+    assert captured_request["request"].request_type.value == "forecast"
+    assert captured_request["request"].target_label == "tomorrow"
+
+
+@pytest.mark.asyncio
+async def test_weather_unsupported_future_date_returns_limitation(gateway, monkeypatch):
+    monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
+    monkeypatch.setattr("freyja.config.settings.openweather_api_key", "fake-key")
+
+    update = _make_update(1, 123456, 123456, "private", "What is the weather in 10 days in Aiken, South Carolina?")
+    result = await gateway.handle(update)
+    assert result is not None
+    assert "outside" in result.text.lower() or "range" in result.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_weather_query_invokes_tool_when_enabled(gateway, monkeypatch):
+    monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
+    monkeypatch.setattr("freyja.config.settings.openweather_api_key", "fake-key")
+
+    with patch("connectors.telegram.gateway.weather_response_text", new_callable=AsyncMock, return_value="Weather for Aiken: sunny, 75°F."):
+        update = _make_update(1, 123456, 123456, "private", "What is the weather in Aiken, South Carolina?")
+        result = await gateway.handle(update)
+
+    assert result is not None
+    assert ("75°F" in result.text or "Aiken" in result.text)
+
+
+@pytest.mark.asyncio
+async def test_time_sensitive_non_weather_returns_unavailable(gateway, monkeypatch):
+    monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", False)
+    update = _make_update(1, 123456, 123456, "private", "What is the current stock price of Apple?")
+    result = await gateway.handle(update)
+    assert result is not None
+    assert result.success is False
+    assert "live data" in result.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_rejection_logs_do_not_contain_message_bodies(gateway, caplog):
     caplog.set_level(logging.INFO)
     update = _make_update(1, 999999, 999999, "private", "secret plan details")
@@ -416,6 +500,86 @@ def test_settings_allowed_user_id_set():
     assert s.allowed_user_id_set == {111, 222, 333, 444}
 
 
-def test_settings_allowed_user_id_set_empty():
+def test_settings_allowed_user_id_set_empty(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "")
     s = TelegramSettings()
     assert s.allowed_user_id_set == set()
+
+
+def _read_heartbeat(gateway: TelegramGateway) -> dict:
+    return json.loads(gateway._heartbeat_file.read_text(encoding="utf-8"))
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_updates_during_empty_poll(gateway, monkeypatch):
+    monkeypatch.setattr(gateway, "_HEARTBEAT_INTERVAL_SECONDS", 0.0)
+    before = _read_heartbeat(gateway)
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=_ok_response({"ok": True, "result": []})):
+        replies = await gateway.poll_updates()
+
+    assert replies == []
+    after = _read_heartbeat(gateway)
+    assert after["last_poll_status"] == "ok"
+    assert after["last_poll_timestamp"] >= before.get("timestamp", 0)
+    assert after["timestamp"] >= before.get("timestamp", 0)
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_reflects_polling_error(gateway, monkeypatch):
+    monkeypatch.setattr(gateway, "_HEARTBEAT_INTERVAL_SECONDS", 0.0)
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock, side_effect=httpx.ConnectError("failed")):
+        replies = await gateway.poll_updates()
+
+    assert replies == []
+    hb = _read_heartbeat(gateway)
+    assert hb["last_poll_status"] != "ok"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_file_permissions(gateway, monkeypatch):
+    monkeypatch.setattr(gateway, "_HEARTBEAT_INTERVAL_SECONDS", 0.0)
+    gateway._record_heartbeat(poll_status="ok")
+    mode = gateway._heartbeat_file.stat().st_mode & 0o777
+    assert mode == 0o600
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_contains_no_secrets(gateway):
+    hb = _read_heartbeat(gateway)
+    hb_text = json.dumps(hb)
+    assert "test-token" not in hb_text
+    assert "user_id" not in hb_text.lower()
+    assert "hello" not in hb_text.lower()
+    assert "update_id" not in hb_text.lower()
+
+
+def test_stale_heartbeat_detection(gateway, tmp_path):
+    old_timestamp = time.time() - 120
+    stale_data = {
+        "timestamp": old_timestamp,
+        "enabled": True,
+        "direct_messages_only": True,
+        "allowed_user_count": 1,
+        "token_configured": True,
+        "last_poll_status": "ok",
+        "last_poll_timestamp": old_timestamp,
+    }
+    gateway._heartbeat_file.write_text(json.dumps(stale_data), encoding="utf-8")
+
+    def is_stale(path: Path, threshold: float = 90.0) -> bool:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return (time.time() - data["timestamp"]) > threshold
+
+    assert is_stale(gateway._heartbeat_file)
+
+
+def test_fresh_heartbeat_not_stale(gateway, monkeypatch):
+    monkeypatch.setattr(gateway, "_HEARTBEAT_INTERVAL_SECONDS", 0.0)
+    gateway._record_heartbeat(poll_status="ok")
+
+    def is_stale(path: Path, threshold: float = 90.0) -> bool:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return (time.time() - data["timestamp"]) > threshold
+
+    assert not is_stale(gateway._heartbeat_file)

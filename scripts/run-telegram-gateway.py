@@ -3,17 +3,32 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Rebuild sys.path BEFORE importing any standard library modules that may
+# transitively import signal (e.g. asyncio -> subprocess -> signal).  Put the
+# 'connectors' directory at the very end so it cannot shadow stdlib modules.
+_PROJECT_DIR = Path(__file__).resolve().parents[1]
+_SRC_DIR = str(_PROJECT_DIR / "src")
+_CONNECTORS_DIR = str(_PROJECT_DIR / "connectors")
+_PROJECT_ROOT = str(_PROJECT_DIR)
+_SCRIPT_DIR = str(_PROJECT_DIR / "scripts")
+
+_cleaned: list[str] = []
+for _entry in sys.path:
+    if _entry in {_SCRIPT_DIR, _PROJECT_ROOT, _SRC_DIR, _CONNECTORS_DIR, ""}:
+        continue
+    _cleaned.append(_entry)
+
+# src first, then project root (so connectors.telegram resolves), then the
+# rest of the path, then connectors last.
+sys.path = [_SRC_DIR, _PROJECT_ROOT] + _cleaned + [_CONNECTORS_DIR]
+
 import asyncio
 import logging
 import signal
-import sys
 import time
-from pathlib import Path
-
-# Add src to path when run as a LaunchAgent script.
-PROJECT_DIR = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_DIR / "src"))
-sys.path.insert(0, str(PROJECT_DIR / "connectors"))
 
 from connectors.telegram.gateway import TelegramGateway  # noqa: E402
 
@@ -25,7 +40,7 @@ _BACKOFF_FACTOR = 2.0
 
 
 def _setup_logging() -> None:
-    log_dir = PROJECT_DIR / "logs"
+    log_dir = _PROJECT_DIR / "logs"
     log_dir.mkdir(exist_ok=True)
     log_path = log_dir / "telegram-gateway.log"
     handler = logging.FileHandler(log_path)
@@ -42,6 +57,8 @@ def _setup_logging() -> None:
         logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
     )
     root.addHandler(stderr_handler)
+    # httpx logs full request URLs at INFO, which would leak the bot token.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 async def main() -> int:

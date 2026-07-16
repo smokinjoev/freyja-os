@@ -13,12 +13,18 @@ from typing import Any
 import httpx
 
 from freyja.config import settings as freyja_settings
-from freyja.tools.registry import get_registry
+from freyja.tools.weather import (
+    WeatherRequest,
+    classify_weather_request,
+    is_time_sensitive_query,
+    weather_response_text,
+)
 
 from .config import TelegramSettings
 from .models import TelegramInboundUpdate, TelegramMessage, TelegramOutboundMessage
 
 logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 _MAX_RECENT_IDS = 1000
 _SAFE_ERROR_TEXT = "Freyja could not process your message. Please try again later."
@@ -49,6 +55,10 @@ class RejectionReason:
 class TelegramGateway:
     """Receive normalized Telegram updates, enforce policy, and forward to Director."""
 
+    # Minimum seconds between heartbeat file writes; updates are still recorded
+    # in memory every polling iteration so callers can distinguish liveness.
+    _HEARTBEAT_INTERVAL_SECONDS = 30.0
+
     def __init__(
         self,
         settings: TelegramSettings | None = None,
@@ -68,6 +78,8 @@ class TelegramGateway:
         self._recent_update_ids: deque[int] = deque(maxlen=_MAX_RECENT_IDS)
         self._http_client: httpx.AsyncClient | None = None
         self._last_offset = self._load_offset()
+        self._last_heartbeat_at = 0.0
+        self._last_heartbeat_status = "ok"
         self._ensure_state_dir()
 
     @property
@@ -115,17 +127,41 @@ class TelegramGateway:
         tmp_path.replace(self._offset_file)
         os.chmod(self._offset_file, 0o600)
 
-    def _record_heartbeat(self) -> None:
+    def _record_heartbeat(self, *, poll_status: str | None = None) -> None:
+        """Write a periodic heartbeat file with safe liveness metadata.
+
+        The heartbeat file is only written to disk when the interval has elapsed
+        or the status changed, so callers can distinguish:
+
+        * alive and polling (recent timestamp, status "ok");
+        * alive but polling failing (recent timestamp, status not "ok");
+        * stale or stopped gateway (timestamp older than threshold).
+
+        No message bodies, user IDs, or token values are ever written.
+        """
+        now = time.time()
+        status = poll_status or "ok"
+        if (
+            now - self._last_heartbeat_at < self._HEARTBEAT_INTERVAL_SECONDS
+            and status == self._last_heartbeat_status
+        ):
+            return
+
+        self._last_heartbeat_at = now
+        self._last_heartbeat_status = status
+
         try:
             self._ensure_state_dir()
             tmp_path = self._heartbeat_file.with_suffix(".tmp")
             tmp_path.write_text(
                 json.dumps({
-                    "timestamp": time.time(),
+                    "timestamp": now,
                     "enabled": self._enabled,
                     "direct_messages_only": self._direct_messages_only,
                     "allowed_user_count": len(self._allowed_user_ids),
                     "token_configured": self.bot_token_configured,
+                    "last_poll_status": status,
+                    "last_poll_timestamp": now,
                 }),
                 encoding="utf-8",
             )
@@ -291,7 +327,44 @@ class TelegramGateway:
                 success=False,
             )
 
+        if is_time_sensitive_query(text):
+            return await self._handle_time_sensitive_query(text, message)
+
         return await self._forward_to_freyja(text, message)
+
+    async def _handle_time_sensitive_query(
+        self,
+        text: str,
+        message: TelegramMessage,
+    ) -> TelegramOutboundMessage:
+        """For time-sensitive queries, use the weather tool if enabled; otherwise state unavailability."""
+        lowered = text.lower()
+        if "weather" in lowered or "temperature" in lowered or "forecast" in lowered or "rain" in lowered or "snow" in lowered or "storm" in lowered:
+            request = classify_weather_request(text)
+            if freyja_settings.weather_tool_enabled:
+                try:
+                    weather_text = await weather_response_text(request)
+                    return self._reply(message, weather_text)
+                except Exception:
+                    logger.exception({"event": "telegram_weather_tool_failed"})
+                    return self._reply(
+                        message,
+                        "Live weather data is currently unavailable. Please check a trusted weather service.",
+                        success=False,
+                    )
+            return self._reply(
+                message,
+                "I don't have live weather data configured right now, so I can't check the forecast. "
+                "Please use a trusted weather service for current conditions.",
+                success=False,
+            )
+
+        return self._reply(
+            message,
+            "I don't have live data configured for this type of question, so I can't give you a current answer. "
+            "Please check an authoritative source.",
+            success=False,
+        )
 
     async def _forward_to_freyja(
         self,
@@ -483,14 +556,15 @@ class TelegramGateway:
             params["offset"] = self._last_offset + 1
 
         replies: list[TelegramOutboundMessage] = []
+        poll_status = "ok"
         try:
             client = await self._client()
             response = await client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
             if not data.get("ok"):
+                poll_status = "api_error"
                 logger.warning({"event": "telegram_api_error", "description": data.get("description")})
-                return replies
 
             for raw_update in data.get("result", []):
                 try:
@@ -502,12 +576,16 @@ class TelegramGateway:
                 if reply is not None:
                     replies.append(reply)
         except httpx.TimeoutException:
+            poll_status = "timeout"
             logger.warning({"event": "telegram_poll_timeout"})
         except httpx.HTTPStatusError as exc:
+            poll_status = f"http_error:{exc.response.status_code}"
             logger.warning({"event": "telegram_poll_http_error", "status_code": exc.response.status_code})
         except Exception:
+            poll_status = "unexpected_error"
             logger.exception({"event": "telegram_poll_unexpected_error"})
 
+        self._record_heartbeat(poll_status=poll_status)
         return replies
 
     async def send_reply(self, reply: TelegramOutboundMessage) -> bool:

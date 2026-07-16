@@ -1128,26 +1128,21 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("pending", help="List pending approvals.")
 
     show = sub.add_parser("show", help="Show one approval.")
-    show.add_argument("approval_id", nargs="?", default=None)
-    show.add_argument("--approval-id", dest="approval_id_opt", default=None)
+    show.add_argument("--approval-id", required=True, help="Approval identifier (use --approval-id=-id for IDs beginning with '-').")
 
     approve = sub.add_parser("approve", help="Approve an approval.")
-    approve.add_argument("approval_id", nargs="?", default=None)
-    approve.add_argument("--approval-id", dest="approval_id_opt", default=None)
+    approve.add_argument("--approval-id", required=True, help="Approval identifier (use --approval-id=-id for IDs beginning with '-').")
     approve.add_argument("--yes", action="store_true", help="Non-interactive mode; requires --actor.")
     approve.add_argument("--actor", default="operator")
 
     deny = sub.add_parser("deny", help="Deny an approval.")
-    deny.add_argument("approval_id", nargs="?", default=None)
-    deny.add_argument("--approval-id", dest="approval_id_opt", default=None)
+    deny.add_argument("--approval-id", required=True, help="Approval identifier.")
     deny.add_argument("--actor", required=True)
     deny.add_argument("--reason", required=True)
 
     resume = sub.add_parser("resume", help="Resume a write-pilot request after an approval.")
-    resume.add_argument("request_id", nargs="?", default=None)
-    resume.add_argument("approval_id", nargs="?", default=None)
-    resume.add_argument("--request-id", dest="request_id_opt", default=None)
-    resume.add_argument("--approval-id", dest="approval_id_opt", default=None)
+    resume.add_argument("--request-id", required=True, dest="request_id")
+    resume.add_argument("--approval-id", required=True, dest="approval_id")
     resume.add_argument("--objective", default=None)
     resume.add_argument("--actor", default="operator")
 
@@ -1203,12 +1198,6 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-
-    # Resolve positional vs option-style IDs, supporting IDs that start with '-'.
-    if hasattr(args, "approval_id_opt") and args.approval_id_opt is not None:
-        args.approval_id = args.approval_id_opt
-    if hasattr(args, "request_id_opt") and args.request_id_opt is not None:
-        args.request_id = args.request_id_opt
 
     handlers: dict[str, Any] = {
         "start": _command_start,
