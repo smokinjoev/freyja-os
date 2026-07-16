@@ -10,7 +10,9 @@ and a clear success/failure flag.
 from __future__ import annotations
 
 import asyncio
+import re
 import shutil
+import socket
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -27,6 +29,7 @@ from freyja.tools.registry import ToolRegistry
 #: Absolute executable paths that may be invoked by local read-only tools.
 _ALLOWED_EXECUTABLES: dict[str, str | None] = {
     "hostname": shutil.which("hostname"),
+    "scutil": shutil.which("scutil"),
     "date": shutil.which("date"),
     "df": shutil.which("df"),
     "curl": shutil.which("curl"),
@@ -41,6 +44,20 @@ _MAX_CAPTURE_BYTES = 128 * 1024
 
 #: Default timeout for local command tools (seconds).
 _DEFAULT_TIMEOUT_SECONDS = 10
+
+#: Valid hostname characters: alphanumeric, hyphen, dot, underscore. Must not
+#: contain whitespace or shell metacharacters that could be misinterpreted.
+_HOSTNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]{0,253}$")
+
+
+def _safe_hostname(raw: str | None) -> str | None:
+    """Return the raw string if it looks like a real hostname, otherwise None."""
+    if not raw:
+        return None
+    cleaned = raw.strip().splitlines()[0]
+    if not _HOSTNAME_RE.match(cleaned):
+        return None
+    return cleaned
 
 
 def _executable_path(name: str) -> str:
@@ -116,13 +133,55 @@ async def _run_read_only_command(
 
 
 async def _hostname_implementation(request: ToolExecutionRequest) -> dict[str, Any]:
+    """Return the system hostname, preferring macOS scutil if available.
+
+    On this host the ``hostname`` binary and ``socket.gethostname()`` both
+    return the same compromised value (``; rm -rf /``), so we rely on
+    ``scutil --get LocalHostName`` first, then validate anything we return.
+    """
+    scutil = _ALLOWED_EXECUTABLES.get("scutil")
+    if scutil:
+        result = await _run_read_only_command("scutil", ["--get", "LocalHostName"])
+        raw = result.get("stdout", "")
+        hostname = _safe_hostname(raw)
+        if result["success"] and hostname is not None:
+            return {
+                "hostname": hostname,
+                **result,
+            }
+
     result = await _run_read_only_command("hostname", [])
-    if result["success"]:
+    raw = result.get("stdout", "")
+    hostname = _safe_hostname(raw)
+    if result["success"] and hostname is not None:
         return {
-            "hostname": result["stdout"],
+            "hostname": hostname,
             **result,
         }
-    return result
+
+    # Last resort: a pure-Python hostname, but still validate it. A compromised
+    # system can also return garbage from socket.gethostname().
+    safe = _safe_hostname(socket.gethostname())
+    if safe:
+        result = {
+            "command": "hostname",
+            "stdout": safe,
+            "stderr": "",
+            "exit_code": 0,
+            "duration_ms": 0,
+            "success": True,
+        }
+        result["hostname"] = safe
+        return result
+
+    return {
+        "command": "hostname",
+        "stdout": "",
+        "stderr": "hostname output is not a valid hostname and no fallback is available",
+        "exit_code": 1,
+        "duration_ms": result.get("duration_ms", 0),
+        "success": False,
+    }
 
 
 async def _current_time_implementation(request: ToolExecutionRequest) -> dict[str, Any]:

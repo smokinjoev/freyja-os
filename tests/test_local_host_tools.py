@@ -13,7 +13,9 @@ import pytest
 from freyja.tools.local_host import (
     _ALLOWED_EXECUTABLES,
     _executable_path,
+    _hostname_implementation,
     _run_read_only_command,
+    _safe_hostname,
     register_local_host_tools,
 )
 from freyja.tools.models import ToolExecutionRequest
@@ -95,6 +97,62 @@ class TestHostnameTool:
         assert "hostname" in result.output
         assert result.output["success"] is True
         assert result.output["exit_code"] == 0
+        # The returned hostname must not contain shell metacharacters.
+        assert ";" not in result.output["hostname"]
+        assert "rm" not in result.output["hostname"].lower()
+
+    @pytest.mark.asyncio
+    async def test_hostname_rejects_compromised_binary(self, monkeypatch):
+        """A malicious hostname binary must not leak commands into the output."""
+
+        async def _fake_run(executable: str, args: list[str], **kwargs):
+            return {
+                "command": f"{executable} {' '.join(args)}",
+                "stdout": "; rm -rf /",
+                "stderr": "",
+                "exit_code": 0,
+                "duration_ms": 1,
+                "success": True,
+            }
+
+        monkeypatch.setattr("freyja.tools.local_host._run_read_only_command", _fake_run)
+        # Also make scutil unavailable so the implementation falls back to socket.
+        monkeypatch.setitem(_ALLOWED_EXECUTABLES, "scutil", None)
+        monkeypatch.setattr("socket.gethostname", lambda: "safe-fallback-host")
+
+        result = await _hostname_implementation(ToolExecutionRequest(tool_name="hostname", arguments={}))
+        assert result["success"] is True
+        assert result["hostname"] == "safe-fallback-host"
+        assert ";" not in result["hostname"]
+
+    @pytest.mark.asyncio
+    async def test_hostname_fails_when_every_source_is_compromised(self, monkeypatch):
+        async def _fake_run(executable: str, args: list[str], **kwargs):
+            return {
+                "command": f"{executable} {' '.join(args)}",
+                "stdout": "; rm -rf /",
+                "stderr": "",
+                "exit_code": 0,
+                "duration_ms": 1,
+                "success": True,
+            }
+
+        monkeypatch.setattr("freyja.tools.local_host._run_read_only_command", _fake_run)
+        monkeypatch.setitem(_ALLOWED_EXECUTABLES, "scutil", None)
+        monkeypatch.setattr("socket.gethostname", lambda: "; rm -rf /")
+
+        result = await _hostname_implementation(ToolExecutionRequest(tool_name="hostname", arguments={}))
+        assert result["success"] is False
+        assert "hostname output is not a valid hostname" in result["stderr"]
+
+    def test_safe_hostname_validation(self):
+        assert _safe_hostname("Iris") == "Iris"
+        assert _safe_hostname("joes-Mac-mini") == "joes-Mac-mini"
+        assert _safe_hostname("host-1.local") == "host-1.local"
+        assert _safe_hostname("  Iris  ") == "Iris"
+        assert _safe_hostname("; rm -rf /") is None
+        assert _safe_hostname("host name") is None
+        assert _safe_hostname("") is None
 
 
 class TestCurrentTimeTool:
