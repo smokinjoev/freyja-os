@@ -717,9 +717,10 @@ async def test_write_pilot_atomic_write_and_backup(write_pilot_runtime, tmp_git_
         approval_callback=approving_callback,
     )
     assert result.status == "complete"
-    backups = list((tmp_git_repo / "docs" / "smith-pilot").glob("atomic.md.bak.*"))
-    assert len(backups) == 1
-    assert backups[0].read_text(encoding="utf-8") == "original\n"
+    # Backups are created before overwriting an existing tracked file and then
+    # cleaned up once the commit succeeds, so no backup remains after completion.
+    assert result.commit_hash is not None
+    assert not list((tmp_git_repo / "docs" / "smith-pilot").glob("atomic.md.bak.*"))
 
 
 @pytest.mark.asyncio

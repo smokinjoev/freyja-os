@@ -49,13 +49,24 @@ class PersistentApprovalProvider:
         content = context.get("content")
         commit_message = context.get("commit_message")
         summary = context.get("summary") or f"{approval_type} approval for {request_id}"
+        # Only path and content approvals validate the proposed payload.  Stage
+        # and commit approvals reuse the hashes recorded for content approval.
+        if approval_type == "path":
+            record_content_hash = self._hash(content) if content is not None else None
+            record_commit_message_hash = self._hash(commit_message) if commit_message is not None else None
+        elif approval_type == "content":
+            record_content_hash = self._hash(content) if content is not None else None
+            record_commit_message_hash = self._hash(commit_message) if commit_message is not None else None
+        else:
+            record_content_hash = None
+            record_commit_message_hash = None
         try:
             self._store.create(
                 request_id=request_id,
                 action=approval_type,
                 target_path=target_path,
-                content_hash=self._hash(content) if content is not None else None,
-                commit_message_hash=self._hash(commit_message) if commit_message is not None else None,
+                content_hash=record_content_hash,
+                commit_message_hash=record_commit_message_hash,
                 summary=summary,
             )
         except ApprovalStoreError:

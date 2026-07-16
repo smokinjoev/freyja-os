@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from freyja.agents.approval_store import SmithApprovalStore
 from freyja.cli import smith_approval
 from freyja.config import settings
 from freyja.main import app
@@ -555,3 +556,301 @@ def test_deny_then_resume_reports_denial(
         "resume", "--request-id", "req-denied-resume", "--approval-id", approval_id,
     ])
     assert code == 1
+
+
+class TestResumableGateFlow:
+    """Resumable one-gate-at-a-time operator flow tests.
+
+    Each test simulates separate CLI processes by calling smith_approval.main
+    repeatedly. No test uses pre-seeded stdin for approvals; each gate is
+    explicitly approved in its own invocation.
+    """
+
+    @pytest.fixture
+    def gate_state(self, enabled_client, tmp_git_repo: Path, tmp_path: Path, monkeypatch):
+        state_dir = tmp_path / "state"
+        content_path = _content_file(tmp_path)
+        request_id = "req-gate-flow"
+        yield {
+            "state_dir": state_dir,
+            "content_path": content_path,
+            "request_id": request_id,
+            "repo": tmp_git_repo,
+            "target": "docs/smith-pilot/operator-test.md",
+        }
+
+    def _start(self, gate_state: dict[str, Any]) -> int:
+        return _run_cli([
+            "--state-dir", str(gate_state["state_dir"]),
+            "start-pilot",
+            "--target", gate_state["target"],
+            "--content-file", str(gate_state["content_path"]),
+            "--commit-message", "add operator note",
+            "--request-id", gate_state["request_id"],
+            "--actor", "operator-test",
+        ])
+
+    def _approve_current(self, gate_state: dict[str, Any], monkeypatch, inputs: list[str] | None = None) -> int:
+        argv = [
+            "--state-dir", str(gate_state["state_dir"]),
+            "approve-current-gate",
+            "--request-id", gate_state["request_id"],
+            "--actor", "operator-test",
+            "--repo-root", str(gate_state["repo"]),
+        ]
+        if inputs:
+            it = iter(inputs)
+            monkeypatch.setattr("builtins.input", lambda _: next(it))
+        return _run_cli(argv)
+
+    def _resume(self, gate_state: dict[str, Any]) -> int:
+        return _run_cli([
+            "--state-dir", str(gate_state["state_dir"]),
+            "resume-pilot",
+            "--request-id", gate_state["request_id"],
+            "--actor", "operator-test",
+        ])
+
+    def _show_current(self, gate_state: dict[str, Any]) -> tuple[int, str]:
+        import io
+        import sys
+        buf = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = buf
+        try:
+            code = _run_cli([
+                "--state-dir", str(gate_state["state_dir"]),
+                "show-current-gate",
+                "--request-id", gate_state["request_id"],
+            ])
+        finally:
+            sys.stdout = old_stdout
+        return code, buf.getvalue()
+
+    def _load_state(self, gate_state: dict[str, Any]) -> dict[str, Any]:
+        state_file = gate_state["state_dir"] / f"{gate_state['request_id']}.json"
+        return json.loads(state_file.read_text(encoding="utf-8"))
+
+    def test_stops_after_path_gate_and_persists_state(
+        self,
+        gate_state: dict[str, Any],
+    ):
+        assert self._start(gate_state) == 0
+        state = self._load_state(gate_state)
+        assert state["current_gate"] == "awaiting_path_approval"
+        assert state["current_approval_id"] is not None
+
+        code, output = self._show_current(gate_state)
+        assert code == 0
+        assert "path approval" in output
+        assert state["current_approval_id"] in output
+
+    def test_approve_path_gate_requires_approve(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        self._start(gate_state)
+        monkeypatch.setattr("builtins.input", lambda _: "no")
+        assert self._approve_current(gate_state, monkeypatch) == 2
+
+    def test_resume_after_path_gate_needs_approval(
+        self,
+        gate_state: dict[str, Any],
+    ):
+        self._start(gate_state)
+        assert self._resume(gate_state) == 1
+
+    def test_path_content_stage_commit_separate_approvals(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        repo = gate_state["repo"]
+        target = repo / gate_state["target"]
+
+        # Path gate
+        assert self._start(gate_state) == 0
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+        assert self._resume(gate_state) == 0
+        state = self._load_state(gate_state)
+        assert state["current_gate"] == "awaiting_content_approval"
+        assert state["last_approved_gate"] == "path"
+        # No file written yet
+        assert not target.exists()
+
+        # Content gate
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+        assert self._resume(gate_state) == 0
+        state = self._load_state(gate_state)
+        assert state["current_gate"] == "awaiting_stage_approval"
+        assert state["last_approved_gate"] == "content"
+        # File written after content approval
+        assert target.exists()
+
+        # Stage gate
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+        assert self._resume(gate_state) == 0
+        state = self._load_state(gate_state)
+        assert state["current_gate"] == "awaiting_commit_approval"
+        assert state["last_approved_gate"] == "stage"
+        staged = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout
+        assert gate_state["target"] in staged
+
+        # Commit gate
+        monkeypatch.setattr("builtins.input", lambda _: "y")
+        assert self._approve_current(gate_state, monkeypatch) == 0
+        assert self._resume(gate_state) == 0
+        state = self._load_state(gate_state)
+        assert state["current_gate"] == "verified"
+
+        status_proc = subprocess.run(
+            ["git", "status", "--short"], cwd=repo, capture_output=True, text=True, check=False
+        )
+        assert status_proc.stdout.strip() == ""
+        log_proc = subprocess.run(
+            ["git", "log", "-1", "--format=%s"], cwd=repo, capture_output=True, text=True, check=False
+        )
+        assert log_proc.stdout.strip() == "add operator note"
+
+    def test_approval_consumed_only_once(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        self._start(gate_state)
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+        # Re-approving the same gate should fail because the record is now approved/consumed.
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 1
+
+    def test_deny_at_stage_gate_rolls_back(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        repo = gate_state["repo"]
+        target = repo / gate_state["target"]
+
+        self._start(gate_state)
+        for _ in range(2):
+            assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+            assert self._resume(gate_state) == 0
+        # Now at stage gate; file exists but is not staged.
+        assert target.exists()
+
+        code = _run_cli([
+            "--state-dir", str(gate_state["state_dir"]),
+            "deny-current-gate",
+            "--request-id", gate_state["request_id"],
+            "--actor", "operator-test",
+            "--reason", "operator declined staging",
+        ])
+        assert code == 0
+
+        # Runtime rolled back the write when staging was denied.
+        assert not target.exists()
+        status_proc = subprocess.run(
+            ["git", "status", "--short"], cwd=repo, capture_output=True, text=True, check=False
+        )
+        assert gate_state["target"] not in status_proc.stdout
+
+    def test_content_hash_mismatch_blocks_resume(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        self._start(gate_state)
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+        gate_state["content_path"].write_text("# changed\n", encoding="utf-8")
+        assert self._resume(gate_state) == 1
+
+    def test_commit_message_hash_mismatch_blocks_resume(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        self._start(gate_state)
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+        state_file = gate_state["state_dir"] / f"{gate_state['request_id']}.json"
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        state["commit_message"] = "tampered message"
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+        assert self._resume(gate_state) == 1
+
+    def test_expired_approval_cannot_be_approved(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        self._start(gate_state)
+        store = SmithApprovalStore()
+        store.initialize()
+        state = self._load_state(gate_state)
+        approval_id = state["current_approval_id"]
+        # Force the approval to expire by setting its expiration to the past.
+        import sqlite3
+        conn = sqlite3.connect(store.database_path)
+        conn.execute(
+            "UPDATE approvals SET expires_at = ? WHERE id = ?",
+            ("2020-01-01T00:00:00+00:00", approval_id),
+        )
+        conn.commit()
+        conn.close()
+
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 1
+
+    def test_state_persists_across_process_calls(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        self._start(gate_state)
+        assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+        # Simulate a new process by reloading the module via a fresh main call.
+        assert self._resume(gate_state) == 0
+        state = self._load_state(gate_state)
+        assert state["last_approved_gate"] == "path"
+
+    def test_no_remote_and_no_push(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        repo = gate_state["repo"]
+        remotes = subprocess.run(
+            ["git", "remote", "-v"], cwd=repo, capture_output=True, text=True, check=False
+        ).stdout
+        assert remotes.strip() == ""
+
+        self._start(gate_state)
+        for _ in range(3):
+            assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+            assert self._resume(gate_state) == 0
+        monkeypatch.setattr("builtins.input", lambda _: "y")
+        assert self._approve_current(gate_state, monkeypatch) == 0
+        assert self._resume(gate_state) == 0
+
+        remotes_after = subprocess.run(
+            ["git", "remote", "-v"], cwd=repo, capture_output=True, text=True, check=False
+        ).stdout
+        assert remotes_after.strip() == ""
+
+    def test_approve_commit_requires_yes(
+        self,
+        gate_state: dict[str, Any],
+        monkeypatch,
+    ):
+        repo = gate_state["repo"]
+        self._start(gate_state)
+        for _ in range(3):
+            assert self._approve_current(gate_state, monkeypatch, ["APPROVE"]) == 0
+            assert self._resume(gate_state) == 0
+        # At commit gate; responding with anything other than y cancels.
+        monkeypatch.setattr("builtins.input", lambda _: "n")
+        assert self._approve_current(gate_state, monkeypatch) == 2

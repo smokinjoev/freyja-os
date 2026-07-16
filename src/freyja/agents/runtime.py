@@ -259,6 +259,7 @@ class SmithRuntime:
             request_id=request_id,
             approval_callback=approval_callback,
             start=start,
+            rollback_on_unapproved=True,
         )
         return await result.execute()
 
@@ -271,6 +272,7 @@ class SmithRuntime:
         actor: str | None = None,
         request_id: str | None = None,
         provider: "PersistentApprovalProvider | None" = None,
+        rollback_on_unapproved: bool = True,
     ) -> "WritePilotResultWithApprovals":
         """Run the write pilot using a persistent approval provider.
 
@@ -283,15 +285,20 @@ class SmithRuntime:
 
         resolved_provider = provider or PersistentApprovalProvider()
         self._approval_provider_for_write_pilot = resolved_provider
-        result = await self.run_write_pilot(
+        start = time.monotonic()
+        run = _WritePilotRun(
+            runtime=self,
             objective=objective,
             target_path=target_path,
             proposed_content=proposed_content,
             commit_message=commit_message,
-            actor=actor,
+            actor=actor or "agent_smith",
             request_id=request_id,
-            approval_callback=resolved_provider.approval_callback,
+            approval_callback=resolved_provider.request_approval,
+            start=start,
+            rollback_on_unapproved=rollback_on_unapproved,
         )
+        result = await run.execute()
         pending = [
             a for a in resolved_provider.store.list_pending()
             if a.request_id == result.request_id
@@ -300,6 +307,27 @@ class SmithRuntime:
             result=result,
             pending_approvals=[a.model_dump(mode="json") for a in pending],
             provider=resolved_provider,
+        )
+
+    async def run_write_pilot_oneshot(
+        self,
+        objective: str,
+        target_path: str,
+        proposed_content: str,
+        commit_message: str,
+        actor: str | None = None,
+        request_id: str | None = None,
+        approval_callback: Callable[..., Awaitable[ApprovalCallback]] | None = None,
+    ) -> WritePilotResult:
+        """Backwards-compatible one-shot write pilot with eager rollback."""
+        return await self.run_write_pilot(
+            objective=objective,
+            target_path=target_path,
+            proposed_content=proposed_content,
+            commit_message=commit_message,
+            actor=actor,
+            request_id=request_id,
+            approval_callback=approval_callback,
         )
 
     async def resume_write_pilot(
@@ -312,6 +340,7 @@ class SmithRuntime:
         commit_message: str,
         actor: str | None = None,
         provider: "PersistentApprovalProvider | None" = None,
+        rollback_on_unapproved: bool = True,
     ) -> "WritePilotResultWithApprovals":
         """Resume a write-pilot run after an approval has been granted.
 
@@ -324,15 +353,20 @@ class SmithRuntime:
         resolved_provider = provider or PersistentApprovalProvider()
         self._approval_provider_for_write_pilot = resolved_provider
         callback = make_resume_callback(resolved_provider, approval_id=approval_id, actor=actor or "agent_smith")
-        result = await self.run_write_pilot(
+        start = time.monotonic()
+        run = _WritePilotRun(
+            runtime=self,
             objective=objective,
             target_path=target_path,
             proposed_content=proposed_content,
             commit_message=commit_message,
-            actor=actor,
+            actor=actor or "agent_smith",
             request_id=request_id,
             approval_callback=callback,
+            start=start,
+            rollback_on_unapproved=rollback_on_unapproved,
         )
+        result = await run.execute()
         pending = [
             a for a in resolved_provider.store.list_pending()
             if a.request_id == request_id
@@ -1036,6 +1070,7 @@ class _WritePilotRun:
         request_id: str,
         approval_callback: "ApprovalCallback | None",
         start: float,
+        rollback_on_unapproved: bool = True,
     ) -> None:
         self._runtime = runtime
         self._objective = objective
@@ -1055,16 +1090,19 @@ class _WritePilotRun:
             or getattr(runtime.policy, "_allowed_root", None)
             or Path(__file__).resolve().parents[3]
         ).resolve()
+        self._git_root = self._resolve_git_root()
         self._approvals: list[dict[str, Any]] = []
         self._transitions: list[dict[str, Any]] = []
         self._audit_records: list[dict[str, Any]] = []
         self._original_content: str | None = None
         self._backup_path: Path | None = None
         self._file_existed = False
+        self._file_was_tracked = False
         self._final_content: str | None = None
         self._commit_hash: str | None = None
         self._tool_results: list[ToolExecutionResult] = []
         self._rolled_back = False
+        self._rollback_on_unapproved = rollback_on_unapproved
 
     async def execute(self) -> WritePilotResult:
         if not settings.agent_smith_enabled:
@@ -1079,25 +1117,27 @@ class _WritePilotRun:
         if path_check.decision.value == "deny":
             return await self._fail(path_check.reason)
         self._transition(WritePilotState.AWAITING_PATH_APPROVAL)
-        approved = await self._request_approval("path", target_path=self._target_path)
+        approved = await self._request_approval_or_resume("path", target_path=self._target_path)
         if not approved:
-            return await self._fail("Path approval denied.")
+            return await self._fail("Path approval denied.", rolled_back=False)
 
         # 2. Content approval
         self._transition(WritePilotState.AWAITING_CONTENT_APPROVAL)
-        approved = await self._request_approval("content", target_path=self._target_path)
+        approved = await self._request_approval_or_resume("content", target_path=self._target_path)
         if not approved:
-            return await self._fail("Content approval denied.")
+            return await self._fail("Content approval denied.", rolled_back=False)
 
         # 3. Write
         original_target = self._repo_root / self._target_path
         self._file_existed = original_target.exists()
+        self._file_was_tracked = self._git_tracked(self._target_path)
         if self._file_existed:
             self._original_content = original_target.read_text(encoding="utf-8")
         write_result = await self._run_tool("write_pilot_file_write", {
             "target_path": self._target_path,
             "content": self._proposed_content,
             "repo_root": str(self._repo_root),
+            "create_backup": self._file_existed,
         })
         if not write_result.success or not write_result.output.get("success"):
             error = write_result.output.get("error") or write_result.public_error_message or "write failed"
@@ -1114,9 +1154,9 @@ class _WritePilotRun:
 
         # 5. Stage approval
         self._transition(WritePilotState.AWAITING_STAGE_APPROVAL)
-        approved = await self._request_approval("stage", target_path=self._target_path)
+        approved = await self._request_approval_or_resume("stage", target_path=self._target_path)
         if not approved:
-            return await self._fail("Stage approval denied.", rolled_back=True, transition_to_rolled_back=False)
+            return await self._fail("Stage approval denied.", rolled_back=False)
 
         stage_result = await self._run_tool("write_pilot_git_add", {
             "target_path": self._target_path,
@@ -1129,9 +1169,9 @@ class _WritePilotRun:
 
         # 6. Commit approval
         self._transition(WritePilotState.AWAITING_COMMIT_APPROVAL)
-        approved = await self._request_approval("commit", target_path=self._target_path, commit_message=self._commit_message)
+        approved = await self._request_approval_or_resume("commit", target_path=self._target_path, commit_message=self._commit_message)
         if not approved:
-            return await self._fail("Commit approval denied.", rolled_back=True, transition_to_rolled_back=False)
+            return await self._fail("Commit approval denied.", rolled_back=False)
 
         commit_result = await self._run_tool("write_pilot_git_commit", {
             "message": self._commit_message,
@@ -1142,6 +1182,7 @@ class _WritePilotRun:
             error = commit_result.output.get("error") or commit_result.public_error_message or "commit failed"
             return await self._fail(f"Commit failed: {error}", rolled_back=False)
         self._commit_hash = commit_result.output.get("commit_hash")
+        self._cleanup_backups()
         self._transition(WritePilotState.COMMITTED)
 
         # 7. Verify
@@ -1169,16 +1210,153 @@ class _WritePilotRun:
             return False
         token = await self._approval_callback(approval_type, self._request_id, provider_context)
         if token is None or not token.approved:
+            # Explicit denial is detected via the persisted approval store. When
+            # a gate has been denied, roll back any write/stage performed for this
+            # request so the repository is left clean.
+            await self._rollback_if_denied(approval_type)
+            # One-shot interactive flows (e.g. run-pilot) expect eager rollback
+            # when the operator simply declines to approve the current gate.
+            if self._rollback_on_unapproved:
+                await self._rollback(transition_to_rolled_back=False)
             return False
         if token.request_id != self._request_id:
+            await self._rollback_if_denied(approval_type)
+            if self._rollback_on_unapproved:
+                await self._rollback(transition_to_rolled_back=False)
             return False
         if token.approval_type != approval_type:
+            await self._rollback_if_denied(approval_type)
+            if self._rollback_on_unapproved:
+                await self._rollback(transition_to_rolled_back=False)
             return False
         if approval_type in {"path", "content", "stage"} and token.target_path != self._target_path:
+            await self._rollback_if_denied(approval_type)
+            if self._rollback_on_unapproved:
+                await self._rollback(transition_to_rolled_back=False)
             return False
         self._approvals[-1]["approved"] = True
         self._audit("approval", "approved", approval_type=approval_type)
         return True
+
+    async def _request_approval_or_resume(self, approval_type: str, **context: Any) -> bool:
+        """Request approval, then try to consume an already-approved record if pending."""
+        # If the gate was approved externally (e.g. via the CLI), the provider's
+        # resume callback may already see an APPROVED record. Try the callback
+        # first so we don't create a duplicate pending record that shadows it.
+        # Provide the full write-pilot context so resume validation has content
+        # and commit-message hashes from the first call.
+        full_context = dict(context)
+        full_context.setdefault("content", self._proposed_content)
+        full_context.setdefault("commit_message", self._commit_message)
+        if self._approval_callback is not None:
+            token = await self._approval_callback(approval_type, self._request_id, full_context)
+            if token is not None and token.approved:
+                # Re-validate the same safety checks the primary path applies.
+                if token.request_id != self._request_id:
+                    return False
+                if token.approval_type != approval_type:
+                    return False
+                if approval_type in {"path", "content", "stage"} and token.target_path != self._target_path:
+                    return False
+                # When using a persistent provider, the callback has already
+                # consumed the approved record. No separate pending record is
+                # required, so just record the approval in memory.
+                self._approvals.append({
+                    "approval_type": approval_type,
+                    "request_id": self._request_id,
+                    "target_path": context.get("target_path"),
+                    "approved": True,
+                    "actor": self._actor,
+                })
+                self._audit("approval", "approved", approval_type=approval_type)
+                return True
+            # The callback returned an unapproved token. Detect an explicit
+            # denial so we can roll back any prior write/stage from earlier
+            # resumed runs before reporting the gate as failed.
+            await self._rollback_if_denied(approval_type)
+        if await self._request_approval(approval_type, **context):
+            return True
+        return False
+
+    async def _rollback_if_denied(self, approval_type: str) -> None:
+        # Path and content denials happen before any filesystem mutation, so
+        # there is nothing to roll back.  Leave the state in the awaiting gate
+        # so the operator can correct and resume.
+        if approval_type in {"path", "content"}:
+            return
+        if self._provider is None:
+            return
+        for record in self._provider.store._list_by_request(self._request_id):
+            if record.action == approval_type and record.status.value == "denied":
+                # The file may have been written by a previous resumed run, but
+                # this fresh run instance doesn't know that unless we check the
+                # filesystem now.  Mark the file as *not* originally existing so
+                # the rollback path deletes the file we created rather than
+                # trying to restore original content that never existed.
+                target = self._repo_root / self._target_path
+                self._file_existed = False
+                self._original_content = None
+                if target.exists():
+                    try:
+                        target.unlink()
+                    except OSError:
+                        pass
+                    # Also remove any adjacent timestamped backups created by the write tool.
+                    for backup in target.parent.glob(f"{target.name}.bak.*"):
+                        try:
+                            backup.unlink()
+                        except OSError:
+                            pass
+                # Unstage only the approved target if it was staged.
+                subprocess.run(
+                    ["git", "restore", "--staged", "--", self._target_path],
+                    cwd=self._git_root,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if self._state != WritePilotState.ROLLED_BACK:
+                    self._transition(WritePilotState.ROLLED_BACK)
+                self._rolled_back = True
+                self._audit("rollback", "completed")
+                return
+
+    def _resolve_git_root(self) -> Path:
+        try:
+            proc = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=self._repo_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if proc.returncode == 0:
+                return Path(proc.stdout.strip()).resolve()
+        except Exception:
+            pass
+        return self._repo_root
+
+    def _git_tracked(self, target_path: str) -> bool:
+        try:
+            proc = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", "--", target_path],
+                cwd=self._git_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            return proc.returncode == 0
+        except Exception:
+            return False
+
+    def _cleanup_backups(self) -> None:
+        target = self._repo_root / self._target_path
+        for backup in target.parent.glob(f"{target.name}.bak.*"):
+            try:
+                backup.unlink()
+            except OSError:
+                pass
+        self._backup_path = None
 
     async def _run_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolExecutionResult:
         tool_check = self._runtime.policy.check_write_pilot_tool(tool_name)
@@ -1217,7 +1395,7 @@ class _WritePilotRun:
         try:
             proc = subprocess.run(
                 ["git", "diff", "--check", "--", self._target_path],
-                cwd=self._repo_root,
+                cwd=self._git_root,
                 capture_output=True,
                 text=True,
                 check=False,
@@ -1230,7 +1408,7 @@ class _WritePilotRun:
         try:
             status_proc = subprocess.run(
                 ["git", "status", "--short", "--", self._target_path],
-                cwd=self._repo_root,
+                cwd=self._git_root,
                 capture_output=True,
                 text=True,
                 check=False,
@@ -1245,15 +1423,24 @@ class _WritePilotRun:
         target = self._repo_root / self._target_path
         try:
             if self._file_existed:
+                # File existed before the pilot: restore its original content,
+                # regardless of whether it was tracked or untracked.
                 if self._original_content is not None:
                     target.write_text(self._original_content, encoding="utf-8")
             else:
+                # File did not exist before the pilot: delete what we created.
                 if target.exists():
                     target.unlink()
+            # Remove any adjacent timestamped backups created by the write tool.
+            for backup in target.parent.glob(f"{target.name}.bak.*"):
+                try:
+                    backup.unlink()
+                except OSError:
+                    pass
             # Unstage only the approved target
             subprocess.run(
                 ["git", "restore", "--staged", "--", self._target_path],
-                cwd=self._repo_root,
+                cwd=self._git_root,
                 capture_output=True,
                 text=True,
                 check=False,
@@ -1288,6 +1475,13 @@ class _WritePilotRun:
         )
         if should_rollback:
             await self._rollback(transition_to_rolled_back=transition_to_rolled_back)
+        # Denials at path/content gate should surface as the awaiting state, not
+        # transitioned to rolled_back, because no filesystem mutation has occurred.
+        if not transition_to_rolled_back and self._state in {
+            WritePilotState.AWAITING_PATH_APPROVAL,
+            WritePilotState.AWAITING_CONTENT_APPROVAL,
+        }:
+            self._rolled_back = False
         return self._finish("failed", message)
 
     def _finish(self, status: str, message: str) -> WritePilotResult:

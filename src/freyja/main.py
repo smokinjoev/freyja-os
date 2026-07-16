@@ -202,7 +202,7 @@ async def smith_write_pilot(request: SmithWritePilotRequest) -> dict[str, Any]:
         proposed_content=request.proposed_content,
         commit_message=request.commit_message,
         actor=request.actor,
-        request_id=request.request_id,
+        request_id=request.request_id or runtime._new_request_id(),
         provider=provider,
     )
     return result.model_dump(mode="json")
@@ -225,6 +225,7 @@ class SmithWritePilotResumeRequest(BaseModel):
     proposed_content: str
     commit_message: str
     actor: str = "agent_smith"
+    rollback_on_unapproved: bool = True
 
 
 def _require_loopback(request: Request) -> None:
@@ -337,9 +338,9 @@ def _validate_resume_payload(body: SmithWritePilotResumeRequest) -> None:
         mismatch = "request_id"
     elif record.target_path != body.target_path:
         mismatch = "target_path"
-    elif record.content_hash is not None and record.content_hash != _hash_for_validation(body.proposed_content):
+    elif body.proposed_content is not None and record.content_hash is not None and record.content_hash != _hash_for_validation(body.proposed_content):
         mismatch = "proposed_content"
-    elif record.commit_message_hash is not None and record.commit_message_hash != _hash_for_validation(body.commit_message):
+    elif body.commit_message is not None and record.commit_message_hash is not None and record.commit_message_hash != _hash_for_validation(body.commit_message):
         mismatch = "commit_message"
 
     if mismatch:
@@ -371,5 +372,6 @@ async def smith_write_pilot_resume(
         commit_message=body.commit_message,
         actor=body.actor,
         provider=provider,
+        rollback_on_unapproved=body.rollback_on_unapproved,
     )
     return result.model_dump(mode="json")

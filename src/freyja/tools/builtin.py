@@ -299,6 +299,8 @@ async def _write_pilot_file_write_implementation(request: ToolExecutionRequest) 
     if target.is_symlink() or any(p.is_symlink() for p in target.parents if p != root):
         return {"error": f"Path '{target_path}' is a symlink or traverses a symlink.", "blocked": True}
 
+    args = request.arguments or {}
+    create_backup = args.get("create_backup", True)
     backup_path: Path | None = None
     existed = target.exists()
     original_mode = target.stat().st_mode if existed else 0o644
@@ -307,9 +309,14 @@ async def _write_pilot_file_write_implementation(request: ToolExecutionRequest) 
         import time
 
         target.parent.mkdir(parents=True, exist_ok=True)
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        backup_path = target.with_suffix(f"{target.suffix}.bak.{timestamp}")
-        if existed:
+        if existed and create_backup:
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            # Avoid collisions if multiple backups are created in the same second.
+            backup_path = target.with_suffix(f"{target.suffix}.bak.{timestamp}")
+            counter = 0
+            while backup_path.exists():
+                counter += 1
+                backup_path = target.with_suffix(f"{target.suffix}.bak.{timestamp}-{counter}")
             backup_path.write_bytes(target.read_bytes())
 
         tmp_path = target.with_suffix(f"{target.suffix}.tmp")
@@ -601,6 +608,7 @@ def register_smith_write_pilot_tools(registry: ToolRegistry) -> None:  # Fixed t
                     "target_path": {"type": "string"},
                     "content": {"type": "string"},
                     "repo_root": {"type": "string"},
+                    "create_backup": {"type": "boolean"},
                 },
             },
             output_schema={
