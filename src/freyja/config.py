@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     agent_smith_approval_db_path: str = str(_default_state_dir() / "smith-approvals.sqlite3")
     agent_smith_approval_loopback_only: bool = True
 
+    telegram_enabled: bool = False
+    telegram_bot_token: str = ""
+    telegram_allowed_user_ids: str = ""
+    telegram_direct_messages_only: bool = True
+    telegram_smith_read_only_enabled: bool = False
+    telegram_max_message_chars: int = 4000
+    telegram_request_timeout_seconds: float = 30.0
+    telegram_poll_interval_seconds: float = 5.0
+    telegram_state_dir: str = str(_default_state_dir() / "telegram")
+
     @property
     def approved_openrouter_models(self) -> list[str]:
         if not self.openrouter_allowlist:
