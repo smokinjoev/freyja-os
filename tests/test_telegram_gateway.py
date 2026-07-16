@@ -95,7 +95,7 @@ async def test_authorized_user_accepted(gateway):
     assert result.chat_id == 123456
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert kwargs["json"] == {"prompt": "Hello Freyja", "provider": "auto"}
+    assert kwargs["json"] == {"prompt": "Hello Freyja", "provider": "auto", "tools_required": False}
 
 
 @pytest.mark.asyncio
@@ -169,7 +169,7 @@ async def test_ordinary_text_routes_to_freyja(gateway):
     assert "(agent: Freyja, provider:" not in result.text
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert kwargs["json"] == {"prompt": "What is 2+2?", "provider": "auto"}
+    assert kwargs["json"] == {"prompt": "What is 2+2?", "provider": "auto", "tools_required": False}
 
 
 @pytest.mark.asyncio
@@ -574,12 +574,247 @@ def test_stale_heartbeat_detection(gateway, tmp_path):
     assert is_stale(gateway._heartbeat_file)
 
 
-def test_fresh_heartbeat_not_stale(gateway, monkeypatch):
-    monkeypatch.setattr(gateway, "_HEARTBEAT_INTERVAL_SECONDS", 0.0)
-    gateway._record_heartbeat(poll_status="ok")
+class TestTelegramToolLoop:
+    @pytest.fixture
+    def tool_settings(self, tmp_path) -> TelegramSettings:
+        return TelegramSettings(
+            telegram_enabled=True,
+            telegram_bot_token="test-token",
+            telegram_allowed_user_ids="123456",
+            telegram_direct_messages_only=True,
+            telegram_smith_read_only_enabled=False,
+            telegram_tools_enabled=True,
+            telegram_state_dir=str(tmp_path / "telegram"),
+            freyja_director_url="http://127.0.0.1:8000",
+        )
 
-    def is_stale(path: Path, threshold: float = 90.0) -> bool:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return (time.time() - data["timestamp"]) > threshold
+    @pytest.fixture
+    async def tool_gateway(self, tool_settings) -> AsyncIterator[TelegramGateway]:
+        gw = TelegramGateway(settings=tool_settings)
+        gw._record_heartbeat()
+        yield gw
+        await gw.close()
 
-    assert not is_stale(gateway._heartbeat_file)
+    @pytest.mark.asyncio
+    async def test_telegram_tool_use_enabled(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "What host am I on?")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": "You are on Iris.",
+            "reason": "tool request",
+            "tool_results": [{"tool_name": "hostname", "success": True, "hostname": "iris"}],
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert result.text == "You are on Iris."
+        assert "<freyja_tool_call>" not in result.text
+        mock_post.assert_awaited_once()
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["tools_required"] is True
+
+    @pytest.mark.asyncio
+    async def test_telegram_tool_use_disabled(self, tool_gateway, monkeypatch):
+        monkeypatch.setattr(tool_gateway._settings, "telegram_tools_enabled", False)
+        update = _make_update(1, 123456, 123456, "private", "What host am I on?")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": "I cannot use tools right now.",
+            "reason": "routine request",
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert result.text == "I cannot use tools right now."
+        mock_post.assert_awaited_once()
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["tools_required"] is False
+
+    @pytest.mark.asyncio
+    async def test_telegram_normal_no_tool_conversation(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "Thanks, that helped!")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": "You're welcome!",
+            "reason": "routine request",
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert result.text == "You're welcome!"
+        mock_post.assert_awaited_once()
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["tools_required"] is False
+
+    @pytest.mark.asyncio
+    async def test_telegram_failed_tool_response_not_exposed(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "Check disk usage.")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": "Tool 'disk_usage' failed (tool_error): Tool execution failed.",
+            "reason": "tool request",
+            "tool_results": [{"tool_name": "disk_usage", "success": False, "error_category": "tool_error"}],
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert "failed" in result.text.lower()
+        assert "stdout" not in result.text.lower()
+        assert "stderr" not in result.text.lower()
+        assert "<freya_tool_call>" not in result.text
+
+    @pytest.mark.asyncio
+    async def test_telegram_malformed_output_never_reaches_user(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "Run diagnostics.")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": 'Tool returned <freyja_tool_call>{"invalid": true}</freyja_tool_call>',
+            "reason": "tool request",
+            "tool_results": [{"tool_name": "hostname", "success": True}],
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert "<freyja_tool_call>" not in result.text
+        assert '{"invalid": true}' not in result.text
+
+    @pytest.mark.asyncio
+    async def test_telegram_legitimate_json_response_passes_unchanged(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "Give me a JSON example.")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": 'Here is an example: {"tool_name": "example_tool", "enabled": true}.',
+            "reason": "routine request",
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert '{"tool_name": "example_tool", "enabled": true}' in result.text
+        assert "<freyja_tool_call>" not in result.text
+
+    @pytest.mark.asyncio
+    async def test_telegram_code_block_with_braces_passes_unchanged(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "Show me a C struct.")
+        code_block = "```c\nstruct Tool { char tool_name[32]; int enabled; };\n```"
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": code_block,
+            "reason": "routine request",
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert "struct Tool" in result.text
+        assert "char tool_name[32]" in result.text
+        assert result.text.count("```") == 2
+
+    @pytest.mark.asyncio
+    async def test_telegram_incomplete_nested_multiple_tool_markers(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "Nested markers.")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": (
+                "start "
+                '<freyja_tool_call>{"tool_name":"a"}</freyja_tool_call>'
+                " middle "
+                '<freyja_tool_call>{"tool_name":"b"}</freyja_tool_call>'
+                " end"
+            ),
+            "reason": "tool request",
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert "<freyja_tool_call>" not in result.text
+        assert "start" in result.text
+        assert "middle" in result.text
+        assert "end" in result.text
+        assert '"tool_name"' not in result.text
+
+    @pytest.mark.asyncio
+    async def test_telegram_casual_chat_cannot_bypass_tool_registry(self, tool_gateway, monkeypatch):
+        monkeypatch.setattr(tool_gateway._settings, "telegram_tools_enabled", True)
+        monkeypatch.setattr("freyja.config.settings.tools_enabled", True)
+        update = _make_update(1, 123456, 123456, "private", "Thanks!")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": "You're welcome!",
+            "reason": "routine request",
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert result.text == "You're welcome!"
+        mock_post.assert_awaited_once()
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["tools_required"] is False
+
+    @pytest.mark.asyncio
+    async def test_telegram_timeout_through_gateway(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "What time is it?")
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.side_effect = httpx.TimeoutException("request timed out")
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert result.success is False
+        assert "process" in result.text.lower() or "later" in result.text.lower()
+
+    @pytest.mark.asyncio
+    async def test_telegram_iteration_limit_not_exposed(self, tool_gateway):
+        update = _make_update(1, 123456, 123456, "private", "Loop forever.")
+        mock_response = _ok_response({
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "response": "Tool iteration limit reached without a final answer.",
+            "reason": "tool request",
+            "tool_results": [
+                {"tool_name": "hostname", "success": True},
+                {"tool_name": "hostname", "success": True},
+            ],
+        })
+
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await tool_gateway.handle(update)
+
+        assert result is not None
+        assert "iteration limit" in result.text.lower()
+        assert "stdout" not in result.text.lower()

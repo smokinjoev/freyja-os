@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from collections import deque
 from pathlib import Path
@@ -330,7 +331,12 @@ class TelegramGateway:
         if is_time_sensitive_query(text):
             return await self._handle_time_sensitive_query(text, message)
 
-        return await self._forward_to_freyja(text, message)
+        use_tools = (
+            self._settings.telegram_tools_enabled
+            and freyja_settings.tools_enabled
+            and not self._looks_like_casual_chat(text)
+        )
+        return await self._forward_to_freyja(text, message, tools_required=use_tools)
 
     async def _handle_time_sensitive_query(
         self,
@@ -366,14 +372,42 @@ class TelegramGateway:
             success=False,
         )
 
+    def _looks_like_casual_chat(self, text: str) -> bool:
+        """Return True for greetings, thanks, and other casual messages.
+
+        These should not incur the latency or cost of a tool loop.
+        """
+        lowered = text.lower().strip()
+        casual_prefixes = (
+            "hi", "hello", "hey", "good morning", "good afternoon", "good evening",
+            "thanks", "thank you", "ok", "okay", "bye", "goodbye", "yes", "no",
+        )
+        if any(lowered.startswith(prefix) for prefix in casual_prefixes):
+            return True
+        return len(text) <= 10 and not any(c.isdigit() for c in text)
+
+    _TOOL_MARKER_PATTERN = re.compile(r"<freyja_tool_call>.*?</freyja_tool_call>", flags=re.DOTALL)
+
+    def _sanitize_reply_for_telegram(self, reply: str) -> str:
+        """Remove Freyja tool-protocol markers from the model reply.
+
+        Only known Freyja markers (``<freyja_tool_call>...</freyja_tool_call>``)
+        are stripped. Legitimate JSON, code blocks, braces, and ordinary
+        XML-like text must pass through unchanged.
+        """
+        cleaned = self._TOOL_MARKER_PATTERN.sub("", reply)
+        return cleaned.strip()
+
     async def _forward_to_freyja(
         self,
         text: str,
         message: TelegramMessage,
+        tools_required: bool = False,
     ) -> TelegramOutboundMessage:
         payload = {
             "prompt": text,
             "provider": "auto",
+            "tools_required": tools_required,
         }
         try:
             client = await self._client()
@@ -383,7 +417,7 @@ class TelegramGateway:
             reply = data.get("response", "")
             if not reply:
                 return self._reply(message, _SAFE_ERROR_TEXT, success=False)
-            return self._reply(message, reply)
+            return self._reply(message, self._sanitize_reply_for_telegram(reply))
         except httpx.TimeoutException:
             logger.warning({"event": "telegram_director_timeout"})
             return self._reply(message, _SAFE_ERROR_TEXT, success=False)

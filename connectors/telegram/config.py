@@ -20,6 +20,7 @@ class TelegramSettings(BaseSettings):
     telegram_allowed_user_ids: str = ""
     telegram_direct_messages_only: bool = True
     telegram_smith_read_only_enabled: bool = False
+    telegram_tools_enabled: bool = False
     telegram_max_message_chars: int = 4000
     telegram_request_timeout_seconds: float = 30.0
     telegram_poll_interval_seconds: float = 5.0

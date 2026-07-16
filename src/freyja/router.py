@@ -4,7 +4,7 @@ import re
 import uuid
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 from freyja.config import settings
 from freyja.memory import store as memory_store
@@ -21,7 +21,7 @@ class RouteRequest(BaseModel):
     model: str | None = None
     task_type: str | None = None
     privacy: str | None = None
-    tools_required: bool = False
+    tools_required: StrictBool = False
     context_size: int = 0
     conversation_id: str | None = None
 
@@ -670,10 +670,11 @@ class Router:
             self._log_tool_execution(entry)
 
             if not execution_result.success:
+                message = (execution_result.public_error_message or "no details").rstrip(".")
                 failure_response = (
                     f"Tool '{tool_name}' failed"
                     f" ({execution_result.error_code or 'unknown'}): "
-                    f"{execution_result.public_error_message or 'no details'}."
+                    f"{message}."
                 )
                 return RoutingResult(
                     decision=decision,

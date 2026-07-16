@@ -115,6 +115,34 @@ async def openrouter_chat(request: ChatRequest) -> dict[str, str]:
     }
 
 
+def _sanitize_tool_results(tool_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return a public, minimal view of tool results for API responses.
+
+    Excludes raw stdout, stderr, prompts, secrets, and internal exception
+    details. Includes only tool name, success status, high-level category, and
+    a small amount of safe metadata.
+    """
+    sanitized: list[dict[str, Any]] = []
+    for entry in tool_results:
+        safe: dict[str, Any] = {
+            "tool_name": entry.get("tool_name"),
+            "success": entry.get("success"),
+        }
+        output = entry.get("output") or {}
+        # Copy only non-sensitive scalar fields from the tool output.
+        for key in ("hostname", "iso_timestamp", "status_code", "status"):
+            if key in output:
+                safe[key] = output[key]
+        error_code = entry.get("error_code")
+        if error_code:
+            safe["error_category"] = error_code
+        duration_ms = entry.get("duration_ms")
+        if duration_ms is not None:
+            safe["duration_ms"] = duration_ms
+        sanitized.append(safe)
+    return sanitized
+
+
 @app.post("/route")
 async def route(request: RouteRequest) -> dict:
     result = await router.execute(request)
@@ -125,7 +153,7 @@ async def route(request: RouteRequest) -> dict:
             status_code=503,
             detail=result.decision.public_error_message or "No approved provider is currently available.",
         )
-    return {
+    response_payload: dict[str, Any] = {
         "provider": result.decision.provider,
         "model": result.decision.model,
         "response": result.response,
@@ -136,6 +164,9 @@ async def route(request: RouteRequest) -> dict:
         "fallback_attempts": result.decision.fallback_attempts,
         "request_id": result.decision.request_id,
     }
+    if request.tools_required and result.tool_results:
+        response_payload["tool_results"] = _sanitize_tool_results(result.tool_results)
+    return response_payload
 
 
 class SmithDryRunRequest(BaseModel):
