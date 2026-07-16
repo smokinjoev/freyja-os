@@ -1,4 +1,10 @@
-"""Bounded weather tool with current/forecast modes and safe fallback."""
+"""Bounded weather tool with current/forecast modes and safe fallback.
+
+Provider: Open-Meteo (https://open-meteo.com/)
+* No API key required.
+* Place-name lookup via Open-Meteo Geocoding API.
+* Current and forecast data via Open-Meteo Forecast API.
+"""
 
 from __future__ import annotations
 
@@ -14,9 +20,10 @@ import httpx
 from freyja.config import settings
 
 
-_OPENWEATHER_CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
-_OPENWEATHER_FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
-_OPENWEATHER_MAX_FORECAST_DAYS = 5
+_OPENMETEO_GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
+_OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+_OPENMETEO_MAX_FORECAST_DAYS = 7
+_HTTP_TIMEOUT_SECONDS = 15.0
 
 
 class WeatherRequestType(StrEnum):
@@ -66,6 +73,38 @@ def _today() -> _datetime.date:
 def _sanitize_location_query(query: str) -> str:
     """Strip likely injection characters from a location query."""
     return re.sub(r"[^\w\s,\-]", "", query).strip()[:100]
+
+
+async def _resolve_location(query: str) -> dict[str, Any] | None:
+    """Resolve a place name to a single Open-Meteo geocoding result.
+
+    Returns the first matching result or None if the query is unknown or
+    ambiguous. Uses bounded HTTP timeouts and a fixed provider endpoint.
+    The geocoding API matches best on the primary place name, so if a query
+    containing a comma returns no results we retry with just the leading token.
+    """
+    candidates = [_sanitize_location_query(query)]
+    leading = query.split(",")[0].strip()
+    if leading and leading != candidates[0]:
+        candidates.append(_sanitize_location_query(leading))
+
+    for name in candidates:
+        if not name:
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+                response = await client.get(
+                    _OPENMETEO_GEOCODING_URL,
+                    params={"name": name, "count": 1, "language": "en", "format": "json"},
+                )
+                response.raise_for_status()
+                data = response.json()
+        except Exception:
+            continue
+        results = data.get("results") or []
+        if results:
+            return results[0]
+    return None
 
 
 def _parse_explicit_date(text: str) -> _datetime.date | None:
@@ -141,13 +180,13 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
     if match:
         days = int(match.group(1))
         target_date = today + _datetime.timedelta(days=days)
-        if days > _OPENWEATHER_MAX_FORECAST_DAYS:
+        if days > _OPENMETEO_MAX_FORECAST_DAYS:
             return ForecastDecision(
                 request_type=WeatherRequestType.FORECAST,
                 target_date=target_date,
                 target_label=f"in {days} days",
                 error_message=(
-                    f"Forecasts are only available up to {_OPENWEATHER_MAX_FORECAST_DAYS} days out; "
+                    f"Forecasts are only available up to {_OPENMETEO_MAX_FORECAST_DAYS} days out; "
                     f"{target_date.isoformat()} is outside that range."
                 ),
             )
@@ -176,13 +215,13 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
         if weekday_idx is not None:
             target_date = _weekday_from_today(weekday_idx, today)
             delta_days = (target_date - today).days
-            if delta_days > _OPENWEATHER_MAX_FORECAST_DAYS:
+            if delta_days > _OPENMETEO_MAX_FORECAST_DAYS:
                 return ForecastDecision(
                     request_type=WeatherRequestType.FORECAST,
                     target_date=target_date,
                     target_label=weekday_name,
                     error_message=(
-                        f"Forecasts are only available up to {_OPENWEATHER_MAX_FORECAST_DAYS} days out; "
+                        f"Forecasts are only available up to {_OPENMETEO_MAX_FORECAST_DAYS} days out; "
                         f"{weekday_name.capitalize()} ({target_date.isoformat()}) is outside that range."
                     ),
                 )
@@ -213,13 +252,13 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
                 target_label=target_date.isoformat(),
                 error_message="I can only look up today's or future weather. Past dates are not supported.",
             )
-        if delta_days > _OPENWEATHER_MAX_FORECAST_DAYS:
+        if delta_days > _OPENMETEO_MAX_FORECAST_DAYS:
             return ForecastDecision(
                 request_type=WeatherRequestType.FORECAST,
                 target_date=target_date,
                 target_label=target_date.isoformat(),
                 error_message=(
-                    f"Forecasts are only available up to {_OPENWEATHER_MAX_FORECAST_DAYS} days out; "
+                    f"Forecasts are only available up to {_OPENMETEO_MAX_FORECAST_DAYS} days out; "
                     f"{target_date.isoformat()} is outside that range."
                 ),
             )
@@ -259,9 +298,9 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
 def _extract_location(prompt: str) -> str:
     """Heuristically extract a location from a weather prompt.
 
-    Removes the leading weather phrase and any temporal qualifiers, returning
-    the remainder as the location query. The provider geocoding step ultimately
-    validates the location.
+    Removes the leading weather phrase, helper verbs, and any temporal
+    qualifiers, returning the remainder as the location query. The provider
+    geocoding step ultimately validates the location.
     """
     # Strip everything up to and including the first weather keyword.
     location = re.sub(
@@ -272,13 +311,15 @@ def _extract_location(prompt: str) -> str:
         flags=re.IGNORECASE,
     )
 
+    # Remove helper verbs and question fragments commonly left in front of the location.
+    location = re.sub(r"\b(is|will|be|are|does|do|did|can|could|would|should)\b", "", location, flags=re.IGNORECASE)
     # Remove temporal qualifiers and relative-date phrases.
     location = re.sub(r"\b(today|tonight|tomorrow|now|currently|this\s+week)\b", "", location, flags=re.IGNORECASE)
     location = re.sub(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", "", location, flags=re.IGNORECASE)
     location = re.sub(r"\bin\s+\d+\s+days?\b|\b\d+\s+days?\b", "", location, flags=re.IGNORECASE)
     location = re.sub(r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{4}\b|\b\d{1,2}/\d{1,2}/\d{2}\b", "", location)
 
-    # Remove leading prepositions left behind by the weather phrase.
+    # Remove leading/trailing prepositions left behind by the weather phrase.
     location = re.sub(r"\b(in|at|for|on|of)\b", "", location, flags=re.IGNORECASE)
     # Drop trailing question mark if any.
     location = re.sub(r"\?$", "", location)
@@ -352,7 +393,7 @@ async def get_weather(
     if request_type is None:
         request_type = WeatherRequestType.CURRENT
 
-    if not settings.weather_tool_enabled or not settings.openweather_api_key:
+    if not settings.weather_tool_enabled:
         return _safe_disabled_response(location, target_label)
 
     sanitized = _sanitize_location_query(location)
@@ -366,12 +407,25 @@ async def get_weather(
             "detail": "Please provide a city name, such as 'Aiken, South Carolina'.",
         }
 
+    resolved = await _resolve_location(sanitized)
+    if resolved is None:
+        return {
+            "live_data_available": False,
+            "request_type": request_type.value,
+            "location": sanitized,
+            "target_label": target_label,
+            "summary": "Location not found.",
+            "detail": "I couldn't find that place. Please try a city name like 'Aiken, South Carolina' or 'Madrid, Spain'.",
+        }
+
+    display_location = _display_name(resolved)
+
     if request_type == WeatherRequestType.FORECAST:
         if target_date is None:
             return {
                 "live_data_available": False,
                 "request_type": request_type.value,
-                "location": sanitized,
+                "location": display_location,
                 "target_label": target_label,
                 "summary": "Forecast date missing.",
                 "detail": "Please specify a date, such as 'tomorrow' or a weekday.",
@@ -381,106 +435,76 @@ async def get_weather(
             return {
                 "live_data_available": False,
                 "request_type": request_type.value,
-                "location": sanitized,
+                "location": display_location,
                 "target_label": target_label,
                 "summary": "Past date not supported.",
                 "detail": "I can only look up today's or future weather.",
             }
-        if delta_days > _OPENWEATHER_MAX_FORECAST_DAYS:
+        if delta_days > _OPENMETEO_MAX_FORECAST_DAYS:
             return {
                 "live_data_available": False,
                 "request_type": request_type.value,
-                "location": sanitized,
+                "location": display_location,
                 "target_label": target_label,
                 "summary": "Forecast date outside supported range.",
                 "detail": (
-                    f"Forecasts are only available up to {_OPENWEATHER_MAX_FORECAST_DAYS} days out."
+                    f"Forecasts are only available up to {_OPENMETEO_MAX_FORECAST_DAYS} days out."
                 ),
             }
-        return await _fetch_openweather_forecast(
-            sanitized,
+        return await _fetch_openmeteo_forecast(
+            resolved,
             target_date=target_date,
             target_label=target_label,
         )
 
-    return await _fetch_openweather_current(sanitized)
+    return await _fetch_openmeteo_current(resolved)
 
 
-async def _fetch_openweather_current(location: str) -> dict[str, Any]:
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(
-                _OPENWEATHER_CURRENT_URL,
-                params={
-                    "q": location,
-                    "appid": settings.openweather_api_key,
-                    "units": "imperial",
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-    except httpx.HTTPStatusError as exc:
-        return {
-            "live_data_available": False,
-            "request_type": WeatherRequestType.CURRENT.value,
-            "location": location,
-            "target_label": "now",
-            "summary": "Weather service returned an error.",
-            "detail": f"HTTP {exc.response.status_code}",
-        }
-    except Exception as exc:
-        return {
-            "live_data_available": False,
-            "request_type": WeatherRequestType.CURRENT.value,
-            "location": location,
-            "target_label": "now",
-            "summary": "Weather service unavailable.",
-            "detail": str(exc),
-        }
-
-    weather = data.get("weather", [{}])[0]
-    main = data.get("main", {})
-    wind = data.get("wind", {})
-    dt = data.get("dt")
-    observation_time = None
-    if dt:
-        try:
-            observation_time = _datetime.datetime.fromtimestamp(dt, tz=_datetime.UTC).isoformat()
-        except Exception:
-            observation_time = None
-    return {
-        "live_data_available": True,
-        "request_type": WeatherRequestType.CURRENT.value,
-        "location": data.get("name", location),
-        "target_label": "now",
-        "summary": weather.get("main", "Unknown"),
-        "description": weather.get("description", "No description"),
-        "temperature_f": main.get("temp"),
-        "feels_like_f": main.get("feels_like"),
-        "humidity_percent": main.get("humidity"),
-        "wind_mph": wind.get("speed"),
-        "observation_time": observation_time,
-        "raw": {
-            "provider": "OpenWeatherMap",
-            "endpoint": "current",
-            "id": data.get("id"),
-        },
-    }
+def _display_name(result: dict[str, Any]) -> str:
+    """Build a human-readable location name from a geocoding result."""
+    parts = [
+        result.get("name"),
+        result.get("admin1"),
+        result.get("country"),
+    ]
+    return ", ".join(str(p) for p in parts if p)
 
 
-async def _fetch_openweather_forecast(
-    location: str,
+async def _fetch_openmeteo_forecast(
+    result: dict[str, Any],
     target_date: _datetime.date,
     target_label: str,
 ) -> dict[str, Any]:
+    """Fetch daily forecast from Open-Meteo for the resolved location."""
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        lat = float(result["latitude"])
+        lon = float(result["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return {
+            "live_data_available": False,
+            "request_type": WeatherRequestType.FORECAST.value,
+            "location": _display_name(result),
+            "target_label": target_label,
+            "summary": "Location coordinates unavailable.",
+            "detail": "Geocoding succeeded but did not return valid coordinates.",
+        }
+
+    today = _today()
+    delta_days = (target_date - today).days
+    try:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
             response = await client.get(
-                _OPENWEATHER_FORECAST_URL,
+                _OPENMETEO_FORECAST_URL,
                 params={
-                    "q": location,
-                    "appid": settings.openweather_api_key,
-                    "units": "imperial",
+                    "latitude": lat,
+                    "longitude": lon,
+                    "daily": "weather_code,temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean",
+                    "temperature_unit": "fahrenheit",
+                    "wind_speed_unit": "mph",
+                    "precipitation_unit": "inch",
+                    "timezone": "auto",
+                    "forecast_days": max(delta_days + 2, 3),
+                    "models": "best_match",
                 },
             )
             response.raise_for_status()
@@ -489,7 +513,7 @@ async def _fetch_openweather_forecast(
         return {
             "live_data_available": False,
             "request_type": WeatherRequestType.FORECAST.value,
-            "location": location,
+            "location": _display_name(result),
             "target_label": target_label,
             "summary": "Weather service returned an error.",
             "detail": f"HTTP {exc.response.status_code}",
@@ -498,59 +522,187 @@ async def _fetch_openweather_forecast(
         return {
             "live_data_available": False,
             "request_type": WeatherRequestType.FORECAST.value,
-            "location": location,
+            "location": _display_name(result),
             "target_label": target_label,
             "summary": "Weather service unavailable.",
             "detail": str(exc),
         }
 
-    # OpenWeatherMap /forecast returns 3-hour slices for 5 days.
-    slices = data.get("list", [])
-    start_of_day = _datetime.datetime.combine(target_date, _datetime.datetime.min.time())
-    end_of_day = start_of_day + _datetime.timedelta(days=1)
-    target_slices = [
-        s for s in slices
-        if start_of_day <= _datetime.datetime.fromtimestamp(s.get("dt", 0), tz=_datetime.UTC).replace(tzinfo=None) < end_of_day
-    ]
-    if not target_slices:
+    daily = data.get("daily", {})
+    dates = daily.get("time", [])
+    if not dates:
         return {
             "live_data_available": False,
             "request_type": WeatherRequestType.FORECAST.value,
-            "location": data.get("city", {}).get("name", location),
+            "location": _display_name(result),
             "target_label": target_label,
             "summary": "Forecast period missing.",
             "detail": f"The weather provider did not return data for {target_label}.",
         }
 
-    # Aggregate: high, low, most common condition.
-    temps = [s.get("main", {}).get("temp") for s in target_slices if s.get("main", {}).get("temp") is not None]
-    feels_likes = [s.get("main", {}).get("feels_like") for s in target_slices if s.get("main", {}).get("feels_like") is not None]
-    humidities = [s.get("main", {}).get("humidity") for s in target_slices if s.get("main", {}).get("humidity") is not None]
-    conditions = [s.get("weather", [{}])[0].get("main") for s in target_slices]
-    descriptions = [s.get("weather", [{}])[0].get("description") for s in target_slices]
-    summaries = [c for c in conditions if c]
-    summary = max(set(summaries), key=summaries.count) if summaries else "Unknown"
-    description = descriptions[0] if descriptions else "No description"
+    target_iso = target_date.isoformat()
+    if target_iso not in dates:
+        return {
+            "live_data_available": False,
+            "request_type": WeatherRequestType.FORECAST.value,
+            "location": _display_name(result),
+            "target_label": target_label,
+            "summary": "Forecast date unavailable.",
+            "detail": f"The weather provider did not return data for {target_label}.",
+        }
+
+    idx = dates.index(target_iso)
+    weather_code = daily.get("weather_code", [None] * len(dates))[idx]
+    high = daily.get("temperature_2m_max", [None] * len(dates))[idx]
+    low = daily.get("temperature_2m_min", [None] * len(dates))[idx]
+    humidity = daily.get("relative_humidity_2m_mean", [None] * len(dates))[idx]
+
+    summary, description = _openmeteo_weather_description(weather_code)
 
     return {
         "live_data_available": True,
         "request_type": WeatherRequestType.FORECAST.value,
-        "location": data.get("city", {}).get("name", location),
+        "location": _display_name(result),
         "target_label": target_label,
-        "target_date": target_date.isoformat(),
+        "target_date": target_iso,
         "summary": summary,
         "description": description,
-        "high_f": max(temps) if temps else None,
-        "low_f": min(temps) if temps else None,
-        "avg_feels_like_f": sum(feels_likes) / len(feels_likes) if feels_likes else None,
-        "humidity_percent": int(sum(humidities) / len(humidities)) if humidities else None,
-        "forecast_periods": len(target_slices),
+        "high_f": high,
+        "low_f": low,
+        "humidity_percent": int(humidity) if humidity is not None else None,
+        "forecast_periods": 1,
         "raw": {
-            "provider": "OpenWeatherMap",
+            "provider": "Open-Meteo",
             "endpoint": "forecast",
-            "city_id": data.get("city", {}).get("id"),
+            "latitude": lat,
+            "longitude": lon,
+            "weather_code": weather_code,
         },
     }
+
+
+async def _fetch_openmeteo_current(result: dict[str, Any]) -> dict[str, Any]:
+    """Fetch current conditions from Open-Meteo for the resolved location."""
+    try:
+        lat = float(result["latitude"])
+        lon = float(result["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return {
+            "live_data_available": False,
+            "request_type": WeatherRequestType.CURRENT.value,
+            "location": _display_name(result),
+            "target_label": "now",
+            "summary": "Location coordinates unavailable.",
+            "detail": "Geocoding succeeded but did not return valid coordinates.",
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+            response = await client.get(
+                _OPENMETEO_FORECAST_URL,
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m",
+                    "temperature_unit": "fahrenheit",
+                    "wind_speed_unit": "mph",
+                    "precipitation_unit": "inch",
+                    "timezone": "auto",
+                    "forecast_days": 1,
+                    "models": "best_match",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPStatusError as exc:
+        return {
+            "live_data_available": False,
+            "request_type": WeatherRequestType.CURRENT.value,
+            "location": _display_name(result),
+            "target_label": "now",
+            "summary": "Weather service returned an error.",
+            "detail": f"HTTP {exc.response.status_code}",
+        }
+    except Exception as exc:
+        return {
+            "live_data_available": False,
+            "request_type": WeatherRequestType.CURRENT.value,
+            "location": _display_name(result),
+            "target_label": "now",
+            "summary": "Weather service unavailable.",
+            "detail": str(exc),
+        }
+
+    current = data.get("current", {})
+    weather_code = current.get("weather_code")
+    summary, description = _openmeteo_weather_description(weather_code)
+    observation_time = None
+    iso_time = current.get("time")
+    if iso_time:
+        try:
+            observation_time = _datetime.datetime.fromisoformat(str(iso_time)).isoformat()
+        except Exception:
+            observation_time = None
+
+    return {
+        "live_data_available": True,
+        "request_type": WeatherRequestType.CURRENT.value,
+        "location": _display_name(result),
+        "target_label": "now",
+        "summary": summary,
+        "description": description,
+        "temperature_f": current.get("temperature_2m"),
+        "feels_like_f": current.get("apparent_temperature"),
+        "humidity_percent": current.get("relative_humidity_2m"),
+        "wind_mph": current.get("wind_speed_10m"),
+        "observation_time": observation_time,
+        "raw": {
+            "provider": "Open-Meteo",
+            "endpoint": "forecast",
+            "latitude": lat,
+            "longitude": lon,
+            "weather_code": weather_code,
+        },
+    }
+
+
+_OPENMETEO_WEATHER_CODES: dict[int, tuple[str, str]] = {
+    0: ("Clear", "clear sky"),
+    1: ("Mainly clear", "mainly clear"),
+    2: ("Partly cloudy", "partly cloudy"),
+    3: ("Overcast", "overcast"),
+    45: ("Fog", "fog"),
+    48: ("Fog", "depositing rime fog"),
+    51: ("Drizzle", "light drizzle"),
+    53: ("Drizzle", "moderate drizzle"),
+    55: ("Drizzle", "dense drizzle"),
+    56: ("Freezing drizzle", "light freezing drizzle"),
+    57: ("Freezing drizzle", "dense freezing drizzle"),
+    61: ("Rain", "slight rain"),
+    63: ("Rain", "moderate rain"),
+    65: ("Rain", "heavy rain"),
+    66: ("Freezing rain", "light freezing rain"),
+    67: ("Freezing rain", "heavy freezing rain"),
+    71: ("Snow", "slight snow"),
+    73: ("Snow", "moderate snow"),
+    75: ("Snow", "heavy snow"),
+    77: ("Snow grains", "snow grains"),
+    80: ("Rain showers", "slight rain showers"),
+    81: ("Rain showers", "moderate rain showers"),
+    82: ("Rain showers", "violent rain showers"),
+    85: ("Snow showers", "slight snow showers"),
+    86: ("Snow showers", "heavy snow showers"),
+    95: ("Thunderstorm", "thunderstorm"),
+    96: ("Thunderstorm", "thunderstorm with slight hail"),
+    99: ("Thunderstorm", "thunderstorm with heavy hail"),
+}
+
+
+def _openmeteo_weather_description(code: int | None) -> tuple[str, str]:
+    """Map an Open-Meteo weather code to a (summary, description) pair."""
+    if code is None:
+        return ("Unknown", "No description")
+    return _OPENMETEO_WEATHER_CODES.get(code, ("Unknown", f"weather code {code}"))
 
 
 async def weather_response_text(request: WeatherRequest | str) -> str:
@@ -576,7 +728,7 @@ async def weather_response_text(request: WeatherRequest | str) -> str:
     if not result["live_data_available"]:
         return f"{result['summary']}\n\n{result['detail']}"
 
-    source = result["raw"].get("provider", "OpenWeatherMap")
+    source = result["raw"].get("provider", "Open-Meteo")
     if result["request_type"] == WeatherRequestType.FORECAST.value:
         return (
             f"Forecast for {result['location']} {result['target_label']}:\n"

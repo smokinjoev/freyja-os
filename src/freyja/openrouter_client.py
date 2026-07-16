@@ -1,6 +1,7 @@
 import httpx
 
 from freyja.config import settings
+from freyja.system_prompt import FREYJA_SYSTEM_PROMPT
 
 
 class OpenRouterClient:
@@ -11,8 +12,8 @@ class OpenRouterClient:
         model: str | None = None,
     ) -> None:
         self.base_url = (base_url or settings.openrouter_base_url).rstrip("/")
-        self.api_key = api_key or settings.openrouter_api_key
-        self.model = model or settings.openrouter_model or ""
+        self.api_key = settings.openrouter_api_key if api_key is None else api_key
+        self.model = settings.openrouter_model if model is None else model
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -43,7 +44,10 @@ class OpenRouterClient:
 
         payload = {
             "model": target_model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [
+                {"role": "system", "content": FREYJA_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
         }
 
         try:

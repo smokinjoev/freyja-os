@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -346,7 +347,6 @@ def test_builtin_get_weather_safe_fallback(registry: ToolRegistry, monkeypatch: 
 
 def test_builtin_get_weather_bad_request_type(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "weather_tool_enabled", True)
-    monkeypatch.setattr(settings, "openweather_api_key", "fake-key")
     register_builtin_tools(registry)
     result = asyncio_run(
         registry.execute(
@@ -361,35 +361,19 @@ def test_builtin_get_weather_bad_request_type(registry: ToolRegistry, monkeypatc
     assert "unsupported" in result.output["summary"].lower()
 
 
-def test_builtin_get_weather_missing_api_key(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_builtin_get_weather_provider_500(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A provider error during geocoding returns a safe, sanitized response."""
     monkeypatch.setattr(settings, "weather_tool_enabled", True)
-    monkeypatch.setattr(settings, "openweather_api_key", "")
-    register_builtin_tools(registry)
-    result = asyncio_run(
-        registry.execute(
-            ToolExecutionRequest(
-                tool_name="get_weather",
-                arguments={"location": "Aiken, SC", "request_type": "current"},
-            )
-        )
-    )
-    assert result.success is True
-    assert result.output["live_data_available"] is False
-    assert "not configured" in result.output["summary"].lower()
-
-
-def test_builtin_get_weather_provider_401(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "weather_tool_enabled", True)
-    monkeypatch.setattr(settings, "openweather_api_key", "bad-key")
     register_builtin_tools(registry)
     import httpx
 
     def _bad_request(*args, **kwargs):
-        request = httpx.Request("GET", "https://api.openweathermap.org/data/2.5/weather")
+        url = str(args[0]) if args else kwargs.get("url", "")
+        request = httpx.Request("GET", url)
         raise httpx.HTTPStatusError(
-            "401 Unauthorized",
+            "500 Internal Server Error",
             request=request,
-            response=httpx.Response(401, text="Unauthorized", request=request),
+            response=httpx.Response(500, text="Internal Server Error", request=request),
         )
 
     with patch("httpx.AsyncClient.get", side_effect=_bad_request):
@@ -403,34 +387,72 @@ def test_builtin_get_weather_provider_401(registry: ToolRegistry, monkeypatch: p
         )
     assert result.success is True
     assert result.output["live_data_available"] is False
-    assert result.output["detail"] == "HTTP 401"
+    assert "location not found" in result.output["summary"].lower()
+
+
+def _openmeteo_geo_response() -> dict[str, Any]:
+    return {
+        "results": [
+            {
+                "id": 456123,
+                "name": "Aiken",
+                "latitude": 33.559,
+                "longitude": -81.722,
+                "admin1": "South Carolina",
+                "country": "United States",
+            }
+        ]
+    }
+
+
+def _openmeteo_forecast_response(target_iso: str) -> dict[str, Any]:
+    return {
+        "latitude": 33.56,
+        "longitude": -81.72,
+        "daily": {
+            "time": [target_iso],
+            "weather_code": [0],
+            "temperature_2m_max": [75.0],
+            "temperature_2m_min": [58.0],
+            "relative_humidity_2m_mean": [60],
+        },
+    }
+
+
+def _openmeteo_current_response() -> dict[str, Any]:
+    return {
+        "latitude": 33.56,
+        "longitude": -81.72,
+        "current": {
+            "time": "2026-07-15T14:00",
+            "temperature_2m": 72.5,
+            "relative_humidity_2m": 55,
+            "apparent_temperature": 74.0,
+            "weather_code": 1,
+            "wind_speed_10m": 5.2,
+        },
+    }
 
 
 def test_builtin_get_weather_forecast_hits_forecast_endpoint(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "weather_tool_enabled", True)
-    monkeypatch.setattr(settings, "openweather_api_key", "fake-key")
     register_builtin_tools(registry)
 
-    captured: dict[str, Any] = {}
+    captured_urls: list[str] = []
     import httpx
 
-    def _capture_forecast(*args, **kwargs):
-        captured["url"] = str(args[0]) if args else kwargs.get("url", "")
-        request = httpx.Request("GET", captured["url"])
-        response_data = {
-            "city": {"name": "Aiken", "id": 12345},
-            "list": [
-                {
-                    "dt": 1784241600,
-                    "main": {"temp": 75, "feels_like": 74, "humidity": 60},
-                    "weather": [{"main": "Clear", "description": "clear sky"}],
-                }
-            ],
-        }
-        return httpx.Response(200, json=response_data, request=request)
+    def _capture(*args, **kwargs):
+        url = str(args[0]) if args else kwargs.get("url", "")
+        captured_urls.append(url)
+        request = httpx.Request("GET", url)
+        if "geocoding-api" in url:
+            return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+        target = kwargs.get("params", {}).get("forecast_days")
+        assert target is not None
+        return httpx.Response(200, json=_openmeteo_forecast_response("2026-07-16"), request=request)
 
-    with patch("httpx.AsyncClient.get", side_effect=_capture_forecast):
-        from datetime import date, timedelta
+    with patch("httpx.AsyncClient.get", side_effect=_capture):
+        from datetime import date
         target = date(2026, 7, 16)
         result = asyncio_run(
             registry.execute(
@@ -447,9 +469,99 @@ def test_builtin_get_weather_forecast_hits_forecast_endpoint(registry: ToolRegis
         )
     assert result.success is True
     assert result.output["live_data_available"] is True
-    assert "forecast" in str(captured.get("url", ""))
+    assert "forecast" in str(captured_urls)
+    assert any("api.open-meteo.com/v1/forecast" in url for url in captured_urls)
     assert result.output["request_type"] == "forecast"
     assert result.output["target_label"] == "tomorrow"
+    assert result.output["high_f"] == 75.0
+
+
+def test_builtin_get_weather_current_hits_current_endpoint(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    register_builtin_tools(registry)
+
+    captured_urls: list[str] = []
+    import httpx
+
+    def _capture(*args, **kwargs):
+        url = str(args[0]) if args else kwargs.get("url", "")
+        captured_urls.append(url)
+        request = httpx.Request("GET", url)
+        if "geocoding-api" in url:
+            return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+        return httpx.Response(200, json=_openmeteo_current_response(), request=request)
+
+    with patch("httpx.AsyncClient.get", side_effect=_capture):
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="get_weather",
+                    arguments={"location": "Aiken, SC", "request_type": "current"},
+                )
+            )
+        )
+    assert result.success is True
+    assert result.output["live_data_available"] is True
+    assert result.output["request_type"] == "current"
+    assert any("api.open-meteo.com/v1/forecast" in url for url in captured_urls)
+    assert result.output["temperature_f"] == 72.5
+
+
+def test_builtin_get_weather_unknown_place(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    register_builtin_tools(registry)
+    import httpx
+
+    def _empty_geo(*args, **kwargs):
+        url = str(args[0]) if args else kwargs.get("url", "")
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json={"results": None}, request=request)
+
+    with patch("httpx.AsyncClient.get", side_effect=_empty_geo):
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="get_weather",
+                    arguments={"location": "Xylophoneburg", "request_type": "current"},
+                )
+            )
+        )
+    assert result.success is True
+    assert result.output["live_data_available"] is False
+    assert "location not found" in result.output["summary"].lower()
+
+
+def test_builtin_get_weather_unsupported_future_date(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    register_builtin_tools(registry)
+
+    def _capture(*args, **kwargs):
+        import httpx
+        url = str(args[0]) if args else kwargs.get("url", "")
+        request = httpx.Request("GET", url)
+        if "geocoding-api" in url:
+            return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+        return httpx.Response(200, json=_openmeteo_forecast_response("2026-07-16"), request=request)
+
+    with patch("httpx.AsyncClient.get", side_effect=_capture):
+        from datetime import date
+        target = date(2026, 12, 25)
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="get_weather",
+                    arguments={
+                        "location": "Aiken, SC",
+                        "request_type": "forecast",
+                        "target_date": target.isoformat(),
+                        "target_label": "christmas",
+                    },
+                )
+            )
+        )
+    assert result.success is True
+    assert result.output["live_data_available"] is False
+    assert "outside supported range" in result.output["summary"].lower()
 
 
 def test_api_execute_validation_error(client: TestClient, registry: ToolRegistry) -> None:

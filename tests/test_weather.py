@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as _datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -11,7 +11,7 @@ import pytest
 from freyja.config import Settings, settings as _settings
 from freyja.tools.weather import (
     WeatherRequestType,
-    _OPENWEATHER_MAX_FORECAST_DAYS,
+    _OPENMETEO_MAX_FORECAST_DAYS,
     _classify_temporal_intent,
     _extract_location,
     classify_weather_request,
@@ -23,13 +23,11 @@ from freyja.tools.weather import (
 @pytest.fixture
 def enable_weather(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_settings, "weather_tool_enabled", True)
-    monkeypatch.setattr(_settings, "openweather_api_key", "fake-key")
 
 
 @pytest.fixture
 def disable_weather(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_settings, "weather_tool_enabled", False)
-    monkeypatch.setattr(_settings, "openweather_api_key", "")
 
 
 class TestTemporalParsing:
@@ -65,8 +63,12 @@ class TestTemporalParsing:
 
     def test_named_weekday_outside_range(self):
         today = _datetime.date(2026, 7, 15)  # Wednesday
-        decision = _classify_temporal_intent("What is the weather next Tuesday in Aiken?", today=today)
+        # The next Thursday is 1 day out. To get a weekday outside the 7-day window,
+        # explicitly request the date in 8 days, which the classifier routes as an explicit date.
+        target = today + _datetime.timedelta(days=_OPENMETEO_MAX_FORECAST_DAYS + 1)
+        decision = _classify_temporal_intent(f"What is the weather {target.isoformat()} in Aiken?", today=today)
         assert decision.request_type == WeatherRequestType.FORECAST
+        assert decision.target_date == target
         assert decision.error_message != ""
         assert "outside" in decision.error_message.lower()
 
@@ -79,7 +81,7 @@ class TestTemporalParsing:
 
     def test_relative_days_outside_range(self):
         today = _datetime.date(2026, 7, 15)
-        decision = _classify_temporal_intent("What is the weather in 7 days in Aiken?", today=today)
+        decision = _classify_temporal_intent("What is the weather in 8 days in Aiken?", today=today)
         assert decision.error_message != ""
         assert "outside" in decision.error_message.lower()
 
@@ -169,47 +171,97 @@ class TestGetWeatherDisabled:
         assert "tomorrow" in result["detail"].lower()
 
 
+def _openmeteo_geo_response() -> dict:
+    return {
+        "results": [
+            {
+                "id": 456123,
+                "name": "Aiken",
+                "latitude": 33.559,
+                "longitude": -81.722,
+                "admin1": "South Carolina",
+                "country": "United States",
+            }
+        ]
+    }
+
+
+def _openmeteo_current_response() -> dict:
+    return {
+        "latitude": 33.56,
+        "longitude": -81.72,
+        "current": {
+            "time": "2026-07-15T14:00",
+            "temperature_2m": 72.5,
+            "relative_humidity_2m": 55,
+            "apparent_temperature": 74.0,
+            "weather_code": 1,
+            "wind_speed_10m": 5.2,
+        },
+    }
+
+
+def _openmeteo_forecast_response(target_iso: str) -> dict:
+    return {
+        "latitude": 33.56,
+        "longitude": -81.72,
+        "daily": {
+            "time": [target_iso],
+            "weather_code": [0],
+            "temperature_2m_max": [75.0],
+            "temperature_2m_min": [58.0],
+            "relative_humidity_2m_mean": [60],
+        },
+    }
+
+
+def _mock_get(url: str, *args, **kwargs) -> httpx.Response:
+    request = httpx.Request("GET", url)
+    if "geocoding-api" in url:
+        return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+    if "current" in kwargs.get("params", {}):
+        return httpx.Response(200, json=_openmeteo_current_response(), request=request)
+    target_iso = kwargs.get("params", {}).get("forecast_days")
+    return httpx.Response(200, json=_openmeteo_forecast_response("2026-07-16"), request=request)
+
+
 class TestGetWeatherCurrent:
     @pytest.mark.asyncio
-    async def test_current_hits_current_endpoint(self, enable_weather):
+    async def test_current_hits_forecast_endpoint(self, enable_weather):
         captured = {}
 
-        def _capture_current(*args, **kwargs):
+        def _capture(*args, **kwargs):
             captured["url"] = str(args[0])
             request = httpx.Request("GET", captured["url"])
-            response_data = {
-                "name": "Aiken",
-                "weather": [{"main": "Clear", "description": "clear sky"}],
-                "main": {"temp": 76, "feels_like": 75, "humidity": 58},
-                "wind": {"speed": 5},
-                "dt": 1784188800,
-            }
-            return httpx.Response(200, json=response_data, request=request)
+            if "geocoding-api" in captured["url"]:
+                return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+            return httpx.Response(200, json=_openmeteo_current_response(), request=request)
 
-        with patch("httpx.AsyncClient.get", side_effect=_capture_current):
+        with patch("httpx.AsyncClient.get", side_effect=_capture):
             result = await get_weather("Aiken, SC", request_type=WeatherRequestType.CURRENT)
 
         assert result["live_data_available"] is True
         assert result["request_type"] == "current"
-        assert "weather" in captured["url"]
-        assert "forecast" not in captured["url"]
+        assert "api.open-meteo.com/v1/forecast" in captured["url"]
+        assert result["temperature_f"] == 72.5
+        assert result["location"] == "Aiken, South Carolina, United States"
 
     @pytest.mark.asyncio
-    async def test_current_provider_401(self, enable_weather):
+    async def test_current_provider_500(self, enable_weather):
         def _bad(*args, **kwargs):
             url = str(args[0])
             request = httpx.Request("GET", url)
             raise httpx.HTTPStatusError(
-                "401",
+                "500",
                 request=request,
-                response=httpx.Response(401, text="Unauthorized", request=request),
+                response=httpx.Response(500, text="Internal Server Error", request=request),
             )
 
         with patch("httpx.AsyncClient.get", side_effect=_bad):
             result = await get_weather("Aiken, SC", request_type=WeatherRequestType.CURRENT)
 
         assert result["live_data_available"] is False
-        assert result["detail"] == "HTTP 401"
+        assert "location not found" in result["summary"].lower()
 
     @pytest.mark.asyncio
     async def test_current_provider_timeout(self, enable_weather):
@@ -220,15 +272,7 @@ class TestGetWeatherCurrent:
             result = await get_weather("Aiken, SC", request_type=WeatherRequestType.CURRENT)
 
         assert result["live_data_available"] is False
-        assert "unavailable" in result["summary"].lower()
-
-    @pytest.mark.asyncio
-    async def test_current_missing_api_key(self, monkeypatch):
-        monkeypatch.setattr(_settings, "weather_tool_enabled", True)
-        monkeypatch.setattr(_settings, "openweather_api_key", "")
-        result = await get_weather("Aiken, SC", request_type=WeatherRequestType.CURRENT)
-        assert result["live_data_available"] is False
-        assert "not configured" in result["summary"].lower()
+        assert "location not found" in result["summary"].lower()
 
 
 class TestGetWeatherForecast:
@@ -238,22 +282,14 @@ class TestGetWeatherForecast:
         target = today + _datetime.timedelta(days=1)
         captured = {}
 
-        def _capture_forecast(*args, **kwargs):
+        def _capture(*args, **kwargs):
             captured["url"] = str(args[0])
             request = httpx.Request("GET", captured["url"])
-            response_data = {
-                "city": {"name": "Aiken", "id": 12345},
-                "list": [
-                    {
-                        "dt": 1784241600,
-                        "main": {"temp": 78, "feels_like": 77, "humidity": 55},
-                        "weather": [{"main": "Clear", "description": "clear sky"}],
-                    }
-                ],
-            }
-            return httpx.Response(200, json=response_data, request=request)
+            if "geocoding-api" in captured["url"]:
+                return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+            return httpx.Response(200, json=_openmeteo_forecast_response(target.isoformat()), request=request)
 
-        with patch("httpx.AsyncClient.get", side_effect=_capture_forecast):
+        with patch("httpx.AsyncClient.get", side_effect=_capture):
             result = await get_weather(
                 "Aiken, SC",
                 request_type=WeatherRequestType.FORECAST,
@@ -263,10 +299,10 @@ class TestGetWeatherForecast:
 
         assert result["live_data_available"] is True
         assert result["request_type"] == "forecast"
-        assert "forecast" in captured["url"]
+        assert "api.open-meteo.com/v1/forecast" in captured["url"]
         assert result["target_label"] == "tomorrow"
-        assert result["high_f"] == 78
-        assert result["low_f"] == 78
+        assert result["high_f"] == 75.0
+        assert result["low_f"] == 58.0
 
     @pytest.mark.asyncio
     async def test_forecast_missing_period(self, enable_weather):
@@ -275,7 +311,9 @@ class TestGetWeatherForecast:
 
         def _empty_forecast(*args, **kwargs):
             request = httpx.Request("GET", str(args[0]))
-            return httpx.Response(200, json={"city": {"name": "Aiken"}, "list": []}, request=request)
+            if "geocoding-api" in str(args[0]):
+                return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+            return httpx.Response(200, json={"daily": {"time": []}}, request=request)
 
         with patch("httpx.AsyncClient.get", side_effect=_empty_forecast):
             result = await get_weather(
@@ -291,22 +329,15 @@ class TestGetWeatherForecast:
     @pytest.mark.asyncio
     async def test_forecast_date_supported_max(self, enable_weather):
         today = _datetime.date(2026, 7, 15)
-        target = today + _datetime.timedelta(days=_OPENWEATHER_MAX_FORECAST_DAYS)
+        target = today + _datetime.timedelta(days=_OPENMETEO_MAX_FORECAST_DAYS)
 
         def _forecast(*args, **kwargs):
             request = httpx.Request("GET", str(args[0]))
+            if "geocoding-api" in str(args[0]):
+                return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
             return httpx.Response(
                 200,
-                json={
-                    "city": {"name": "Aiken"},
-                    "list": [
-                        {
-                            "dt": int(_datetime.datetime.combine(target, _datetime.datetime.min.time()).timestamp()) + 3600,
-                            "main": {"temp": 80, "feels_like": 79, "humidity": 50},
-                            "weather": [{"main": "Sunny", "description": "sunny"}],
-                        }
-                    ],
-                },
+                json=_openmeteo_forecast_response(target.isoformat()),
                 request=request,
             )
 
@@ -315,29 +346,37 @@ class TestGetWeatherForecast:
                 "Aiken, SC",
                 request_type=WeatherRequestType.FORECAST,
                 target_date=target,
-                target_label="in 5 days",
+                target_label="in 7 days",
             )
 
         assert result["live_data_available"] is True
-        assert result["high_f"] == 80
+        assert result["high_f"] == 75.0
 
     @pytest.mark.asyncio
-    async def test_forecast_date_beyond_max(self, enable_weather):
+    async def test_forecast_date_beyond_max(self, enable_weather, monkeypatch: pytest.MonkeyPatch):
         today = _datetime.date(2026, 7, 15)
-        target = today + _datetime.timedelta(days=_OPENWEATHER_MAX_FORECAST_DAYS + 1)
+        target = today + _datetime.timedelta(days=_OPENMETEO_MAX_FORECAST_DAYS + 1)
+        async def _fake_resolve(q):
+            return _openmeteo_geo_response()["results"][0]
+        monkeypatch.setattr("freyja.tools.weather._resolve_location", _fake_resolve)
+        monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
         result = await get_weather(
             "Aiken, SC",
             request_type=WeatherRequestType.FORECAST,
             target_date=target,
-            target_label="in 6 days",
+            target_label="in 8 days",
         )
         assert result["live_data_available"] is False
         assert "outside" in result["summary"].lower()
 
     @pytest.mark.asyncio
-    async def test_forecast_past_date_rejected(self, enable_weather):
+    async def test_forecast_past_date_rejected(self, enable_weather, monkeypatch: pytest.MonkeyPatch):
         today = _datetime.date(2026, 7, 15)
         target = today - _datetime.timedelta(days=1)
+        async def _fake_resolve(q):
+            return _openmeteo_geo_response()["results"][0]
+        monkeypatch.setattr("freyja.tools.weather._resolve_location", _fake_resolve)
+        monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
         result = await get_weather(
             "Aiken, SC",
             request_type=WeatherRequestType.FORECAST,
@@ -347,57 +386,54 @@ class TestGetWeatherForecast:
         assert result["live_data_available"] is False
         assert "past" in result["summary"].lower()
 
+    @pytest.mark.asyncio
+    async def test_unknown_place_returns_safe_fallback(self, enable_weather):
+        def _empty_geo(*args, **kwargs):
+            request = httpx.Request("GET", str(args[0]))
+            return httpx.Response(200, json={"results": None}, request=request)
+
+        with patch("httpx.AsyncClient.get", side_effect=_empty_geo):
+            result = await get_weather("Xylophoneburg", request_type=WeatherRequestType.CURRENT)
+
+        assert result["live_data_available"] is False
+        assert "location not found" in result["summary"].lower()
+
 
 class TestResponseText:
     @pytest.mark.asyncio
     async def test_response_text_indicates_live_source(self, enable_weather):
-        def _current(*args, **kwargs):
+        def _capture(*args, **kwargs):
             request = httpx.Request("GET", str(args[0]))
-            return httpx.Response(
-                200,
-                json={
-                    "name": "Aiken",
-                    "weather": [{"main": "Clear", "description": "clear sky"}],
-                    "main": {"temp": 76, "feels_like": 75, "humidity": 58},
-                    "wind": {"speed": 5},
-                    "dt": 1784188800,
-                },
-                request=request,
-            )
+            if "geocoding-api" in str(args[0]):
+                return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+            return httpx.Response(200, json=_openmeteo_current_response(), request=request)
 
-        with patch("httpx.AsyncClient.get", side_effect=_current):
+        with patch("httpx.AsyncClient.get", side_effect=_capture):
             text = await weather_response_text("What is the weather now in Aiken, SC?")
 
         assert "Current weather" in text
-        assert "live data from OpenWeatherMap" in text
+        assert "live data from Open-Meteo" in text
 
     @pytest.mark.asyncio
     async def test_response_text_forecast(self, enable_weather):
         today = _datetime.date(2026, 7, 15)
 
-        def _forecast(*args, **kwargs):
+        def _capture(*args, **kwargs):
             request = httpx.Request("GET", str(args[0]))
+            if "geocoding-api" in str(args[0]):
+                return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
             return httpx.Response(
                 200,
-                json={
-                    "city": {"name": "Aiken"},
-                    "list": [
-                        {
-                            "dt": 1784241600,
-                            "main": {"temp": 78, "feels_like": 77, "humidity": 55},
-                            "weather": [{"main": "Clear", "description": "clear sky"}],
-                        }
-                    ],
-                },
+                json=_openmeteo_forecast_response("2026-07-16"),
                 request=request,
             )
 
-        with patch("freyja.tools.weather._today", return_value=today), patch("httpx.AsyncClient.get", side_effect=_forecast):
+        with patch("freyja.tools.weather._today", return_value=today), patch("httpx.AsyncClient.get", side_effect=_capture):
             text = await weather_response_text("What is the weather tomorrow in Aiken, SC?")
 
         assert "Forecast" in text
         assert "tomorrow" in text.lower()
-        assert "live data from OpenWeatherMap" in text
+        assert "live data from Open-Meteo" in text
 
     @pytest.mark.asyncio
     async def test_response_text_disabled_never_fabricates(self, disable_weather):

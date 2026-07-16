@@ -79,7 +79,6 @@ class Settings(BaseSettings):
     telegram_state_dir: str = str(_default_state_dir() / "telegram")
 
     weather_tool_enabled: bool = False
-    openweather_api_key: str = ""
 
     @property
     def approved_openrouter_models(self) -> list[str]:

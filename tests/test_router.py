@@ -1,5 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from freyja.config import Settings, settings
@@ -58,7 +60,10 @@ async def test_manual_local_override(router: Router) -> None:
     assert result.decision.provider == "ollama"
     assert result.decision.reason == "manual local override"
     assert result.response == "local"
-    router.ollama_client.chat.assert_awaited_once_with(prompt="hi", model="qwen2.5:7b")
+    router.ollama_client.chat.assert_awaited_once()
+    _, kwargs = router.ollama_client.chat.call_args
+    assert kwargs["prompt"] == "hi"
+    assert kwargs["model"] == "qwen2.5:7b"
 
 
 async def test_manual_cloud_override_allowed(router: Router, monkeypatch: pytest.MonkeyPatch, reset_settings) -> None:

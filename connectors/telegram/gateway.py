@@ -383,10 +383,6 @@ class TelegramGateway:
             reply = data.get("response", "")
             if not reply:
                 return self._reply(message, _SAFE_ERROR_TEXT, success=False)
-            meta = data.get("provider", "")
-            model = data.get("model", "")
-            if meta and model:
-                reply += f"\n\n(agent: Freyja, provider: {meta}, model: {model})"
             return self._reply(message, reply)
         except httpx.TimeoutException:
             logger.warning({"event": "telegram_director_timeout"})

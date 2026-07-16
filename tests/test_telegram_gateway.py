@@ -90,7 +90,8 @@ async def test_authorized_user_accepted(gateway):
 
     assert result is not None
     assert result.success is True
-    assert result.text == "Local auto hello\n\n(agent: Freyja, provider: ollama, model: qwen2.5:1.5b)"
+    assert result.text == "Local auto hello"
+    assert "(agent: Freyja, provider:" not in result.text
     assert result.chat_id == 123456
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
@@ -164,8 +165,11 @@ async def test_ordinary_text_routes_to_freyja(gateway):
         result = await gateway.handle(update)
 
     assert result is not None
-    assert "Freyja" in result.text
+    assert result.text == "The sum is 4."
+    assert "(agent: Freyja, provider:" not in result.text
     mock_post.assert_awaited_once()
+    _, kwargs = mock_post.call_args
+    assert kwargs["json"] == {"prompt": "What is 2+2?", "provider": "auto"}
 
 
 @pytest.mark.asyncio
@@ -324,7 +328,6 @@ async def test_weather_query_returns_safe_fallback_when_unconfigured(gateway, mo
 @pytest.mark.asyncio
 async def test_weather_now_invokes_current_conditions(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
-    monkeypatch.setattr("freyja.config.settings.openweather_api_key", "fake-key")
 
     captured_request = {}
     async def _capture(request):
@@ -343,7 +346,6 @@ async def test_weather_now_invokes_current_conditions(gateway, monkeypatch):
 @pytest.mark.asyncio
 async def test_weather_tomorrow_invokes_forecast(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
-    monkeypatch.setattr("freyja.config.settings.openweather_api_key", "fake-key")
 
     captured_request = {}
     async def _capture(request):
@@ -362,7 +364,6 @@ async def test_weather_tomorrow_invokes_forecast(gateway, monkeypatch):
 @pytest.mark.asyncio
 async def test_weather_unsupported_future_date_returns_limitation(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
-    monkeypatch.setattr("freyja.config.settings.openweather_api_key", "fake-key")
 
     update = _make_update(1, 123456, 123456, "private", "What is the weather in 10 days in Aiken, South Carolina?")
     result = await gateway.handle(update)
@@ -373,7 +374,6 @@ async def test_weather_unsupported_future_date_returns_limitation(gateway, monke
 @pytest.mark.asyncio
 async def test_weather_query_invokes_tool_when_enabled(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
-    monkeypatch.setattr("freyja.config.settings.openweather_api_key", "fake-key")
 
     with patch("connectors.telegram.gateway.weather_response_text", new_callable=AsyncMock, return_value="Weather for Aiken: sunny, 75°F."):
         update = _make_update(1, 123456, 123456, "private", "What is the weather in Aiken, South Carolina?")

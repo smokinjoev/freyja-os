@@ -1,12 +1,13 @@
 import httpx
 
 from freyja.config import settings
+from freyja.system_prompt import FREYJA_SYSTEM_PROMPT
 
 
 class OllamaClient:
     def __init__(self, base_url: str | None = None, model: str | None = None) -> None:
         self.base_url = (base_url or settings.ollama_base_url).rstrip("/")
-        self.model = model or settings.ollama_model or ""
+        self.model = settings.ollama_model if model is None else model
 
     async def healthy(self) -> bool:
         try:
@@ -32,7 +33,10 @@ class OllamaClient:
 
         payload = {
             "model": target_model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [
+                {"role": "system", "content": FREYJA_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
             "stream": stream,
         }
 
