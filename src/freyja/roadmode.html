@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101318">
+  <title>Freyja Road Mode</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; background: #101318; color: #f3f5f7; min-height: 100vh; }
+    main { max-width: 720px; margin: auto; padding: 24px 18px 44px; }
+    h1 { font-size: 1.7rem; margin: 0 0 8px; }
+    .muted { color: #aab1bb; }
+    select, button { width: 100%; min-height: 58px; border-radius: 14px; border: 1px solid #39414c; font-size: 1.08rem; }
+    select { background: #1a2028; color: white; padding: 0 14px; margin: 18px 0; }
+    button { background: #242c36; color: white; font-weight: 700; padding: 10px; }
+    button.primary { min-height: 92px; background: #e9edf2; color: #101318; font-size: 1.45rem; }
+    button:disabled { opacity: .45; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .card { background: #171c23; border: 1px solid #2c3440; border-radius: 18px; padding: 18px; margin: 18px 0; }
+    #chapter { font-size: 1.25rem; font-weight: 700; }
+    #status { min-height: 24px; margin: 10px 0 16px; }
+    #excerpt { color: #c8ced6; line-height: 1.45; max-height: 8.5em; overflow: hidden; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Freyja Road Mode</h1>
+  <div class="muted">Public-domain audiobook reader</div>
+  <select id="book" aria-label="Choose a book"></select>
+  <div class="card">
+    <div id="title">Choose a book</div>
+    <div id="chapter" class="muted">Not loaded</div>
+    <div id="status" class="muted">Ready</div>
+    <div id="excerpt"></div>
+  </div>
+  <button id="play" class="primary" disabled>Load Book</button>
+  <div class="grid">
+    <button id="back" disabled>Back one paragraph</button>
+    <button id="next" disabled>Next chapter</button>
+  </div>
+</main>
+<script>
+const synth = window.speechSynthesis;
+const bookSelect = document.querySelector('#book');
+const playButton = document.querySelector('#play');
+const backButton = document.querySelector('#back');
+const nextButton = document.querySelector('#next');
+const titleEl = document.querySelector('#title');
+const chapterEl = document.querySelector('#chapter');
+const statusEl = document.querySelector('#status');
+const excerptEl = document.querySelector('#excerpt');
+let book = null;
+let chapterIndex = 0;
+let paragraphIndex = 0;
+let speaking = false;
+let saveTimer = null;
+
+async function api(path, options) {
+  const response = await fetch(path, options);
+  if (!response.ok) throw new Error((await response.json()).detail || response.statusText);
+  return response.json();
+}
+
+async function loadLibrary() {
+  const data = await api('/road/api/books');
+  bookSelect.innerHTML = '<option value="">Choose a book</option>' + data.books.map(b => `<option value="${b.slug}">${b.title} — ${b.author}</option>`).join('');
+}
+
+async function loadBook() {
+  if (!bookSelect.value) return;
+  stop();
+  statusEl.textContent = 'Loading and caching book…';
+  try {
+    book = await api(`/road/api/books/${bookSelect.value}`);
+    chapterIndex = Math.min(book.progress.chapter_index, book.chapters.length - 1);
+    paragraphIndex = book.progress.paragraph_index;
+    playButton.disabled = backButton.disabled = nextButton.disabled = false;
+    playButton.textContent = 'Start reading';
+    render();
+    statusEl.textContent = 'Ready to resume';
+  } catch (error) {
+    statusEl.textContent = error.message;
+  }
+}
+
+function render() {
+  if (!book) return;
+  const chapter = book.chapters[chapterIndex];
+  paragraphIndex = Math.min(paragraphIndex, Math.max(0, chapter.paragraphs.length - 1));
+  titleEl.textContent = book.title;
+  chapterEl.textContent = chapter.title;
+  excerptEl.textContent = chapter.paragraphs[paragraphIndex] || '';
+}
+
+function saveProgress() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => api(`/road/api/books/${book.slug}/progress`, {
+    method: 'PUT', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({chapter_index: chapterIndex, paragraph_index: paragraphIndex})
+  }).catch(() => {}), 250);
+}
+
+function chooseVoice() {
+  const voices = synth.getVoices();
+  return voices.find(v => v.lang === 'en-US' && /Samantha|Ava|Allison|Susan/i.test(v.name)) ||
+         voices.find(v => v.lang === 'en-US') || voices[0];
+}
+
+function speakCurrent() {
+  if (!book || !speaking) return;
+  const chapter = book.chapters[chapterIndex];
+  if (paragraphIndex >= chapter.paragraphs.length) {
+    chapterIndex++;
+    paragraphIndex = 0;
+    if (chapterIndex >= book.chapters.length) { stop(); statusEl.textContent = 'Book complete'; return; }
+    render();
+  }
+  const utterance = new SpeechSynthesisUtterance(book.chapters[chapterIndex].paragraphs[paragraphIndex]);
+  utterance.voice = chooseVoice();
+  utterance.rate = 0.92;
+  utterance.onstart = () => { statusEl.textContent = 'Reading'; render(); };
+  utterance.onend = () => {
+    if (!speaking) return;
+    paragraphIndex++;
+    saveProgress();
+    speakCurrent();
+  };
+  utterance.onerror = () => { stop(); statusEl.textContent = 'Audio stopped'; };
+  synth.speak(utterance);
+}
+
+function stop() {
+  speaking = false;
+  synth.cancel();
+  playButton.textContent = book ? 'Continue reading' : 'Load Book';
+  statusEl.textContent = book ? 'Paused' : 'Ready';
+  saveProgress();
+}
+
+playButton.addEventListener('click', () => {
+  if (!book) return loadBook();
+  if (speaking) return stop();
+  speaking = true;
+  playButton.textContent = 'Pause';
+  speakCurrent();
+});
+bookSelect.addEventListener('change', () => {
+  book = null; stop();
+  playButton.disabled = !bookSelect.value;
+  playButton.textContent = 'Load Book';
+  titleEl.textContent = bookSelect.options[bookSelect.selectedIndex]?.text || 'Choose a book';
+  chapterEl.textContent = 'Not loaded'; excerptEl.textContent = '';
+});
+backButton.addEventListener('click', () => {
+  stop(); paragraphIndex = Math.max(0, paragraphIndex - 1); render(); saveProgress();
+});
+nextButton.addEventListener('click', () => {
+  stop(); chapterIndex = Math.min(book.chapters.length - 1, chapterIndex + 1); paragraphIndex = 0; render(); saveProgress();
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden && speaking) saveProgress(); });
+window.addEventListener('beforeunload', saveProgress);
+synth.onvoiceschanged = () => {};
+loadLibrary().catch(error => statusEl.textContent = error.message);
+</script>
+</body>
+</html>
