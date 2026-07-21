@@ -94,10 +94,16 @@ function render() {
 }
 
 function saveProgress() {
+  if (!book) return;
+  const snapshot = {
+    slug: book.slug,
+    chapter_index: chapterIndex,
+    paragraph_index: paragraphIndex,
+  };
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => api(`/road/api/books/${book.slug}/progress`, {
+  saveTimer = setTimeout(() => api(`/road/api/books/${snapshot.slug}/progress`, {
     method: 'PUT', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({chapter_index: chapterIndex, paragraph_index: paragraphIndex})
+    body: JSON.stringify({chapter_index: snapshot.chapter_index, paragraph_index: snapshot.paragraph_index})
   }).catch(() => {}), 250);
 }
 
@@ -146,8 +152,10 @@ playButton.addEventListener('click', () => {
   speakCurrent();
 });
 bookSelect.addEventListener('change', () => {
-  book = null; stop();
+  stop();
+  book = null;
   playButton.disabled = !bookSelect.value;
+  backButton.disabled = nextButton.disabled = true;
   playButton.textContent = 'Load Book';
   titleEl.textContent = bookSelect.options[bookSelect.selectedIndex]?.text || 'Choose a book';
   chapterEl.textContent = 'Not loaded'; excerptEl.textContent = '';
