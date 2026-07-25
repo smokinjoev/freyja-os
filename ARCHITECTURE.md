@@ -175,6 +175,7 @@ Recommended responsibilities:
 - PostgreSQL
 - Redis or equivalent message/cache service
 - Vector database, initially Qdrant or pgvector
+- Always-on Signal REST wrapper and Freyja Signal connector
 - Home Assistant
 - Shared storage
 - Backups
@@ -191,7 +192,7 @@ Atlas should provide reliable infrastructure rather than primary conversational 
 
 Recommended responsibilities:
 
-- Signal bridge
+- Optional fallback messaging bridge
 - Telegram bridge for testing
 - Reverse proxy restricted to the local network or VPN
 - Health monitoring
@@ -436,6 +437,55 @@ Required controls:
 - No direct shell execution from arbitrary natural-language requests
 
 Potential bridge technologies include `signal-cli` or a maintained REST wrapper around it. The selected bridge should run on an always-on Linux system when possible.
+
+### Current Signal connector deployment
+
+Atlas is the always-on Signal connector host. The selected bridge is
+`bbernhard/signal-cli-rest-api` running in `native` mode. Native mode supports
+the HTTP receive endpoint, which the separate `SignalRestTransport` adapter
+polls on a configurable interval. The adapter parses transport envelopes into
+`InboundMessage` objects, calls `SignalGateway`, and delivers the returned
+`OutboundResponse` through the wrapper's send endpoint.
+
+The responsibility boundary is deliberate:
+
+- `SignalRestTransport` owns the REST API, wire payload parsing, polling,
+  outbound delivery, and recoverable transport errors.
+- `SignalGateway` owns enablement, sender allowlisting, group rejection,
+  message-size validation, attachment-only rejection, duplicate suppression,
+  Director forwarding, and safe error responses.
+
+Transport code must not bypass or duplicate gateway policy. Unauthorized
+senders and group messages remain rejected by the gateway.
+
+Required deployment configuration includes:
+
+- `SIGNAL_ENABLED`
+- `SIGNAL_ACCOUNT_NUMBER`
+- `SIGNAL_ALLOWED_SENDERS`
+- `SIGNAL_REST_API_URL`
+- `FREYJA_DIRECTOR_URL`
+- `SIGNAL_POLL_INTERVAL_SECONDS`
+- `SIGNAL_TRANSPORT_TIMEOUT_SECONDS`
+- `SIGNAL_REQUEST_TIMEOUT_SECONDS`
+
+Retry bounds and message limits are configured with
+`SIGNAL_RECONNECT_MAX_SECONDS` and `SIGNAL_MAX_MESSAGE_CHARS`.
+
+The Atlas Compose deployment places the REST wrapper only on a private Docker
+network and publishes no REST API port. Signal account keys and registration
+state live in a named volume rather than an image or Git. First-time account
+registration or device linking is a manual operator action performed according
+to the wrapper's upstream documentation; no account is registered by Freyja.
+
+Create `deploy/compose/signal/.env` from its example, populate it locally, and
+set its filesystem mode to `0600`. Detailed deployment steps are maintained in
+`deploy/compose/signal/README.md`. The Compose model can be validated without
+starting or pulling containers:
+
+```bash
+docker compose -f deploy/compose/signal/compose.yaml config
+```
 
 ## 7.2 Telegram
 

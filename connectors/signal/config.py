@@ -15,10 +15,19 @@ class SignalSettings(BaseSettings):
     signal_max_message_chars: int = 4000
     freyja_director_url: str = "http://127.0.0.1:8000"
     signal_request_timeout_seconds: float = 30.0
+    signal_rest_api_url: str = "http://127.0.0.1:8080"
+    signal_account_number: str = ""
+    signal_poll_interval_seconds: float = 5.0
+    signal_transport_timeout_seconds: float = 60.0
+    signal_reconnect_max_seconds: float = 60.0
 
     @property
     def allowed_sender_set(self) -> set[str]:
         return {entry.strip() for entry in self.signal_allowed_senders.split(",") if entry.strip()}
+
+    @property
+    def transport_configured(self) -> bool:
+        return bool(self.signal_account_number.strip())
 
 
 settings = SignalSettings()

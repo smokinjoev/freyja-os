@@ -1,0 +1,64 @@
+name: freyja-signal
+
+services:
+  signal-api:
+    image: ${SIGNAL_REST_API_IMAGE:-bbernhard/signal-cli-rest-api:0.99}
+    restart: unless-stopped
+    environment:
+      MODE: native
+    expose:
+      - "8080"
+    volumes:
+      - signal-cli-data:/home/.local/share/signal-cli
+    networks:
+      - signal-private
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/v1/about"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  signal-connector:
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/signal-connector.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      signal-api:
+        condition: service_healthy
+    environment:
+      SIGNAL_ENABLED: ${SIGNAL_ENABLED:-false}
+      SIGNAL_ACCOUNT_NUMBER: ${SIGNAL_ACCOUNT_NUMBER:-}
+      SIGNAL_ALLOWED_SENDERS: ${SIGNAL_ALLOWED_SENDERS:-}
+      SIGNAL_REST_API_URL: http://signal-api:8080
+      FREYJA_DIRECTOR_URL: ${FREYJA_DIRECTOR_URL:-http://host.docker.internal:8000}
+      SIGNAL_POLL_INTERVAL_SECONDS: ${SIGNAL_POLL_INTERVAL_SECONDS:-5}
+      SIGNAL_TRANSPORT_TIMEOUT_SECONDS: ${SIGNAL_TRANSPORT_TIMEOUT_SECONDS:-60}
+      SIGNAL_REQUEST_TIMEOUT_SECONDS: ${SIGNAL_REQUEST_TIMEOUT_SECONDS:-30}
+      SIGNAL_RECONNECT_MAX_SECONDS: ${SIGNAL_RECONNECT_MAX_SECONDS:-60}
+      SIGNAL_MAX_MESSAGE_CHARS: ${SIGNAL_MAX_MESSAGE_CHARS:-4000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - signal-private
+      - freyja-backend
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  signal-private:
+    internal: true
+  freyja-backend:
+
+volumes:
+  signal-cli-data:
