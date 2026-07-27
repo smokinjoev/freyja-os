@@ -13,10 +13,11 @@ Freyja-OS is a locally controlled personal-agent platform.
 
 Phase 1: repository foundation and Director skeleton.
 
-## Signal connector
+## Mars control plane
 
-Atlas is the always-on host for the Signal connector deployment. The
-deployment uses
+Mars is the always-on host for the Freyja Director and Signal connector. Iris
+remains the primary local-inference host, and Atlas remains the infrastructure
+heavy lifter. The deployment uses
 [`bbernhard/signal-cli-rest-api`](https://github.com/bbernhard/signal-cli-rest-api)
 in `native` mode: a transport adapter polls its receive endpoint, normalizes
 supported messages, passes them to `SignalGateway`, and sends the resulting
@@ -39,8 +40,8 @@ First-time registration or linking is a deliberate operator action; follow the
 wrapper's upstream instructions from a trusted Atlas session and never commit
 the resulting account data or phone numbers.
 
-For the Atlas Compose layout, environment-file instructions, private networking,
-and configuration validation, see
+For the Mars Compose layout, local-first routing configuration,
+environment-file instructions, private networking, and validation, see
 [`deploy/compose/signal/README.md`](deploy/compose/signal/README.md). The Signal
 REST API has no public port in that deployment and is reachable only on its
 private Docker network.
