@@ -1,6 +1,61 @@
-name: freyja-signal
+name: freyja-control-plane
 
 services:
+  director:
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/director.Dockerfile
+    restart: unless-stopped
+    # Mars user `joe` owns the bind-mounted ignored data directory.
+    user: "1000:1000"
+    environment:
+      FREYJA_ENV: ${FREYJA_ENV:-production}
+      FREYJA_HOST: 0.0.0.0
+      FREYJA_PORT: 8000
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
+      OLLAMA_CLASSIFICATION_MODEL: ${OLLAMA_CLASSIFICATION_MODEL:-qwen2.5:1.5b}
+      OLLAMA_MIN_CHAT_PARAMETERS_B: ${OLLAMA_MIN_CHAT_PARAMETERS_B:-3}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      CLOUD_ENABLED: ${CLOUD_ENABLED:-true}
+      OPENROUTER_MONTHLY_SOFT_LIMIT: ${OPENROUTER_MONTHLY_SOFT_LIMIT:-20.0}
+      OPENROUTER_MONTHLY_HARD_LIMIT: ${OPENROUTER_MONTHLY_HARD_LIMIT:-30.0}
+      OPENROUTER_PER_REQUEST_LIMIT: ${OPENROUTER_PER_REQUEST_LIMIT:-1.0}
+      LOCAL_MAX_PROMPT_CHARS: ${LOCAL_MAX_PROMPT_CHARS:-8000}
+      OPENROUTER_ALLOWLIST: ${OPENROUTER_ALLOWLIST:-openai/gpt-4o-mini,anthropic/claude-3.5-haiku}
+      MEMORY_ENABLED: ${MEMORY_ENABLED:-true}
+      MEMORY_DATABASE_PATH: /app/data/freyja.db
+      MEMORY_MAX_MESSAGES_PER_CONVERSATION: ${MEMORY_MAX_MESSAGES_PER_CONVERSATION:-1000}
+      MEMORY_RETENTION_DAYS: ${MEMORY_RETENTION_DAYS:-90}
+      TOOLS_ENABLED: ${TOOLS_ENABLED:-true}
+      TOOLS_DEFAULT_TIMEOUT_SECONDS: ${TOOLS_DEFAULT_TIMEOUT_SECONDS:-30}
+      TOOLS_AUDIT_LOG_ENABLED: ${TOOLS_AUDIT_LOG_ENABLED:-true}
+      WEATHER_TOOL_ENABLED: ${WEATHER_TOOL_ENABLED:-false}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ../../../data:/app/data
+    networks:
+      - freyja-backend
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   signal-api:
     image: ${SIGNAL_REST_API_IMAGE:-bbernhard/signal-cli-rest-api:0.99}
     restart: unless-stopped
@@ -25,6 +80,8 @@ services:
       dockerfile: deploy/docker/signal-connector.Dockerfile
     restart: unless-stopped
     depends_on:
+      director:
+        condition: service_healthy
       signal-api:
         condition: service_healthy
     environment:
@@ -32,14 +89,12 @@ services:
       SIGNAL_ACCOUNT_NUMBER: ${SIGNAL_ACCOUNT_NUMBER:-}
       SIGNAL_ALLOWED_SENDERS: ${SIGNAL_ALLOWED_SENDERS:-}
       SIGNAL_REST_API_URL: http://signal-api:8080
-      FREYJA_DIRECTOR_URL: ${FREYJA_DIRECTOR_URL:-http://host.docker.internal:8000}
+      FREYJA_DIRECTOR_URL: http://director:8000
       SIGNAL_POLL_INTERVAL_SECONDS: ${SIGNAL_POLL_INTERVAL_SECONDS:-5}
       SIGNAL_TRANSPORT_TIMEOUT_SECONDS: ${SIGNAL_TRANSPORT_TIMEOUT_SECONDS:-60}
       SIGNAL_REQUEST_TIMEOUT_SECONDS: ${SIGNAL_REQUEST_TIMEOUT_SECONDS:-30}
       SIGNAL_RECONNECT_MAX_SECONDS: ${SIGNAL_RECONNECT_MAX_SECONDS:-60}
       SIGNAL_MAX_MESSAGE_CHARS: ${SIGNAL_MAX_MESSAGE_CHARS:-4000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     networks:
       - signal-private
       - freyja-backend

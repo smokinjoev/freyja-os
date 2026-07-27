@@ -58,16 +58,6 @@ async def main() -> int:
     transport = SignalRestTransport(gateway, connector_settings)
 
     try:
-        if not gateway.enabled:
-            logger.warning("Signal gateway is disabled; connector will not start")
-            return 0
-        if not connector_settings.transport_configured:
-            logger.error(
-                "Signal transport is not configured; "
-                "SIGNAL_ACCOUNT_NUMBER must be set"
-            )
-            return 1
-
         shutdown_event = asyncio.Event()
         loop = asyncio.get_running_loop()
 
@@ -78,6 +68,19 @@ async def main() -> int:
 
         for signum in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signum, request_shutdown)
+
+        if not gateway.enabled:
+            logger.warning(
+                "Signal gateway is disabled; connector is idle until enabled"
+            )
+            await shutdown_event.wait()
+            return 0
+        if not connector_settings.transport_configured:
+            logger.error(
+                "Signal transport is not configured; "
+                "SIGNAL_ACCOUNT_NUMBER must be set"
+            )
+            return 1
 
         logger.info("Signal connector started")
         backoff_seconds = _INITIAL_BACKOFF_SECONDS
