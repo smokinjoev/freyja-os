@@ -148,6 +148,15 @@ class SignalRestTransport:
                 )
                 continue
 
+            if message.sender == self._account_number:
+                logger.info(
+                    {
+                        "event": "signal_transport_event_rejected",
+                        "reason": "self_message",
+                    }
+                )
+                continue
+
             reply = await self._gateway.handle(message)
             await self.send(reply)
             replies.append(reply)

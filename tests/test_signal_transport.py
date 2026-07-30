@@ -146,6 +146,26 @@ async def test_unsupported_event_is_not_forwarded_or_replied_to():
 
 
 @pytest.mark.asyncio
+async def test_self_message_is_not_forwarded_or_replied_to():
+    gateway = AsyncMock()
+    self_event = native_event("Sent from a linked device")
+    self_event["envelope"]["source"] = ACCOUNT
+    self_event["envelope"]["sourceNumber"] = ACCOUNT
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[self_event], request=request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle_request))
+    transport = SignalRestTransport(gateway, transport_settings(), client)
+
+    replies = await transport.poll_once()
+
+    assert replies == []
+    gateway.handle.assert_not_awaited()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_receive_http_failure_raises_transport_error():
     gateway = AsyncMock()
 
