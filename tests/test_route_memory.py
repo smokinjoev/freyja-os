@@ -107,8 +107,10 @@ def test_route_secrets_redacted_in_memory(isolated_store):
 
 def test_route_raw_provider_error_redacted_in_memory(isolated_store):
     with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_ollama, \
+         patch("freyja.openrouter_client.OpenRouterClient.healthy", new_callable=AsyncMock) as mock_openrouter_healthy, \
          patch("freyja.openrouter_client.OpenRouterClient.chat", new_callable=AsyncMock) as mock_openrouter:
         mock_ollama.return_value = {"error": "Authorization: Bearer sk-bad"}
+        mock_openrouter_healthy.return_value = True
         mock_openrouter.return_value = {"error": "Provider Error: timeout"}
         response = client.post("/route", json={
             "prompt": "large prompt " + "x" * 9000,

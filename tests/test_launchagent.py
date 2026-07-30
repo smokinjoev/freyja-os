@@ -1,14 +1,15 @@
 import os
 import pathlib
+import platform
+import shutil
 import plistlib
 import subprocess
 
 import pytest
 
-PROJECT_DIR = pathlib.Path("/Users/freyja/freyja-os")
-PLIST_SRC = PROJECT_DIR / "scripts" / "com.freyja-os.director.plist"
-LOG_DIR = PROJECT_DIR / "logs"
-EXPECTED_LOG = LOG_DIR / "director.log"
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+PLIST_SRC = REPO_ROOT / "scripts" / "com.freyja-os.director.plist"
+LOG_DIR = REPO_ROOT / "logs"
 
 
 def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -47,33 +48,40 @@ def test_plist_sets_working_directory_and_pythonpath() -> None:
         data = plistlib.load(f)
 
     env = data.get("EnvironmentVariables", {})
-    assert env.get("PYTHONPATH") == str(PROJECT_DIR / "src")
-    assert data.get("WorkingDirectory") == str(PROJECT_DIR)
+    install_root = pathlib.Path(data["WorkingDirectory"])
+    assert pathlib.Path(env["PYTHONPATH"]) == install_root / "src"
 
 
 def test_plist_stdout_stderr_point_to_logs() -> None:
     with open(PLIST_SRC, "rb") as f:
         data = plistlib.load(f)
 
-    assert data.get("StandardOutPath") == str(EXPECTED_LOG)
-    assert data.get("StandardErrorPath") == str(EXPECTED_LOG)
+    install_root = pathlib.Path(data["WorkingDirectory"])
+    expected_log = install_root / "logs" / "director.log"
+    assert pathlib.Path(data["StandardOutPath"]) == expected_log
+    assert pathlib.Path(data["StandardErrorPath"]) == expected_log
 
 
+@pytest.mark.skipif(platform.system() != "Darwin", reason="plutil is macOS-specific")
 def test_plist_passes_lint() -> None:
+    if shutil.which("plutil") is None:
+        pytest.skip("plutil is not available")
     result = _run(["plutil", "-lint", str(PLIST_SRC)])
     assert result.returncode == 0
     assert "OK" in result.stdout
 
 
 def test_expected_paths_exist() -> None:
-    assert (PROJECT_DIR / ".venv" / "bin" / "uvicorn").exists()
-    assert (PROJECT_DIR / "src" / "freyja" / "main.py").exists()
-    assert (PROJECT_DIR / "scripts" / "install-director.sh").exists()
-    assert (PROJECT_DIR / "scripts" / "status-director.sh").exists()
-    assert (PROJECT_DIR / "scripts" / "restart-director.sh").exists()
-    assert (PROJECT_DIR / "scripts" / "remove-director.sh").exists()
+    uvicorn = REPO_ROOT / ".venv" / "bin" / "uvicorn"
+    assert uvicorn.exists() or shutil.which("uvicorn") is not None
+    assert (REPO_ROOT / "src" / "freyja" / "main.py").exists()
+    assert (REPO_ROOT / "scripts" / "install-director.sh").exists()
+    assert (REPO_ROOT / "scripts" / "status-director.sh").exists()
+    assert (REPO_ROOT / "scripts" / "restart-director.sh").exists()
+    assert (REPO_ROOT / "scripts" / "remove-director.sh").exists()
 
 
+@pytest.mark.skipif(platform.system() != "Darwin", reason="LaunchAgent ownership checks are macOS-specific")
 @pytest.mark.skipif(os.geteuid() != 0, reason="Ownership checks require root")
 def test_project_files_owned_by_freyja_user() -> None:
     for path in [PLIST_SRC, LOG_DIR]:
@@ -88,6 +96,8 @@ def _get_freyja_uid() -> str:
 
 
 def _service_is_loaded() -> bool:
+    if platform.system() != "Darwin" or shutil.which("launchctl") is None:
+        return False
     # launchctl list from root cannot see gui-domain services; print can.
     uid = _get_freyja_uid()
     if not uid:

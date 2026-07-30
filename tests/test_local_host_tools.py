@@ -81,10 +81,24 @@ class TestRunCommand:
 
     @pytest.mark.asyncio
     async def test_no_shell_injection(self):
-        result = await _run_read_only_command("hostname", ["; rm -rf /"])
-        # `hostname` treats the whole string as one argument, so no shell runs.
+        captured = {}
+
+        class _FakeProc:
+            returncode = 0
+
+            async def communicate(self):
+                return b"safe-host\n", b""
+
+        async def _fake_create_subprocess_exec(*command, **kwargs):
+            captured["command"] = command
+            return _FakeProc()
+
+        with patch("asyncio.create_subprocess_exec", side_effect=_fake_create_subprocess_exec):
+            result = await _run_read_only_command("hostname", ["; rm -rf /"])
+
         assert result["success"] is True
         assert result["exit_code"] == 0
+        assert captured["command"] == (_executable_path("hostname"), "; rm -rf /")
         assert "; rm" not in result["stdout"]
 
 

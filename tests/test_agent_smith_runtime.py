@@ -125,6 +125,39 @@ def registry(tmp_path, tmp_policy):
     tool_registry = ToolRegistry()
     register_builtin_tools(tool_registry)
     register_smith_tools(tool_registry)
+
+    async def _system_health(request: ToolExecutionRequest) -> dict:
+        return {"status": "ok"}
+
+    async def _repository_status(request: ToolExecutionRequest) -> dict:
+        return {"status": "ok"}
+
+    if tool_registry.get_tool("system_health") is not None:
+        tool_registry.unregister("system_health")
+    tool_registry.register(
+        ToolDefinition(
+            name="system_health",
+            description="Mocked system health for runtime unit tests.",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+        ),
+        _system_health,
+    )
+    if tool_registry.get_tool("repository_status") is not None:
+        tool_registry.unregister("repository_status")
+    tool_registry.register(
+        ToolDefinition(
+            name="repository_status",
+            description="Mocked read-only git status for runtime unit tests.",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+        ),
+        _repository_status,
+    )
     return tool_registry
 
 
@@ -200,6 +233,8 @@ def spy_registry(registry):
         calls.append(("repository_status", request.arguments))
         return {"status": "ok"}
 
+    if registry.get_tool("repository_status") is not None:
+        registry.unregister("repository_status")
     registry.register(
         ToolDefinition(
             name="repository_status",
@@ -885,8 +920,7 @@ async def test_run_read_only_read_only_allowlist_unchanging():
     }
 
 
-@pytest.mark.asyncio
-async def test_read_only_endpoint_gated_when_disabled(test_client):
+def test_read_only_endpoint_gated_when_disabled(test_client):
     from freyja.config import settings
 
     original_enabled = settings.agent_smith_enabled
@@ -906,8 +940,7 @@ async def test_read_only_endpoint_gated_when_disabled(test_client):
         settings.agent_smith_read_only_enabled = original_read_only
 
 
-@pytest.mark.asyncio
-async def test_read_only_endpoint_allows_when_enabled(test_client, monkeypatch):
+def test_read_only_endpoint_allows_when_enabled(test_client, monkeypatch):
     from freyja.config import settings
 
     original_enabled = settings.agent_smith_enabled

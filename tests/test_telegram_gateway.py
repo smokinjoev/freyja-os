@@ -471,8 +471,13 @@ async def test_retry_backoff_on_poll_failure(gateway):
 
 
 @pytest.mark.asyncio
-async def test_disabled_gateway_rejects_all():
-    disabled = TelegramGateway(settings=TelegramSettings(telegram_enabled=False))
+async def test_disabled_gateway_rejects_all(tmp_path):
+    disabled = TelegramGateway(
+        settings=TelegramSettings(
+            telegram_enabled=False,
+            telegram_state_dir=str(tmp_path / "telegram"),
+        )
+    )
     update = _make_update(1, 123456, 123456, "private", "Hello")
     result = await disabled.handle(update)
     assert result is None

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _datetime
+import calendar
 from unittest.mock import patch
 
 import httpx
@@ -31,6 +32,11 @@ def disable_weather(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestTemporalParsing:
+    def _next_weekday_today(self, weekday: int) -> _datetime.date:
+        today = _datetime.date.today()
+        days = (weekday - today.weekday()) % 7
+        return today + _datetime.timedelta(days=days)
+
     def test_now_is_current(self):
         decision = _classify_temporal_intent("What is the weather now in Aiken?")
         assert decision.request_type == WeatherRequestType.CURRENT
@@ -47,22 +53,22 @@ class TestTemporalParsing:
         assert decision.target_label == "tonight"
 
     def test_tomorrow_is_forecast(self):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
         decision = _classify_temporal_intent("What is the weather tomorrow in Aiken?", today=today)
         assert decision.request_type == WeatherRequestType.FORECAST
         assert decision.target_label == "tomorrow"
-        assert decision.target_date == _datetime.date(2026, 7, 16)
+        assert decision.target_date == today + _datetime.timedelta(days=1)
         assert decision.error_message == ""
 
     def test_named_weekday_within_range(self):
-        today = _datetime.date(2026, 7, 15)  # Wednesday
+        today = self._next_weekday_today(calendar.WEDNESDAY)
         decision = _classify_temporal_intent("What is the weather Friday in Aiken?", today=today)
         assert decision.request_type == WeatherRequestType.FORECAST
         assert decision.target_label == "friday"
-        assert decision.target_date == _datetime.date(2026, 7, 17)
+        assert decision.target_date == today + _datetime.timedelta(days=2)
 
     def test_named_weekday_outside_range(self):
-        today = _datetime.date(2026, 7, 15)  # Wednesday
+        today = _datetime.date.today()
         # The next Thursday is 1 day out. To get a weekday outside the 7-day window,
         # explicitly request the date in 8 days, which the classifier routes as an explicit date.
         target = today + _datetime.timedelta(days=_OPENMETEO_MAX_FORECAST_DAYS + 1)
@@ -73,43 +79,46 @@ class TestTemporalParsing:
         assert "outside" in decision.error_message.lower()
 
     def test_relative_days_within_range(self):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
         decision = _classify_temporal_intent("What is the weather in 3 days in Aiken?", today=today)
         assert decision.request_type == WeatherRequestType.FORECAST
         assert decision.target_label == "in 3 days"
-        assert decision.target_date == _datetime.date(2026, 7, 18)
+        assert decision.target_date == today + _datetime.timedelta(days=3)
 
     def test_relative_days_outside_range(self):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
         decision = _classify_temporal_intent("What is the weather in 8 days in Aiken?", today=today)
         assert decision.error_message != ""
         assert "outside" in decision.error_message.lower()
 
     def test_explicit_iso_date_within_range(self):
-        today = _datetime.date(2026, 7, 15)
-        decision = _classify_temporal_intent("What is the weather 2026-07-17 in Aiken?", today=today)
+        today = _datetime.date.today()
+        target = today + _datetime.timedelta(days=2)
+        decision = _classify_temporal_intent(f"What is the weather {target.isoformat()} in Aiken?", today=today)
         assert decision.request_type == WeatherRequestType.FORECAST
-        assert decision.target_date == _datetime.date(2026, 7, 17)
+        assert decision.target_date == target
 
     def test_explicit_iso_date_today(self):
-        today = _datetime.date(2026, 7, 15)
-        decision = _classify_temporal_intent("What is the weather 2026-07-15 in Aiken?", today=today)
+        today = _datetime.date.today()
+        decision = _classify_temporal_intent(f"What is the weather {today.isoformat()} in Aiken?", today=today)
         assert decision.request_type == WeatherRequestType.CURRENT
 
     def test_explicit_past_date_rejected(self):
-        today = _datetime.date(2026, 7, 15)
-        decision = _classify_temporal_intent("What is the weather 2026-07-10 in Aiken?", today=today)
+        today = _datetime.date.today()
+        target = today - _datetime.timedelta(days=1)
+        decision = _classify_temporal_intent(f"What is the weather {target.isoformat()} in Aiken?", today=today)
         assert decision.error_message != ""
         assert "past" in decision.error_message.lower()
 
     def test_explicit_date_outside_range(self):
-        today = _datetime.date(2026, 7, 15)
-        decision = _classify_temporal_intent("What is the weather 2026-07-25 in Aiken?", today=today)
+        today = _datetime.date.today()
+        target = today + _datetime.timedelta(days=_OPENMETEO_MAX_FORECAST_DAYS + 1)
+        decision = _classify_temporal_intent(f"What is the weather {target.isoformat()} in Aiken?", today=today)
         assert decision.error_message != ""
         assert "outside" in decision.error_message.lower()
 
     def test_malformed_date_returns_error(self):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
         decision = _classify_temporal_intent("What is the weather 2026-02-30 in Aiken?", today=today)
         assert decision.error_message != ""
         assert "could not understand" in decision.error_message.lower()
@@ -120,11 +129,11 @@ class TestTemporalParsing:
         assert decision.target_label == "now"
 
     def test_forecast_no_date_defaults_tomorrow(self):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
         decision = _classify_temporal_intent("What is the weather forecast for Aiken?", today=today)
         assert decision.request_type == WeatherRequestType.FORECAST
         assert decision.target_label == "forecast"
-        assert decision.target_date == _datetime.date(2026, 7, 16)
+        assert decision.target_date == today + _datetime.timedelta(days=1)
 
 
 class TestLocationExtraction:
@@ -159,7 +168,7 @@ class TestGetWeatherDisabled:
 
     @pytest.mark.asyncio
     async def test_tomorrow_disabled_returns_safe_response(self, disable_weather):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
         result = await get_weather(
             "Aiken, SC",
             request_type=WeatherRequestType.FORECAST,
@@ -191,7 +200,7 @@ def _openmeteo_current_response() -> dict:
         "latitude": 33.56,
         "longitude": -81.72,
         "current": {
-            "time": "2026-07-15T14:00",
+            "time": f"{_datetime.date.today().isoformat()}T14:00",
             "temperature_2m": 72.5,
             "relative_humidity_2m": 55,
             "apparent_temperature": 74.0,
@@ -221,8 +230,7 @@ def _mock_get(url: str, *args, **kwargs) -> httpx.Response:
         return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
     if "current" in kwargs.get("params", {}):
         return httpx.Response(200, json=_openmeteo_current_response(), request=request)
-    target_iso = kwargs.get("params", {}).get("forecast_days")
-    return httpx.Response(200, json=_openmeteo_forecast_response("2026-07-16"), request=request)
+    return httpx.Response(200, json=_openmeteo_forecast_response((_datetime.date.today() + _datetime.timedelta(days=1)).isoformat()), request=request)
 
 
 class TestGetWeatherCurrent:
@@ -277,8 +285,8 @@ class TestGetWeatherCurrent:
 
 class TestGetWeatherForecast:
     @pytest.mark.asyncio
-    async def test_tomorrow_hits_forecast_endpoint(self, enable_weather):
-        today = _datetime.date(2026, 7, 15)
+    async def test_tomorrow_hits_forecast_endpoint(self, enable_weather, monkeypatch: pytest.MonkeyPatch):
+        today = _datetime.date.today()
         target = today + _datetime.timedelta(days=1)
         captured = {}
 
@@ -289,6 +297,7 @@ class TestGetWeatherForecast:
                 return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
             return httpx.Response(200, json=_openmeteo_forecast_response(target.isoformat()), request=request)
 
+        monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
         with patch("httpx.AsyncClient.get", side_effect=_capture):
             result = await get_weather(
                 "Aiken, SC",
@@ -305,8 +314,8 @@ class TestGetWeatherForecast:
         assert result["low_f"] == 58.0
 
     @pytest.mark.asyncio
-    async def test_forecast_missing_period(self, enable_weather):
-        today = _datetime.date(2026, 7, 15)
+    async def test_forecast_missing_period(self, enable_weather, monkeypatch: pytest.MonkeyPatch):
+        today = _datetime.date.today()
         target = today + _datetime.timedelta(days=1)
 
         def _empty_forecast(*args, **kwargs):
@@ -315,6 +324,7 @@ class TestGetWeatherForecast:
                 return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
             return httpx.Response(200, json={"daily": {"time": []}}, request=request)
 
+        monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
         with patch("httpx.AsyncClient.get", side_effect=_empty_forecast):
             result = await get_weather(
                 "Aiken, SC",
@@ -327,8 +337,8 @@ class TestGetWeatherForecast:
         assert "missing" in result["summary"].lower() or "did not return" in result["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_forecast_date_supported_max(self, enable_weather):
-        today = _datetime.date(2026, 7, 15)
+    async def test_forecast_date_supported_max(self, enable_weather, monkeypatch: pytest.MonkeyPatch):
+        today = _datetime.date.today()
         target = today + _datetime.timedelta(days=_OPENMETEO_MAX_FORECAST_DAYS)
 
         def _forecast(*args, **kwargs):
@@ -341,6 +351,7 @@ class TestGetWeatherForecast:
                 request=request,
             )
 
+        monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
         with patch("httpx.AsyncClient.get", side_effect=_forecast):
             result = await get_weather(
                 "Aiken, SC",
@@ -354,7 +365,7 @@ class TestGetWeatherForecast:
 
     @pytest.mark.asyncio
     async def test_forecast_date_beyond_max(self, enable_weather, monkeypatch: pytest.MonkeyPatch):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
         target = today + _datetime.timedelta(days=_OPENMETEO_MAX_FORECAST_DAYS + 1)
         async def _fake_resolve(q):
             return _openmeteo_geo_response()["results"][0]
@@ -371,7 +382,7 @@ class TestGetWeatherForecast:
 
     @pytest.mark.asyncio
     async def test_forecast_past_date_rejected(self, enable_weather, monkeypatch: pytest.MonkeyPatch):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
         target = today - _datetime.timedelta(days=1)
         async def _fake_resolve(q):
             return _openmeteo_geo_response()["results"][0]
@@ -416,7 +427,8 @@ class TestResponseText:
 
     @pytest.mark.asyncio
     async def test_response_text_forecast(self, enable_weather):
-        today = _datetime.date(2026, 7, 15)
+        today = _datetime.date.today()
+        target = today + _datetime.timedelta(days=1)
 
         def _capture(*args, **kwargs):
             request = httpx.Request("GET", str(args[0]))
@@ -424,7 +436,7 @@ class TestResponseText:
                 return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
             return httpx.Response(
                 200,
-                json=_openmeteo_forecast_response("2026-07-16"),
+                json=_openmeteo_forecast_response(target.isoformat()),
                 request=request,
             )
 

@@ -1,4 +1,5 @@
 import logging
+import datetime as _datetime
 from typing import Any
 from unittest.mock import patch
 
@@ -248,7 +249,10 @@ def test_disabled_registry_rejects_all(disabled_registry: DisabledToolRegistry) 
 
 def test_builtin_system_health(registry: ToolRegistry) -> None:
     register_builtin_tools(registry)
-    result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="system_health")))
+    with patch("freyja.tools.builtin._ollama_healthy", return_value=True), patch(
+        "freyja.tools.builtin._openrouter_healthy", return_value=True
+    ):
+        result = asyncio_run(registry.execute(ToolExecutionRequest(tool_name="system_health")))
     assert result.success is True
     assert "director" in result.output
     assert "ollama" in result.output
@@ -434,7 +438,7 @@ def _openmeteo_current_response() -> dict[str, Any]:
         "latitude": 33.56,
         "longitude": -81.72,
         "current": {
-            "time": "2026-07-15T14:00",
+            "time": f"{_datetime.date.today().isoformat()}T14:00",
             "temperature_2m": 72.5,
             "relative_humidity_2m": 55,
             "apparent_temperature": 74.0,
@@ -459,11 +463,13 @@ def test_builtin_get_weather_forecast_hits_forecast_endpoint(registry: ToolRegis
             return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
         target = kwargs.get("params", {}).get("forecast_days")
         assert target is not None
-        return httpx.Response(200, json=_openmeteo_forecast_response("2026-07-16"), request=request)
+        return httpx.Response(200, json=_openmeteo_forecast_response(target_date.isoformat()), request=request)
+
+    today = _datetime.date.today()
+    target_date = today + _datetime.timedelta(days=1)
+    monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
 
     with patch("httpx.AsyncClient.get", side_effect=_capture):
-        from datetime import date
-        target = date(2026, 7, 16)
         result = asyncio_run(
             registry.execute(
                 ToolExecutionRequest(
@@ -471,7 +477,7 @@ def test_builtin_get_weather_forecast_hits_forecast_endpoint(registry: ToolRegis
                     arguments={
                         "location": "Aiken, SC",
                         "request_type": "forecast",
-                        "target_date": target.isoformat(),
+                        "target_date": target_date.isoformat(),
                         "target_label": "tomorrow",
                     },
                 )
@@ -551,11 +557,14 @@ def test_builtin_get_weather_unsupported_future_date(registry: ToolRegistry, mon
         request = httpx.Request("GET", url)
         if "geocoding-api" in url:
             return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
-        return httpx.Response(200, json=_openmeteo_forecast_response("2026-07-16"), request=request)
+        return httpx.Response(200, json=_openmeteo_forecast_response(target_date.isoformat()), request=request)
+
+    today = _datetime.date.today()
+    target = today + _datetime.timedelta(days=8)
+    target_date = today + _datetime.timedelta(days=1)
+    monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
 
     with patch("httpx.AsyncClient.get", side_effect=_capture):
-        from datetime import date
-        target = date(2026, 12, 25)
         result = asyncio_run(
             registry.execute(
                 ToolExecutionRequest(

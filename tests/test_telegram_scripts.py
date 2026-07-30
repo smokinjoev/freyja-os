@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-PROJECT_DIR = Path("/Users/freyja/freyja-os")
+PROJECT_DIR = Path(__file__).resolve().parents[1]
 ENABLE_SCRIPT = PROJECT_DIR / "scripts" / "enable-telegram-travel-mode.sh"
 DISABLE_SCRIPT = PROJECT_DIR / "scripts" / "disable-telegram-travel-mode.sh"
 VERIFY_SCRIPT = PROJECT_DIR / "scripts" / "verify-telegram-travel-mode.sh"

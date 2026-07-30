@@ -27,6 +27,20 @@ def registry(tmp_path):
     tool_registry = ToolRegistry()
     register_builtin_tools(tool_registry)
     register_smith_tools(tool_registry)
+    tool_registry.unregister("run_test_suite")
+
+    async def _mock_run_test_suite(request: ToolExecutionRequest) -> dict:
+        return {"ok": True, "summary": "mocked test suite"}
+
+    tool_registry.register(
+        ToolDefinition(
+            name="run_test_suite",
+            description="Mocked project test suite for orchestrator unit tests",
+            risk_level=ToolRiskLevel.READ_ONLY,
+            input_schema={"type": "object", "properties": {}},
+        ),
+        _mock_run_test_suite,
+    )
     return tool_registry
 
 
@@ -313,7 +327,7 @@ async def test_path_boundary_outside_root_rejected(policy):
 
 @pytest.mark.anyio
 async def test_secret_path_rejected(policy):
-    result = policy.check_path("/Users/freyja/freyja-os/secrets/api.key")
+    result = policy.check_path(str(policy.allowed_root / "secrets" / "api.key"))
     assert result.decision == PolicyDecision.DENY
     assert "secret" in result.reason.lower()
 
