@@ -39,7 +39,7 @@ class MemoryStore:
         self._database_path = (
             database_path
             if database_path is not None
-            else getattr(settings, "memory_database_path", "/Users/freyja/freyja-os/data/freyja.db")
+            else settings.memory_database_path
         )
         self._max_messages = (
             max_messages_per_conversation

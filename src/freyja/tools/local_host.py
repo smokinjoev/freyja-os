@@ -405,7 +405,7 @@ def register_local_host_tools(registry: ToolRegistry) -> None:
     registry.register(
         ToolDefinition(
             name="repository_status",
-            description="Return `git status --short --branch` for /Users/freyja/freyja-os.",
+            description="Return `git status --short --branch` for the Freyja-OS repository.",
             version="1.0.0",
             input_schema={"type": "object", "properties": {}},
             output_schema={

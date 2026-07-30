@@ -16,6 +16,7 @@ from freyja.tools.models import ToolRiskLevel
 from .models import AuditEvent, PolicyCheckResult, PolicyDecision
 
 logger = logging.getLogger(__name__)
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 _SECRET_PATH_PATTERNS = [
     re.compile(r"(^|/|\.)env"),
@@ -33,16 +34,16 @@ class AgentPolicy:
     def __init__(self, path: str | None = None) -> None:
         self._path = path or str(settings.agent_smith_policy_path)
         self._config: dict[str, Any] = self._load(self._path)
-        self._allowed_root = Path(self._config.get("allowed_root", "/Users/freyja/freyja-os")).resolve()
+        self._allowed_root = self._resolve_repo_path(self._config.get("allowed_root", "."))
         self._auto_allowed = set(self._config.get("auto_allowed_operations", []))
         self._approval_required = set(self._config.get("approval_required_operations", []))
         self._prohibited_operations = set(self._config.get("prohibited_operations", []))
         self._read_only_builtin_tools = set(self._config.get("read_only_builtin_tools", []))
         self._smith_read_only_tools = set(self._config.get("smith_read_only_tools", []))
         self._write_pilot_allowed_tools = set(self._config.get("write_pilot_allowed_tools", []))
-        self._write_pilot_sandbox = Path(
-            self._config.get("write_pilot_sandbox", "/Users/freyja/freyja-os/docs/smith-pilot")
-        ).expanduser().resolve()
+        self._write_pilot_sandbox = self._resolve_repo_path(
+            self._config.get("write_pilot_sandbox", "docs/smith-pilot")
+        )
         self._max_retries = int(self._config.get("max_retries", settings.agent_smith_max_retries))
         self._secret_patterns = [
             re.compile(pattern) for pattern in self._config.get("secret_patterns", [r"\.env$", r"(^|/)secrets?(/|$)", r"\.pem$", r"\.key$", r"\.pfx$"])
@@ -52,12 +53,18 @@ class AgentPolicy:
     def _load(self, path: str) -> dict[str, Any]:
         resolved = Path(path)
         if not resolved.is_absolute():
-            resolved = Path(__file__).resolve().parents[3] / resolved
+            resolved = _REPO_ROOT / resolved
         with resolved.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle)
         if not isinstance(data, dict):
             raise ValueError(f"Policy file '{path}' must contain a YAML mapping")
         return data
+
+    def _resolve_repo_path(self, value: str) -> Path:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = _REPO_ROOT / path
+        return path.resolve()
 
     @property
     def allowed_root(self) -> Path:

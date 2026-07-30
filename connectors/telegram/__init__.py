@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .config import TelegramSettings
-from .gateway import TelegramGateway, TelegramGatewayError
+from .gateway import TelegramGateway, TelegramGatewayError, get_gateway
 from .models import TelegramInboundUpdate, TelegramOutboundMessage
 
 __all__ = [
@@ -12,4 +12,5 @@ __all__ = [
     "TelegramInboundUpdate",
     "TelegramOutboundMessage",
     "TelegramSettings",
+    "get_gateway",
 ]

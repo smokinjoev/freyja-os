@@ -640,4 +640,12 @@ class TelegramGateway:
             await self._http_client.aclose()
 
 
-gateway = TelegramGateway()
+_gateway: TelegramGateway | None = None
+
+
+def get_gateway() -> TelegramGateway:
+    """Return the process-wide Telegram gateway, creating it on first use."""
+    global _gateway
+    if _gateway is None:
+        _gateway = TelegramGateway()
+    return _gateway

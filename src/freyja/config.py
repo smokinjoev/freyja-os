@@ -16,6 +16,11 @@ def _default_state_dir() -> Path:
     return base / "freyja"
 
 
+def _repo_root() -> Path:
+    """Return the repository root for repo-scoped default files."""
+    return Path(__file__).resolve().parents[2]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -46,7 +51,7 @@ class Settings(BaseSettings):
     openrouter_allowlist: str = Field(default="", alias="OPENROUTER_ALLOWLIST")
 
     memory_enabled: bool = True
-    memory_database_path: str = "/Users/freyja/freyja-os/data/freyja.db"
+    memory_database_path: str = str(_repo_root() / "data" / "freyja.db")
     memory_max_messages_per_conversation: int = 1000
     memory_retention_days: int = 90
 
@@ -63,7 +68,7 @@ class Settings(BaseSettings):
     agent_smith_dry_run_max_retries: int = 2
     agent_smith_max_steps: int = 20
     agent_smith_audit_enabled: bool = True
-    agent_smith_audit_log_path: str = "/Users/freyja/freyja-os/logs/agent-smith-audit.jsonl"
+    agent_smith_audit_log_path: str = str(_repo_root() / "logs" / "agent-smith-audit.jsonl")
     agent_smith_approval_ttl_seconds: int = 900
     agent_smith_approval_db_path: str = str(_default_state_dir() / "smith-approvals.sqlite3")
     agent_smith_approval_loopback_only: bool = True

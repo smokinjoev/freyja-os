@@ -2,7 +2,7 @@ agent_smith:
   enabled: false
   description: "Agent Smith maintenance bot policy for the Freyja-OS repository."
 
-allowed_root: /Users/freyja/freyja-os
+allowed_root: .
 
 read_only_builtin_tools:
   - system_health
@@ -34,7 +34,7 @@ write_pilot_allowed_tools:
   - write_pilot_git_commit
 
 # Sandbox directory for the Agent Smith approved-write pilot.
-write_pilot_sandbox: /Users/freyja/freyja-os/docs/smith-pilot
+write_pilot_sandbox: docs/smith-pilot
 
 # Operations that require explicit human approval before execution.
 approval_required_operations:

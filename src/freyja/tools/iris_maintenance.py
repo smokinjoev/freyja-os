@@ -65,7 +65,8 @@ _SECRET_PATH_PATTERNS = [
     re.compile(r"(^|/)\.password-store(/|$)"),
 ]
 
-_RESTART_DIRECTOR_SCRIPT = "/Users/freyja/freyja-os/scripts/restart-director.sh"
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_RESTART_DIRECTOR_SCRIPT = str(_REPO_ROOT / "scripts" / "restart-director.sh")
 _RESTART_DIRECTOR_FIXED_ARGS = []
 
 
@@ -561,10 +562,9 @@ def _sanitize_path_error(exc: PathViolationError) -> str:
 
 
 def _get_allowed_root() -> Path:
-    root = Path(getattr(settings, "agent_smith_allowed_root", "/Users/freyja/freyja-os"))
+    root = Path(getattr(settings, "agent_smith_allowed_root", str(_REPO_ROOT)))
     if not root.is_absolute():
-        project_root = Path(__file__).resolve().parents[3]
-        root = project_root / root
+        root = _REPO_ROOT / root
     return root.resolve()
 
 

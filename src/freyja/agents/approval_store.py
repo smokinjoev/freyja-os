@@ -60,7 +60,7 @@ class SmithApprovalStore:
         self._database_path = (
             database_path
             if database_path is not None
-            else getattr(settings, "agent_smith_approval_db_path", "/Users/freyja/freyja-os/data/smith-approvals.sqlite3")
+            else settings.agent_smith_approval_db_path
         )
         self._initialized = False
 
