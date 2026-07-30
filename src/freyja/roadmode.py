@@ -51,9 +51,9 @@ def _save_progress(data: dict[str, dict[str, int]]) -> None:
 
 def _strip_gutenberg_wrappers(text: str) -> str:
     start = re.search(r"\*\*\* START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK.*?\*\*\*", text, re.I)
-    end = re.search(r"\*\*\* END OF (?:THE|THIS) PROJECT GUTENBERG EBOOK.*?\*\*\*", text, re.I)
     if start:
         text = text[start.end():]
+    end = re.search(r"\*\*\* END OF (?:THE|THIS) PROJECT GUTENBERG EBOOK.*?\*\*\*", text, re.I)
     if end:
         text = text[: end.start()]
     return text.strip()
@@ -61,7 +61,7 @@ def _strip_gutenberg_wrappers(text: str) -> str:
 
 def _parse_chapters(text: str) -> list[dict[str, object]]:
     text = _strip_gutenberg_wrappers(text).replace("\r\n", "\n")
-    pattern = re.compile(r"(?im)^(chapter\s+(?:[ivxlcdm]+|\d+)(?:\.?\s+.*)?|book\s+(?:[ivxlcdm]+|\d+)(?:\.?\s+.*)?)\s*$")
+    pattern = re.compile(r"(?im)^(chapter[ \t]+(?:[ivxlcdm]+|\d+)(?:\.?[ \t]+[^\n]*)?|book[ \t]+(?:[ivxlcdm]+|\d+)(?:\.?[ \t]+[^\n]*)?)\s*$")
     matches = list(pattern.finditer(text))
     if not matches:
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
