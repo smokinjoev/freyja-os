@@ -2,7 +2,7 @@ name: freyja-signal-atlas
 
 services:
   signal-api:
-    image: ${SIGNAL_REST_API_IMAGE:-bbernhard/signal-cli-rest-api:0.99}
+    image: ${SIGNAL_REST_API_IMAGE:-bbernhard/signal-cli-rest-api:0.100}
     restart: unless-stopped
     environment:
       MODE: native
