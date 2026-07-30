@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from shutil import which
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,7 +14,7 @@ class IMessageSettings(BaseSettings):
     )
 
     imessage_enabled: bool = False
-    imessage_imsg_path: str = "/opt/homebrew/bin/imsg"
+    imessage_imsg_path: str = ""
     imessage_database_path: str = str(
         Path.home() / "Library" / "Messages" / "chat.db"
     )
@@ -27,6 +28,21 @@ class IMessageSettings(BaseSettings):
             for entry in self.imessage_allowed_senders.split(",")
             if entry.strip()
         }
+
+    @property
+    def resolved_imsg_path(self) -> str:
+        if self.imessage_imsg_path.strip():
+            return self.imessage_imsg_path.strip()
+
+        discovered = which("imsg")
+        if discovered:
+            return discovered
+
+        for candidate in ("/opt/homebrew/bin/imsg", "/usr/local/bin/imsg"):
+            if Path(candidate).exists():
+                return candidate
+
+        return "imsg"
 
 
 settings = IMessageSettings()

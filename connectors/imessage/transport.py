@@ -26,7 +26,7 @@ class IMessageTransport:
 
     def watch_command(self, *, since_rowid: int | None = None) -> list[str]:
         command = [
-            self._settings.imessage_imsg_path,
+            self._settings.resolved_imsg_path,
             "watch",
             "--db",
             self._settings.imessage_database_path,
@@ -38,7 +38,7 @@ class IMessageTransport:
 
     def send_command(self, reply: IMessageReply) -> list[str]:
         return [
-            self._settings.imessage_imsg_path,
+            self._settings.resolved_imsg_path,
             "send",
             "--db",
             self._settings.imessage_database_path,

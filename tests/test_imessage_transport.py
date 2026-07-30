@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -96,3 +97,19 @@ def test_send_command_uses_chat_id_without_a_shell():
         "imessage",
         "--json",
     ]
+
+
+def test_imsg_path_is_discovered_from_path_when_unconfigured():
+    configured = IMessageSettings(_env_file=None, imessage_imsg_path="")
+
+    with patch("connectors.imessage.config.which", return_value="/usr/local/bin/imsg"):
+        assert configured.resolved_imsg_path == "/usr/local/bin/imsg"
+
+
+def test_explicit_imsg_path_takes_precedence():
+    configured = IMessageSettings(
+        _env_file=None,
+        imessage_imsg_path="/custom/bin/imsg",
+    )
+
+    assert configured.resolved_imsg_path == "/custom/bin/imsg"
