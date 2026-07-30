@@ -72,8 +72,9 @@ Telegram Bot API traffic transits Telegram's cloud. While the bot token and
 message content are carried over HTTPS, Telegram's servers can see message
 metadata and, for non-secret chats, message bodies. Do not send sensitive
 personal data, credentials, or secrets through this gateway. For stronger
-privacy in the future, the plan is to migrate to the Signal gateway or a
-self-hosted Hera/Atlas transport.
+privacy in the future, the plan is to migrate to the Signal gateway on Atlas.
+Hera is reserved for separate inference and benchmarking, not core messaging
+infrastructure.
 
 ## Command list
 
@@ -173,7 +174,7 @@ It is idempotent.
 
 ## Emergency kill switch
 
-From any shell on Iris:
+From any shell on the host running the Telegram gateway:
 
 ```bash
 launchctl bootout gui/$(id -u)/com.freyja-os.telegram-gateway
@@ -226,8 +227,8 @@ It never prints the bot token, allowed user IDs, or API keys.
 
 The gateway is implemented alongside the existing Signal gateway under
 `connectors/`. The routing, authorization, and command logic are isolated to
-`connectors/telegram/` so that a future Signal/Hera/Atlas gateway can reuse the
-same Director endpoints and agent model without changing the core service.
+`connectors/telegram/` so that the Atlas Signal gateway can reuse the same
+Director endpoints and agent model without changing the core service.
 
 ## Files added or changed
 

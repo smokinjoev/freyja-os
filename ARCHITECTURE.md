@@ -1,7 +1,7 @@
 # Freyja-OS Architecture
 
-**Version:** 0.1 Draft  
-**Status:** Initial implementation baseline  
+**Version:** 0.1 Rev 1
+**Status:** Rev 1 host-role baseline
 **Primary owner:** Joe  
 **Project:** Freyja-OS
 
@@ -91,6 +91,13 @@ The current known hardware pool includes:
 
 The architecture assumes these systems may be reassigned as their capabilities are tested.
 
+### 3.3 Rev 1 Authoritative Host Roles
+
+- Mars: Freyja Director and control plane.
+- Atlas: always-on infrastructure services and Signal connector.
+- Iris: local LLM inference; inference-focused and not a development host.
+- Hera: development, model benchmarking, and experimental inference; not core Freyja infrastructure.
+
 ---
 
 ## 4. High-Level Architecture
@@ -147,9 +154,9 @@ The architecture assumes these systems may be reassigned as their capabilities a
 
 ## 5. Node Roles
 
-## 5.1 Mac mini M4 — Director Node
+## 5.1 Mars — Director and Control Plane
 
-**Primary role:** AI reasoning and orchestration
+**Primary role:** Freyja authority, routing, policy, and control plane
 
 Recommended responsibilities:
 
@@ -157,16 +164,17 @@ Recommended responsibilities:
 - Request routing
 - Conversation state
 - Policy and permission checks
-- Local Ollama inference for models that fit within 24 GB unified memory
 - OpenRouter client
 - Tool registry
 - Session management
 - Cost accounting
 - Administrative interface
 
-The Mac mini is the logical center of Freyja-OS. It should remain the single authority for deciding how requests are processed.
+Mars is the logical center of Freyja-OS. It should remain the single authority
+for deciding how requests are processed. Messaging connectors and worker nodes
+must forward requests to Mars rather than making independent routing decisions.
 
-## 5.2 Atlas Ryzen Server — Infrastructure Node
+## 5.2 Atlas Ryzen Server — Infrastructure and Signal Node
 
 **Primary role:** Always-on backend services
 
@@ -184,9 +192,41 @@ Recommended responsibilities:
 - Container hosting
 - Internal DNS or service discovery
 
-Atlas should provide reliable infrastructure rather than primary conversational reasoning.
+Atlas should provide reliable infrastructure and the always-on Signal path. It
+should not host the Freyja Director in Rev 1 and should not become the primary
+conversational reasoning authority.
 
-## 5.3 NUCBox — Gateway and Utility Node
+## 5.3 Iris — Local Inference Node
+
+**Primary role:** Local LLM inference
+
+Recommended responsibilities:
+
+- Ollama models used by the Mars Director for local-first routing
+- Model compatibility and inference-health checks
+- Stable inference service for the Mars control plane
+
+Iris should remain the preferred local inference endpoint for Rev 1. It is
+inference-focused, not the development, Director, or always-on Signal host.
+
+## 5.4 Hera — Development and Benchmark Node
+
+**Primary role:** Development, verification, and inference benchmarking
+
+Recommended responsibilities:
+
+- Development environment and repository work
+- Cross-platform tests and pre-deployment verification
+- Model benchmarking
+- Performance comparison against Iris-hosted models
+- Experimental inference workloads that should not affect core Freyja services
+
+Hera is the Rev 1 development and benchmarking machine, deliberately separate
+from core Freyja infrastructure. It may provide benchmark data or optional
+inference capacity, but Rev 1 must not depend on Hera for the Director, Signal
+connector, databases, or always-on control path.
+
+## 5.5 NUCBox — Utility Node
 
 **Primary role:** Low-power always-on gateway
 
@@ -202,7 +242,7 @@ Recommended responsibilities:
 
 The NUCBox is a suitable place for services that must remain online continuously but do not require high compute performance.
 
-## 5.4 Raspberry Pi “Cloyd” — Edge Automation Node
+## 5.6 Raspberry Pi “Cloyd” — Edge Automation Node
 
 **Primary role:** Sensor and local automation edge node
 
@@ -217,7 +257,7 @@ Recommended responsibilities:
 
 Cloyd should not host the central Director.
 
-## 5.5 Avatar Computer — Human Interface Node
+## 5.7 Avatar Computer — Human Interface Node
 
 **Primary role:** Local embodied interface
 
@@ -234,7 +274,7 @@ Recommended responsibilities:
 
 The avatar computer should function as a client and presentation device, not an independent authority.
 
-## 5.6 Older Computers — Worker Pool
+## 5.8 Older Computers — Worker Pool
 
 Older systems should be assigned one function at a time based on operating system, CPU, GPU, memory, and reliability.
 
@@ -440,7 +480,8 @@ Potential bridge technologies include `signal-cli` or a maintained REST wrapper 
 
 ### Current Signal connector deployment
 
-Atlas is the always-on Signal connector host. The selected bridge is
+Atlas is the always-on Signal connector host. Mars remains the Director and
+control-plane host. The selected bridge is
 `bbernhard/signal-cli-rest-api` running in `native` mode. Native mode supports
 the HTTP receive endpoint, which the separate `SignalRestTransport` adapter
 polls on a configurable interval. The adapter parses transport envelopes into
@@ -453,7 +494,7 @@ The responsibility boundary is deliberate:
   outbound delivery, and recoverable transport errors.
 - `SignalGateway` owns enablement, sender allowlisting, group rejection,
   message-size validation, attachment-only rejection, duplicate suppression,
-  Director forwarding, and safe error responses.
+  forwarding to the Mars Director, and safe error responses.
 
 Transport code must not bypass or duplicate gateway policy. Unauthorized
 senders and group messages remain rejected by the gateway.
@@ -473,8 +514,9 @@ Retry bounds and message limits are configured with
 `SIGNAL_RECONNECT_MAX_SECONDS` and `SIGNAL_MAX_MESSAGE_CHARS`.
 
 The Atlas Compose deployment places the REST wrapper only on a private Docker
-network and publishes no REST API port. Signal account keys and registration
-state live in a named volume rather than an image or Git. First-time account
+network and publishes no REST API port. The connector has outbound access to
+the private Mars Director endpoint. Signal account keys and registration state
+live in a named volume rather than an image or Git. First-time account
 registration or device linking is a manual operator action performed according
 to the wrapper's upstream documentation; no account is registered by Freyja.
 

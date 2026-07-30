@@ -230,7 +230,7 @@ Fallback example:
 primary local model -> alternate local model -> error response
 ```
 
-### P0 — Validate Mac mini resource limits
+### P0 — Validate Iris local inference limits
 
 Document:
 
@@ -242,6 +242,10 @@ Document:
 ### P1 — Add remote Ollama node support
 
 Support Ollama running on another private-network node.
+
+Rev 1 default: Mars calls Iris for local Ollama inference. Hera may be tested as
+a separate benchmark or optional inference machine, but it is not core
+infrastructure.
 
 ### P1 — Add local model benchmark script
 
@@ -874,7 +878,7 @@ The same `/v1/chat` endpoint can route to either Ollama or OpenRouter and record
 
 ## Sprint 3 Tasks
 
-- Deploy Signal bridge on an always-on node
+- Deploy Signal bridge on Atlas
 - Configure dedicated Signal identity
 - Implement authorized sender allowlist
 - Connect inbound messages to the Director
