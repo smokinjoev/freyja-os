@@ -20,6 +20,9 @@ class IMessageSettings(BaseSettings):
     )
     imessage_allowed_senders: str = ""
     imessage_max_message_chars: int = 4000
+    freyja_director_url: str = "http://127.0.0.1:8000"
+    freyja_connector_token: str = ""
+    imessage_request_timeout_seconds: float = 30.0
 
     @property
     def allowed_sender_set(self) -> set[str]:

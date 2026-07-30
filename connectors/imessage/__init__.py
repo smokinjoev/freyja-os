@@ -1,6 +1,7 @@
 """Native macOS iMessage connector primitives."""
 
 from connectors.imessage.config import IMessageSettings
+from connectors.imessage.gateway import IMessageGateway
 from connectors.imessage.models import IMessage, IMessageReply
 from connectors.imessage.transport import (
     IMessageTransport,
@@ -10,6 +11,7 @@ from connectors.imessage.transport import (
 
 __all__ = [
     "IMessage",
+    "IMessageGateway",
     "IMessageReply",
     "IMessageSettings",
     "IMessageTransport",
