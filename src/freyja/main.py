@@ -262,24 +262,57 @@ class SmithWritePilotResumeRequest(BaseModel):
 def _require_loopback(request: Request) -> None:
     if not settings.agent_smith_approval_loopback_only:
         return
-    client = request.client
-    if client is None or not client.host:
+    _require_loopback_host(
+        request.client.host if request.client else None,
+        missing_detail="Approval admin endpoint requires a client address.",
+        invalid_detail="Approval admin endpoint received an invalid client address.",
+        denied_detail="Approval admin endpoint is only available from loopback.",
+    )
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        _require_loopback_host(
+            forwarded_for.split(",", 1)[0].strip(),
+            missing_detail="Approval admin endpoint received an invalid forwarded client address.",
+            invalid_detail="Approval admin endpoint received an invalid forwarded client address.",
+            denied_detail="Approval admin endpoint is only available from loopback.",
+        )
+    forwarded = request.headers.get("forwarded")
+    if forwarded:
+        for part in forwarded.split(";"):
+            key, separator, value = part.strip().partition("=")
+            if separator and key.lower() == "for":
+                _require_loopback_host(
+                    value.strip('"[]'),
+                    missing_detail="Approval admin endpoint received an invalid forwarded client address.",
+                    invalid_detail="Approval admin endpoint received an invalid forwarded client address.",
+                    denied_detail="Approval admin endpoint is only available from loopback.",
+                )
+                break
+
+
+def _require_loopback_host(
+    host: str | None,
+    *,
+    missing_detail: str,
+    invalid_detail: str,
+    denied_detail: str,
+) -> None:
+    if not host:
         raise HTTPException(
             status_code=403,
-            detail="Approval admin endpoint requires a client address.",
+            detail=missing_detail,
         )
-    host = client.host
     try:
         address = ipaddress.ip_address(host)
     except ValueError as exc:
         raise HTTPException(
             status_code=403,
-            detail="Approval admin endpoint received an invalid client address.",
+            detail=invalid_detail,
         ) from exc
     if not address.is_loopback:
         raise HTTPException(
             status_code=403,
-            detail="Approval admin endpoint is only available from loopback.",
+            detail=denied_detail,
         )
 
 

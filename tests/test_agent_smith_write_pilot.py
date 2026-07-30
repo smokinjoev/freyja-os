@@ -217,6 +217,8 @@ max_retries: 2
 """
     )
     monkeypatch.setattr(settings, "agent_smith_policy_path", str(policy_path))
+    monkeypatch.setattr(settings, "agent_smith_approval_db_path", str(tmp_path / "smith-approvals.sqlite3"))
+    monkeypatch.setattr(settings, "agent_smith_audit_log_path", str(tmp_path / "agent-smith-audit.jsonl"))
     from fastapi.testclient import TestClient
 
     return TestClient(app)
@@ -938,14 +940,13 @@ def test_write_pilot_endpoint_403_when_write_pilot_disabled(test_client_write_pi
 
 def test_approval_admin_list_requires_loopback(test_client_write_pilot_enabled, monkeypatch):
     from freyja.config import settings
+    from fastapi.testclient import TestClient
 
     monkeypatch.setattr(settings, "agent_smith_enabled", True)
     monkeypatch.setattr(settings, "agent_smith_write_pilot_enabled", True)
     monkeypatch.setattr(settings, "agent_smith_approval_loopback_only", True)
-    response = test_client_write_pilot_enabled.get(
-        "/agents/smith/approvals",
-        headers={"X-Forwarded-For": "192.0.2.1"},
-    )
+    non_loopback_client = TestClient(app, client=("192.0.2.1", 123))
+    response = non_loopback_client.get("/agents/smith/approvals")
     assert response.status_code == 403
 
 
