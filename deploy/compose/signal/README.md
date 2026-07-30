@@ -13,8 +13,11 @@ Hera is the development and benchmark machine, not core Freyja infrastructure.
 ## Network and data isolation
 
 The Signal REST API has no published host port and is reachable only by the
-connector on `signal-private`. The connector also joins `atlas-egress` so it
-can reach the Director on Mars at `FREYJA_DIRECTOR_URL`.
+connector on `signal-private`. It also joins `atlas-egress` because linking,
+registration, send, and receive operations must reach Signal's servers.
+
+The connector joins both `signal-private` and `atlas-egress` so it can reach the
+local Signal REST API and the Director on Mars at `FREYJA_DIRECTOR_URL`.
 
 Signal account keys and registration state are stored in the
 `signal-cli-data` Docker volume. Neither belongs in Git.

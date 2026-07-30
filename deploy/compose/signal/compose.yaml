@@ -12,6 +12,7 @@ services:
       - signal-cli-data:/home/.local/share/signal-cli
     networks:
       - signal-private
+      - atlas-egress
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/v1/about"]
       interval: 30s
