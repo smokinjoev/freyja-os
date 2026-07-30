@@ -77,6 +77,21 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
 
 
 @pytest.mark.asyncio
+async def test_director_token_is_sent_as_bearer_header(enabled_gateway):
+    enabled_gateway._director_token = "test-connector-token"
+    message = make_message("+15551234567", "Hello Freyja", "msg-auth")
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Authenticated hello"})
+        result = await enabled_gateway.handle(message)
+
+    assert result.success is True
+    assert mock_post.await_args.kwargs["headers"] == {
+        "Authorization": "Bearer test-connector-token"
+    }
+
+
+@pytest.mark.asyncio
 async def test_blocked_sender_receives_rejection():
     gw = SignalGateway()
     gw._enabled = True

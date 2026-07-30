@@ -32,6 +32,7 @@ class SignalGateway:
         self._allowed_senders = settings.allowed_sender_set
         self._max_message_chars = settings.signal_max_message_chars
         self._director_url = settings.freyja_director_url.rstrip("/")
+        self._director_token = settings.freyja_connector_token
         self._timeout = settings.signal_request_timeout_seconds
         self._recent_message_ids: deque[str] = deque(maxlen=_MAX_RECENT_IDS)
         self._http_client: httpx.AsyncClient | None = None
@@ -116,7 +117,16 @@ class SignalGateway:
 
         try:
             client = await self._client()
-            response = await client.post(f"{self._director_url}/route", json=payload)
+            headers = (
+                {"Authorization": f"Bearer {self._director_token}"}
+                if self._director_token
+                else None
+            )
+            response = await client.post(
+                f"{self._director_url}/route",
+                json=payload,
+                headers=headers,
+            )
             response.raise_for_status()
             data = response.json()
 

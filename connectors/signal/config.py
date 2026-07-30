@@ -14,6 +14,7 @@ class SignalSettings(BaseSettings):
     signal_allowed_senders: str = ""
     signal_max_message_chars: int = 4000
     freyja_director_url: str = "http://127.0.0.1:8000"
+    freyja_connector_token: str = ""
     signal_request_timeout_seconds: float = 30.0
     signal_rest_api_url: str = "http://127.0.0.1:8080"
     signal_account_number: str = ""

@@ -18,6 +18,49 @@ def test_health() -> None:
     assert response.json() == {"status": "healthy"}
 
 
+def test_health_remains_public_when_connector_auth_is_enabled(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get("/health")
+    assert response.status_code == 200
+
+
+def test_protected_endpoint_requires_connector_token(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get("/ollama/models")
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Connector authentication required."}
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_protected_endpoint_rejects_wrong_connector_token(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get(
+        "/ollama/models",
+        headers={"Authorization": "Bearer wrong-token"},
+    )
+    assert response.status_code == 401
+
+
+def test_protected_endpoint_accepts_connector_token(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    with patch("freyja.ollama_client.OllamaClient.tags", new_callable=AsyncMock) as mock_tags:
+        mock_tags.return_value = {"models": [{"name": "tinyllama:latest"}]}
+        response = client.get(
+            "/ollama/models",
+            headers={"Authorization": "Bearer test-connector-token"},
+        )
+    assert response.status_code == 200
+    assert response.json() == {"models": ["tinyllama:latest"]}
+
+
 def test_ollama_health_reachable() -> None:
     with patch("freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock) as mock_healthy:
         mock_healthy.return_value = True

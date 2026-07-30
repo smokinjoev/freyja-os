@@ -1,8 +1,10 @@
 import hashlib
+import hmac
 import ipaddress
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from freyja.agents.approval_provider import PersistentApprovalProvider
@@ -22,6 +24,28 @@ app = FastAPI(
     version="0.1.0",
     description="Core orchestration service for Freyja-OS.",
 )
+
+
+@app.middleware("http")
+async def require_connector_auth(request: Request, call_next):
+    """Require a bearer token for non-public Director endpoints when configured."""
+    expected = settings.freyja_connector_token
+    if not expected or request.url.path in {"/", "/health"}:
+        return await call_next(request)
+
+    scheme, _, supplied = request.headers.get("authorization", "").partition(" ")
+    authorized = (
+        scheme.lower() == "bearer"
+        and bool(supplied)
+        and hmac.compare_digest(supplied, expected)
+    )
+    if not authorized:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Connector authentication required."},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return await call_next(request)
 
 ollama = OllamaClient()
 openrouter = OpenRouterClient()
