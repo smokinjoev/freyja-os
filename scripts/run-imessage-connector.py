@@ -80,7 +80,10 @@ async def main() -> int:
 
             reply = await gateway.handle(message)
             if reply is not None:
-                await transport.send(reply)
+                try:
+                    await transport.send(reply)
+                except IMessageTransportError:
+                    logger.exception("iMessage reply send failed")
 
         return 0
     except IMessageTransportError:

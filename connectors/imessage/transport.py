@@ -119,13 +119,22 @@ class IMessageTransport:
             )
 
     async def send(self, reply: IMessageReply) -> None:
+        process: asyncio.subprocess.Process | None = None
         try:
             process = await asyncio.create_subprocess_exec(
                 *self.send_command(reply),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _, stderr = await process.communicate()
+            _, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=self._settings.imessage_send_timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            if process is not None:
+                process.kill()
+                await process.wait()
+            raise IMessageTransportError("imsg send timed out") from exc
         except OSError as exc:
             raise IMessageTransportError("Unable to start imsg send") from exc
 

@@ -3,11 +3,16 @@ from __future__ import annotations
 from datetime import timezone
 from unittest.mock import patch
 
+import asyncio
 import pytest
 
 from connectors.imessage.config import IMessageSettings
 from connectors.imessage.models import IMessageReply
-from connectors.imessage.transport import IMessageTransport, UnsupportedIMessageEvent
+from connectors.imessage.transport import (
+    IMessageTransport,
+    IMessageTransportError,
+    UnsupportedIMessageEvent,
+)
 
 
 def settings() -> IMessageSettings:
@@ -99,6 +104,27 @@ def test_send_command_uses_chat_id_without_a_shell():
     ]
 
 
+@pytest.mark.asyncio
+async def test_send_times_out_when_imsg_does_not_exit(monkeypatch):
+    transport = IMessageTransport(
+        IMessageSettings(
+            _env_file=None,
+            imessage_send_timeout_seconds=0.01,
+        )
+    )
+    process = _HangingProcess()
+
+    async def _fake_subprocess(*args, **kwargs):
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess)
+
+    with pytest.raises(IMessageTransportError, match="imsg send timed out"):
+        await transport.send(IMessageReply(chat_id=4, text="hello"))
+
+    assert process.killed is True
+
+
 def test_imsg_path_is_discovered_from_path_when_unconfigured():
     configured = IMessageSettings(_env_file=None, imessage_imsg_path="")
 
@@ -113,3 +139,20 @@ def test_explicit_imsg_path_takes_precedence():
     )
 
     assert configured.resolved_imsg_path == "/custom/bin/imsg"
+
+
+class _HangingProcess:
+    returncode = None
+
+    def __init__(self) -> None:
+        self.killed = False
+
+    async def communicate(self):
+        await asyncio.sleep(60)
+
+    def kill(self) -> None:
+        self.killed = True
+        self.returncode = -9
+
+    async def wait(self):
+        return self.returncode
