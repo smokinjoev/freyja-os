@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.freyja-os.imessage-connector</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/freyja/freyja-os-imessage-runtime/.venv/bin/python</string>
+        <string>/Users/freyja/freyja-os-imessage-runtime/scripts/run-imessage-connector.py</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>/Users/freyja/freyja-os-imessage-runtime/src:/Users/freyja/freyja-os-imessage-runtime</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/freyja/freyja-os-imessage-runtime</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/freyja/freyja-os-imessage-runtime/logs/imessage-connector.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/freyja/freyja-os-imessage-runtime/logs/imessage-connector.log</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
