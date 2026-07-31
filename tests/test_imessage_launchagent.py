@@ -43,6 +43,9 @@ def test_imessage_plist_sets_runtime_environment() -> None:
     data = _load_plist()
     env = data["EnvironmentVariables"]
 
+    assert env["HOME"] == "/Users/freyja"
+    assert env["USER"] == "freyja"
+    assert env["LOGNAME"] == "freyja"
     assert str(RUNTIME_ROOT / "src") in env["PYTHONPATH"]
     assert str(RUNTIME_ROOT) in env["PYTHONPATH"]
     assert "/opt/homebrew/bin" in env["PATH"]
@@ -62,6 +65,7 @@ def test_imessage_plist_restarts_on_unexpected_exit() -> None:
     assert data["RunAtLoad"] is True
     assert data["KeepAlive"]["SuccessfulExit"] is False
     assert data["ThrottleInterval"] == 10
+    assert data["LimitLoadToSessionType"] == "Aqua"
 
 
 @pytest.mark.skipif(platform.system() != "Darwin", reason="plutil is macOS-specific")

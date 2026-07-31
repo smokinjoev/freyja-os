@@ -13,6 +13,12 @@
 
     <key>EnvironmentVariables</key>
     <dict>
+        <key>HOME</key>
+        <string>/Users/freyja</string>
+        <key>USER</key>
+        <string>freyja</string>
+        <key>LOGNAME</key>
+        <string>freyja</string>
         <key>PYTHONPATH</key>
         <string>/Users/freyja/freyja-os-imessage-runtime/src:/Users/freyja/freyja-os-imessage-runtime</string>
         <key>PATH</key>
@@ -42,5 +48,8 @@
 
     <key>ProcessType</key>
     <string>Background</string>
+
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
 </dict>
 </plist>
