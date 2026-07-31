@@ -13,7 +13,12 @@ def ask(prompt: str, *, base_url: str, model: str, max_tokens: int) -> str:
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "Answer directly and concisely. Do not expose hidden reasoning."},
+            {"role": "system", "content": (
+                "Answer directly and concisely. Do not expose hidden reasoning. "
+                "Use only facts supplied by the user or system. Never invent names, "
+                "hours, dates, phone numbers, staffing, tasks, or status. If details "
+                "are missing, say what is unknown and ask one focused question."
+            )},
             {"role": "user", "content": prompt},
         ],
         "max_tokens": max_tokens,
