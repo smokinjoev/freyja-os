@@ -114,8 +114,13 @@ class IMessageTransport:
 
         return_code = await process.wait()
         if return_code:
+            detail = ""
+            if process.stderr is not None:
+                raw_stderr = await process.stderr.read()
+                detail = raw_stderr.decode("utf-8", errors="replace").strip()
             raise IMessageTransportError(
                 f"imsg watch exited with status {return_code}"
+                + (f": {detail}" if detail else "")
             )
 
     async def send(self, reply: IMessageReply) -> None:

@@ -125,6 +125,20 @@ async def test_send_times_out_when_imsg_does_not_exit(monkeypatch):
     assert process.killed is True
 
 
+@pytest.mark.asyncio
+async def test_watch_failure_includes_stderr(monkeypatch):
+    transport = IMessageTransport(settings())
+
+    async def _fake_subprocess(*args, **kwargs):
+        return _FailedWatchProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess)
+
+    with pytest.raises(IMessageTransportError, match="permission denied"):
+        async for _ in transport.watch():
+            pass
+
+
 def test_imsg_path_is_discovered_from_path_when_unconfigured():
     configured = IMessageSettings(_env_file=None, imessage_imsg_path="")
 
@@ -156,3 +170,28 @@ class _HangingProcess:
 
     async def wait(self):
         return self.returncode
+
+
+class _AsyncLineReader:
+    def __init__(self, lines: list[bytes] | None = None, data: bytes = b"") -> None:
+        self._lines = lines or []
+        self._data = data
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._lines:
+            raise StopAsyncIteration
+        return self._lines.pop(0)
+
+    async def read(self):
+        return self._data
+
+
+class _FailedWatchProcess:
+    stdout = _AsyncLineReader()
+    stderr = _AsyncLineReader(data=b"permission denied")
+
+    async def wait(self):
+        return 1
