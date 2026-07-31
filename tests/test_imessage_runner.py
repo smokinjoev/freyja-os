@@ -103,6 +103,68 @@ def test_handle_message_skips_when_gateway_returns_none():
     assert transport.replies == []
 
 
+def test_seed_seen_messages_reads_recent_message_ids():
+    import asyncio
+
+    runner = _load_runner()
+    transport = _FakeTransport(recent_messages=[_message(message_id="msg-001")])
+
+    seen = asyncio.run(runner._seed_seen_messages(transport))
+
+    assert seen == {"msg-001"}
+
+
+def test_poll_recent_messages_skips_seeded_messages():
+    import asyncio
+
+    runner = _load_runner()
+    shutdown_event = asyncio.Event()
+    gateway = _FakeGateway(None)
+    old_message = _message(message_id="msg-old")
+    new_message = _message(message_id="msg-new")
+    transport = _FakeTransport(
+        recent_messages=[old_message, new_message],
+        on_recent_messages=shutdown_event.set,
+    )
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_poll_interval_seconds=60,
+    )
+
+    asyncio.run(
+        runner._poll_recent_messages(
+            shutdown_event,
+            gateway,
+            transport,
+            settings,
+            {"msg-old"},
+        )
+    )
+
+    assert gateway.messages == [new_message]
+
+
+def test_run_watch_loop_keeps_process_alive_when_watch_fails():
+    import asyncio
+
+    runner = _load_runner()
+    shutdown_event = asyncio.Event()
+    shutdown_event.set()
+    gateway = _FakeGateway(None)
+    transport = _FakeTransport(watch_error=runner.IMessageTransportError("boom"))
+
+    asyncio.run(
+        runner._run_watch_loop(
+            shutdown_event,
+            gateway,
+            transport,
+            set(),
+        )
+    )
+
+    assert gateway.messages == []
+
+
 class _FakeGateway:
     def __init__(self, reply):
         self.reply = reply
@@ -114,18 +176,37 @@ class _FakeGateway:
 
 
 class _FakeTransport:
-    def __init__(self):
+    def __init__(
+        self,
+        recent_messages=None,
+        on_recent_messages=None,
+        watch_error=None,
+    ):
         self.replies = []
+        self._recent_messages = list(recent_messages or [])
+        self._on_recent_messages = on_recent_messages
+        self._watch_error = watch_error
 
     async def send(self, reply):
         self.replies.append(reply)
 
+    async def recent_messages(self):
+        if self._on_recent_messages is not None:
+            self._on_recent_messages()
+        return self._recent_messages
 
-def _message() -> IMessage:
+    async def watch(self):
+        if self._watch_error is not None:
+            raise self._watch_error
+        if False:
+            yield None
+
+
+def _message(message_id: str = "msg-001") -> IMessage:
     return IMessage(
         sender="+15551234567",
         text="hello",
-        message_id="msg-001",
+        message_id=message_id,
         chat_id=4,
         chat_identifier="+15551234567",
         timestamp="2026-07-30T04:09:38.511Z",

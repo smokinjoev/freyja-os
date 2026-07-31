@@ -64,15 +64,32 @@ async def _handle_message(
             logger.exception("iMessage reply send failed")
 
 
+async def _seed_seen_messages(transport: IMessageTransport) -> set[str]:
+    try:
+        messages = await transport.recent_messages()
+    except IMessageTransportError:
+        logger.exception("Unable to seed iMessage polling state")
+        return set()
+
+    message_ids = {message.message_id for message in messages}
+    if message_ids:
+        logger.info("Seeded iMessage polling state with %s recent messages", len(message_ids))
+    return message_ids
+
+
 async def _poll_recent_messages(
     shutdown_event: asyncio.Event,
     gateway: IMessageGateway,
     transport: IMessageTransport,
     settings: IMessageSettings,
+    seen_message_ids: set[str],
 ) -> None:
     while not shutdown_event.is_set():
         try:
             for message in await transport.recent_messages():
+                if message.message_id in seen_message_ids:
+                    continue
+                seen_message_ids.add(message.message_id)
                 await _handle_message(gateway, transport, message)
         except IMessageTransportError:
             logger.exception("iMessage polling cycle failed")
@@ -84,6 +101,29 @@ async def _poll_recent_messages(
             )
         except asyncio.TimeoutError:
             pass
+
+
+async def _run_watch_loop(
+    shutdown_event: asyncio.Event,
+    gateway: IMessageGateway,
+    transport: IMessageTransport,
+    seen_message_ids: set[str],
+) -> None:
+    try:
+        async for message in transport.watch():
+            if shutdown_event.is_set():
+                break
+            if message.message_id in seen_message_ids:
+                continue
+            seen_message_ids.add(message.message_id)
+            await _handle_message(gateway, transport, message)
+    except IMessageTransportError:
+        logger.exception("iMessage watch failed; polling fallback remains active")
+        await shutdown_event.wait()
+    else:
+        if not shutdown_event.is_set():
+            logger.warning("iMessage watch ended; polling fallback remains active")
+            await shutdown_event.wait()
 
 
 async def main() -> int:
@@ -109,19 +149,26 @@ async def main() -> int:
             return 0
 
         logger.info("iMessage connector started")
+        seen_message_ids = await _seed_seen_messages(transport)
         poll_task = asyncio.create_task(
             _poll_recent_messages(
                 shutdown_event,
                 gateway,
                 transport,
                 connector_settings,
+                seen_message_ids,
             )
         )
-        async for message in transport.watch():
-            if shutdown_event.is_set():
-                break
-
-            await _handle_message(gateway, transport, message)
+        if connector_settings.imessage_watch_enabled:
+            await _run_watch_loop(
+                shutdown_event,
+                gateway,
+                transport,
+                seen_message_ids,
+            )
+        else:
+            logger.info("iMessage watch disabled; polling fallback is active")
+            await shutdown_event.wait()
 
         poll_task.cancel()
         await asyncio.gather(poll_task, return_exceptions=True)

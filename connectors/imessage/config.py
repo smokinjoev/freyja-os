@@ -24,6 +24,7 @@ class IMessageSettings(BaseSettings):
     freyja_connector_token: str = ""
     imessage_request_timeout_seconds: float = 30.0
     imessage_send_timeout_seconds: float = 30.0
+    imessage_watch_enabled: bool = True
     imessage_poll_interval_seconds: float = 5.0
     imessage_poll_chat_limit: int = 10
     imessage_poll_history_limit: int = 3
