@@ -103,18 +103,34 @@ def test_handle_message_skips_when_gateway_returns_none():
     assert transport.replies == []
 
 
-def test_seed_seen_messages_reads_recent_message_ids():
+def test_seed_seen_messages_reads_recent_message_ids(tmp_path):
     import asyncio
 
     runner = _load_runner()
     transport = _FakeTransport(recent_messages=[_message(message_id="msg-001")])
+    seen_store = runner.SeenMessageStore(tmp_path / "seen.json", limit=100)
 
-    seen = asyncio.run(runner._seed_seen_messages(transport))
+    asyncio.run(runner._seed_seen_messages(transport, seen_store))
 
-    assert seen == {"msg-001"}
+    assert seen_store.message_ids == {"msg-001"}
 
 
-def test_poll_recent_messages_skips_seeded_messages():
+def test_seen_message_store_round_trips_and_prunes(tmp_path):
+    runner = _load_runner()
+    state_path = tmp_path / "state" / "imessage-seen.json"
+    seen_store = runner.SeenMessageStore(state_path, limit=2)
+
+    seen_store.add("msg-001")
+    seen_store.add("msg-002")
+    seen_store.add("msg-003")
+
+    reloaded = runner.SeenMessageStore(state_path, limit=2)
+    reloaded.load()
+
+    assert reloaded.message_ids == {"msg-002", "msg-003"}
+
+
+def test_poll_recent_messages_skips_seeded_messages(tmp_path):
     import asyncio
 
     runner = _load_runner()
@@ -130,6 +146,8 @@ def test_poll_recent_messages_skips_seeded_messages():
         _env_file=None,
         imessage_poll_interval_seconds=60,
     )
+    seen_store = runner.SeenMessageStore(tmp_path / "seen.json", limit=100)
+    seen_store.add("msg-old", persist=False)
 
     asyncio.run(
         runner._poll_recent_messages(
@@ -137,14 +155,15 @@ def test_poll_recent_messages_skips_seeded_messages():
             gateway,
             transport,
             settings,
-            {"msg-old"},
+            seen_store,
         )
     )
 
     assert gateway.messages == [new_message]
+    assert seen_store.message_ids == {"msg-old", "msg-new"}
 
 
-def test_run_watch_loop_keeps_process_alive_when_watch_fails():
+def test_run_watch_loop_keeps_process_alive_when_watch_fails(tmp_path):
     import asyncio
 
     runner = _load_runner()
@@ -152,13 +171,14 @@ def test_run_watch_loop_keeps_process_alive_when_watch_fails():
     shutdown_event.set()
     gateway = _FakeGateway(None)
     transport = _FakeTransport(watch_error=runner.IMessageTransportError("boom"))
+    seen_store = runner.SeenMessageStore(tmp_path / "seen.json", limit=100)
 
     asyncio.run(
         runner._run_watch_loop(
             shutdown_event,
             gateway,
             transport,
-            set(),
+            seen_store,
         )
     )
 

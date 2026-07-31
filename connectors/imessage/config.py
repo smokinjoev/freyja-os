@@ -28,6 +28,10 @@ class IMessageSettings(BaseSettings):
     imessage_poll_interval_seconds: float = 5.0
     imessage_poll_chat_limit: int = 10
     imessage_poll_history_limit: int = 3
+    imessage_seen_state_path: str = str(
+        Path.home() / "Library" / "Application Support" / "Freyja" / "imessage-seen.json"
+    )
+    imessage_seen_state_limit: int = 5000
 
     @property
     def allowed_sender_set(self) -> set[str]:
