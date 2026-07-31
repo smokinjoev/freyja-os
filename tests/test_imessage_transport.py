@@ -104,6 +104,66 @@ def test_send_command_uses_chat_id_without_a_shell():
     ]
 
 
+def test_chats_command_is_argument_safe():
+    transport = IMessageTransport(settings())
+
+    assert transport.chats_command(limit=5) == [
+        "/opt/homebrew/bin/imsg",
+        "chats",
+        "--limit",
+        "5",
+        "--json",
+    ]
+
+
+def test_history_command_is_argument_safe():
+    transport = IMessageTransport(settings())
+
+    assert transport.history_command(chat_id=4, limit=2) == [
+        "/opt/homebrew/bin/imsg",
+        "history",
+        "--chat-id",
+        "4",
+        "--limit",
+        "2",
+        "--json",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_recent_messages_reads_recent_chat_history(monkeypatch):
+    transport = IMessageTransport(settings())
+    requests: list[list[str]] = []
+
+    async def _fake_subprocess(*args, **kwargs):
+        command = list(args)
+        requests.append(command)
+        if "chats" in command:
+            return _CompletedProcess(
+                b'{"id":4,"identifier":"+15551234567"}\n'
+                b'{"id":"skip-me","identifier":"+15557654321"}\n'
+            )
+        return _CompletedProcess(
+            (
+                '{"guid":"msg-2","text":"second","sender":"+15551234567",'
+                '"chat_id":4,"chat_identifier":"+15551234567",'
+                '"created_at":"2026-07-30T04:09:39.511Z",'
+                '"is_group":false,"is_from_me":false}\n'
+                '{"guid":"msg-1","text":"first","sender":"+15551234567",'
+                '"chat_id":4,"chat_identifier":"+15551234567",'
+                '"created_at":"2026-07-30T04:09:38.511Z",'
+                '"is_group":false,"is_from_me":false}\n'
+            ).encode()
+        )
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess)
+
+    messages = await transport.recent_messages()
+
+    assert [message.message_id for message in messages] == ["msg-1", "msg-2"]
+    assert len(requests) == 2
+
+
 @pytest.mark.asyncio
 async def test_send_times_out_when_imsg_does_not_exit(monkeypatch):
     transport = IMessageTransport(
@@ -195,3 +255,13 @@ class _FailedWatchProcess:
 
     async def wait(self):
         return 1
+
+
+class _CompletedProcess:
+    returncode = 0
+
+    def __init__(self, stdout: bytes) -> None:
+        self._stdout = stdout
+
+    async def communicate(self):
+        return self._stdout, b""

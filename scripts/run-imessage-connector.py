@@ -51,6 +51,41 @@ def _runtime_ready(settings: IMessageSettings, gateway: IMessageGateway) -> bool
     return True
 
 
+async def _handle_message(
+    gateway: IMessageGateway,
+    transport: IMessageTransport,
+    message,
+) -> None:
+    reply = await gateway.handle(message)
+    if reply is not None:
+        try:
+            await transport.send(reply)
+        except IMessageTransportError:
+            logger.exception("iMessage reply send failed")
+
+
+async def _poll_recent_messages(
+    shutdown_event: asyncio.Event,
+    gateway: IMessageGateway,
+    transport: IMessageTransport,
+    settings: IMessageSettings,
+) -> None:
+    while not shutdown_event.is_set():
+        try:
+            for message in await transport.recent_messages():
+                await _handle_message(gateway, transport, message)
+        except IMessageTransportError:
+            logger.exception("iMessage polling cycle failed")
+
+        try:
+            await asyncio.wait_for(
+                shutdown_event.wait(),
+                timeout=max(1.0, settings.imessage_poll_interval_seconds),
+            )
+        except asyncio.TimeoutError:
+            pass
+
+
 async def main() -> int:
     _configure_logging()
     connector_settings = IMessageSettings()
@@ -74,16 +109,22 @@ async def main() -> int:
             return 0
 
         logger.info("iMessage connector started")
+        poll_task = asyncio.create_task(
+            _poll_recent_messages(
+                shutdown_event,
+                gateway,
+                transport,
+                connector_settings,
+            )
+        )
         async for message in transport.watch():
             if shutdown_event.is_set():
                 break
 
-            reply = await gateway.handle(message)
-            if reply is not None:
-                try:
-                    await transport.send(reply)
-                except IMessageTransportError:
-                    logger.exception("iMessage reply send failed")
+            await _handle_message(gateway, transport, message)
+
+        poll_task.cancel()
+        await asyncio.gather(poll_task, return_exceptions=True)
 
         return 0
     except IMessageTransportError:

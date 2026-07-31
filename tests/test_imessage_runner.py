@@ -5,6 +5,7 @@ from pathlib import Path
 
 from connectors.imessage.config import IMessageSettings
 from connectors.imessage.gateway import IMessageGateway
+from connectors.imessage.models import IMessage, IMessageReply
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -74,3 +75,58 @@ def test_runtime_ready_with_enabled_gateway_database_and_allowlist(tmp_path):
     gateway._enabled = True
 
     assert runner._runtime_ready(settings, gateway) is True
+
+
+def test_handle_message_sends_gateway_reply():
+    import asyncio
+
+    runner = _load_runner()
+    gateway = _FakeGateway(IMessageReply(chat_id=4, text="reply"))
+    transport = _FakeTransport()
+    message = _message()
+
+    asyncio.run(runner._handle_message(gateway, transport, message))
+
+    assert gateway.messages == [message]
+    assert transport.replies == [IMessageReply(chat_id=4, text="reply")]
+
+
+def test_handle_message_skips_when_gateway_returns_none():
+    import asyncio
+
+    runner = _load_runner()
+    gateway = _FakeGateway(None)
+    transport = _FakeTransport()
+
+    asyncio.run(runner._handle_message(gateway, transport, _message()))
+
+    assert transport.replies == []
+
+
+class _FakeGateway:
+    def __init__(self, reply):
+        self.reply = reply
+        self.messages = []
+
+    async def handle(self, message):
+        self.messages.append(message)
+        return self.reply
+
+
+class _FakeTransport:
+    def __init__(self):
+        self.replies = []
+
+    async def send(self, reply):
+        self.replies.append(reply)
+
+
+def _message() -> IMessage:
+    return IMessage(
+        sender="+15551234567",
+        text="hello",
+        message_id="msg-001",
+        chat_id=4,
+        chat_identifier="+15551234567",
+        timestamp="2026-07-30T04:09:38.511Z",
+    )

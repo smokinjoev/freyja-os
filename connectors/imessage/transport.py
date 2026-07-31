@@ -51,6 +51,26 @@ class IMessageTransport:
             "--json",
         ]
 
+    def chats_command(self, *, limit: int) -> list[str]:
+        return [
+            self._settings.resolved_imsg_path,
+            "chats",
+            "--limit",
+            str(limit),
+            "--json",
+        ]
+
+    def history_command(self, *, chat_id: int, limit: int) -> list[str]:
+        return [
+            self._settings.resolved_imsg_path,
+            "history",
+            "--chat-id",
+            str(chat_id),
+            "--limit",
+            str(limit),
+            "--json",
+        ]
+
     @staticmethod
     def parse_event(event: Any) -> IMessage:
         if not isinstance(event, dict):
@@ -122,6 +142,61 @@ class IMessageTransport:
                 f"imsg watch exited with status {return_code}"
                 + (f": {detail}" if detail else "")
             )
+
+    async def recent_messages(self) -> list[IMessage]:
+        chats = await self._run_json_lines(
+            self.chats_command(limit=self._settings.imessage_poll_chat_limit)
+        )
+
+        messages: list[IMessage] = []
+        for chat in chats:
+            chat_id = chat.get("id") if isinstance(chat, dict) else None
+            if not isinstance(chat_id, int):
+                continue
+            for event in await self._run_json_lines(
+                self.history_command(
+                    chat_id=chat_id,
+                    limit=self._settings.imessage_poll_history_limit,
+                )
+            ):
+                try:
+                    messages.append(self.parse_event(event))
+                except UnsupportedIMessageEvent:
+                    continue
+
+        messages.sort(key=lambda message: message.timestamp)
+        return messages
+
+    async def _run_json_lines(self, command: list[str]) -> list[Any]:
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=self._settings.imessage_request_timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            raise IMessageTransportError("imsg command timed out") from exc
+        except OSError as exc:
+            raise IMessageTransportError("Unable to start imsg command") from exc
+
+        if process.returncode:
+            detail = stderr.decode("utf-8", errors="replace").strip()
+            raise IMessageTransportError(
+                f"imsg command failed with status {process.returncode}"
+                + (f": {detail}" if detail else "")
+            )
+
+        events: list[Any] = []
+        for raw_line in stdout.splitlines():
+            try:
+                events.append(json.loads(raw_line))
+            except json.JSONDecodeError:
+                continue
+        return events
 
     async def send(self, reply: IMessageReply) -> None:
         process: asyncio.subprocess.Process | None = None
