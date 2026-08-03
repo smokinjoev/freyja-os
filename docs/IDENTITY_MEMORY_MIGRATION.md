@@ -38,6 +38,9 @@ unchanged; migration provenance is appended to metadata.
 ## Verification and rollback
 
 Run the command again without `--apply`; `migratable` should be zero. Verify
+with `--verify` for a non-zero exit status when further migration or conflicts
+remain. Backup files are created with mode `0600`.
+Verify
 recall through synthetic Signal and iMessage principals for the same canonical
 person. To roll back while services are stopped, replace the migrated database
 with the backup.

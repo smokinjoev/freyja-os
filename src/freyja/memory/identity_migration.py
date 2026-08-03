@@ -26,6 +26,10 @@ class MigrationReport:
     def safe_to_apply(self) -> bool:
         return not self.ambiguous and not self.conflicts
 
+    @property
+    def verified(self) -> bool:
+        return self.safe_to_apply and self.migratable == 0
+
     def to_dict(self) -> dict:
         return {
             "scanned": self.scanned,
@@ -35,6 +39,7 @@ class MigrationReport:
             "ambiguous_count": len(self.ambiguous),
             "conflict_count": len(self.conflicts),
             "safe_to_apply": self.safe_to_apply,
+            "verified": self.verified,
             "applied": self.applied,
             "backup_path": self.backup_path,
         }
@@ -48,10 +53,15 @@ def migrate_memory_principals(
     backup_path: str | Path | None = None,
 ) -> MigrationReport:
     database = Path(memory_database).expanduser()
+    if not database.is_file() or database.is_symlink():
+        raise ValueError("memory database must be an existing regular file")
     candidates = _candidate_subjects(identities)
     report = MigrationReport()
     with sqlite3.connect(database) as connection:
         connection.row_factory = sqlite3.Row
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "shared_memories" not in tables:
+            raise ValueError("memory database does not contain shared_memories")
         rows = connection.execute("SELECT * FROM shared_memories ORDER BY row_id").fetchall()
         report.scanned = len(rows)
         plans: list[tuple[sqlite3.Row, Person, str]] = []
@@ -88,11 +98,16 @@ def migrate_memory_principals(
             return report
         if not report.safe_to_apply:
             raise ValueError("identity-memory migration has ambiguous mappings or conflicts")
+        if not plans:
+            report.applied = True
+            return report
         destination = Path(backup_path) if backup_path else database.with_suffix(database.suffix + ".pre-identity-migration.bak")
         if destination.exists():
             raise FileExistsError(f"backup already exists: {destination}")
+        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with sqlite3.connect(destination) as backup_connection:
             connection.backup(backup_connection)
+        destination.chmod(0o600)
         report.backup_path = str(destination)
         try:
             connection.execute("BEGIN IMMEDIATE")
