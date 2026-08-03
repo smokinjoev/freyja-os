@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     memory_recall_max_total_chars: int = 3000
     memory_recall_include_in_cloud: bool = False
 
+    identity_provider: str = "seeded"
+    identity_database_path: str = str(_default_state_dir() / "identity.sqlite3")
+    identity_seed_fallback: bool = True
+
     tools_enabled: bool = True
     tools_default_timeout_seconds: int = 30
     tools_audit_log_enabled: bool = True

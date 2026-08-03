@@ -1,0 +1,15 @@
+{
+  "people": [
+    {
+      "person_id": "example-person",
+      "display_name": "Example Person",
+      "preferred_name": "Example",
+      "aliases": ["Example Alias"],
+      "identities": [
+        {"kind": "email", "value": "person@example.invalid", "verified": false}
+      ],
+      "metadata": {}
+    }
+  ],
+  "relationships": []
+}

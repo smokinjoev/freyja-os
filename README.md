@@ -22,6 +22,11 @@ Certification, Benchmark, Communications, and Family Calendar foundation.
 `Person`, `Identity`, `Alias`, and `Relationship`, then resolves raw platform
 identifiers into people before downstream services act on them.
 
+Identity data can remain on the deterministic development seed or load from a
+versioned local SQLite store. Private JSON imports support validation, duplicate
+detection, dry runs, and transactional replacement. See
+[`docs/IDENTITY_STORAGE.md`](docs/IDENTITY_STORAGE.md).
+
 - Signal and iMessage senders can resolve to a `Person` while preserving legacy
   allowlist syntax.
 - Calendar members can be selected by person ID or alias; events attach to

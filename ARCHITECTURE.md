@@ -470,6 +470,10 @@ adapters second, Director tools third, certification suites fourth.
 ## 6.5.2 Identity Service
 
 The Identity Service is the authoritative source for people known to Freyja.
+Its resolver consumes an identity-provider boundary. Rev 1 providers are the
+deterministic in-memory seed and a versioned SQLite repository stored outside
+the source tree. Future Apple or Google adapters must implement this boundary
+rather than bypassing canonical `Person` records.
 Subsystems should resolve raw identifiers into a `Person` as early as practical
 and pass canonical person context through the existing Director and tool path.
 

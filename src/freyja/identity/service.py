@@ -5,6 +5,7 @@ from dataclasses import replace
 from typing import Iterable, Mapping
 
 from freyja.identity.models import Alias, Identity, IdentityKind, Person, Relationship
+from freyja.identity.providers import IdentityProvider, SQLiteIdentityProvider
 from freyja.memory.principal import stable_identity
 
 
@@ -19,11 +20,17 @@ class IdentityService:
         *,
         people: Iterable[Person] | None = None,
         relationships: Iterable[Relationship] | None = None,
+        provider: IdentityProvider | None = None,
     ) -> None:
         self._people: dict[str, Person] = {}
         self._identity_index: dict[tuple[str, str], str] = {}
         self._alias_index: dict[str, str] = {}
         self._relationships: list[Relationship] = []
+        if provider is not None:
+            if people is not None or relationships is not None:
+                raise ValueError("provider cannot be combined with people or relationships")
+            loaded_people, loaded_relationships = provider.load()
+            people, relationships = loaded_people, loaded_relationships
         for person in people or ():
             self.add_person(person)
         for relationship in relationships or ():
@@ -182,6 +189,19 @@ def person_from_legacy_member(member_id: str) -> Person:
 
 
 def default_identity_service() -> IdentityService:
+    from freyja.config import settings
+
+    if settings.identity_provider == "sqlite":
+        provider = SQLiteIdentityProvider(settings.identity_database_path)
+        people, relationships = provider.load()
+        if people or not settings.identity_seed_fallback:
+            return IdentityService(people=people, relationships=relationships)
+    elif settings.identity_provider != "seeded":
+        raise ValueError(f"unsupported identity provider: {settings.identity_provider}")
+    return seeded_identity_service()
+
+
+def seeded_identity_service() -> IdentityService:
     joe = Person(
         person_id="joe",
         display_name="Joe",

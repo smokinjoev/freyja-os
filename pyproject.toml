@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 freyja-certify = "certification.cli:main"
+freyja-identity-import = "freyja.cli.identity_import:main"
 
 [tool.setuptools]
 packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.identity", "freyja.memory", "freyja.tools"]
