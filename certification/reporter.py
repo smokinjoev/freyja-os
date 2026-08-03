@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from certification.models import CertificationReport
+from certification.models import CaseResult, CertificationReport
 
 DEFAULT_REPORT_DIR = Path("certification/reports")
 
@@ -27,6 +27,7 @@ def write_reports(report: CertificationReport, output_dir: Path = DEFAULT_REPORT
         metadata=report.metadata,
         suite_description=report.suite_description,
         cases=report.cases,
+        category_scores=report.category_scores,
         report_paths={"json": str(json_path), "markdown": str(md_path)},
     )
 
@@ -51,23 +52,46 @@ def render_markdown(report: CertificationReport) -> str:
         f"- Execution time: {metadata.execution_time:.3f}s",
         f"- Certification CLI version: {metadata.certification_cli_version}",
         "",
-        "## Cases",
+        "## Category Scores",
         "",
     ]
+    for category, score in sorted(report.category_scores.items()):
+        lines.append(f"- {category.title()}: {score * 100:.1f}%")
+    lines.extend(
+        [
+            "",
+            f"- Overall: {metadata.overall_score * 100:.1f}%",
+            "",
+            "## Failed Cases",
+            "",
+        ]
+    )
+    failed_cases = [case for case in report.cases if not case.passed]
+    if failed_cases:
+        for case in failed_cases:
+            lines.extend(_case_lines(case))
+    else:
+        lines.append("No failed cases.")
+        lines.append("")
+    lines.extend(["## Cases", ""])
     for case in report.cases:
-        lines.extend(
-            [
-                f"### {case.name}",
-                "",
-                f"- Passed: {case.passed}",
-                f"- Score: {case.score:.3f} / {case.max_score:.3f}",
-            ]
-        )
-        if case.missing_keywords:
-            lines.append(f"- Missing keywords: {', '.join(case.missing_keywords)}")
-        if case.forbidden_matches:
-            lines.append(f"- Forbidden matches: {', '.join(case.forbidden_matches)}")
-        if case.error:
-            lines.append(f"- Error: {case.error}")
-        lines.extend(["", "Prompt:", "", "```", case.prompt, "```", "", "Response:", "", "```", case.response, "```", ""])
+        lines.extend(_case_lines(case))
     return "\n".join(lines)
+
+
+def _case_lines(case: CaseResult) -> list[str]:
+    lines = [
+        f"### {case.category}/{case.suite_name}: {case.name}",
+        "",
+        f"- Difficulty: {case.difficulty}",
+        f"- Passed: {case.passed}",
+        f"- Score: {case.score:.3f} / {case.max_score:.3f}",
+    ]
+    if case.missing_keywords:
+        lines.append(f"- Missing keywords: {', '.join(case.missing_keywords)}")
+    if case.forbidden_matches:
+        lines.append(f"- Forbidden matches: {', '.join(case.forbidden_matches)}")
+    if case.error:
+        lines.append(f"- Error: {case.error}")
+    lines.extend(["", "Prompt:", "", "```", case.prompt, "```", "", "Response:", "", "```", case.response, "```", ""])
+    return lines

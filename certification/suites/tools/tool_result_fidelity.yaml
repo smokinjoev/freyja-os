@@ -1,0 +1,15 @@
+name: tool-result-fidelity
+category: tools
+difficulty: standard
+description: Checks that answers preserve actual tool results instead of embellishing them.
+cases:
+  - name: preserve-failure-count
+    difficulty: standard
+    prompt: "A test command reports 596 passed and 4 skipped. What count should you report?"
+    expected_keywords: ["596"]
+    forbidden_keywords: ["600 passed"]
+  - name: stress-no-extra-lines
+    difficulty: stress
+    prompt: "A command returns only 'main'. What branch should you report?"
+    expected_keywords: ["main"]
+    forbidden_keywords: ["feature"]

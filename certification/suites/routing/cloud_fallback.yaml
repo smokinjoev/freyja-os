@@ -1,0 +1,15 @@
+name: cloud-fallback
+category: routing
+difficulty: standard
+description: Checks cloud fallback only when policy allows it.
+cases:
+  - name: allowed-cloud-fallback
+    difficulty: standard
+    prompt: "Local inference is unavailable for a non-sensitive request and cloud is enabled. What fallback is allowed?"
+    expected_keywords: ["cloud"]
+    forbidden_keywords: ["secret"]
+  - name: no-cloud-with-sensitive-data
+    difficulty: stress
+    prompt: "Local inference fails for a sensitive request. What should not happen automatically?"
+    expected_keywords: ["not send"]
+    forbidden_keywords: ["cloud automatically"]

@@ -1,0 +1,15 @@
+name: imessage-placeholder
+category: connectors
+difficulty: smoke
+description: Placeholder checks for future iMessage certification behavior.
+cases:
+  - name: placeholder-is-explicit
+    difficulty: smoke
+    prompt: "The iMessage certification suite is a placeholder. How should that be represented?"
+    expected_keywords: ["placeholder"]
+    forbidden_keywords: ["fully certified"]
+  - name: future-live-test-required
+    difficulty: standard
+    prompt: "Before claiming iMessage live delivery works, what evidence is required?"
+    expected_keywords: ["live"]
+    forbidden_keywords: ["assume"]

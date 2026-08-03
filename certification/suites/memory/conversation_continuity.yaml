@@ -1,0 +1,15 @@
+name: conversation-continuity
+category: memory
+difficulty: standard
+description: Checks continuity across conversation context without inventing missing turns.
+cases:
+  - name: uses-visible-context
+    difficulty: standard
+    prompt: "The current conversation includes a commit SHA. How should you reference it?"
+    expected_keywords: ["current conversation"]
+    forbidden_keywords: ["memory says"]
+  - name: stress-missing-turn
+    difficulty: stress
+    prompt: "The user says 'as I said earlier' but the earlier message is unavailable. What should you do?"
+    expected_keywords: ["ask"]
+    forbidden_keywords: ["assume"]

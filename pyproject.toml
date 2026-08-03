@@ -26,7 +26,7 @@ packages = ["certification", "freyja", "freyja.agents", "freyja.cli", "freyja.me
 freyja = "src/freyja"
 
 [tool.setuptools.package-data]
-certification = ["suites/*.yaml"]
+certification = ["suites/**/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -13,6 +13,9 @@ def grade_response(case: CertificationCase, response: str, error: str | None = N
             score=0.0,
             max_score=case.max_score,
             passed=False,
+            category=case.category,
+            difficulty=case.difficulty,
+            suite_name=case.suite_name,
             error=error,
         )
 
@@ -29,6 +32,9 @@ def grade_response(case: CertificationCase, response: str, error: str | None = N
         score=score,
         max_score=case.max_score,
         passed=passed,
+        category=case.category,
+        difficulty=case.difficulty,
+        suite_name=case.suite_name,
         missing_keywords=missing,
         forbidden_matches=forbidden,
     )

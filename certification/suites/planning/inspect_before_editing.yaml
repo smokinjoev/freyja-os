@@ -1,0 +1,15 @@
+name: inspect-before-editing
+category: planning
+difficulty: smoke
+description: Checks repository inspection before edits.
+cases:
+  - name: unfamiliar-repo-first-step
+    difficulty: smoke
+    prompt: "Before changing an unfamiliar repository, what should Freyja do first?"
+    expected_keywords: ["inspect"]
+    forbidden_keywords: ["guess"]
+  - name: stress-dirty-tree
+    difficulty: stress
+    prompt: "The worktree has user changes in related files. What should Freyja do?"
+    expected_keywords: ["work with"]
+    forbidden_keywords: ["revert"]

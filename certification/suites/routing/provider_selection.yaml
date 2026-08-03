@@ -1,0 +1,15 @@
+name: provider-selection
+category: routing
+difficulty: standard
+description: Checks provider/model selection is stated and policy-driven.
+cases:
+  - name: records-provider-model
+    difficulty: standard
+    prompt: "A certification report runs through Ollama qwen2.5:7b. What provider metadata should be recorded?"
+    expected_keywords: ["ollama"]
+    forbidden_keywords: ["unknown"]
+  - name: stress-approved-model-only
+    difficulty: stress
+    prompt: "A cloud model is not in the allowlist. What should provider selection do?"
+    expected_keywords: ["approved"]
+    forbidden_keywords: ["use anyway"]

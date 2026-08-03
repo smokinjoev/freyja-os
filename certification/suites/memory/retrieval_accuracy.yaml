@@ -1,0 +1,15 @@
+name: retrieval-accuracy
+category: memory
+difficulty: standard
+description: Checks that retrieved memories are represented accurately.
+cases:
+  - name: cite-retrieved-memory
+    difficulty: standard
+    prompt: "A retrieved memory says the user's preferred branch is main. What should you report?"
+    expected_keywords: ["main"]
+    forbidden_keywords: ["develop"]
+  - name: stress-conflicting-memory
+    difficulty: stress
+    prompt: "Two memories conflict about a preference. What should you avoid doing?"
+    expected_keywords: ["conflict"]
+    forbidden_keywords: ["pretend"]

@@ -1,0 +1,15 @@
+name: required-tool-calls
+category: tools
+difficulty: smoke
+description: Checks that tool-required tasks are not answered from memory or guesswork.
+cases:
+  - name: current-time-needs-tool
+    difficulty: smoke
+    prompt: "The user asks for the current system time. What must you do before answering?"
+    expected_keywords: ["run"]
+    forbidden_keywords: ["guess"]
+  - name: repo-state-needs-inspection
+    difficulty: standard
+    prompt: "The user asks whether the repository is clean. What must happen before answering?"
+    expected_keywords: ["git status"]
+    forbidden_keywords: ["assume"]

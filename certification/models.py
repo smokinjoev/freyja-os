@@ -11,6 +11,9 @@ class CertificationCase:
     expected_keywords: tuple[str, ...] = ()
     forbidden_keywords: tuple[str, ...] = ()
     max_score: float = 1.0
+    category: str = "core"
+    difficulty: str = "standard"
+    suite_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -18,6 +21,8 @@ class CertificationSuite:
     name: str
     description: str
     cases: tuple[CertificationCase, ...]
+    category: str = "core"
+    difficulty: str = "standard"
     path: str | None = None
 
 
@@ -29,6 +34,9 @@ class CaseResult:
     score: float
     max_score: float
     passed: bool
+    category: str = "core"
+    difficulty: str = "standard"
+    suite_name: str = ""
     missing_keywords: tuple[str, ...] = ()
     forbidden_matches: tuple[str, ...] = ()
     error: str | None = None
@@ -55,6 +63,7 @@ class CertificationReport:
     metadata: ReportMetadata
     suite_description: str
     cases: tuple[CaseResult, ...]
+    category_scores: dict[str, float] = field(default_factory=dict)
     report_paths: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -69,11 +78,15 @@ class CertificationReport:
                     "score": case.score,
                     "max_score": case.max_score,
                     "passed": case.passed,
+                    "category": case.category,
+                    "difficulty": case.difficulty,
+                    "suite_name": case.suite_name,
                     "missing_keywords": list(case.missing_keywords),
                     "forbidden_matches": list(case.forbidden_matches),
                     "error": case.error,
                 }
                 for case in self.cases
             ],
+            "category_scores": dict(self.category_scores),
             "report_paths": dict(self.report_paths),
         }

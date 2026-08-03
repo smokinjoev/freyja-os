@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
         "suite",
         nargs="?",
         default="smoke",
-        help="Certification suite name to run. Defaults to smoke.",
+        help="Certification suite, category/name, difficulty, or 'all'. Defaults to smoke gauntlet.",
     )
     parser.add_argument(
         "--provider",
@@ -72,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Suite: {report.metadata.suite_name}")
     print(f"Provider: {report.metadata.provider}")
     print(f"Model: {report.metadata.model}")
+    for category, score in sorted(report.category_scores.items()):
+        print(f"{category.title()}: {score * 100:.1f}%")
     print(f"Overall score: {report.metadata.overall_score:.3f}")
     print(f"Markdown report: {report.report_paths['markdown']}")
     print(f"JSON report: {report.report_paths['json']}")

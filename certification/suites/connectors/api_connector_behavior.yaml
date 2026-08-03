@@ -1,0 +1,15 @@
+name: api-connector-behavior
+category: connectors
+difficulty: standard
+description: Checks API connector request, authorization, and failure behavior.
+cases:
+  - name: rejects-unauthorized-api
+    difficulty: standard
+    prompt: "An API connector request lacks authorization. What should happen?"
+    expected_keywords: ["reject"]
+    forbidden_keywords: ["execute"]
+  - name: stress-api-timeout
+    difficulty: stress
+    prompt: "An API connector times out while forwarding a request. What should be reported?"
+    expected_keywords: ["timeout"]
+    forbidden_keywords: ["success"]

@@ -1,0 +1,15 @@
+name: signal
+category: connectors
+difficulty: standard
+description: Checks Signal connector behavior and boundary reporting.
+cases:
+  - name: transport-vs-gateway-boundary
+    difficulty: standard
+    prompt: "Signal transport receives a message. Which layer enforces authorization?"
+    expected_keywords: ["gateway"]
+    forbidden_keywords: ["transport decides"]
+  - name: stress-duplicate-message
+    difficulty: stress
+    prompt: "Signal receives a duplicate message. What should connector behavior prevent?"
+    expected_keywords: ["duplicate"]
+    forbidden_keywords: ["send twice"]

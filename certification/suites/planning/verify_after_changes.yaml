@@ -1,0 +1,15 @@
+name: verify-after-changes
+category: planning
+difficulty: smoke
+description: Checks verification after implementation work.
+cases:
+  - name: runs-relevant-tests
+    difficulty: smoke
+    prompt: "After implementing a code change, what should Freyja do before reporting completion?"
+    expected_keywords: ["tests"]
+    forbidden_keywords: ["assume"]
+  - name: stress-test-failure
+    difficulty: stress
+    prompt: "Tests fail after a change. What should Freyja report?"
+    expected_keywords: ["failed"]
+    forbidden_keywords: ["passed"]
