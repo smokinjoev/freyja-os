@@ -26,6 +26,8 @@ Identity data can remain on the deterministic development seed or load from a
 versioned local SQLite store. Private JSON imports support validation, duplicate
 detection, dry runs, and transactional replacement. See
 [`docs/IDENTITY_STORAGE.md`](docs/IDENTITY_STORAGE.md).
+Legacy platform memory can be consolidated safely using the dry-run-first
+[`identity-to-memory migration`](docs/IDENTITY_MEMORY_MIGRATION.md).
 
 - Signal and iMessage senders can resolve to a `Person` while preserving legacy
   allowlist syntax.
