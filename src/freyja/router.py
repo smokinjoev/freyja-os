@@ -91,16 +91,38 @@ ROUTINE_TASK_TYPES = {
 CLOUD_TASK_TYPES = {
     "code",
     "coding",
+    "debug",
+    "debugging",
     "plan",
     "planning",
+    "architecture",
+    "architectural",
     "reason",
+    "reasoning",
     "complex",
     "difficult",
     "large_context",
     "advanced",
     "math",
     "translation",
+    "tool_selection",
+    "tool-selection",
 }
+
+COMPLEX_PROMPT_PATTERNS = (
+    "write code",
+    "fix the bug",
+    "debug",
+    "stack trace",
+    "patch",
+    "refactor",
+    "architecture",
+    "design a system",
+    "implementation plan",
+    "plan the implementation",
+    "tool selection",
+    "which tool",
+)
 
 
 def _classify_privacy(prompt: str, explicit: str | None) -> str:
@@ -158,6 +180,14 @@ def _cloud_score(request: RouteRequest) -> int:
     return score
 
 
+def _local_reasoning_score(request: RouteRequest) -> int:
+    score = _cloud_score(request)
+    prompt = request.prompt.lower()
+    if any(pattern in prompt for pattern in COMPLEX_PROMPT_PATTERNS):
+        score += 2
+    return score
+
+
 class Router:
     def __init__(self, registry: ToolRegistry | None = None) -> None:
         self.ollama_client: Any | None = None
@@ -191,6 +221,9 @@ class Router:
         if _meets_min_chat_capability(default):
             return default
         return settings.ollama_chat_model
+
+    def _reasoning_model(self, requested: str | None = None) -> str:
+        return requested or settings.ollama_reasoning_model
 
     def _approved_model(self, requested: str | None) -> tuple[str, str]:
         approved = settings.approved_openrouter_models
@@ -315,11 +348,20 @@ class Router:
         notice: str | None = None
         reason_tail = ""
 
-        if request.provider not in {"local", "cloud", "auto"}:
+        if request.provider not in {"local", "local_reasoning", "cloud", "auto"}:
             return RoutingDecision(
                 provider="error",
                 model="",
                 reason=f"invalid provider '{request.provider}'",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+
+        if request.provider == "local_reasoning":
+            return RoutingDecision(
+                provider="local_reasoning",
+                model=self._reasoning_model(request.model),
+                reason="manual local_reasoning override",
                 privacy_classification=privacy,
                 estimated_cost_usd=0.0,
             )
@@ -386,37 +428,15 @@ class Router:
             if sensitive_decision is not None:
                 return sensitive_decision
 
-        if _cloud_score(request) > _routine_score(request):
-            cloud_allowed = settings.cloud_enabled and spent_this_month < settings.openrouter_monthly_soft_limit
-            if cloud_allowed and estimated_cost <= settings.openrouter_per_request_limit:
-                openrouter_healthy = await self._openrouter_healthy()
-                if openrouter_healthy:
-                    model, reason = self._approved_model(request.model)
-                    if model:
-                        return RoutingDecision(
-                            provider="openrouter",
-                            model=model,
-                            reason=f"cloud preferred for task/context; {reason}",
-                            privacy_classification=privacy,
-                            fallback_attempts=fallback_attempts,
-                            estimated_cost_usd=estimated_cost,
-                        )
-                    fallback_attempts.append(self._record_attempt("openrouter", "no approved model"))
-                else:
-                    fallback_attempts.append(self._record_attempt("openrouter", "unhealthy"))
-            else:
-                if not settings.cloud_enabled:
-                    notice = "Cloud routing is currently disabled; falling back to local."
-                    reason_tail = "cloud disabled"
-                    fallback_attempts.append(self._record_attempt("openrouter", "cloud disabled"))
-                elif spent_this_month >= settings.openrouter_monthly_soft_limit:
-                    notice = "Monthly cloud soft budget reached; falling back to local."
-                    reason_tail = "soft budget reached"
-                    fallback_attempts.append(self._record_attempt("openrouter", "soft budget reached"))
-                elif estimated_cost > settings.openrouter_per_request_limit:
-                    notice = "Request exceeds per-request cost limit; falling back to local."
-                    reason_tail = "per-request cost limit exceeded"
-                    fallback_attempts.append(self._record_attempt("openrouter", "per-request limit"))
+        if _local_reasoning_score(request) > _routine_score(request):
+            return RoutingDecision(
+                provider="local_reasoning",
+                model=self._reasoning_model(request.model),
+                reason="local_reasoning preferred for complex local task",
+                privacy_classification=privacy,
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=0.0,
+            )
 
         local_reason = "routine/sensitive request defaults to local"
         if reason_tail:
@@ -460,9 +480,9 @@ class Router:
                 response="",
             )
 
-        if decision.provider == "ollama":
+        if decision.provider in {"ollama", "local_reasoning"}:
             if self.ollama_client is None:
-                decision.reason += "; ollama client unavailable"
+                decision.reason += f"; {decision.provider} client unavailable"
                 decision.public_error_message = PUBLIC_ERROR_MESSAGES["ollama"]
                 return RoutingResult(decision=decision, response="")
             if request.tools_required:
@@ -475,16 +495,17 @@ class Router:
             response = await self.ollama_client.chat(
                 prompt=request.prompt,
                 model=decision.model or None,
+                output_tokens=settings.ollama_default_output_tokens if decision.provider == "local_reasoning" else None,
             )
             if "error" in response:
                 raw_error = response["error"]
-                decision.fallback_attempts.append({"provider": "ollama", "outcome": raw_error})
+                decision.fallback_attempts.append({"provider": decision.provider, "outcome": raw_error})
                 if settings.cloud_enabled and request.provider != "local":
                     fallback_result = await self._try_openrouter_fallback(request, decision)
                     fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
                     return fallback_result
                 decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
-                decision.public_error_message = self._public_error("ollama", decision.fallback_attempts)
+                decision.public_error_message = self._public_error(decision.provider, decision.fallback_attempts)
                 return RoutingResult(decision=decision, response="")
 
             content = response.get("message", {}).get("content", "")
@@ -511,13 +532,9 @@ class Router:
             if "error" in response:
                 raw_error = response["error"]
                 decision.fallback_attempts.append({"provider": "openrouter", "outcome": raw_error})
-                if request.provider != "cloud":
-                    fallback_result = await self._try_ollama_fallback(request, decision)
-                    fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
-                    return fallback_result
-                decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
-                decision.public_error_message = self._public_error("openrouter", decision.fallback_attempts)
-                return RoutingResult(decision=decision, response="")
+                fallback_result = await self._try_ollama_fallback(request, decision)
+                fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
+                return fallback_result
 
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             response_text = response.get("response", "")
@@ -565,11 +582,16 @@ class Router:
                 )
             prompt = "".join(prompt_parts)
 
-            response = await client.chat(
-                prompt=prompt,
-                model=decision.model or None,
-                tools_required=True,
-            )
+            chat_kwargs: dict[str, Any] = {
+                "prompt": prompt,
+                "model": decision.model or None,
+                "tools_required": True,
+            }
+            if decision.provider in {"ollama", "local_reasoning"}:
+                chat_kwargs["tools"] = registry.list_tools()
+            if decision.provider == "local_reasoning":
+                chat_kwargs["output_tokens"] = settings.ollama_default_output_tokens
+            response = await client.chat(**chat_kwargs)
             if "error" in response:
                 return RoutingResult(
                     decision=decision,
@@ -578,7 +600,7 @@ class Router:
                 )
 
             content = self._extract_response_text(response, decision.provider)
-            tool_call = self._parse_tool_call(content)
+            tool_call = self._extract_tool_call(response, content, decision.provider)
             clean_content = self._strip_tool_markers(content)
 
             if tool_call is None:
@@ -599,7 +621,8 @@ class Router:
             if not isinstance(arguments, dict):
                 arguments = {}
 
-            validation_errors = registry.validate_arguments(tool_name, arguments)
+            arguments, normalization_errors = registry.normalize_arguments(tool_name, arguments)
+            validation_errors = normalization_errors or registry.validate_arguments(tool_name, arguments)
             definition = registry.get_tool(tool_name)
 
             if definition is None:
@@ -689,9 +712,20 @@ class Router:
         )
 
     def _extract_response_text(self, response: dict[str, Any], provider: str) -> str:
-        if provider == "ollama":
+        if provider in {"ollama", "local_reasoning"}:
             return response.get("message", {}).get("content", "")
         return response.get("response", "")
+
+    def _extract_tool_call(self, response: dict[str, Any], content: str, provider: str) -> dict[str, Any] | None:
+        if provider in {"ollama", "local_reasoning"}:
+            calls = response.get("message", {}).get("tool_calls") or []
+            if calls:
+                function = calls[0].get("function", {})
+                name = function.get("name")
+                arguments = function.get("arguments") or {}
+                if isinstance(name, str) and isinstance(arguments, dict):
+                    return {"tool_name": name, "arguments": arguments}
+        return self._parse_tool_call(content)
 
     def _parse_tool_call(self, content: str) -> dict[str, Any] | None:
         match = re.search(

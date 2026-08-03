@@ -91,6 +91,22 @@ class ToolRegistry:
             return []
         return _validate_against_schema(arguments, schema)
 
+    def normalize_arguments(self, tool_name: str, arguments: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        """Return conservative schema-aware argument normalizations.
+
+        Only unambiguous enum aliases are normalized. Invalid or ambiguous
+        values are returned as validation errors instead of being guessed.
+        """
+        definition = self._tools.get(tool_name)
+        if definition is None:
+            return dict(arguments), [f"Tool '{tool_name}' not found"]
+        if not definition.enabled:
+            return dict(arguments), [f"Tool '{tool_name}' is disabled"]
+        schema = definition.input_schema or {}
+        if not schema:
+            return dict(arguments), []
+        return _normalize_against_schema(arguments, schema)
+
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         start = time.monotonic()
         name = request.tool_name
@@ -120,7 +136,8 @@ class ToolRegistry:
                     duration_ms=_elapsed_ms(start),
                 )
 
-            validation_errors = self.validate_arguments(name, request.arguments)
+            normalized_arguments, normalization_errors = self.normalize_arguments(name, request.arguments)
+            validation_errors = normalization_errors or self.validate_arguments(name, normalized_arguments)
             if validation_errors:
                 return self._error_result(
                     request,
@@ -139,7 +156,8 @@ class ToolRegistry:
                 )
 
             timeout = definition.timeout_seconds or self._default_timeout_seconds
-            output = await asyncio.wait_for(implementation(request), timeout=timeout)
+            normalized_request = request.model_copy(update={"arguments": normalized_arguments})
+            output = await asyncio.wait_for(implementation(normalized_request), timeout=timeout)
             duration_ms = _elapsed_ms(start)
             result = ToolExecutionResult(
                 success=True,
@@ -242,6 +260,9 @@ class DisabledToolRegistry(ToolRegistry):
     def validate_arguments(self, tool_name: str, arguments: dict[str, Any]) -> list[str]:
         return ["Tool execution is globally disabled"]
 
+    def normalize_arguments(self, tool_name: str, arguments: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        return dict(arguments), ["Tool execution is globally disabled"]
+
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         return ToolExecutionResult(
             success=False,
@@ -276,11 +297,66 @@ def _validate_against_schema(arguments: dict[str, Any], schema: dict[str, Any]) 
             continue
         expected = prop.get("type")
         if expected is None:
-            continue
-        if not _type_matches(value, expected):
+            pass
+        elif not _type_matches(value, expected):
             errors.append(f"Argument '{key}' must be of type {expected}")
+            continue
+        enum = prop.get("enum")
+        if enum is not None and value not in enum:
+            errors.append(f"Argument '{key}' must be one of: {', '.join(map(str, enum))}")
 
     return errors
+
+
+def _normalize_against_schema(arguments: dict[str, Any], schema: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    normalized = dict(arguments)
+    errors: list[str] = []
+    properties = schema.get("properties", {}) or {}
+
+    for key, value in arguments.items():
+        prop = properties.get(key)
+        if prop is None:
+            continue
+        enum = prop.get("enum")
+        if enum is None or value in enum:
+            continue
+        if not isinstance(value, str):
+            continue
+        replacement, error = _normalize_enum_alias(key, value, enum)
+        if error is not None:
+            errors.append(error)
+        elif replacement is not None:
+            normalized[key] = replacement
+
+    if errors:
+        return normalized, errors
+    return normalized, _validate_against_schema(normalized, schema)
+
+
+def _normalize_enum_alias(key: str, value: str, enum: list[Any]) -> tuple[Any | None, str | None]:
+    lower_enum = {str(item).lower(): item for item in enum}
+    lowered = value.strip().lower()
+    if lowered in lower_enum:
+        return lower_enum[lowered], None
+
+    alias_targets = {
+        "f": "fahrenheit",
+        "degf": "fahrenheit",
+        "°f": "fahrenheit",
+        "c": "celsius",
+        "degc": "celsius",
+        "°c": "celsius",
+    }
+    if len(lowered) == 1:
+        prefix_matches = [item for item in enum if str(item).lower().startswith(lowered)]
+        if len(prefix_matches) > 1:
+            return None, f"Argument '{key}' is ambiguous for enum values: {', '.join(map(str, prefix_matches))}"
+    target = alias_targets.get(lowered)
+    if target is not None and target in lower_enum:
+        return lower_enum[target], None
+    if target is not None:
+        return None, f"Argument '{key}' has unsupported enum alias: {value}"
+    return None, f"Argument '{key}' must be one of: {', '.join(map(str, enum))}"
 
 
 def _type_matches(value: Any, expected: str) -> bool:

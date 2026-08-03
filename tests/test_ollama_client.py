@@ -42,6 +42,103 @@ async def test_chat_sends_system_prompt_first(client: OllamaClient) -> None:
     assert "Do not claim to be Qwen" in messages[0]["content"]
     assert messages[1]["role"] == "user"
     assert messages[1]["content"] == "hi"
+    assert captured["payload"]["options"]["num_predict"] >= 160
+
+
+@pytest.mark.asyncio
+async def test_chat_excludes_thinking_from_result(client: OllamaClient) -> None:
+    def _capture(*args, **kwargs):
+        request = httpx.Request("POST", str(args[0]))
+        return httpx.Response(
+            200,
+            json={
+                "model": "qwen2.5:7b",
+                "message": {
+                    "content": "visible",
+                    "thinking": "private chain of thought",
+                },
+                "done_reason": "stop",
+                "prompt_eval_count": 12,
+                "eval_count": 3,
+                "eval_duration": 1_000_000_000,
+            },
+            request=request,
+        )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=_capture):
+        result = await client.chat("hi")
+
+    assert result["message"]["content"] == "visible"
+    assert "thinking" not in result["message"]
+    assert "private chain of thought" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_empty_content_length_retries_once_success(client: OllamaClient) -> None:
+    responses = [
+        {
+            "model": "qwen2.5:7b",
+            "message": {"content": "", "thinking": "still thinking"},
+            "done_reason": "length",
+            "eval_count": 160,
+            "eval_duration": 1_000_000_000,
+        },
+        {
+            "model": "qwen2.5:7b",
+            "message": {"content": "done", "thinking": "hidden"},
+            "done_reason": "stop",
+            "eval_count": 2,
+            "eval_duration": 1_000_000_000,
+        },
+    ]
+    budgets: list[int] = []
+
+    def _capture(*args, **kwargs):
+        request = httpx.Request("POST", str(args[0]))
+        budgets.append(kwargs["json"]["options"]["num_predict"])
+        return httpx.Response(200, json=responses.pop(0), request=request)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=_capture) as post:
+        result = await client.chat("hi", output_tokens=160)
+
+    assert post.await_count == 2
+    assert result["message"]["content"] == "done"
+    assert result["retried"] is True
+    assert budgets == [160, 1024]
+
+
+@pytest.mark.asyncio
+async def test_empty_content_retry_exhaustion_returns_provider_failure(client: OllamaClient) -> None:
+    def _capture(*args, **kwargs):
+        request = httpx.Request("POST", str(args[0]))
+        return httpx.Response(
+            200,
+            json={
+                "model": "qwen2.5:7b",
+                "message": {"content": "", "thinking": "hidden"},
+                "done_reason": "length",
+                "eval_count": 160,
+                "eval_duration": 1_000_000_000,
+            },
+            request=request,
+        )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=_capture) as post:
+        result = await client.chat("hi", output_tokens=160)
+
+    assert post.await_count == 2
+    assert result["status"] == "empty_content"
+    assert result["error"] == "Ollama returned empty content"
+    assert "thinking" not in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_chat_unavailable_returns_error(client: OllamaClient) -> None:
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=httpx.ConnectError("refused")):
+        result = await client.chat("hi")
+
+    assert "error" in result
+    assert result["model"] == "qwen2.5:7b"
 
 
 @pytest.mark.asyncio

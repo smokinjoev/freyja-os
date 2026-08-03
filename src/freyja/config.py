@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b"
     ollama_chat_model: str = "qwen2.5:7b"
     ollama_classification_model: str = "qwen2.5:1.5b"
+    ollama_reasoning_model: str = "gpt-oss:20b"
+    ollama_min_output_tokens: int = 160
+    ollama_default_output_tokens: int = 512
+    ollama_retry_output_tokens: int = 1024
     ollama_min_chat_parameters_b: int = 3
 
     openrouter_api_key: str = ""

@@ -88,6 +88,25 @@ async def ollama_health() -> dict[str, bool | str]:
     }
 
 
+@app.get("/local-reasoning/health")
+async def local_reasoning_health() -> dict[str, bool | str]:
+    healthy = await ollama.healthy()
+    model_available = False
+    if healthy:
+        tags = await ollama.tags()
+        if "error" not in tags:
+            model_available = settings.ollama_reasoning_model in {
+                model.get("name", "") for model in tags.get("models", [])
+            }
+    return {
+        "local_reasoning_reachable": healthy and model_available,
+        "ollama_reachable": healthy,
+        "base_url": settings.ollama_base_url,
+        "model": settings.ollama_reasoning_model,
+        "model_available": model_available,
+    }
+
+
 @app.get("/ollama/models")
 async def ollama_models() -> dict[str, list[str]]:
     tags = await ollama.tags()

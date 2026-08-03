@@ -143,6 +143,74 @@ def test_input_validation(registry: ToolRegistry) -> None:
     assert "type string" in result.public_error_message
 
 
+def test_enum_normalization_safe_alias(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(
+        name="weather_units",
+        description="Normalizes weather units",
+        input_schema={
+            "type": "object",
+            "required": ["unit"],
+            "properties": {"unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}},
+        },
+    )
+
+    async def weather_units(request: ToolExecutionRequest) -> dict:
+        return {"unit": request.arguments["unit"]}
+
+    registry.register(definition, weather_units)
+    result = asyncio_run(
+        registry.execute(ToolExecutionRequest(tool_name="weather_units", arguments={"unit": "F"}))
+    )
+    assert result.success is True
+    assert result.output == {"unit": "fahrenheit"}
+
+
+def test_invalid_enum_rejected(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(
+        name="weather_units_invalid",
+        description="Rejects bad units",
+        input_schema={
+            "type": "object",
+            "required": ["unit"],
+            "properties": {"unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}},
+        },
+    )
+
+    async def noop(request: ToolExecutionRequest) -> dict:
+        return {}
+
+    registry.register(definition, noop)
+    result = asyncio_run(
+        registry.execute(ToolExecutionRequest(tool_name="weather_units_invalid", arguments={"unit": "kelvin"}))
+    )
+    assert result.success is False
+    assert result.error_code == "validation_error"
+    assert "must be one of" in result.public_error_message
+
+
+def test_ambiguous_enum_alias_rejected(registry: ToolRegistry) -> None:
+    definition = ToolDefinition(
+        name="ambiguous_units",
+        description="Rejects ambiguous aliases",
+        input_schema={
+            "type": "object",
+            "required": ["unit"],
+            "properties": {"unit": {"type": "string", "enum": ["fahrenheit", "forecast"]}},
+        },
+    )
+
+    async def noop(request: ToolExecutionRequest) -> dict:
+        return {}
+
+    registry.register(definition, noop)
+    result = asyncio_run(
+        registry.execute(ToolExecutionRequest(tool_name="ambiguous_units", arguments={"unit": "F"}))
+    )
+    assert result.success is False
+    assert result.error_code == "validation_error"
+    assert "ambiguous" in result.public_error_message
+
+
 def test_successful_execution(registry: ToolRegistry) -> None:
     definition = ToolDefinition(
         name="add",
@@ -370,9 +438,9 @@ def test_builtin_get_weather_bad_request_type(registry: ToolRegistry, monkeypatc
             )
         )
     )
-    assert result.success is True
-    assert result.output["live_data_available"] is False
-    assert "unsupported" in result.output["summary"].lower()
+    assert result.success is False
+    assert result.error_code == "validation_error"
+    assert "request_type" in result.public_error_message
 
 
 def test_builtin_get_weather_provider_500(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:

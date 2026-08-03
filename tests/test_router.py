@@ -9,7 +9,7 @@ import pytest
 from freyja.config import Settings, settings
 from freyja.router import RouteRequest, Router
 from freyja.tools.builtin import register_builtin_tools
-from freyja.tools.models import ToolDefinition
+from freyja.tools.models import ToolDefinition, ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry
 
 
@@ -41,6 +41,7 @@ def reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "local_max_prompt_chars": 8000,
         "openrouter_allowlist": "",
         "ollama_model": "qwen2.5:1.5b",
+        "ollama_reasoning_model": "gpt-oss:20b",
         "openrouter_model": "openai/gpt-4o-mini",
     }
     for key, value in defaults.items():
@@ -130,6 +131,21 @@ async def test_routine_request_routes_local(router: Router) -> None:
     router.openrouter_client.chat.assert_not_called()
 
 
+async def test_quick_acknowledgement_stays_fast_tier(router: Router, reset_settings) -> None:
+    router.ollama_client.healthy.return_value = True
+    router.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "ok"},
+    }
+
+    req = RouteRequest(prompt="ok thanks", task_type="chat")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "ollama"
+    assert result.decision.model == "qwen2.5:7b"
+    assert result.response == "ok"
+
+
 async def test_sensitive_request_routes_local_when_ollama_healthy(router: Router) -> None:
     router.ollama_client.healthy.return_value = True
     router.ollama_client.chat.return_value = {
@@ -161,21 +177,23 @@ async def test_sensitive_request_falls_back_when_ollama_unhealthy(router: Router
     assert any(a["provider"] == "ollama" and a["outcome"] == "unhealthy" for a in result.decision.fallback_attempts)
 
 
-async def test_large_context_routes_cloud_when_healthy(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_complex_coding_routes_local_reasoning(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
     _settings_with_allowlist(monkeypatch)
     router.ollama_client.healthy.return_value = True
     router.openrouter_client.healthy.return_value = True
-    router.openrouter_client.chat.return_value = {
-        "model": "openai/gpt-4o-mini",
-        "response": "cloud large",
+    router.ollama_client.chat.return_value = {
+        "model": "gpt-oss:20b",
+        "message": {"content": "local reasoning"},
     }
 
-    big_prompt = "x" * 9000
-    req = RouteRequest(prompt=big_prompt, task_type="coding")
+    req = RouteRequest(prompt="Debug this stack trace and propose a patch", task_type="coding")
     result = await router.execute(req)
 
-    assert result.decision.provider == "openrouter"
-    assert "cloud preferred" in result.decision.reason
+    assert result.decision.provider == "local_reasoning"
+    assert result.decision.model == "gpt-oss:20b"
+    assert "complex local task" in result.decision.reason
+    assert result.response == "local reasoning"
+    router.openrouter_client.chat.assert_not_called()
 
 
 async def test_cloud_disabled_blocks_auto_cloud(router: Router, disable_cloud) -> None:
@@ -189,8 +207,8 @@ async def test_cloud_disabled_blocks_auto_cloud(router: Router, disable_cloud) -
     req = RouteRequest(prompt=big_prompt, task_type="coding")
     result = await router.execute(req)
 
-    assert result.decision.provider == "ollama"
-    assert "Cloud routing is currently disabled" in (result.decision.limitation_notice or "")
+    assert result.decision.provider == "local_reasoning"
+    assert result.decision.model == settings.ollama_reasoning_model
 
 
 async def test_soft_budget_reached_routes_local(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -205,8 +223,8 @@ async def test_soft_budget_reached_routes_local(router: Router, reset_settings, 
     req = RouteRequest(prompt=big_prompt, task_type="coding")
     result = await router.execute(req, spent_this_month=20.0)
 
-    assert result.decision.provider == "ollama"
-    assert "soft budget reached" in result.decision.reason
+    assert result.decision.provider == "local_reasoning"
+    assert result.decision.model == settings.ollama_reasoning_model
 
 
 async def test_local_failure_falls_back_to_cloud(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -218,12 +236,28 @@ async def test_local_failure_falls_back_to_cloud(router: Router, reset_settings,
         "response": "cloud fallback",
     }
 
-    req = RouteRequest(prompt="hi", task_type="coding")
+    req = RouteRequest(prompt="Debug this bug and propose a patch", task_type="coding")
     result = await router.execute(req)
 
     assert result.decision.provider == "openrouter"
-    assert any(a["provider"] == "ollama" for a in result.decision.fallback_attempts)
+    assert any(a["provider"] == "local_reasoning" for a in result.decision.fallback_attempts)
     assert "fallback" in result.decision.reason
+
+
+async def test_retry_exhaustion_falls_back_to_cloud(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
+    _settings_with_allowlist(monkeypatch)
+    router.ollama_client.chat.return_value = {"error": "Ollama returned empty content", "status": "empty_content"}
+    router.openrouter_client.chat.return_value = {
+        "model": "openai/gpt-4o-mini",
+        "response": "cloud fallback",
+    }
+
+    req = RouteRequest(prompt="Write code to fix this bug", task_type="coding")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "openrouter"
+    assert result.response == "cloud fallback"
+    assert any(a["provider"] == "local_reasoning" for a in result.decision.fallback_attempts)
 
 
 async def test_cloud_failure_falls_back_to_local(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,7 +271,7 @@ async def test_cloud_failure_falls_back_to_local(router: Router, reset_settings,
     }
 
     big_prompt = "x" * 9000
-    req = RouteRequest(prompt=big_prompt, task_type="coding")
+    req = RouteRequest(prompt=big_prompt, provider="cloud")
     result = await router.execute(req)
 
     assert result.decision.provider == "ollama"
@@ -258,6 +292,118 @@ async def test_audit_reason_and_request_id(router: Router, reset_settings) -> No
     assert result.decision.request_id
     assert result.decision.reason
     assert result.decision.privacy_classification in {"routine", "sensitive"}
+
+
+async def test_native_tool_call_validated_and_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "chat_max_tool_iterations", 2)
+    registry = ToolRegistry(audit_enabled=False)
+    seen_arguments: list[dict[str, Any]] = []
+
+    async def weather(request: ToolExecutionRequest) -> dict:
+        seen_arguments.append(request.arguments)
+        return {"summary": f"{request.arguments['unit']} in {request.arguments['location']}"}
+
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description="Weather",
+            input_schema={
+                "type": "object",
+                "required": ["location", "unit"],
+                "properties": {
+                    "location": {"type": "string"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+            },
+        ),
+        weather,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.side_effect = [
+        {
+            "model": "gpt-oss:20b",
+            "message": {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": {"location": "Boston", "unit": "F"},
+                        }
+                    }
+                ],
+            },
+        },
+        {
+            "model": "gpt-oss:20b",
+            "message": {"content": "It is fahrenheit in Boston."},
+        },
+    ]
+
+    req = RouteRequest(
+        prompt="What is the weather in Boston in Fahrenheit?",
+        provider="local_reasoning",
+        tools_required=True,
+    )
+    result = await r.execute(req)
+
+    assert result.response == "It is fahrenheit in Boston."
+    assert seen_arguments == [{"location": "Boston", "unit": "fahrenheit"}]
+    first_call = r.ollama_client.chat.await_args_list[0].kwargs
+    assert first_call["tools"]
+
+
+async def test_native_tool_call_invalid_arguments_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "chat_max_tool_iterations", 2)
+    registry = ToolRegistry(audit_enabled=False)
+
+    async def weather(request: ToolExecutionRequest) -> dict:
+        return {}
+
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description="Weather",
+            input_schema={
+                "type": "object",
+                "required": ["location", "unit"],
+                "properties": {
+                    "location": {"type": "string"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+            },
+        ),
+        weather,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.return_value = {
+        "model": "gpt-oss:20b",
+        "message": {
+            "content": "",
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": {"location": "Boston", "unit": "kelvin"},
+                    }
+                }
+            ],
+        },
+    }
+
+    req = RouteRequest(
+        prompt="What is the weather in Boston?",
+        provider="local_reasoning",
+        tools_required=True,
+    )
+    result = await r.execute(req)
+
+    assert "Invalid arguments" in result.response
+    assert result.tool_results[0]["error_code"] == "validation_error"
 
 
 async def test_logs_never_contain_api_keys(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
