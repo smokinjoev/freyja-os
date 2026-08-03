@@ -8,6 +8,7 @@ from freyja.openrouter_client import OpenRouterClient
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolImplementation, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
 from freyja.tools.calendar import register_calendar_tools
+from freyja.tools.identity import register_identity_tools
 from freyja.tools.local_host import register_local_host_tools
 from freyja.tools.weather import WeatherRequestType, classify_weather_request, get_weather
 
@@ -112,6 +113,8 @@ _BUILTIN_TOOL_NAMES = (
     "calendar_delete_event",
     "calendar_find_time",
     "calendar_move_event_if_conflict",
+    "identity_resolution",
+    "identity_relationships",
 )
 
 
@@ -134,6 +137,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         return
     register_local_host_tools(registry)
     register_calendar_tools(registry)
+    register_identity_tools(registry)
     registry.register(
         ToolDefinition(
             name="get_weather",

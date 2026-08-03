@@ -20,7 +20,7 @@ dependencies = [
 freyja-certify = "certification.cli:main"
 
 [tool.setuptools]
-packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.memory", "freyja.tools"]
+packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.identity", "freyja.memory", "freyja.tools"]
 
 [tool.setuptools.package-dir]
 freyja = "src/freyja"

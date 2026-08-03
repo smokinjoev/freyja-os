@@ -273,6 +273,9 @@ def _member_ids(request: ToolExecutionRequest) -> list[str] | None:
     value = request.arguments.get("member_ids")
     if isinstance(value, list):
         return [str(item) for item in value]
+    person_data = request.metadata.get("person")
+    if isinstance(person_data, dict) and person_data.get("person_id"):
+        return [str(person_data["person_id"])]
     return None
 
 

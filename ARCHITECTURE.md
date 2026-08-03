@@ -467,6 +467,38 @@ The reference implementation is Family Calendar:
 Future services should follow the same pattern: domain service first, provider
 adapters second, Director tools third, certification suites fourth.
 
+## 6.5.2 Identity Service
+
+The Identity Service is the authoritative source for people known to Freyja.
+Subsystems should resolve raw identifiers into a `Person` as early as practical
+and pass canonical person context through the existing Director and tool path.
+
+Core model:
+
+- `Person`: canonical person ID, display name, preferred name, aliases,
+  identities, and non-sensitive metadata.
+- `Identity`: typed external identifier such as phone, email, Signal,
+  iMessage, calendar, voice, avatar, or account identity.
+- `Alias`: natural-language names such as Dad, Father, Joe, or Joseph.
+- `Relationship`: directed relationship edge such as spouse or child.
+
+Current integrations:
+
+- Messaging connectors resolve configured Signal and iMessage senders to
+  `Person` metadata while preserving legacy allowlists and platform-scoped
+  conversation IDs.
+- The Director extracts trusted `X-Freyja-Person-*` connector headers and
+  forwards sanitized person context in tool metadata.
+- Calendar tools default to the resolved person when no explicit members are
+  provided, and `CalendarService` accepts person IDs or aliases.
+- Memory remains scoped by existing principals, but known people use the stable
+  family-member memory subject so preferences attach to a person rather than a
+  raw contact identifier.
+
+Identity is intentionally not a replacement router or message bus. It is a
+shared resolver and query service used by existing Director, connector, memory,
+and Personal Intelligence Service boundaries.
+
 ## 6.6 Queue and Event Bus
 
 A queue is recommended once multiple nodes are active.
@@ -504,8 +536,8 @@ Directors. Signal, iMessage, and future platforms should:
 
 Family members can be configured with aliases in allowlists, for example
 `joe=+15551234567` or `beth=beth@example.com`. Aliases resolve to shared
-`family-member:<hash>` memory subjects across platforms while preserving
-platform-scoped conversation IDs.
+Person-backed `family-member:<hash>` memory subjects across platforms while
+preserving platform-scoped conversation IDs.
 
 ---
 

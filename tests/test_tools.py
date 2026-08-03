@@ -102,6 +102,8 @@ def test_discovery(registry: ToolRegistry) -> None:
         "calendar_delete_event",
         "calendar_find_time",
         "calendar_move_event_if_conflict",
+        "identity_resolution",
+        "identity_relationships",
     }
 
 
@@ -386,7 +388,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 19
+    assert len(tools) == 21
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:

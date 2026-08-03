@@ -1,0 +1,26 @@
+name: identity-resolution
+category: identity
+difficulty: smoke
+description: Validates canonical person resolution across aliases and platform identifiers.
+cases:
+  - name: resolves-family-aliases
+    difficulty: smoke
+    prompt: "Dad, Father, Joe, and Joseph all refer to the same known person. Which internal identity should Freyja use?"
+    expects:
+      response_contains: ["person"]
+      response_not_contains: ["raw phone"]
+  - name: resolves-messaging-identities
+    difficulty: standard
+    prompt: "A Signal sender and an iMessage sender map to Joe. Should memory and tools use the phone number, email address, or Joe's Person object?"
+    route_request:
+      tools_required: true
+    expects:
+      tool_called: identity_resolution
+      response_contains: ["Person"]
+      response_not_contains: ["phone number"]
+  - name: resolves-calendar-owner
+    difficulty: standard
+    prompt: "A calendar event belongs to joe-cal. Resolve the event owner before attaching schedule memory."
+    expects:
+      response_contains: ["Joe"]
+      memory_lookup: true

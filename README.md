@@ -13,8 +13,24 @@ Freyja-OS is a locally controlled personal-agent platform.
 
 ## Current phase
 
-Current phase: Personal Intelligence Services on top of the Director, Router,
-Memory, Certification, and Benchmark foundation.
+Current phase: Identity Service on top of the Director, Router, Memory,
+Certification, Benchmark, Communications, and Family Calendar foundation.
+
+## Identity Service
+
+`freyja.identity` is the canonical source of people known to Freyja. It models
+`Person`, `Identity`, `Alias`, and `Relationship`, then resolves raw platform
+identifiers into people before downstream services act on them.
+
+- Signal and iMessage senders can resolve to a `Person` while preserving legacy
+  allowlist syntax.
+- Calendar members can be selected by person ID or alias; events attach to
+  canonical person IDs while providers keep their own calendar IDs.
+- Memory principals for known people use the stable family-member subject so
+  preferences attach to a person instead of a raw phone number, email address,
+  or account ID.
+- Read-only Director tools expose identity resolution and relationship queries
+  for certification and future router use.
 
 ## Personal Intelligence Services
 
@@ -44,8 +60,8 @@ SIGNAL_ALLOWED_SENDERS=joe=+15551234567,beth=+15557654321
 IMESSAGE_ALLOWED_SENDERS=joe=joe@example.com,beth=+15557654321
 ```
 
-Aliases let the same family member keep a stable memory identity across
-messaging platforms while conversation IDs remain platform-specific.
+Aliases let the same family member keep a stable Person-backed memory identity
+across messaging platforms while conversation IDs remain platform-specific.
 
 ## Certification CLI
 

@@ -43,6 +43,7 @@ class CalendarMember:
     member_id: str
     display_name: str
     calendar_ids: tuple[str, ...] = ()
+    person_id: str | None = None
     timezone: str = "UTC"
     availability_rules: tuple[AvailabilityRule, ...] = field(default_factory=tuple)
     preferred_working_hours: tuple[AvailabilityRule, ...] = field(default_factory=tuple)
@@ -52,6 +53,10 @@ class CalendarMember:
 
     def all_calendar_ids(self) -> tuple[str, ...]:
         return self.calendar_ids or (self.member_id,)
+
+    @property
+    def canonical_person_id(self) -> str:
+        return self.person_id or self.member_id
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,19 @@
+name: identity-relationships
+category: identity
+difficulty: smoke
+description: Validates queryable family relationships attached to Person records.
+cases:
+  - name: spouse-query
+    difficulty: smoke
+    prompt: "Who is Joe's spouse according to the identity relationship graph?"
+    expects:
+      response_contains: ["Beth"]
+  - name: relationship-routing
+    difficulty: standard
+    prompt: "If Joe asks to message his spouse, should Freyja resolve spouse through Identity before choosing Signal or iMessage?"
+    route_request:
+      tools_required: true
+    expects:
+      tool_called: identity_relationships
+      connector_called: signal
+      response_contains: ["Identity"]

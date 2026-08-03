@@ -591,6 +591,7 @@ class Router:
         *,
         spent_this_month: float = 0.0,
         memory_principal: MemoryPrincipal | None = None,
+        person_context: dict[str, str] | None = None,
     ) -> RoutingResult:
         started = time.monotonic()
         decision = await self.decide(request, spent_this_month=spent_this_month)
@@ -619,6 +620,7 @@ class Router:
                     self.ollama_client,
                     self._registry,
                     memory_principal,
+                    person_context,
                     evidence,
                     started,
                 )
@@ -657,6 +659,7 @@ class Router:
                     self.openrouter_client,
                     self._registry,
                     memory_principal,
+                    person_context,
                     evidence,
                     started,
                 )
@@ -693,6 +696,7 @@ class Router:
         client: Any,
         registry: ToolRegistry,
         memory_principal: MemoryPrincipal | None = None,
+        person_context: dict[str, str] | None = None,
         evidence: RuntimeEvidence | None = None,
         started: float | None = None,
     ) -> RoutingResult:
@@ -844,6 +848,7 @@ class Router:
                 actor="freyja_router",
                 metadata={
                     "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                    "person": dict(person_context) if person_context else None,
                 },
             )
             execution_result = await registry.execute(execution_request)

@@ -13,6 +13,7 @@ from freyja.calendar import (
     GoogleCalendarProvider,
     InMemoryCalendarProvider,
 )
+from freyja.identity import Alias, IdentityService, Person
 
 
 def _dt(hour: int, minute: int = 0) -> datetime:
@@ -76,6 +77,25 @@ async def test_free_busy_groups_busy_events_by_family_member(family: list[Calend
 
     assert len(result["busy"]["joe"]) == 1
     assert result["busy"]["beth"] == []
+
+
+@pytest.mark.asyncio
+async def test_calendar_resolves_person_aliases(family: list[CalendarMember]) -> None:
+    provider = InMemoryCalendarProvider(
+        [CalendarEvent("work", "joe-cal", "Work block", _dt(10), _dt(11), attendee_ids=("joe",))]
+    )
+    identity_service = IdentityService(
+        people=[
+            Person(person_id="joe", display_name="Joe", aliases=(Alias("Dad"),)),
+            Person(person_id="beth", display_name="Beth"),
+        ]
+    )
+    service = CalendarService(providers={"memory": provider}, members=family, identity_service=identity_service)
+
+    result = await service.free_busy(start=_dt(9), end=_dt(12), member_ids=["Dad"])
+
+    assert list(result["busy"]) == ["joe"]
+    assert len(result["busy"]["joe"]) == 1
 
 
 @pytest.mark.asyncio

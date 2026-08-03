@@ -1,5 +1,6 @@
 from freyja.tools.builtin import register_builtin_tools
 from freyja.tools.errors import ToolDisabledError, ToolNotFoundError, ToolTimeoutError, ToolValidationError
+from freyja.tools.identity import get_identity_service, set_identity_service
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolExecutionResult, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry, get_registry, set_registry
 
@@ -16,4 +17,6 @@ __all__ = [
     "get_registry",
     "set_registry",
     "register_builtin_tools",
+    "get_identity_service",
+    "set_identity_service",
 ]

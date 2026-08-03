@@ -2,89 +2,63 @@
 
 ## Current Milestone
 
-Communications: Signal production integration, native iMessage integration,
-multi-user messaging support, Director integration, and certification coverage.
+Identity Service: make `Person` the canonical representation for people across
+memory, messaging, calendar, Director tools, and future voice/avatar work.
 
 ## Completed Work
 
-- Signal gateway forwards authorized senders to the Director `/route` endpoint
-  with connector auth, memory-principal headers, duplicate suppression, group
-  rejection, safe outbound errors, and mocked transport coverage.
-- Native iMessage gateway forwards authorized macOS bridge events to the
-  Director with the same memory-principal pattern, duplicate/self/group
-  suppression, safe outbound errors, and mocked transport coverage.
-- Shared messaging identity resolution supports both legacy plain allowlists
-  and multi-user aliases such as `joe=+15551234567` or
-  `beth=beth@example.com`.
-- Aliased Signal and iMessage senders resolve to the same
-  `family-member:<hash>` memory subject, while conversations remain
-  platform-scoped.
-- Connector certification now includes Signal, iMessage, multi-user messaging,
-  API connector behavior, and boundary expectations.
-- Family Calendar remains implemented as the first Personal Intelligence
-  Service and is ready to use communications as a user-facing access path.
+- Added `freyja.identity` with `Person`, `Identity`, `Alias`,
+  `Relationship`, and `IdentityService`.
+- Implemented alias, phone, email, Signal, iMessage, and calendar-owner
+  resolution.
+- Added queryable directed relationships such as spouse and child.
+- Added read-only Director tools:
+  - `identity_resolution`
+  - `identity_relationships`
+- Signal and iMessage allowlists now attach canonical Person headers when a
+  sender maps to a known person, while preserving legacy allowlist behavior.
+- Router tool execution now receives sanitized person metadata from trusted
+  connector headers.
+- Calendar service and tools now accept person IDs or aliases and default to
+  the resolved sender when available.
+- Identity certification suites were added under
+  `certification/suites/identity/`.
 
 ## Remaining Work
 
-- Configure production allowlists per family member on the deployed Signal and
-  iMessage hosts.
-- Run live delivery checks on the actual Signal REST wrapper and macOS iMessage
-  bridge before declaring external delivery fully operational.
-- Add future platforms by reusing the shared identity resolver and
-  connector-gateway-to-Director pattern.
-
-## Family Calendar
-
-Implemented components:
-
-- `freyja.calendar.models` for family members, availability rules, events,
-  preferences, time windows, and ranked options.
-- `freyja.calendar.providers` for `CalendarProvider`,
-  `InMemoryCalendarProvider`, `GoogleCalendarProvider`, and
-  `AppleCalendarProvider`.
-- `freyja.calendar.service.CalendarService` for schedule views, free/busy,
-  event search, CRUD forwarding, ranked free-time search, conflict detection,
-  travel buffers, and memory-preference scoring.
-- `freyja.tools.calendar` for Director tools:
-  - `calendar_today_schedule`
-  - `calendar_tomorrow_schedule`
-  - `calendar_free_busy`
-  - `calendar_list_events`
-  - `calendar_search_events`
-  - `calendar_create_event`
-  - `calendar_modify_event`
-  - `calendar_delete_event`
-  - `calendar_find_time`
-  - `calendar_move_event_if_conflict`
-
-The implementation uses mocked/in-memory providers only. No live Google or
-Apple calendar account access is required.
-
-## Certification
-
-Calendar certification suites were added under `certification/suites/calendar/`
-for schedule reasoning, conflict detection, preference handling, and provider
-abstraction.
-
-Communications certification suites live under
-`certification/suites/connectors/` and cover Signal, iMessage, multi-user
-identity, and connector boundary behavior.
+- Replace the in-code default family seed with a persistent contact source.
+- Add production contact import/sync for Google Contacts, Apple Contacts, or a
+  local encrypted contacts file.
+- Expand relationship coverage beyond the current directed edges.
+- Add future voice/avatar identity adapters when those subsystems are built.
+- Use identity benchmark history for router policy only after benchmark data is
+  collected; no automatic routing changes are implemented yet.
 
 ## Architectural Decisions
 
-- Messaging connectors stay outside the Director and act as adapters into the
-  existing `/route` API.
-- Authorization stays in each gateway, not in transports or model prompts.
-- Raw phone numbers and email addresses are never sent as Director memory
-  subjects.
-- Family member aliases provide cross-platform identity continuity without
-  forcing all members onto the same messaging provider.
-- Connector tests use mocked HTTP/subprocess transports; no live accounts are
-  required in CI.
+- Identity is a shared service, not a parallel Director or messaging path.
+- Connectors perform platform authorization first, then pass sanitized identity
+  headers to the Director.
+- Raw phone numbers, emails, account IDs, and device IDs are not used as memory
+  subjects for known people.
+- Memory remains scoped through `MemoryPrincipal`; known people keep the stable
+  `family-member:<hash>` subject for backward compatibility.
+- Calendar provider account IDs remain provider data. Scheduling logic works in
+  terms of canonical person IDs where practical.
+- Tests use mocked contacts, mocked connectors, and in-memory calendar
+  providers. No live services are required.
 
-## Next Work
+## Completed Foundation
 
-Next milestone: prepare Family Calendar for real household use through the
-communications layer. Add production family-member configuration, then run live
-Signal and iMessage smoke tests before connecting calendar scheduling prompts to
-real user conversations.
+- Director, Router, and tool execution path.
+- Memory framework and shared memory APIs.
+- Certification CLI, Gauntlet, runtime behavioral verification, benchmark, and
+  comparison framework.
+- Multi-user Communications through Signal and native iMessage connectors.
+- Family Calendar Personal Intelligence Service.
+
+## Next Milestone
+
+Prepare Identity for persistent household use: configure a durable contact
+store, add import/sync adapters, and migrate production messaging/calendar
+configuration from inline aliases to canonical Person records.

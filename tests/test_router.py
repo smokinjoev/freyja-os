@@ -599,6 +599,41 @@ class TestToolLoop:
         assert result.runtime_evidence.tool_calls[0].name == "hostname"
         assert result.runtime_evidence.tool_calls[0].success is True
 
+    async def test_tool_request_receives_resolved_person_context(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        captured: dict[str, Any] = {}
+
+        async def _capture_person(request: ToolExecutionRequest) -> dict[str, Any]:
+            captured.update(request.metadata)
+            return {"ok": True}
+
+        registry.register(
+            ToolDefinition(name="capture_person", description="Capture person metadata."),
+            _capture_person,
+        )
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "qwen2.5:7b", "message": {"content": self._tool_call("capture_person")}}
+            return {"model": "qwen2.5:7b", "message": {"content": "done"}}
+
+        router.ollama_client.chat.side_effect = _respond
+        principal = MemoryPrincipal(client_type="signal", client_subject="family-member:abc")
+        result = await router.execute(
+            RouteRequest(prompt="Use a tool.", provider="local", tools_required=True),
+            memory_principal=principal,
+            person_context={"person_id": "joe", "display_name": "Joe", "preferred_name": "Joe"},
+        )
+
+        assert result.response == "done"
+        assert captured["person"]["person_id"] == "joe"
+        assert captured["memory_principal"]["client_subject"] == "family-member:abc"
+
     async def test_tool_failure_returns_honest_error(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
         monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)

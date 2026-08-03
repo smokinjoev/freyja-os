@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from freyja.calendar.models import AvailabilityRule, CalendarEvent, CalendarMember, CalendarPreference, RankedTimeOption, TimeWindow
 from freyja.calendar.providers import CalendarProvider, InMemoryCalendarProvider
+from freyja.identity import IdentityService, default_identity_service
 
 
 class CalendarService:
@@ -14,9 +15,11 @@ class CalendarService:
         *,
         providers: dict[str, CalendarProvider] | None = None,
         members: list[CalendarMember] | None = None,
+        identity_service: IdentityService | None = None,
     ) -> None:
         self._providers = providers or {"memory": InMemoryCalendarProvider()}
-        self._members = {member.member_id: member for member in members or _default_family()}
+        self._identity_service = identity_service or default_identity_service()
+        self._members = {member.canonical_person_id: member for member in members or _default_family()}
 
     @property
     def members(self) -> dict[str, CalendarMember]:
@@ -77,13 +80,13 @@ class CalendarService:
         member_ids: list[str] | None = None,
     ) -> dict:
         members = self._selected_members(member_ids)
-        events = await self.list_events(start=start, end=end, member_ids=[member.member_id for member in members])
+        events = await self.list_events(start=start, end=end, member_ids=[member.canonical_person_id for member in members])
         busy = {
-            member.member_id: [
+            member.canonical_person_id: [
                 event.to_dict()
                 for event in events
                 if event.calendar_id in member.all_calendar_ids()
-                or set(event.attendee_ids) & {member.member_id}
+                or set(event.attendee_ids) & {member.canonical_person_id, member.member_id}
             ]
             for member in members
         }
@@ -111,7 +114,7 @@ class CalendarService:
                 title=title,
                 start=start,
                 end=end,
-                attendee_ids=tuple(member.member_id for member in members),
+                attendee_ids=tuple(member.canonical_person_id for member in members),
                 location=location,
                 description=description,
                 provider=provider_name,
@@ -148,7 +151,7 @@ class CalendarService:
         least_disruptive: bool = True,
     ) -> list[RankedTimeOption]:
         members = self._selected_members(member_ids)
-        busy_events = await self.list_events(start=start, end=end, member_ids=[member.member_id for member in members])
+        busy_events = await self.list_events(start=start, end=end, member_ids=[member.canonical_person_id for member in members])
         options: list[RankedTimeOption] = []
         cursor = _ceil_to_step(start, step_minutes)
         duration = timedelta(minutes=max(1, duration_minutes))
@@ -167,7 +170,7 @@ class CalendarService:
                     RankedTimeOption(
                         window=window,
                         score=score,
-                        attendee_ids=tuple(member.member_id for member in members),
+                        attendee_ids=tuple(member.canonical_person_id for member in members),
                         reasons=tuple(reasons),
                         preference_matches=tuple(matches),
                     )
@@ -222,8 +225,20 @@ class CalendarService:
     def _selected_members(self, member_ids: list[str] | None) -> list[CalendarMember]:
         if not member_ids:
             return list(self._members.values())
-        selected = [self._members[member_id] for member_id in member_ids if member_id in self._members]
+        selected = [
+            self._members[resolved_id]
+            for member_id in member_ids
+            if (resolved_id := self._resolve_member_id(member_id)) in self._members
+        ]
         return selected or list(self._members.values())
+
+    def _resolve_member_id(self, member_id: str) -> str:
+        if member_id in self._members:
+            return member_id
+        person = self._identity_service.resolve(member_id)
+        if person is not None:
+            return person.person_id
+        return member_id
 
     def _score_window(
         self,

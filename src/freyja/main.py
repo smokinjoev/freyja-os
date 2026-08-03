@@ -11,6 +11,7 @@ from freyja.agents.approval_provider import PersistentApprovalProvider
 from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprovals
 from freyja.agents.runtime import SmithRuntime
 from freyja.config import settings
+from freyja.identity import person_context_from_headers
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
@@ -193,7 +194,8 @@ async def route(request: RouteRequest, raw_request: Request) -> dict:
         memory_principal = principal_from_headers(raw_request.headers)
     except ValueError:
         raise HTTPException(status_code=403, detail="Invalid memory principal.") from None
-    result = await router.execute(request, memory_principal=memory_principal)
+    person_context = person_context_from_headers(raw_request.headers)
+    result = await router.execute(request, memory_principal=memory_principal, person_context=person_context)
     if result.decision.provider == "error":
         raise HTTPException(status_code=400, detail=result.decision.reason)
     if not result.response:

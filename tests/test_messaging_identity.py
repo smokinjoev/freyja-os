@@ -19,6 +19,7 @@ def test_family_alias_uses_shared_family_subject() -> None:
     assert signal["+15551234567"].member_id == "joe-smith"
     assert signal["+15551234567"].subject == imessage["joe@example.com"].subject
     assert signal["+15551234567"].safe_headers()["X-Freyja-Family-Member"] == "joe-smith"
+    assert signal["+15551234567"].safe_headers()["X-Freyja-Person-Id"] == "joe-smith"
 
 
 def test_authorized_sender_headers_do_not_include_raw_address() -> None:
@@ -28,3 +29,4 @@ def test_authorized_sender_headers_do_not_include_raw_address() -> None:
 
     assert "joe@example.com" not in str(headers)
     assert headers["X-Freyja-Client-Type"] == "imessage"
+    assert headers["X-Freyja-Person-Id"] == "joe"
