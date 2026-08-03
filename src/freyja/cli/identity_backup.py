@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 from pathlib import Path
 
 from freyja.identity.backup import backup_identity_database, restore_identity_database, verify_identity_backup
@@ -27,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
             result = verify_identity_backup(args.backup)
         else:
             result = restore_identity_database(args.backup, args.destination, replace=args.replace)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, json.JSONDecodeError, sqlite3.Error) as exc:
         parser.exit(2, f"identity backup operation failed: {exc}\n")
     print(json.dumps(result, sort_keys=True))
     return 0

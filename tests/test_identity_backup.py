@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import stat
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -58,5 +59,15 @@ def test_missing_or_non_identity_database_is_rejected(tmp_path) -> None:
         backup_identity_database(tmp_path / "missing.sqlite3", tmp_path / "backup.sqlite3")
     invalid = tmp_path / "invalid.sqlite3"
     invalid.write_bytes(b"not sqlite")
-    with pytest.raises(Exception):
-        backup_identity_database(invalid, tmp_path / "backup.sqlite3")
+    backup = tmp_path / "backup.sqlite3"
+    with pytest.raises(sqlite3.DatabaseError):
+        backup_identity_database(invalid, backup)
+    assert not backup.exists()
+
+
+def test_orphan_manifest_prevents_backup_overwrite(tmp_path) -> None:
+    source = _database(tmp_path / "source.sqlite3")
+    backup = tmp_path / "backup.sqlite3"
+    backup.with_suffix(".sqlite3.manifest.json").write_text("reserved")
+    with pytest.raises(FileExistsError, match="backup already exists"):
+        backup_identity_database(source.path, backup)

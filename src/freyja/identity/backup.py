@@ -10,23 +10,30 @@ from pathlib import Path
 def backup_identity_database(source: str | Path, destination: str | Path) -> dict:
     source_path = _existing_database(source)
     destination_path = Path(destination).expanduser()
-    if destination_path.exists():
+    manifest_path = _manifest_path(destination_path)
+    if destination_path.exists() or manifest_path.exists():
         raise FileExistsError(f"backup already exists: {destination_path}")
     destination_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with sqlite3.connect(source_path) as source_connection, sqlite3.connect(destination_path) as target_connection:
-        source_connection.backup(target_connection)
-    destination_path.chmod(0o600)
-    _require_integrity(destination_path)
-    manifest = {
-        "format": "freyja-identity-sqlite-backup-v1",
-        "created_at": datetime.now(UTC).isoformat(),
-        "sha256": _sha256(destination_path),
-        "size_bytes": destination_path.stat().st_size,
-    }
-    manifest_path = _manifest_path(destination_path)
-    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    manifest_path.chmod(0o600)
-    return manifest
+    try:
+        with sqlite3.connect(source_path) as source_connection, sqlite3.connect(destination_path) as target_connection:
+            source_connection.backup(target_connection)
+        destination_path.chmod(0o600)
+        _require_integrity(destination_path)
+        manifest = {
+            "format": "freyja-identity-sqlite-backup-v1",
+            "created_at": datetime.now(UTC).isoformat(),
+            "sha256": _sha256(destination_path),
+            "size_bytes": destination_path.stat().st_size,
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        manifest_path.chmod(0o600)
+        return manifest
+    except Exception:
+        if destination_path.exists():
+            destination_path.unlink()
+        if manifest_path.exists():
+            manifest_path.unlink()
+        raise
 
 
 def verify_identity_backup(backup: str | Path) -> dict:
