@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     memory_database_path: str = str(_repo_root() / "data" / "freyja.db")
     memory_max_messages_per_conversation: int = 1000
     memory_retention_days: int = 90
+    memory_shared_enabled: bool = True
+    memory_shared_max_items_per_principal: int = 200
+    memory_shared_max_global_items: int = 10000
+    memory_shared_max_item_chars: int = 2000
+    memory_recall_max_items: int = 12
+    memory_recall_max_item_chars: int = 500
+    memory_recall_max_total_chars: int = 3000
+    memory_recall_include_in_cloud: bool = False
 
     tools_enabled: bool = True
     tools_default_timeout_seconds: int = 30

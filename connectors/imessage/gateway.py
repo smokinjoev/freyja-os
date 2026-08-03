@@ -7,6 +7,7 @@ import httpx
 
 from connectors.imessage.config import settings
 from connectors.imessage.models import IMessage, IMessageReply
+from freyja.memory.principal import build_memory_principal, stable_identity
 
 logger = logging.getLogger(__name__)
 
@@ -90,18 +91,33 @@ class IMessageGateway:
         )
 
     async def _forward(self, message: IMessage) -> IMessageReply | None:
+        subject = stable_identity("imessage", message.sender)
+        conversation_seed = message.chat_identifier or str(message.chat_id)
+        conversation_id = stable_identity("imessage-conv", conversation_seed)
+        try:
+            principal = build_memory_principal(
+                client_type="imessage",
+                client_subject=subject,
+                conversation_id=conversation_id,
+            )
+        except ValueError:
+            return self._safe_error_response(message)
+
         payload = {
             "prompt": message.text,
             "provider": "auto",
+            "conversation_id": principal.conversation_id,
         }
 
         try:
             client = await self._client()
-            headers = (
-                {"Authorization": f"Bearer {self._director_token}"}
-                if self._director_token
-                else None
-            )
+            headers = {
+                "X-Freyja-Client-Type": principal.client_type,
+                "X-Freyja-Client-Subject": principal.client_subject,
+                "X-Freyja-Conversation-Id": principal.conversation_id or "",
+            }
+            if self._director_token:
+                headers["Authorization"] = f"Bearer {self._director_token}"
             response = await client.post(
                 f"{self._director_url}/route",
                 json=payload,

@@ -19,14 +19,28 @@ from freyja.memory.models import (
     CreateConversationRequest,
     CreateConversationResponse,
     ListConversationsResponse,
+    MemoryPrincipal,
     MemoryMessage,
+    PutSharedMemoryRequest,
     PruneResponse,
+    SharedMemory,
+    SharedMemoryListResponse,
     utc_now,
 )
 
 logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
+_SCHEMA_COMPONENT = "memory_store"
+_SCHEMA_VERSION = 2
+
+
+class MemoryAccessDeniedError(Exception):
+    """Raised when a memory operation lacks a trusted principal."""
+
+
+class MemoryStorageError(Exception):
+    """Raised when durable memory storage is unavailable or unsafe."""
 
 
 class MemoryStore:
@@ -51,6 +65,16 @@ class MemoryStore:
             if retention_days is not None
             else getattr(settings, "memory_retention_days", 90)
         )
+        self._shared_item_limit = max(
+            1, int(getattr(settings, "memory_shared_max_items_per_principal", 200))
+        )
+        self._shared_global_limit = max(
+            self._shared_item_limit,
+            int(getattr(settings, "memory_shared_max_global_items", 10000)),
+        )
+        self._shared_max_item_chars = max(
+            1, int(getattr(settings, "memory_shared_max_item_chars", 2000))
+        )
         self._initialized = False
 
     @property
@@ -58,16 +82,24 @@ class MemoryStore:
         return self._database_path
 
     def _ensure_parent_dir(self) -> None:
-        parent = Path(self._database_path).parent
+        path = Path(self._database_path).expanduser()
+        parent = path.parent
+        if _path_has_symlink(parent):
+            raise MemoryStorageError("Memory database parent path contains a symlink")
         if parent:
             parent.mkdir(parents=True, exist_ok=True)
+            _chmod_if_supported(parent, 0o700)
+        if path.is_symlink():
+            raise MemoryStorageError("Memory database path must not be a symlink")
 
     def _connect(self) -> sqlite3.Connection:
         self._ensure_parent_dir()
-        conn = sqlite3.connect(self._database_path, check_same_thread=False)
+        conn = sqlite3.connect(self._database_path, check_same_thread=False, timeout=5.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        _chmod_if_supported(Path(self._database_path), 0o600)
         return conn
 
     def initialize(self, *, force: bool = False) -> None:
@@ -78,6 +110,12 @@ class MemoryStore:
             try:
                 conn.executescript(
                     """
+                    CREATE TABLE IF NOT EXISTS schema_versions (
+                        component TEXT PRIMARY KEY,
+                        version INTEGER NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+
                     CREATE TABLE IF NOT EXISTS conversations (
                         conversation_id TEXT PRIMARY KEY,
                         created_at TEXT NOT NULL,
@@ -103,7 +141,46 @@ class MemoryStore:
 
                     CREATE INDEX IF NOT EXISTS idx_messages_request_id
                         ON messages(request_id);
+
+                    CREATE TABLE IF NOT EXISTS shared_memories (
+                        row_id TEXT PRIMARY KEY,
+                        principal_scope TEXT NOT NULL,
+                        client_type TEXT NOT NULL,
+                        client_subject TEXT NOT NULL,
+                        account_owner TEXT,
+                        conversation_id TEXT,
+                        memory_id TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        confidence REAL NOT NULL,
+                        sensitivity TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        expires_at TEXT,
+                        metadata TEXT NOT NULL DEFAULT '{}',
+                        UNIQUE(principal_scope, memory_id)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_shared_memories_scope_updated
+                        ON shared_memories(principal_scope, updated_at DESC);
+
+                    CREATE INDEX IF NOT EXISTS idx_shared_memories_scope_kind
+                        ON shared_memories(principal_scope, kind);
+
+                    CREATE INDEX IF NOT EXISTS idx_shared_memories_expiration
+                        ON shared_memories(expires_at);
                     """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO schema_versions (component, version, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(component) DO UPDATE SET
+                        version=excluded.version,
+                        updated_at=excluded.updated_at
+                    """,
+                    (_SCHEMA_COMPONENT, _SCHEMA_VERSION, utc_now().isoformat()),
                 )
                 conn.commit()
                 self._initialized = True
@@ -311,6 +388,277 @@ class MemoryStore:
             finally:
                 conn.close()
 
+    def put_shared_memory(
+        self,
+        principal: MemoryPrincipal,
+        request: PutSharedMemoryRequest,
+    ) -> SharedMemory:
+        self._require_initialized()
+        if not getattr(settings, "memory_shared_enabled", True):
+            raise MemoryAccessDeniedError("Shared memory is disabled")
+        memory_id = _safe_memory_id(request.memory_id)
+        now = utc_now()
+        safe_content = redact_content(request.content)[: self._shared_max_item_chars]
+        metadata = request.metadata or {}
+        scope = principal.scope_key
+        with _LOCK:
+            conn = self._connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                self._cleanup_expired_shared_memories(conn, now)
+                existing = conn.execute(
+                    """
+                    SELECT row_id, created_at FROM shared_memories
+                    WHERE principal_scope = ? AND memory_id = ?
+                    """,
+                    (scope, memory_id),
+                ).fetchone()
+                row_id = existing["row_id"] if existing else str(uuid.uuid4())
+                created_at = (
+                    datetime.fromisoformat(existing["created_at"]) if existing else now
+                )
+                conn.execute(
+                    """
+                    INSERT INTO shared_memories (
+                        row_id, principal_scope, client_type, client_subject,
+                        account_owner, conversation_id, memory_id, kind, content,
+                        source, confidence, sensitivity, created_at, updated_at,
+                        expires_at, metadata
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(principal_scope, memory_id) DO UPDATE SET
+                        kind=excluded.kind,
+                        content=excluded.content,
+                        source=excluded.source,
+                        confidence=excluded.confidence,
+                        sensitivity=excluded.sensitivity,
+                        updated_at=excluded.updated_at,
+                        expires_at=excluded.expires_at,
+                        metadata=excluded.metadata
+                    """,
+                    (
+                        row_id,
+                        scope,
+                        principal.client_type,
+                        principal.client_subject,
+                        principal.account_owner,
+                        principal.conversation_id,
+                        memory_id,
+                        request.kind,
+                        safe_content,
+                        principal.client_type,
+                        request.confidence,
+                        request.sensitivity,
+                        created_at.isoformat(),
+                        now.isoformat(),
+                        request.expires_at.isoformat() if request.expires_at else None,
+                        json.dumps(metadata),
+                    ),
+                )
+                self._enforce_shared_quotas(conn, scope)
+                conn.commit()
+                return SharedMemory(
+                    memory_id=memory_id,
+                    client_type=principal.client_type,
+                    client_subject=principal.client_subject,
+                    account_owner=principal.account_owner,
+                    conversation_id=principal.conversation_id,
+                    kind=request.kind,
+                    content=safe_content,
+                    source=principal.client_type,
+                    confidence=request.confidence,
+                    sensitivity=request.sensitivity,
+                    created_at=created_at,
+                    updated_at=now,
+                    expires_at=request.expires_at,
+                    metadata=metadata,
+                )
+            except sqlite3.Error as exc:
+                conn.rollback()
+                raise MemoryStorageError("Shared memory storage failed") from exc
+            finally:
+                conn.close()
+
+    def list_shared_memories(
+        self,
+        principal: MemoryPrincipal,
+        *,
+        kinds: list[str] | None = None,
+        limit: int = 50,
+    ) -> SharedMemoryListResponse:
+        self._require_initialized()
+        if not getattr(settings, "memory_shared_enabled", True):
+            return SharedMemoryListResponse(memories=[])
+        bounded_limit = min(max(1, int(limit)), 200)
+        clauses = [
+            "principal_scope = ?",
+            "(expires_at IS NULL OR expires_at > ?)",
+        ]
+        params: list[Any] = [principal.scope_key, utc_now().isoformat()]
+        if kinds:
+            placeholders = ",".join("?" * len(kinds))
+            clauses.append(f"kind IN ({placeholders})")
+            params.extend(kinds)
+        params.append(bounded_limit)
+        with _LOCK:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    f"""
+                    SELECT * FROM shared_memories
+                    WHERE {' AND '.join(clauses)}
+                    ORDER BY updated_at DESC, rowid DESC
+                    LIMIT ?
+                    """,
+                    params,
+                ).fetchall()
+                memories: list[SharedMemory] = []
+                for row in rows:
+                    memory = self._row_to_shared_memory(row)
+                    if memory is not None:
+                        memories.append(memory)
+                return SharedMemoryListResponse(memories=memories)
+            except sqlite3.Error as exc:
+                raise MemoryStorageError("Shared memory storage failed") from exc
+            finally:
+                conn.close()
+
+    def get_shared_memory(
+        self,
+        principal: MemoryPrincipal,
+        memory_id: str,
+    ) -> SharedMemory | None:
+        self._require_initialized()
+        with _LOCK:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    """
+                    SELECT * FROM shared_memories
+                    WHERE principal_scope = ?
+                      AND memory_id = ?
+                      AND (expires_at IS NULL OR expires_at > ?)
+                    """,
+                    (principal.scope_key, _safe_memory_id(memory_id), utc_now().isoformat()),
+                ).fetchone()
+                return self._row_to_shared_memory(row) if row else None
+            except sqlite3.Error as exc:
+                raise MemoryStorageError("Shared memory storage failed") from exc
+            finally:
+                conn.close()
+
+    def delete_shared_memory(
+        self,
+        principal: MemoryPrincipal,
+        memory_id: str,
+    ) -> bool:
+        self._require_initialized()
+        with _LOCK:
+            conn = self._connect()
+            try:
+                cursor = conn.execute(
+                    "DELETE FROM shared_memories WHERE principal_scope = ? AND memory_id = ?",
+                    (principal.scope_key, _safe_memory_id(memory_id)),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+            except sqlite3.Error as exc:
+                raise MemoryStorageError("Shared memory storage failed") from exc
+            finally:
+                conn.close()
+
+    def prune_shared_memories(self) -> int:
+        self._require_initialized()
+        with _LOCK:
+            conn = self._connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                deleted = self._cleanup_expired_shared_memories(conn, utc_now())
+                self._enforce_global_shared_quota(conn)
+                conn.commit()
+                return deleted
+            except sqlite3.Error as exc:
+                conn.rollback()
+                raise MemoryStorageError("Shared memory storage failed") from exc
+            finally:
+                conn.close()
+
+    def _cleanup_expired_shared_memories(
+        self, conn: sqlite3.Connection, now: datetime
+    ) -> int:
+        cursor = conn.execute(
+            "DELETE FROM shared_memories WHERE expires_at IS NOT NULL AND expires_at <= ?",
+            (now.isoformat(),),
+        )
+        return cursor.rowcount
+
+    def _enforce_shared_quotas(self, conn: sqlite3.Connection, scope: str) -> None:
+        self._enforce_principal_shared_quota(conn, scope)
+        self._enforce_global_shared_quota(conn)
+
+    def _enforce_principal_shared_quota(
+        self, conn: sqlite3.Connection, scope: str
+    ) -> None:
+        cursor = conn.execute(
+            """
+            SELECT row_id FROM shared_memories
+            WHERE principal_scope = ?
+            ORDER BY updated_at DESC, rowid DESC
+            """,
+            (scope,),
+        )
+        rows = [row["row_id"] for row in cursor.fetchall()]
+        excess = len(rows) - self._shared_item_limit
+        if excess > 0:
+            self._delete_shared_rows(conn, rows[-excess:])
+
+    def _enforce_global_shared_quota(self, conn: sqlite3.Connection) -> None:
+        cursor = conn.execute(
+            """
+            SELECT row_id FROM shared_memories
+            ORDER BY updated_at DESC, rowid DESC
+            """
+        )
+        rows = [row["row_id"] for row in cursor.fetchall()]
+        excess = len(rows) - self._shared_global_limit
+        if excess > 0:
+            self._delete_shared_rows(conn, rows[-excess:])
+
+    def _delete_shared_rows(self, conn: sqlite3.Connection, row_ids: list[str]) -> None:
+        if not row_ids:
+            return
+        placeholders = ",".join("?" * len(row_ids))
+        conn.execute(f"DELETE FROM shared_memories WHERE row_id IN ({placeholders})", row_ids)
+
+    def _row_to_shared_memory(self, row: sqlite3.Row) -> SharedMemory | None:
+        try:
+            metadata = json.loads(row["metadata"])
+        except json.JSONDecodeError:
+            metadata = {}
+        try:
+            return SharedMemory(
+                memory_id=row["memory_id"],
+                client_type=row["client_type"],
+                client_subject=row["client_subject"],
+                account_owner=row["account_owner"],
+                conversation_id=row["conversation_id"],
+                kind=row["kind"],
+                content=row["content"],
+                source=row["source"],
+                confidence=float(row["confidence"]),
+                sensitivity=row["sensitivity"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+                expires_at=(
+                    datetime.fromisoformat(row["expires_at"])
+                    if row["expires_at"]
+                    else None
+                ),
+                metadata=metadata if isinstance(metadata, dict) else {},
+            )
+        except (ValidationError, ValueError, TypeError) as exc:
+            logger.warning("Skipping malformed shared memory row: %s", exc)
+            return None
+
     def _row_to_message(self, row: sqlite3.Row) -> MemoryMessage:
         try:
             metadata = json.loads(row["metadata"])
@@ -436,6 +784,42 @@ def prune(
     return s.prune(older_than_days=older_than_days)
 
 
+def put_shared_memory(
+    principal: MemoryPrincipal,
+    request: PutSharedMemoryRequest,
+    store: MemoryStore | None = None,
+) -> SharedMemory:
+    return (store or get_store()).put_shared_memory(principal, request)
+
+
+def list_shared_memories(
+    principal: MemoryPrincipal,
+    *,
+    kinds: list[str] | None = None,
+    limit: int = 50,
+    store: MemoryStore | None = None,
+) -> SharedMemoryListResponse:
+    return (store or get_store()).list_shared_memories(
+        principal, kinds=kinds, limit=limit
+    )
+
+
+def get_shared_memory(
+    principal: MemoryPrincipal,
+    memory_id: str,
+    store: MemoryStore | None = None,
+) -> SharedMemory | None:
+    return (store or get_store()).get_shared_memory(principal, memory_id)
+
+
+def delete_shared_memory(
+    principal: MemoryPrincipal,
+    memory_id: str,
+    store: MemoryStore | None = None,
+) -> bool:
+    return (store or get_store()).delete_shared_memory(principal, memory_id)
+
+
 class MemoryDisabledStore:
     """No-op store used when memory is disabled. Returns empty/success defaults."""
 
@@ -478,6 +862,55 @@ class MemoryDisabledStore:
     def prune(self, *, older_than_days: int | None = None) -> PruneResponse:
         return PruneResponse(deleted_records=0)
 
+    def put_shared_memory(
+        self,
+        principal: MemoryPrincipal,
+        request: PutSharedMemoryRequest,
+    ) -> SharedMemory:
+        now = utc_now()
+        content = redact_content(request.content)[
+            : max(1, int(getattr(settings, "memory_shared_max_item_chars", 2000)))
+        ]
+        return SharedMemory(
+            memory_id=_safe_memory_id(request.memory_id),
+            client_type=principal.client_type,
+            client_subject=principal.client_subject,
+            account_owner=principal.account_owner,
+            conversation_id=principal.conversation_id,
+            kind=request.kind,
+            content=content,
+            source=principal.client_type,
+            confidence=request.confidence,
+            sensitivity=request.sensitivity,
+            created_at=now,
+            updated_at=now,
+            expires_at=request.expires_at,
+            metadata=request.metadata or {},
+        )
+
+    def list_shared_memories(
+        self,
+        principal: MemoryPrincipal,
+        *,
+        kinds: list[str] | None = None,
+        limit: int = 50,
+    ) -> SharedMemoryListResponse:
+        return SharedMemoryListResponse(memories=[])
+
+    def get_shared_memory(
+        self,
+        principal: MemoryPrincipal,
+        memory_id: str,
+    ) -> SharedMemory | None:
+        return None
+
+    def delete_shared_memory(
+        self,
+        principal: MemoryPrincipal,
+        memory_id: str,
+    ) -> bool:
+        return False
+
 
 def is_memory_enabled() -> bool:
     return bool(getattr(settings, "memory_enabled", True))
@@ -487,3 +920,31 @@ def get_active_store() -> MemoryStore | MemoryDisabledStore:
     if is_memory_enabled():
         return get_store()
     return MemoryDisabledStore()
+
+
+def _safe_memory_id(memory_id: str | None) -> str:
+    value = memory_id or str(uuid.uuid4())
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", value):
+        raise ValueError("memory_id contains invalid characters")
+    return value
+
+
+def _path_has_symlink(path: Path) -> bool:
+    path = path.expanduser()
+    parts = path.parts
+    if not parts:
+        return False
+    current = Path(parts[0])
+    for part in parts[1:]:
+        current = current / part
+        if current.exists() and current.is_symlink():
+            return True
+    return False
+
+
+def _chmod_if_supported(path: Path, mode: int) -> None:
+    try:
+        if path.exists():
+            os.chmod(path, mode)
+    except OSError:
+        logger.debug("Unable to chmod memory path %s", path)

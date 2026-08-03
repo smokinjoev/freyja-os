@@ -7,6 +7,7 @@ import httpx
 
 from connectors.signal.config import settings
 from connectors.signal.models import InboundMessage, OutboundResponse
+from freyja.memory.principal import build_memory_principal, stable_identity
 
 logger = logging.getLogger(__name__)
 
@@ -110,18 +111,40 @@ class SignalGateway:
         )
 
     async def _forward(self, message: InboundMessage) -> OutboundResponse:
+        subject = stable_identity("signal", message.sender)
+        conversation_id = stable_identity("signal-conv", message.sender)
+        owner = (
+            stable_identity("signal-owner", settings.signal_account_number)
+            if settings.signal_account_number
+            else None
+        )
+        try:
+            principal = build_memory_principal(
+                client_type="signal",
+                client_subject=subject,
+                account_owner=owner,
+                conversation_id=conversation_id,
+            )
+        except ValueError:
+            return self._safe_error_response(message)
+
         payload = {
             "prompt": message.text,
             "provider": "auto",
+            "conversation_id": principal.conversation_id,
         }
 
         try:
             client = await self._client()
-            headers = (
-                {"Authorization": f"Bearer {self._director_token}"}
-                if self._director_token
-                else None
-            )
+            headers = {
+                "X-Freyja-Client-Type": principal.client_type,
+                "X-Freyja-Client-Subject": principal.client_subject,
+                "X-Freyja-Conversation-Id": principal.conversation_id or "",
+            }
+            if principal.account_owner:
+                headers["X-Freyja-Account-Owner"] = principal.account_owner
+            if self._director_token:
+                headers["Authorization"] = f"Bearer {self._director_token}"
             response = await client.post(
                 f"{self._director_url}/route",
                 json=payload,

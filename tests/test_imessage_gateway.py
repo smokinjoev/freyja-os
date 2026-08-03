@@ -61,10 +61,15 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     assert result.chat_id == 7
     assert result.text == "Hello from Mars"
     mock_post.assert_awaited_once()
-    assert mock_post.await_args.kwargs["json"] == {
-        "prompt": "Hello Freyja",
-        "provider": "auto",
-    }
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["prompt"] == "Hello Freyja"
+    assert payload["provider"] == "auto"
+    assert payload["conversation_id"].startswith("imessage-conv:")
+    headers = mock_post.await_args.kwargs["headers"]
+    assert headers["X-Freyja-Client-Type"] == "imessage"
+    assert headers["X-Freyja-Client-Subject"].startswith("imessage:")
+    assert headers["X-Freyja-Conversation-Id"] == payload["conversation_id"]
+    assert "+15551234567" not in str(headers)
 
 
 @pytest.mark.asyncio
@@ -76,9 +81,18 @@ async def test_director_token_is_sent_as_bearer_header(enabled_gateway):
         result = await enabled_gateway.handle(make_message())
 
     assert result is not None
-    assert mock_post.await_args.kwargs["headers"] == {
-        "Authorization": "Bearer test-token"
-    }
+    headers = mock_post.await_args.kwargs["headers"]
+    assert headers["Authorization"] == "Bearer test-token"
+    assert headers["X-Freyja-Client-Type"] == "imessage"
+
+
+@pytest.mark.asyncio
+async def test_imessage_identity_mapping_happens_after_allowlist_validation(enabled_gateway):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        result = await enabled_gateway.handle(make_message(sender="+15559999999"))
+
+    assert result is None
+    mock_post.assert_not_called()
 
 
 @pytest.mark.asyncio

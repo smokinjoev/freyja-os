@@ -73,7 +73,14 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     assert result.reply_to_message_id == "msg-001"
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert kwargs["json"] == {"prompt": "Hello Freyja", "provider": "auto"}
+    assert kwargs["json"]["prompt"] == "Hello Freyja"
+    assert kwargs["json"]["provider"] == "auto"
+    assert kwargs["json"]["conversation_id"].startswith("signal-conv:")
+    headers = kwargs["headers"]
+    assert headers["X-Freyja-Client-Type"] == "signal"
+    assert headers["X-Freyja-Client-Subject"].startswith("signal:")
+    assert headers["X-Freyja-Conversation-Id"] == kwargs["json"]["conversation_id"]
+    assert "+15551234567" not in str(headers)
 
 
 @pytest.mark.asyncio
@@ -86,9 +93,20 @@ async def test_director_token_is_sent_as_bearer_header(enabled_gateway):
         result = await enabled_gateway.handle(message)
 
     assert result.success is True
-    assert mock_post.await_args.kwargs["headers"] == {
-        "Authorization": "Bearer test-connector-token"
-    }
+    headers = mock_post.await_args.kwargs["headers"]
+    assert headers["Authorization"] == "Bearer test-connector-token"
+    assert headers["X-Freyja-Client-Type"] == "signal"
+
+
+@pytest.mark.asyncio
+async def test_signal_identity_mapping_happens_after_allowlist_validation(enabled_gateway):
+    message = make_message("+19998887777", "Hello Freyja", "msg-unauthorized")
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        result = await enabled_gateway.handle(message)
+
+    assert result.success is False
+    mock_post.assert_not_called()
 
 
 @pytest.mark.asyncio

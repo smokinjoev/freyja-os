@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,7 +10,12 @@ import pytest
 from pydantic import ValidationError
 
 from freyja.config import settings
-from freyja.memory.models import AppendMessageRequest, CreateConversationRequest
+from freyja.memory.models import (
+    AppendMessageRequest,
+    CreateConversationRequest,
+    MemoryPrincipal,
+    PutSharedMemoryRequest,
+)
 from freyja.memory.store import (
     MemoryDisabledStore,
     MemoryStore,
@@ -49,8 +55,15 @@ def test_schema_initialization_creates_tables_and_indexes(temp_db: str) -> None:
         names = {row[0] for row in cursor.fetchall()}
         assert "conversations" in names
         assert "messages" in names
+        assert "schema_versions" in names
+        assert "shared_memories" in names
         assert "idx_messages_conversation_timestamp" in names
         assert "idx_messages_request_id" in names
+        assert "idx_shared_memories_scope_updated" in names
+        version = conn.execute(
+            "SELECT version FROM schema_versions WHERE component = 'memory_store'"
+        ).fetchone()
+        assert version[0] == 2
     finally:
         conn.close()
     if os.path.exists(temp_db):
@@ -64,6 +77,24 @@ def test_schema_initialization_is_idempotent(temp_db: str) -> None:
     assert s._initialized is True
     if os.path.exists(temp_db):
         os.remove(temp_db)
+
+
+def test_database_file_permissions_are_restrictive(temp_db: str) -> None:
+    s = MemoryStore(database_path=temp_db)
+    s.initialize()
+    mode = os.stat(temp_db).st_mode & 0o777
+    assert mode == 0o600
+    if os.path.exists(temp_db):
+        os.remove(temp_db)
+
+
+def test_database_path_rejects_symlink(tmp_path: Path) -> None:
+    target = tmp_path / "target.db"
+    link = tmp_path / "link.db"
+    link.symlink_to(target)
+    s = MemoryStore(database_path=str(link))
+    with pytest.raises(Exception):
+        s.initialize()
 
 
 def test_create_conversation_generates_uuid(temp_db: str) -> None:
@@ -218,6 +249,160 @@ def test_metadata_round_trip(store: MemoryStore) -> None:
     assert message.model == "qwen2.5:1.5b"
     assert message.request_id == "req-123"
     assert message.metadata == {"foo": "bar", "count": 1}
+
+
+def _principal(
+    subject: str = "signal:abc",
+    conversation: str = "signal-conv:abc",
+    *,
+    client_type: str = "signal",
+) -> MemoryPrincipal:
+    return MemoryPrincipal(
+        client_type=client_type,
+        client_subject=subject,
+        account_owner="signal-owner:main" if client_type == "signal" else None,
+        conversation_id=conversation,
+    )
+
+
+def test_shared_memory_round_trip_and_cross_principal_isolation(store: MemoryStore) -> None:
+    saved = store.put_shared_memory(
+        _principal("signal:one"),
+        PutSharedMemoryRequest(
+            memory_id="timezone",
+            kind="preference",
+            content="Use America/New_York.",
+        ),
+    )
+    assert saved.memory_id == "timezone"
+    assert store.list_shared_memories(_principal("signal:one")).memories[0].content == "Use America/New_York."
+    assert store.list_shared_memories(_principal("signal:two")).memories == []
+    assert store.get_shared_memory(_principal("signal:two"), "timezone") is None
+    assert store.delete_shared_memory(_principal("signal:two"), "timezone") is False
+    assert store.get_shared_memory(_principal("signal:one"), "timezone") is not None
+
+
+def test_shared_memory_upsert_scoped_by_principal(store: MemoryStore) -> None:
+    signal = _principal("signal:one")
+    imessage = _principal("imessage:one", "imessage-conv:one", client_type="imessage")
+    store.put_shared_memory(
+        signal,
+        PutSharedMemoryRequest(memory_id="state", kind="fact", content="Signal state."),
+    )
+    store.put_shared_memory(
+        imessage,
+        PutSharedMemoryRequest(memory_id="state", kind="fact", content="iMessage state."),
+    )
+    assert store.get_shared_memory(signal, "state").content == "Signal state."
+    assert store.get_shared_memory(imessage, "state").content == "iMessage state."
+
+
+def test_shared_memory_redacts_secrets_before_persistence(store: MemoryStore) -> None:
+    saved = store.put_shared_memory(
+        _principal(),
+        PutSharedMemoryRequest(
+            memory_id="secret",
+            kind="fact",
+            content="token=do-not-store and Authorization: Bearer sk-secret",
+        ),
+    )
+    assert "do-not-store" not in saved.content
+    assert "sk-secret" not in saved.content
+    assert "<redacted>" in saved.content
+
+
+def test_shared_memory_item_size_limit(temp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "memory_shared_max_item_chars", 12)
+    s = MemoryStore(database_path=temp_db, max_messages_per_conversation=5)
+    s.initialize()
+    saved = s.put_shared_memory(
+        _principal(),
+        PutSharedMemoryRequest(memory_id="long", kind="summary", content="x" * 50),
+    )
+    assert len(saved.content) == 12
+    if os.path.exists(temp_db):
+        os.remove(temp_db)
+
+
+def test_shared_memory_per_principal_and_global_quotas(temp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "memory_shared_max_items_per_principal", 2)
+    monkeypatch.setattr(settings, "memory_shared_max_global_items", 3)
+    s = MemoryStore(database_path=temp_db)
+    s.initialize()
+    for i in range(4):
+        s.put_shared_memory(
+            _principal("signal:one"),
+            PutSharedMemoryRequest(memory_id=f"p-{i}", kind="fact", content=f"p{i}"),
+        )
+    assert [m.memory_id for m in s.list_shared_memories(_principal("signal:one")).memories] == ["p-3", "p-2"]
+    for i in range(2):
+        s.put_shared_memory(
+            _principal(f"signal:{i}", f"signal-conv:{i}"),
+            PutSharedMemoryRequest(memory_id=f"g-{i}", kind="fact", content=f"g{i}"),
+        )
+    conn = sqlite3.connect(temp_db)
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM shared_memories").fetchone()[0]
+    finally:
+        conn.close()
+    assert total == 3
+    if os.path.exists(temp_db):
+        os.remove(temp_db)
+
+
+def test_shared_memory_expiration_and_cleanup(store: MemoryStore) -> None:
+    expired_at = datetime.now(timezone.utc) - timedelta(days=1)
+    store.put_shared_memory(
+        _principal(),
+        PutSharedMemoryRequest(
+            memory_id="expired",
+            kind="fact",
+            content="old",
+            expires_at=expired_at,
+        ),
+    )
+    assert store.list_shared_memories(_principal()).memories == []
+    assert store.prune_shared_memories() >= 0
+
+
+def test_shared_memory_malformed_metadata_and_rows_are_skipped(store: MemoryStore) -> None:
+    principal = _principal()
+    store.put_shared_memory(
+        principal,
+        PutSharedMemoryRequest(memory_id="good", kind="fact", content="ok"),
+    )
+    conn = sqlite3.connect(store.database_path)
+    try:
+        conn.execute(
+            "UPDATE shared_memories SET metadata = '{bad', kind = 'bad-kind' WHERE memory_id = 'good'"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert store.list_shared_memories(principal).memories == []
+
+
+def test_shared_memory_concurrent_reads_and_writes(temp_db: str) -> None:
+    s = MemoryStore(database_path=temp_db)
+    s.initialize()
+
+    def write(index: int) -> None:
+        principal = _principal(f"signal:{index % 3}", f"signal-conv:{index % 3}")
+        s.put_shared_memory(
+            principal,
+            PutSharedMemoryRequest(memory_id=f"m-{index}", kind="fact", content=f"value-{index}"),
+        )
+        s.list_shared_memories(principal)
+
+    threads = [threading.Thread(target=write, args=(i,)) for i in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert s.list_shared_memories(_principal("signal:1", "signal-conv:1")).memories
+    if os.path.exists(temp_db):
+        os.remove(temp_db)
 
 
 def test_active_store_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
