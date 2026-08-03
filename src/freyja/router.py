@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 import uuid
 from typing import Any
 
@@ -40,11 +41,54 @@ class RoutingDecision(BaseModel):
     public_error_message: str | None = None
 
 
+class RuntimeToolCallEvidence(BaseModel):
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    success: bool | None = None
+    error: str | None = None
+    duration_ms: int | None = None
+
+
+class RuntimeEvidence(BaseModel):
+    provider_selected: str | None = None
+    model_selected: str | None = None
+    routing_decision: str | None = None
+    routing_reason: str | None = None
+    fallback_events: list[dict[str, Any]] = Field(default_factory=list)
+    tool_calls: list[RuntimeToolCallEvidence] = Field(default_factory=list)
+    memory_lookups: list[dict[str, Any]] = Field(default_factory=list)
+    connector_operations: list[dict[str, Any]] = Field(default_factory=list)
+    vision_executions: list[dict[str, Any]] = Field(default_factory=list)
+    timing: dict[str, float] = Field(default_factory=dict)
+    token_counts: dict[str, int] = Field(default_factory=dict)
+    cost: float | None = None
+
+    @classmethod
+    def from_decision(cls, decision: RoutingDecision) -> "RuntimeEvidence":
+        return cls(
+            provider_selected=decision.provider,
+            model_selected=decision.model,
+            routing_decision=decision.provider,
+            routing_reason=decision.reason,
+            fallback_events=list(decision.fallback_attempts),
+            cost=decision.estimated_cost_usd,
+        )
+
+    def refresh_decision(self, decision: RoutingDecision) -> None:
+        self.provider_selected = decision.provider
+        self.model_selected = decision.model
+        self.routing_decision = decision.provider
+        self.routing_reason = decision.reason
+        self.fallback_events = list(decision.fallback_attempts)
+        self.cost = decision.estimated_cost_usd
+
+
 class RoutingResult(BaseModel):
     decision: RoutingDecision
     response: str
     latency_ms: int | None = None
     tool_results: list[dict[str, Any]] = Field(default_factory=list)
+    runtime_evidence: RuntimeEvidence = Field(default_factory=RuntimeEvidence)
 
 
 SANITIZED_TERMS = {"api key", "authorization", "bearer", "sk-"}
@@ -205,18 +249,27 @@ class Router:
         request: RouteRequest,
         provider: str,
         principal: MemoryPrincipal | None,
+        evidence: RuntimeEvidence | None = None,
     ) -> str:
         if principal is None:
             return request.prompt
         if provider not in {"ollama", "local_reasoning"} and not settings.memory_recall_include_in_cloud:
             return request.prompt
-        memories = self._recall_shared_memories(principal)
+        memories = self._recall_shared_memories(principal, evidence)
         if not memories:
             return request.prompt
         return f"{self._format_recalled_memory(memories)}\n\nCurrent user request:\n{request.prompt}"
 
-    def _recall_shared_memories(self, principal: MemoryPrincipal) -> list[dict[str, str]]:
+    def _recall_shared_memories(
+        self,
+        principal: MemoryPrincipal,
+        evidence: RuntimeEvidence | None = None,
+    ) -> list[dict[str, str]]:
         if not getattr(settings, "memory_shared_enabled", True):
+            if evidence is not None:
+                evidence.memory_lookups.append(
+                    {"operation": "shared_recall", "success": False, "reason": "disabled", "count": 0}
+                )
             return []
         try:
             limit = max(1, min(int(settings.memory_recall_max_items), 50))
@@ -226,7 +279,20 @@ class Router:
             )
         except Exception:
             logger.exception("Shared memory recall failed for principal %s", principal.client_type)
+            if evidence is not None:
+                evidence.memory_lookups.append(
+                    {"operation": "shared_recall", "success": False, "reason": "error", "count": 0}
+                )
             return []
+        if evidence is not None:
+            evidence.memory_lookups.append(
+                {
+                    "operation": "shared_recall",
+                    "success": True,
+                    "count": len(response.memories),
+                    "principal_type": principal.client_type,
+                }
+            )
         formatted = []
         max_item_chars = max(1, int(settings.memory_recall_max_item_chars))
         total_limit = max(1, int(settings.memory_recall_max_total_chars))
@@ -526,21 +592,26 @@ class Router:
         spent_this_month: float = 0.0,
         memory_principal: MemoryPrincipal | None = None,
     ) -> RoutingResult:
+        started = time.monotonic()
         decision = await self.decide(request, spent_this_month=spent_this_month)
         self._log_decision(decision, request)
+        evidence = RuntimeEvidence.from_decision(decision)
+        self._record_connector_origin(evidence, memory_principal)
 
         if decision.provider == "error":
             decision.public_error_message = PUBLIC_ERROR_MESSAGES["blocked"]
-            return RoutingResult(
+            return self._routing_result(
                 decision=decision,
                 response="",
+                evidence=evidence,
+                started=started,
             )
 
         if decision.provider in {"ollama", "local_reasoning"}:
             if self.ollama_client is None:
                 decision.reason += f"; {decision.provider} client unavailable"
                 decision.public_error_message = PUBLIC_ERROR_MESSAGES["ollama"]
-                return RoutingResult(decision=decision, response="")
+                return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
             if request.tools_required:
                 return await self._execute_with_tools(
                     request,
@@ -548,33 +619,37 @@ class Router:
                     self.ollama_client,
                     self._registry,
                     memory_principal,
+                    evidence,
+                    started,
                 )
             response = await self.ollama_client.chat(
-                prompt=self._prompt_for_provider(request, decision.provider, memory_principal),
+                prompt=self._prompt_for_provider(request, decision.provider, memory_principal, evidence),
                 model=decision.model or None,
                 output_tokens=settings.ollama_default_output_tokens if decision.provider == "local_reasoning" else None,
             )
+            self._record_provider_response(evidence, response, decision.provider)
             if "error" in response:
                 raw_error = response["error"]
                 decision.fallback_attempts.append({"provider": decision.provider, "outcome": raw_error})
                 if settings.cloud_enabled and request.provider != "local":
-                    fallback_result = await self._try_openrouter_fallback(request, decision, memory_principal)
+                    fallback_result = await self._try_openrouter_fallback(request, decision, memory_principal, evidence, started)
                     fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
+                    fallback_result.runtime_evidence.refresh_decision(fallback_result.decision)
                     return fallback_result
                 decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
                 decision.public_error_message = self._public_error(decision.provider, decision.fallback_attempts)
-                return RoutingResult(decision=decision, response="")
+                return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
 
             content = response.get("message", {}).get("content", "")
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
-            await self._record_memory(request, decision, content)
-            return RoutingResult(decision=decision, response=content)
+            await self._record_memory(request, decision, content, evidence)
+            return self._routing_result(decision=decision, response=content, evidence=evidence, started=started)
 
         if decision.provider == "openrouter":
             if self.openrouter_client is None:
                 decision.reason += "; openrouter client unavailable"
                 decision.public_error_message = PUBLIC_ERROR_MESSAGES["openrouter"]
-                return RoutingResult(decision=decision, response="")
+                return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
             if request.tools_required:
                 return await self._execute_with_tools(
                     request,
@@ -582,28 +657,34 @@ class Router:
                     self.openrouter_client,
                     self._registry,
                     memory_principal,
+                    evidence,
+                    started,
                 )
             response = await self.openrouter_client.chat(
-                prompt=self._prompt_for_provider(request, "openrouter", memory_principal),
+                prompt=self._prompt_for_provider(request, "openrouter", memory_principal, evidence),
                 model=decision.model or None,
             )
+            self._record_provider_response(evidence, response, "openrouter")
             if "error" in response:
                 raw_error = response["error"]
                 decision.fallback_attempts.append({"provider": "openrouter", "outcome": raw_error})
-                fallback_result = await self._try_ollama_fallback(request, decision, memory_principal)
+                fallback_result = await self._try_ollama_fallback(request, decision, memory_principal, evidence, started)
                 fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
+                fallback_result.runtime_evidence.refresh_decision(fallback_result.decision)
                 return fallback_result
 
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             response_text = response.get("response", "")
-            await self._record_memory(request, decision, response_text)
-            return RoutingResult(
+            await self._record_memory(request, decision, response_text, evidence)
+            return self._routing_result(
                 decision=decision,
                 response=response_text,
+                evidence=evidence,
+                started=started,
             )
 
-        await self._record_memory(request, decision, "")
-        return RoutingResult(decision=decision, response="")
+        await self._record_memory(request, decision, "", evidence)
+        return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
 
     async def _execute_with_tools(
         self,
@@ -612,6 +693,8 @@ class Router:
         client: Any,
         registry: ToolRegistry,
         memory_principal: MemoryPrincipal | None = None,
+        evidence: RuntimeEvidence | None = None,
+        started: float | None = None,
     ) -> RoutingResult:
         """Run a bounded read-only tool loop with a provider client.
 
@@ -628,7 +711,7 @@ class Router:
 
         for iteration in range(max_iterations):
             prompt_parts = [
-                self._prompt_for_provider(request, decision.provider, memory_principal)
+                self._prompt_for_provider(request, decision.provider, memory_principal, evidence)
             ]
             for idx, entry in enumerate(tool_history, start=1):
                 serialized = self._serialize_tool_output(entry["output"], max_output_chars)
@@ -653,11 +736,15 @@ class Router:
             if decision.provider == "local_reasoning":
                 chat_kwargs["output_tokens"] = settings.ollama_default_output_tokens
             response = await client.chat(**chat_kwargs)
+            if evidence is not None:
+                self._record_provider_response(evidence, response, decision.provider)
             if "error" in response:
-                return RoutingResult(
+                return self._routing_result(
                     decision=decision,
                     response="",
                     tool_results=list(tool_history),
+                    evidence=evidence,
+                    started=started,
                 )
 
             content = self._extract_response_text(response, decision.provider)
@@ -665,18 +752,22 @@ class Router:
             clean_content = self._strip_tool_markers(content)
 
             if tool_call is None:
-                return RoutingResult(
+                return self._routing_result(
                     decision=decision,
                     response=clean_content,
                     tool_results=list(tool_history),
+                    evidence=evidence,
+                    started=started,
                 )
 
             tool_name = tool_call.get("tool_name")
             if not isinstance(tool_name, str):
-                return RoutingResult(
+                return self._routing_result(
                     decision=decision,
                     response=clean_content,
                     tool_results=list(tool_history),
+                    evidence=evidence,
+                    started=started,
                 )
             arguments = tool_call.get("arguments", {})
             if not isinstance(arguments, dict):
@@ -697,10 +788,13 @@ class Router:
                 )
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
-                return RoutingResult(
+                self._record_tool_evidence(evidence, entry)
+                return self._routing_result(
                     decision=decision,
                     response=f"Unknown tool '{tool_name}'.",
                     tool_results=list(tool_history),
+                    evidence=evidence,
+                    started=started,
                 )
 
             if not definition.enabled:
@@ -714,10 +808,13 @@ class Router:
                 )
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
-                return RoutingResult(
+                self._record_tool_evidence(evidence, entry)
+                return self._routing_result(
                     decision=decision,
                     response=f"Tool '{tool_name}' is currently disabled.",
                     tool_results=list(tool_history),
+                    evidence=evidence,
+                    started=started,
                 )
 
             if validation_errors:
@@ -731,10 +828,13 @@ class Router:
                 )
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
-                return RoutingResult(
+                self._record_tool_evidence(evidence, entry)
+                return self._routing_result(
                     decision=decision,
                     response=f"Invalid arguments for '{tool_name}': {'; '.join(validation_errors)}",
                     tool_results=list(tool_history),
+                    evidence=evidence,
+                    started=started,
                 )
 
             execution_request = ToolExecutionRequest(
@@ -756,6 +856,7 @@ class Router:
             )
             tool_history.append(entry)
             self._log_tool_execution(entry)
+            self._record_tool_evidence(evidence, entry)
 
             if not execution_result.success:
                 message = (execution_result.public_error_message or "no details").rstrip(".")
@@ -764,17 +865,134 @@ class Router:
                     f" ({execution_result.error_code or 'unknown'}): "
                     f"{message}."
                 )
-                return RoutingResult(
+                return self._routing_result(
                     decision=decision,
                     response=failure_response,
                     tool_results=list(tool_history),
+                    evidence=evidence,
+                    started=started,
                 )
 
-        return RoutingResult(
+        return self._routing_result(
             decision=decision,
             response="Tool iteration limit reached without a final answer.",
             tool_results=list(tool_history),
+            evidence=evidence,
+            started=started,
         )
+
+    def _routing_result(
+        self,
+        *,
+        decision: RoutingDecision,
+        response: str,
+        evidence: RuntimeEvidence | None = None,
+        started: float | None = None,
+        tool_results: list[dict[str, Any]] | None = None,
+    ) -> RoutingResult:
+        runtime_evidence = evidence or RuntimeEvidence.from_decision(decision)
+        runtime_evidence.refresh_decision(decision)
+        latency_ms: int | None = None
+        if started is not None:
+            latency_ms = int((time.monotonic() - started) * 1000)
+            runtime_evidence.timing["duration_ms"] = latency_ms
+        return RoutingResult(
+            decision=decision,
+            response=response,
+            latency_ms=latency_ms,
+            tool_results=tool_results or [],
+            runtime_evidence=runtime_evidence,
+        )
+
+    def _record_connector_origin(
+        self,
+        evidence: RuntimeEvidence,
+        principal: MemoryPrincipal | None,
+    ) -> None:
+        if principal is None:
+            return
+        evidence.connector_operations.append(
+            {
+                "connector": principal.client_type,
+                "operation": "route",
+                "success": True,
+                "conversation_id": principal.conversation_id,
+            }
+        )
+
+    def _record_tool_evidence(
+        self,
+        evidence: RuntimeEvidence | None,
+        entry: dict[str, Any],
+    ) -> None:
+        if evidence is None:
+            return
+        evidence.tool_calls.append(
+            RuntimeToolCallEvidence(
+                name=str(entry.get("tool_name", "")),
+                arguments=self._sanitize_arguments(
+                    entry.get("arguments", {}) if isinstance(entry.get("arguments"), dict) else {}
+                ),
+                success=entry.get("success"),
+                error=entry.get("error_code") or entry.get("public_error_message"),
+                duration_ms=entry.get("duration_ms"),
+            )
+        )
+
+    def _record_provider_response(
+        self,
+        evidence: RuntimeEvidence | None,
+        response: dict[str, Any],
+        provider: str,
+    ) -> None:
+        if evidence is None:
+            return
+        observed_model = response.get("model")
+        if isinstance(observed_model, str) and observed_model:
+            evidence.model_selected = observed_model
+        if isinstance(response.get("latency_ms"), int):
+            evidence.timing[f"{provider}_latency_ms"] = response["latency_ms"]
+        usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+        token_fields = {
+            "prompt_tokens": response.get("prompt_eval_count") or usage.get("prompt_tokens"),
+            "completion_tokens": response.get("eval_count") or usage.get("completion_tokens"),
+            "total_tokens": usage.get("total_tokens"),
+        }
+        for key, value in token_fields.items():
+            if value is None:
+                continue
+            try:
+                evidence.token_counts[key] = int(value)
+            except (TypeError, ValueError):
+                continue
+        if "total_tokens" not in evidence.token_counts:
+            prompt_tokens = evidence.token_counts.get("prompt_tokens")
+            completion_tokens = evidence.token_counts.get("completion_tokens")
+            if prompt_tokens is not None and completion_tokens is not None:
+                evidence.token_counts["total_tokens"] = prompt_tokens + completion_tokens
+
+    def _sanitize_arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        sanitized: dict[str, Any] = {}
+        for key, value in arguments.items():
+            lowered = key.lower()
+            if any(term in lowered for term in SANITIZED_TERMS):
+                sanitized[key] = "<redacted>"
+            elif isinstance(value, dict):
+                sanitized[key] = self._sanitize_arguments(value)
+            elif isinstance(value, list):
+                sanitized[key] = [
+                    "<redacted>" if isinstance(item, str) and self._looks_sensitive_value(item) else item
+                    for item in value
+                ]
+            elif isinstance(value, str) and self._looks_sensitive_value(value):
+                sanitized[key] = "<redacted>"
+            else:
+                sanitized[key] = value
+        return sanitized
+
+    def _looks_sensitive_value(self, value: str) -> bool:
+        lowered = value.lower()
+        return any(term in lowered for term in ("bearer ", "sk-", "token=", "api_key="))
 
     def _extract_response_text(self, response: dict[str, Any], provider: str) -> str:
         if provider in {"ollama", "local_reasoning"}:
@@ -871,6 +1089,7 @@ class Router:
         request: RouteRequest,
         decision: RoutingDecision,
         response_text: str,
+        evidence: RuntimeEvidence | None = None,
     ) -> None:
         if not request.conversation_id:
             return
@@ -906,41 +1125,60 @@ class Router:
                     },
                 )
             )
+            if evidence is not None:
+                evidence.memory_lookups.append(
+                    {
+                        "operation": "conversation_record",
+                        "success": True,
+                        "conversation_id": request.conversation_id,
+                    }
+                )
         except Exception:
             logger.exception("Memory recording failed for conversation %s", request.conversation_id)
+            if evidence is not None:
+                evidence.memory_lookups.append(
+                    {
+                        "operation": "conversation_record",
+                        "success": False,
+                        "conversation_id": request.conversation_id,
+                    }
+                )
 
     async def _try_openrouter_fallback(
         self,
         request: RouteRequest,
         decision: RoutingDecision,
         memory_principal: MemoryPrincipal | None = None,
+        evidence: RuntimeEvidence | None = None,
+        started: float | None = None,
     ) -> RoutingResult:
         cloud_allowed = settings.cloud_enabled and decision.estimated_cost_usd <= settings.openrouter_per_request_limit
         if not cloud_allowed:
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             decision.public_error_message = self._public_error("openrouter", decision.fallback_attempts)
-            return RoutingResult(decision=decision, response="")
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
         if self.openrouter_client is None:
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             decision.public_error_message = PUBLIC_ERROR_MESSAGES["openrouter"]
-            return RoutingResult(decision=decision, response="")
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
         model, reason = self._approved_model(request.model)
         if not model:
             decision.fallback_attempts.append(self._record_attempt("openrouter", "no approved model"))
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             decision.public_error_message = PUBLIC_ERROR_MESSAGES["none_available"]
-            return RoutingResult(decision=decision, response="")
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
         decision.fallback_attempts.append({"provider": "openrouter", "outcome": "attempting fallback"})
         response = await self.openrouter_client.chat(
-            prompt=self._prompt_for_provider(request, "openrouter", memory_principal),
+            prompt=self._prompt_for_provider(request, "openrouter", memory_principal, evidence),
             model=model,
         )
+        self._record_provider_response(evidence, response, "openrouter")
         if "error" in response:
             raw_error = response["error"]
             decision.fallback_attempts.append({"provider": "openrouter", "outcome": raw_error})
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             decision.public_error_message = self._public_error("openrouter", decision.fallback_attempts)
-            return RoutingResult(decision=decision, response="")
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
         new_decision = RoutingDecision(
             request_id=decision.request_id,
             provider="openrouter",
@@ -951,32 +1189,40 @@ class Router:
             estimated_cost_usd=decision.estimated_cost_usd,
         )
         self._log_decision(new_decision, request)
-        return RoutingResult(decision=new_decision, response=response.get("response", ""))
+        return self._routing_result(
+            decision=new_decision,
+            response=response.get("response", ""),
+            evidence=evidence,
+            started=started,
+        )
 
     async def _try_ollama_fallback(
         self,
         request: RouteRequest,
         decision: RoutingDecision,
         memory_principal: MemoryPrincipal | None = None,
+        evidence: RuntimeEvidence | None = None,
+        started: float | None = None,
     ) -> RoutingResult:
         if self.ollama_client is None:
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             decision.public_error_message = PUBLIC_ERROR_MESSAGES["ollama"]
-            return RoutingResult(decision=decision, response="")
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
         decision.fallback_attempts.append({"provider": "ollama", "outcome": "attempting fallback"})
         fallback_model = request.model or settings.ollama_model
         if not _meets_min_chat_capability(fallback_model):
             fallback_model = settings.ollama_chat_model
         response = await self.ollama_client.chat(
-            prompt=self._prompt_for_provider(request, "ollama", memory_principal),
+            prompt=self._prompt_for_provider(request, "ollama", memory_principal, evidence),
             model=fallback_model or None,
         )
+        self._record_provider_response(evidence, response, "ollama")
         if "error" in response:
             raw_error = response["error"]
             decision.fallback_attempts.append({"provider": "ollama", "outcome": raw_error})
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             decision.public_error_message = self._public_error("ollama", decision.fallback_attempts)
-            return RoutingResult(decision=decision, response="")
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
         new_decision = RoutingDecision(
             request_id=decision.request_id,
             provider="ollama",
@@ -988,7 +1234,12 @@ class Router:
             limitation_notice="Cloud provider failed; returned local response.",
         )
         self._log_decision(new_decision, request)
-        return RoutingResult(decision=new_decision, response=response.get("message", {}).get("content", ""))
+        return self._routing_result(
+            decision=new_decision,
+            response=response.get("message", {}).get("content", ""),
+            evidence=evidence,
+            started=started,
+        )
 
     def _log_decision(self, decision: RoutingDecision, request: RouteRequest) -> None:
         log_record = {

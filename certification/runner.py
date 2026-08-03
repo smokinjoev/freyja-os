@@ -227,6 +227,41 @@ def _category_scores(case_results: list[CaseResult]) -> dict[str, float]:
 
 
 def _context_from_routing_result(result: Any, duration_ms: float) -> CertificationContext:
+    runtime_evidence = getattr(result, "runtime_evidence", None)
+    if runtime_evidence is not None:
+        data = runtime_evidence.model_dump(mode="json") if hasattr(runtime_evidence, "model_dump") else dict(runtime_evidence)
+        token_counts: dict[str, int] = {}
+        for key, value in dict(data.get("token_counts") or {}).items():
+            try:
+                token_counts[str(key)] = int(value)
+            except (TypeError, ValueError):
+                continue
+        context = CertificationContext(
+            provider_selected=data.get("provider_selected"),
+            model_selected=data.get("model_selected"),
+            routing_decision=data.get("routing_decision"),
+            routing_reason=data.get("routing_reason"),
+            fallback_events=list(data.get("fallback_events") or []),
+            memory_lookups=list(data.get("memory_lookups") or []),
+            connector_operations=list(data.get("connector_operations") or []),
+            vision_executions=list(data.get("vision_executions") or []),
+            timing=dict(data.get("timing") or {}),
+            token_counts=token_counts,
+            cost=data.get("cost"),
+        )
+        context.tool_calls = [
+            ToolCallEvidence(
+                name=str(entry.get("name", "")),
+                arguments=sanitize_arguments(entry.get("arguments", {}) if isinstance(entry.get("arguments"), dict) else {}),
+                success=entry.get("success"),
+                error=entry.get("error"),
+                duration_ms=entry.get("duration_ms"),
+            )
+            for entry in data.get("tool_calls") or []
+        ]
+        context.timing.setdefault("duration_ms", duration_ms)
+        return context
+
     decision = result.decision
     context = CertificationContext(
         provider_selected=decision.provider,

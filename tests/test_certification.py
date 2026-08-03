@@ -14,6 +14,7 @@ from certification.models import CertificationCase, CertificationReport, Certifi
 from certification.reporter import report_stem, write_reports
 from certification.runner import OllamaCertificationProvider, list_suite_names, load_gauntlet, load_suite, resolve_suite_path, run_suite
 from certification.verifiers import RouterVerifier, ToolVerifier, discover_verifiers
+from freyja.router import RuntimeEvidence, RuntimeToolCallEvidence
 
 
 class FakeProvider:
@@ -301,6 +302,53 @@ async def test_director_provider_collects_routing_context() -> None:
     assert execution.context.routing_reason == "manual local override"
     assert execution.context.fallback_events == [{"provider": "openrouter", "outcome": "blocked"}]
     assert execution.context.tool_calls[0].arguments["token"] == "[redacted]"
+
+
+@pytest.mark.asyncio
+async def test_director_provider_prefers_runtime_evidence() -> None:
+    decision = SimpleNamespace(
+        provider="ollama",
+        model="qwen2.5:7b",
+        reason="manual local override",
+        fallback_attempts=[],
+        estimated_cost_usd=0.0,
+        public_error_message=None,
+    )
+    runtime_evidence = RuntimeEvidence(
+        provider_selected="ollama",
+        model_selected="qwen2.5:7b",
+        routing_decision="ollama",
+        routing_reason="manual local override",
+        fallback_events=[{"provider": "openrouter", "outcome": "blocked"}],
+        tool_calls=[
+            RuntimeToolCallEvidence(
+                name="memory",
+                arguments={"token": "<redacted>", "query": "preference"},
+                success=True,
+                duration_ms=5,
+            )
+        ],
+        memory_lookups=[{"operation": "shared_recall", "success": True, "count": 1}],
+        connector_operations=[{"connector": "signal", "operation": "route", "success": True}],
+        timing={"duration_ms": 12},
+        token_counts={"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+        cost=0.0,
+    )
+    result = SimpleNamespace(
+        decision=decision,
+        response="cannot verify",
+        tool_results=[],
+        runtime_evidence=runtime_evidence,
+    )
+    router = SimpleNamespace(execute=lambda request: _async_result(result))
+    provider = OllamaCertificationProvider(model="qwen2.5:7b", router_instance=router)
+
+    execution = await provider.complete(CertificationCase(name="case", prompt="prompt"))
+
+    assert execution.context.tool_calls[0].arguments["token"] == "[redacted]"
+    assert execution.context.memory_lookups[0]["count"] == 1
+    assert execution.context.connector_operations[0]["connector"] == "signal"
+    assert execution.context.token_counts["total_tokens"] == 7
 
 
 def test_cli_lists_suites(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:

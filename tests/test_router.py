@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from freyja.config import Settings, settings
+from freyja.memory.models import MemoryPrincipal
 from freyja.router import RouteRequest, Router
 from freyja.tools.builtin import register_builtin_tools
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest
@@ -58,6 +59,9 @@ async def test_manual_local_override(router: Router) -> None:
     router.ollama_client.chat.return_value = {
         "model": "qwen2.5:7b",
         "message": {"content": "local"},
+        "prompt_eval_count": 4,
+        "eval_count": 2,
+        "latency_ms": 12,
     }
 
     req = RouteRequest(prompt="hi", provider="local")
@@ -66,6 +70,12 @@ async def test_manual_local_override(router: Router) -> None:
     assert result.decision.provider == "ollama"
     assert result.decision.reason == "manual local override"
     assert result.response == "local"
+    assert result.runtime_evidence.provider_selected == "ollama"
+    assert result.runtime_evidence.model_selected == "qwen2.5:7b"
+    assert result.runtime_evidence.routing_reason == "manual local override"
+    assert result.runtime_evidence.token_counts["total_tokens"] == 6
+    assert result.runtime_evidence.timing["ollama_latency_ms"] == 12
+    assert result.latency_ms is not None
     router.ollama_client.chat.assert_awaited_once()
     _, kwargs = router.ollama_client.chat.call_args
     assert kwargs["prompt"] == "hi"
@@ -175,6 +185,32 @@ async def test_sensitive_request_falls_back_when_ollama_unhealthy(router: Router
 
     assert result.decision.provider == "openrouter"
     assert any(a["provider"] == "ollama" and a["outcome"] == "unhealthy" for a in result.decision.fallback_attempts)
+    assert result.runtime_evidence.provider_selected == "openrouter"
+    assert any(a["provider"] == "ollama" and a["outcome"] == "unhealthy" for a in result.runtime_evidence.fallback_events)
+
+
+async def test_runtime_evidence_records_connector_origin(router: Router) -> None:
+    router.ollama_client.healthy.return_value = True
+    router.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "signal reply"},
+    }
+    principal = MemoryPrincipal(
+        client_type="signal",
+        client_subject="subject-hash",
+        conversation_id="conversation-hash",
+    )
+
+    result = await router.execute(RouteRequest(prompt="hello", provider="local"), memory_principal=principal)
+
+    assert result.runtime_evidence.connector_operations == [
+        {
+            "connector": "signal",
+            "operation": "route",
+            "success": True,
+            "conversation_id": "conversation-hash",
+        }
+    ]
 
 
 async def test_complex_coding_routes_local_reasoning(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -404,6 +440,9 @@ async def test_native_tool_call_invalid_arguments_rejected(monkeypatch: pytest.M
 
     assert "Invalid arguments" in result.response
     assert result.tool_results[0]["error_code"] == "validation_error"
+    assert result.runtime_evidence.tool_calls[0].name == "get_weather"
+    assert result.runtime_evidence.tool_calls[0].success is False
+    assert result.runtime_evidence.tool_calls[0].error == "validation_error"
 
 
 async def test_logs_never_contain_api_keys(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -557,6 +596,8 @@ class TestToolLoop:
         assert result.tool_results[0]["tool_name"] == "hostname"
         assert result.tool_results[0]["success"] is True
         assert result.tool_results[0]["duration_ms"] is not None
+        assert result.runtime_evidence.tool_calls[0].name == "hostname"
+        assert result.runtime_evidence.tool_calls[0].success is True
 
     async def test_tool_failure_returns_honest_error(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
@@ -626,6 +667,21 @@ class TestToolLoop:
         assert result.tool_results[0]["success"] is False
         assert result.tool_results[0]["error_code"] == "tool_not_found"
         assert "Unknown tool" in result.response
+
+    async def test_tool_evidence_redacts_sensitive_arguments(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": self._tool_call("unknown_secret_tool", {"token": "sk-test", "query": "safe"})},
+        }
+
+        req = RouteRequest(prompt="Use a missing tool.", provider="local", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.runtime_evidence.tool_calls[0].name == "unknown_secret_tool"
+        assert result.runtime_evidence.tool_calls[0].arguments == {"token": "<redacted>", "query": "safe"}
 
     async def test_iteration_limit_exhaustion(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")

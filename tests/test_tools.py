@@ -346,6 +346,7 @@ def test_builtin_recall_conversation(registry: ToolRegistry, tmp_path, monkeypat
     monkeypatch.setattr(settings, "memory_database_path", str(tmp_path / "tools_recall.db"))
     store = MemoryStore(database_path=str(tmp_path / "tools_recall.db"))
     store.initialize()
+    set_store(store)
     store.create_conversation(CreateConversationRequest(conversation_id="conv-1"))
     store.append_message(
         AppendMessageRequest(
@@ -354,14 +355,17 @@ def test_builtin_recall_conversation(registry: ToolRegistry, tmp_path, monkeypat
     )
     monkeypatch.setattr(settings, "tools_default_timeout_seconds", 5)
     register_builtin_tools(registry)
-    result = asyncio_run(
-        registry.execute(
-            ToolExecutionRequest(
-                tool_name="recall_conversation",
-                arguments={"conversation_id": "conv-1", "limit": 10},
+    try:
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="recall_conversation",
+                    arguments={"conversation_id": "conv-1", "limit": 10},
+                )
             )
         )
-    )
+    finally:
+        set_store(None)
     assert result.success is True
     assert result.output["conversation_id"] == "conv-1"
     assert result.output["count"] == 1
