@@ -19,6 +19,8 @@ class MemoryPrincipal(BaseModel):
     @property
     def scope_key(self) -> str:
         owner = self.account_owner or ""
+        if self.client_subject.startswith("family-member:"):
+            return "\x1f".join(("person", self.client_subject, owner, ""))
         conversation = self.conversation_id or ""
         return "\x1f".join((self.client_type, self.client_subject, owner, conversation))
 
