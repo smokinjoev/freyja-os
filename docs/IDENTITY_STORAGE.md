@@ -34,7 +34,10 @@ records and review only the aggregate count:
 freyja-identity-import-apple --dry-run
 ```
 
-macOS may request Contacts permission for the invoking terminal or application.
+The importer never triggers the initial macOS permission dialog implicitly. If
+access has not been decided, explicitly authorize that one prompt and perform a
+dry run with `freyja-identity-import-apple --dry-run --request-access`. Later
+imports do not need `--request-access` once access has been granted.
 After backing up an existing identity database, replace it intentionally:
 
 ```bash
@@ -46,8 +49,9 @@ freyja-identity-import-apple --replace \
 
 The native helper sends contact data only through a local process pipe. The CLI
 prints aggregate counts, not names, addresses, phone numbers, or native contact
-identifiers. Native identifiers are stored only as SHA-256 digests so imports
-remain stable without retaining the source identifier.
+identifiers. Native identifiers are stored only as domain-separated SHA-256
+digests so imports remain stable without retaining the source identifier or a
+general-purpose hash that can be correlated with unrelated datasets.
 
 ### vCard fallback
 
@@ -64,6 +68,7 @@ Then back up and import the reviewed file:
 freyja-identity-backup backup ~/.local/state/freyja/identity.sqlite3 \
   ~/.local/state/freyja/identity-backup.sqlite3
 freyja-identity-import-vcard /private/path/contacts.vcf \
+  --replace \
   --database ~/.local/state/freyja/identity.sqlite3
 ```
 

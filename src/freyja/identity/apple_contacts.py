@@ -13,12 +13,17 @@ from freyja.identity.providers import validate_records
 HELPER_PATH = Path(__file__).with_name("apple_contacts_export.swift")
 
 
-def load_apple_contacts(*, helper_path: Path = HELPER_PATH, timeout_seconds: int = 120) -> list[Person]:
+def load_apple_contacts(
+    *, helper_path: Path = HELPER_PATH, timeout_seconds: int = 120, request_access: bool = False
+) -> list[Person]:
     if not helper_path.is_file():
         raise RuntimeError("Apple Contacts helper is missing")
     try:
+        command = ["/usr/bin/swift", str(helper_path)]
+        if request_access:
+            command.append("--request-access")
         result = subprocess.run(
-            ["/usr/bin/swift", str(helper_path)],
+            command,
             check=False,
             capture_output=True,
             text=True,
@@ -42,12 +47,19 @@ def people_from_apple_payload(payload: Any) -> list[Person]:
     for record in payload["contacts"]:
         if not isinstance(record, dict):
             raise ValueError("Apple contact must be an object")
-        identifier = str(record.get("identifier", "")).strip()
-        display_name = str(record.get("display_name", "")).strip()
+        raw_identifier = record.get("identifier")
+        raw_display_name = record.get("display_name")
+        if not isinstance(raw_identifier, str) or not isinstance(raw_display_name, str):
+            raise ValueError("Apple contact requires string identifier and display_name")
+        identifier = raw_identifier.strip()
+        display_name = raw_display_name.strip()
         if not identifier or not display_name:
             raise ValueError("Apple contact requires identifier and display_name")
-        uid_digest = hashlib.sha256(identifier.encode("utf-8")).hexdigest()
-        nickname = str(record.get("nickname", "")).strip()
+        uid_digest = hashlib.sha256(b"freyja:apple-contact:v1\0" + identifier.encode("utf-8")).hexdigest()
+        raw_nickname = record.get("nickname", "")
+        if not isinstance(raw_nickname, str):
+            raise ValueError("Apple contact nickname must be a string")
+        nickname = raw_nickname.strip()
         aliases = (Alias(nickname),) if nickname and nickname.casefold() != display_name.casefold() else ()
         identities: list[Identity] = []
         for kind, field in (("phone", "phones"), ("email", "emails")):
@@ -55,10 +67,13 @@ def people_from_apple_payload(payload: Any) -> list[Person]:
             if not isinstance(values, list):
                 raise ValueError(f"Apple contact {field} must be an array")
             for item in values:
-                if not isinstance(item, dict) or not str(item.get("value", "")).strip():
+                if not isinstance(item, dict) or not isinstance(item.get("value"), str) or not item["value"].strip():
                     raise ValueError(f"Apple contact {field} entry requires value")
+                raw_label = item.get("label", "")
+                if not isinstance(raw_label, str):
+                    raise ValueError(f"Apple contact {field} entry label must be a string")
                 identities.append(
-                    Identity(kind=kind, value=str(item["value"]).strip(), label=str(item.get("label", "")).strip() or None)
+                    Identity(kind=kind, value=item["value"].strip(), label=raw_label.strip() or None)
                 )
         people.append(
             Person(

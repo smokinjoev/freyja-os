@@ -14,11 +14,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--database", type=Path, default=Path(settings.identity_database_path))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--replace", action="store_true", help="Required before writing the identity database.")
+    parser.add_argument(
+        "--request-access",
+        action="store_true",
+        help="Explicitly allow macOS to show the initial Contacts permission prompt.",
+    )
     args = parser.parse_args(argv)
     if not args.dry_run and not args.replace:
         parser.error("use --dry-run first; --replace is required to write")
     try:
-        people = load_apple_contacts()
+        people = load_apple_contacts(request_access=args.request_access)
         if not args.dry_run:
             SQLiteIdentityProvider(args.database).replace_all(people, [])
     except (OSError, RuntimeError, ValueError) as exc:

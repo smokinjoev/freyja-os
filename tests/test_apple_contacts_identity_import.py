@@ -46,6 +46,8 @@ def test_apple_payload_rejects_malformed_and_duplicate_records() -> None:
         people_from_apple_payload([])
     with pytest.raises(ValueError, match="identifier and display_name"):
         people_from_apple_payload({"contacts": [{"identifier": "id", "display_name": ""}]})
+    with pytest.raises(ValueError, match="string identifier"):
+        people_from_apple_payload({"contacts": [{"identifier": 123, "display_name": "Person"}]})
 
     duplicate = payload()
     duplicate["contacts"].append(
@@ -86,8 +88,29 @@ def test_helper_output_is_parsed_without_exposing_stderr(monkeypatch, tmp_path) 
         load_apple_contacts(helper_path=helper)
 
 
+def test_permission_request_is_only_forwarded_when_explicit(monkeypatch, tmp_path) -> None:
+    helper = tmp_path / "helper.swift"
+    helper.write_text("// synthetic helper")
+    commands = []
+
+    def successful_run(command, **kwargs):
+        commands.append(command)
+        return CompletedProcess(command, 0, json.dumps(payload()), "")
+
+    monkeypatch.setattr("freyja.identity.apple_contacts.subprocess.run", successful_run)
+    load_apple_contacts(helper_path=helper)
+    load_apple_contacts(helper_path=helper, request_access=True)
+
+    assert commands[0] == ["/usr/bin/swift", str(helper)]
+    assert commands[1] == ["/usr/bin/swift", str(helper), "--request-access"]
+
+
 def test_apple_cli_dry_run_does_not_create_database(monkeypatch, tmp_path, capsys) -> None:
-    monkeypatch.setattr(identity_import_apple, "load_apple_contacts", lambda: people_from_apple_payload(payload()))
+    monkeypatch.setattr(
+        identity_import_apple,
+        "load_apple_contacts",
+        lambda **kwargs: people_from_apple_payload(payload()),
+    )
     database = tmp_path / "identity.sqlite3"
 
     assert identity_import_apple.main(["--database", str(database), "--dry-run"]) == 0
@@ -98,7 +121,7 @@ def test_apple_cli_dry_run_does_not_create_database(monkeypatch, tmp_path, capsy
 def test_apple_cli_requires_replace_before_writing(monkeypatch, tmp_path) -> None:
     called = False
 
-    def unexpected_load():
+    def unexpected_load(**kwargs):
         nonlocal called
         called = True
         return []

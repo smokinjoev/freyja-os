@@ -40,6 +40,16 @@ def test_vcard_requires_uid_and_full_name() -> None:
         parse_vcards("BEGIN:VCARD\nUID:missing-name\nEND:VCARD\n")
 
 
+def test_vcard_preserves_escaped_nickname_commas_and_rejects_encoded_values() -> None:
+    escaped = VCARD.replace("NICKNAME:One", r"NICKNAME:One\, Primary,Uno")
+    person = parse_vcards(escaped)[0]
+    assert [alias.value for alias in person.aliases] == ["One, Primary", "Uno"]
+
+    encoded = VCARD.replace("FN:Person One", "FN;ENCODING=QUOTED-PRINTABLE:Person=20One")
+    with pytest.raises(ValueError, match="encoded vCard values"):
+        parse_vcards(encoded)
+
+
 def test_vcard_rejects_duplicate_identity() -> None:
     duplicate = VCARD + VCARD.replace("synthetic-contact-one", "synthetic-contact-two").replace(
         "Person One", "Person Two"
@@ -59,3 +69,16 @@ def test_vcard_dry_run_does_not_create_database(tmp_path) -> None:
         "dry_run": True,
     }
     assert not database.exists()
+
+
+def test_vcard_write_requires_explicit_replace(tmp_path) -> None:
+    source = tmp_path / "contacts.vcf"
+    source.write_text(VCARD)
+    database = tmp_path / "identity.sqlite3"
+
+    with pytest.raises(ValueError, match="--replace"):
+        import_vcards(source, database)
+    assert not database.exists()
+
+    assert import_vcards(source, database, replace=True)["people"] == 1
+    assert database.is_file()

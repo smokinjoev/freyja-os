@@ -46,24 +46,38 @@ def _parse_card(lines: list[str]) -> Person:
             if "=" in parameter:
                 key, value = parameter.split("=", 1)
                 parameters[key.upper()] = value.strip('"')
-        fields.setdefault(name, []).append((parameters, _unescape(raw_value)))
+            elif parameter:
+                parameters.setdefault("TYPE", parameter)
+        encoding = parameters.get("ENCODING", "").upper()
+        if encoding:
+            raise ValueError(f"encoded vCard values are not supported: {encoding}")
+        charset = parameters.get("CHARSET", "utf-8").lower().replace("_", "-")
+        if charset not in {"utf-8", "utf8"}:
+            raise ValueError(f"vCard charset is not supported: {charset}")
+        fields.setdefault(name, []).append((parameters, raw_value))
     uid = _first(fields, "UID")
     display_name = _first(fields, "FN")
     if not uid or not display_name:
         raise ValueError("each vCard requires UID and FN")
+    version = _first(fields, "VERSION")
+    if version not in {"3.0", "4.0"}:
+        raise ValueError("each vCard requires VERSION 3.0 or 4.0")
     aliases: list[Alias] = []
     for _parameters, value in fields.get("NICKNAME", []):
-        aliases.extend(Alias(item.strip()) for item in value.split(",") if item.strip())
+        for item in _split_unescaped(value, ","):
+            alias = _unescape(item).strip()
+            if alias:
+                aliases.append(Alias(alias))
     identities: list[Identity] = []
     for name, kind in (("TEL", "phone"), ("EMAIL", "email")):
         for parameters, value in fields.get(name, []):
-            cleaned = value.removeprefix("tel:").removeprefix("mailto:").strip()
+            cleaned = re.sub(r"^(?:tel:|mailto:)", "", _unescape(value), flags=re.IGNORECASE).strip()
             if cleaned:
                 identities.append(Identity(kind=kind, value=cleaned, label=_label(parameters)))
-    uid_digest = hashlib.sha256(uid.encode("utf-8")).hexdigest()
+    uid_digest = hashlib.sha256(b"freyja:vcard-contact:v1\0" + uid.encode("utf-8")).hexdigest()
     return Person(
         person_id=f"contact-{uid_digest[:20]}",
-        display_name=display_name.strip(),
+        display_name=display_name,
         preferred_name=aliases[0].value if aliases else None,
         aliases=tuple(aliases),
         identities=tuple(identities),
@@ -84,7 +98,7 @@ def _unfold(content: str) -> list[str]:
 
 def _first(fields: dict[str, list[tuple[dict[str, str], str]]], name: str) -> str | None:
     values = fields.get(name, [])
-    return values[0][1].strip() if values else None
+    return _unescape(values[0][1]).strip() if values else None
 
 
 def _label(parameters: dict[str, str]) -> str | None:
@@ -94,3 +108,7 @@ def _label(parameters: dict[str, str]) -> str | None:
 
 def _unescape(value: str) -> str:
     return re.sub(r"\\([nN,;\\])", lambda match: "\n" if match.group(1).lower() == "n" else match.group(1), value)
+
+
+def _split_unescaped(value: str, separator: str) -> list[str]:
+    return re.split(rf"(?<!\\){re.escape(separator)}", value)

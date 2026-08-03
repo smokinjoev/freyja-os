@@ -8,10 +8,14 @@ func fail(_ message: String) -> Never {
 
 let store = CNContactStore()
 let status = CNContactStore.authorizationStatus(for: .contacts)
+let mayRequestAccess = CommandLine.arguments.dropFirst().contains("--request-access")
 if status == .denied || status == .restricted {
     fail("Contacts permission is unavailable")
 }
 if status == .notDetermined {
+    if !mayRequestAccess {
+        fail("Contacts permission has not been requested; rerun with explicit permission-request approval")
+    }
     let semaphore = DispatchSemaphore(value: 0)
     var granted = false
     store.requestAccess(for: .contacts) { allowed, _ in
