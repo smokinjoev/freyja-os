@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Protocol
@@ -9,6 +10,7 @@ from freyja.identity.models import Alias, Identity, Person, Relationship
 
 
 SCHEMA_VERSION = 1
+_ALIAS_SEPARATOR = re.compile(r"[^a-z0-9]+")
 
 
 class IdentityProvider(Protocol):
@@ -139,17 +141,38 @@ def validate_records(people: list[Person], relationships: list[Relationship]) ->
             raise ValueError(f"duplicate person_id: {person.person_id}")
         person_ids.add(person.person_id)
         for alias in person.aliases:
-            key = " ".join(alias.value.lower().split())
+            key = _normalize_alias(alias.value)
             if not key:
                 raise ValueError("alias value is required")
             if key in alias_keys:
                 raise ValueError(f"duplicate alias: {alias.value}")
             alias_keys.add(key)
         for identity in person.identities:
-            key = (identity.kind, identity.value.strip().lower())
+            key = _identity_key(identity.kind, identity.value)
             if key in identity_keys:
                 raise ValueError(f"duplicate identity: {identity.kind}:{identity.value}")
             identity_keys.add(key)
     for item in relationships:
         if item.source_person_id not in person_ids or item.target_person_id not in person_ids:
             raise ValueError("relationship references unknown person")
+
+
+def _identity_key(kind: str, value: str) -> tuple[str, str]:
+    if kind in {"email", "imessage"} and "@" in value:
+        normalized = value.strip().lower()
+    elif kind in {"phone", "signal", "imessage"}:
+        stripped = value.strip()
+        prefix = "+" if stripped.startswith("+") else ""
+        digits = "".join(character for character in stripped if character.isdigit())
+        normalized = f"{prefix}{digits}" if digits else stripped.lower()
+    elif kind == "alias":
+        normalized = _normalize_alias(value)
+    else:
+        normalized = value.strip().lower()
+    if not normalized:
+        raise ValueError(f"identity value is required: {kind}")
+    return kind, normalized
+
+
+def _normalize_alias(value: str) -> str:
+    return "-".join(part for part in _ALIAS_SEPARATOR.split(value.strip().lower()) if part)

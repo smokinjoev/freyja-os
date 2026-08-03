@@ -45,16 +45,29 @@ def main(argv: list[str] | None = None) -> int:
 def _person(data: Any) -> Person:
     if not isinstance(data, dict):
         raise ValueError("each person must be an object")
-    aliases = tuple(Alias(str(item["value"]), item.get("label")) if isinstance(item, dict) else Alias(str(item)) for item in data.get("aliases", []))
-    identities = tuple(
-        Identity(str(item["kind"]), str(item["value"]), item.get("label"), bool(item.get("verified", False)))
-        for item in data.get("identities", [])
-        if isinstance(item, dict)
-    )
+    raw_aliases = data.get("aliases", [])
+    raw_identities = data.get("identities", [])
+    if not isinstance(raw_aliases, list) or not isinstance(raw_identities, list):
+        raise ValueError("aliases and identities must be arrays")
+    aliases: list[Alias] = []
+    for item in raw_aliases:
+        if isinstance(item, dict):
+            if "value" not in item:
+                raise ValueError("alias object requires value")
+            aliases.append(Alias(str(item["value"]), item.get("label")))
+        elif isinstance(item, str):
+            aliases.append(Alias(item))
+        else:
+            raise ValueError("alias must be a string or object")
+    identities: list[Identity] = []
+    for item in raw_identities:
+        if not isinstance(item, dict) or "kind" not in item or "value" not in item:
+            raise ValueError("identity requires kind and value")
+        identities.append(Identity(str(item["kind"]), str(item["value"]), item.get("label"), bool(item.get("verified", False))))
     metadata = data.get("metadata", {})
     if not isinstance(metadata, dict):
         raise ValueError("person metadata must be an object")
-    return Person(str(data.get("person_id", "")), str(data.get("display_name", "")), data.get("preferred_name"), aliases, identities, metadata)
+    return Person(str(data.get("person_id", "")), str(data.get("display_name", "")), data.get("preferred_name"), tuple(aliases), tuple(identities), metadata)
 
 
 def _relationship(data: Any) -> Relationship:

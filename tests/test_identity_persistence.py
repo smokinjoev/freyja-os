@@ -72,3 +72,22 @@ def test_duplicate_aliases_are_rejected(tmp_path) -> None:
     ]}))
     with pytest.raises(ValueError, match="duplicate alias"):
         import_document(source, tmp_path / "identity.sqlite3")
+
+
+def test_equivalent_phone_formats_are_rejected_as_duplicates(tmp_path) -> None:
+    source = tmp_path / "contacts.json"
+    source.write_text(json.dumps({"people": [
+        {"person_id": "a", "display_name": "A", "identities": [{"kind": "signal", "value": "+1 (555) 123-4567"}]},
+        {"person_id": "b", "display_name": "B", "identities": [{"kind": "signal", "value": "+15551234567"}]},
+    ]}))
+    with pytest.raises(ValueError, match="duplicate identity"):
+        import_document(source, tmp_path / "identity.sqlite3")
+
+
+def test_malformed_identity_is_rejected_instead_of_ignored(tmp_path) -> None:
+    source = tmp_path / "contacts.json"
+    source.write_text(json.dumps({"people": [
+        {"person_id": "a", "display_name": "A", "identities": ["not-an-object"]},
+    ]}))
+    with pytest.raises(ValueError, match="identity requires kind and value"):
+        import_document(source, tmp_path / "identity.sqlite3")
