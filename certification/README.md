@@ -90,19 +90,92 @@ requests. Each case stores a `runtime_context` object in JSON reports with:
 The JSON report has a `schema_version` field so future dashboard code can
 version migrations deliberately.
 
-## Benchmark And Compare
+## Benchmark Workflow
 
-Run identical suites across model names:
+Run identical certification suites across provider/model targets:
+
+```bash
+freyja-certify benchmark \
+  --benchmark-suite smoke \
+  --provider ollama --model qwen3:27b \
+  --provider ollama --model hermes3:8b \
+  --provider openrouter --model openai/gpt-5.5
+```
+
+`--benchmark-suite` may be repeated to run multiple suites for every target.
+The older Ollama-only shortcut is still supported:
 
 ```bash
 freyja-certify benchmark --benchmark-suite smoke --models qwen2.5:7b,gpt-oss:20b
 ```
 
-Compare two JSON reports:
+Benchmark history is stored under `certification/benchmarks/` by default. Each
+benchmark run writes:
+
+- individual certification Markdown and JSON reports for each target/suite run
+- one benchmark Markdown comparison table
+- one benchmark JSON report with stable target IDs and router-ready metrics
+
+Benchmark metrics include overall score, category scores, execution time,
+average latency, token usage, tool success rate, verifier correctness for
+routing/memory/connectors/vision, failures, and cost when available.
+
+## Benchmark Report Format
+
+Benchmark JSON reports use this top-level shape:
+
+```json
+{
+  "schema_version": "1.0",
+  "timestamp": "2026-08-03T12:00:00+00:00",
+  "git_sha": "abc123",
+  "suite_names": ["smoke"],
+  "entries": [
+    {
+      "target": {
+        "provider": "ollama",
+        "model": "qwen3:27b",
+        "target_id": "ollama:qwen3:27b"
+      },
+      "metrics": {
+        "overall_score": 0.92,
+        "category_scores": {"routing": 1.0},
+        "average_latency_ms": 840.0,
+        "token_usage": 1200
+      }
+    }
+  ],
+  "rankings": {
+    "overall_score": ["ollama:qwen3:27b"],
+    "latency": ["ollama:qwen3:27b"]
+  },
+  "router_data": {
+    "selection_inputs": {}
+  }
+}
+```
+
+`router_data.selection_inputs` is intentionally compact and stable so the
+Freyja Router can later consume measured provider/model behavior without
+depending on Markdown report layout or per-case certification internals.
+
+## Comparison Workflow
+
+Compare two certification reports or two benchmark reports:
 
 ```bash
 freyja-certify compare --reports certification/reports/old.json certification/reports/new.json
+freyja-certify compare --reports certification/benchmarks/old.json certification/benchmarks/new.json
 ```
 
-Comparison output highlights score deltas, latency deltas, regressions, and
-improvements.
+Compare benchmark history by commit prefix or by two models contained in the
+latest matching benchmark report:
+
+```bash
+freyja-certify compare --commits 51295e5 abc1234
+freyja-certify compare --models qwen3:27b,hermes3:8b
+```
+
+Comparison output is written to `certification/benchmarks/` by default and
+highlights score deltas, latency deltas, regressions, improvements, and ranking
+changes for benchmark reports.

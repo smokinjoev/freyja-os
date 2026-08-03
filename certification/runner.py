@@ -52,6 +52,44 @@ class OllamaCertificationProvider:
         return CertificationExecution(response=result.response, context=context)
 
 
+class OpenRouterCertificationProvider:
+    name = "openrouter"
+
+    def __init__(self, model: str | None = None, router_instance: object | None = None) -> None:
+        from freyja.config import settings
+        from freyja.router import router
+
+        self.model = model or settings.openrouter_model or "default"
+        self._router = router_instance or router
+
+    async def complete(self, case: CertificationCase) -> CertificationExecution:
+        from freyja.router import RouteRequest
+
+        request_data = {"prompt": case.prompt, "provider": "cloud", "model": self.model}
+        request_data.update(case.route_request)
+        request_data["prompt"] = case.prompt
+        request_data["provider"] = "cloud"
+        request_data["model"] = self.model
+        start = time.monotonic()
+        result = await self._router.execute(RouteRequest(**request_data))
+        context = _context_from_routing_result(result, elapsed_ms(start))
+        if not result.response:
+            return CertificationExecution(response="", error=result.decision.public_error_message or result.decision.reason, context=context)
+        return CertificationExecution(response=result.response, context=context)
+
+
+def provider_for_name(
+    provider: str,
+    model: str | None = None,
+    router_instance: object | None = None,
+) -> CertificationProvider:
+    if provider == "ollama":
+        return OllamaCertificationProvider(model=model, router_instance=router_instance)
+    if provider == "openrouter":
+        return OpenRouterCertificationProvider(model=model, router_instance=router_instance)
+    raise ValueError(f"Unsupported certification provider '{provider}'")
+
+
 def load_suite(name: str, suite_dir: Path = DEFAULT_SUITE_DIR) -> CertificationSuite:
     if name in DIFFICULTIES:
         return load_gauntlet(difficulty=name, suite_dir=suite_dir)

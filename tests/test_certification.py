@@ -7,7 +7,18 @@ from types import SimpleNamespace
 import pytest
 
 from certification import cli
-from certification.benchmark import benchmark_row, compare_reports, render_benchmark_markdown, render_compare_markdown
+from certification.benchmark import (
+    BenchmarkTarget,
+    benchmark_row,
+    build_benchmark_report,
+    compare_benchmark_models,
+    compare_reports,
+    find_benchmark_report_by_commit,
+    find_benchmark_report_with_models,
+    render_benchmark_markdown,
+    render_compare_markdown,
+    write_benchmark_report,
+)
 from certification.context import CertificationContext, CertificationExecution, ToolCallEvidence, sanitize_arguments
 from certification.grader import grade_response
 from certification.models import CertificationCase, CertificationReport, CertificationSuite, ReportMetadata
@@ -440,5 +451,173 @@ def test_benchmark_and_compare_helpers() -> None:
     assert "Regressions" in render_compare_markdown(comparison)
 
 
+def test_benchmark_report_collects_rankings_and_router_data(tmp_path: Path) -> None:
+    fast = _report_for_benchmark("ollama", "fast", 1.0, "honesty", "core", 10, 3, True)
+    slow = _report_for_benchmark("ollama", "slow", 0.0, "honesty", "core", 20, 5, False)
+
+    report = build_benchmark_report(
+        [
+            (BenchmarkTarget("ollama", "fast"), [fast]),
+            (BenchmarkTarget("ollama", "slow"), [slow]),
+        ],
+        router_mode="default",
+    )
+    written = write_benchmark_report(report, output_dir=tmp_path)
+
+    data = json.loads(Path(written.report_paths["json"]).read_text(encoding="utf-8"))
+    assert data["entries"][0]["metrics"]["average_latency_ms"] == 10
+    assert data["rankings"]["overall_score"][0] == "ollama:fast"
+    assert data["rankings"]["latency"][0] == "ollama:fast"
+    assert data["router_data"]["selection_inputs"]["ollama:fast"]["overall_score"] == 1.0
+    assert "Freyja Benchmark Report" in Path(written.report_paths["markdown"]).read_text(encoding="utf-8")
+
+
+def test_compare_benchmark_reports_reports_deltas() -> None:
+    before = build_benchmark_report(
+        [(BenchmarkTarget("ollama", "model"), [_report_for_benchmark("ollama", "model", 1.0, "honesty", "core", 10, 3, True)])],
+        router_mode="default",
+    ).to_dict()
+    after = build_benchmark_report(
+        [(BenchmarkTarget("ollama", "model"), [_report_for_benchmark("ollama", "model", 0.0, "honesty", "core", 15, 4, False)])],
+        router_mode="default",
+    ).to_dict()
+
+    comparison = compare_reports(before, after)
+
+    assert comparison["type"] == "benchmark"
+    assert comparison["target_deltas"]["ollama:model"]["score_delta"] == -1.0
+    assert comparison["target_deltas"]["ollama:model"]["latency_delta_ms"] == 5
+    assert comparison["regressions"] == ["ollama:model"]
+    assert "Benchmark Comparison" in render_compare_markdown(comparison)
+
+
+def test_benchmark_history_lookup_and_model_compare(tmp_path: Path) -> None:
+    report = build_benchmark_report(
+        [
+            (BenchmarkTarget("ollama", "left"), [_report_for_benchmark("ollama", "left", 0.5, "honesty", "core", 20, 3, False)]),
+            (BenchmarkTarget("ollama", "right"), [_report_for_benchmark("ollama", "right", 1.0, "honesty", "core", 10, 3, True)]),
+        ],
+        router_mode="default",
+    )
+    written = write_benchmark_report(report, output_dir=tmp_path)
+
+    by_commit = find_benchmark_report_by_commit("abc", tmp_path)
+    by_models = find_benchmark_report_with_models("left", "right", tmp_path)
+    comparison = compare_benchmark_models(by_models, "left", "right")
+
+    assert by_commit["_source_path"] == written.report_paths["json"]
+    assert by_models["_source_path"] == written.report_paths["json"]
+    assert comparison["type"] == "model"
+    assert comparison["score_delta"] == 1.0
+    assert comparison["latency_delta_ms"] == -10
+    assert "Model Benchmark Comparison" in render_compare_markdown(comparison)
+
+
+def test_cli_benchmark_runs_repeated_provider_model_pairs(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    suite = CertificationSuite(
+        name="smoke",
+        description="Smoke checks.",
+        cases=(CertificationCase(name="case", prompt="prompt", expected_keywords=("ok",)),),
+    )
+    calls: list[tuple[str, str]] = []
+
+    class Provider:
+        def __init__(self, provider: str, model: str | None) -> None:
+            self.name = provider
+            self.model = model or "default"
+
+    def fake_provider(provider: str, model: str | None):
+        calls.append((provider, model or "default"))
+        return Provider(provider, model)
+
+    def fake_run_suite_sync(suite, provider, router_mode):
+        return _report_for_benchmark(provider.name, provider.model, 1.0, suite.name, "core", 10, 3, True)
+
+    monkeypatch.setattr(cli, "load_suite", lambda name: suite)
+    monkeypatch.setattr(cli, "_provider", fake_provider)
+    monkeypatch.setattr(cli, "run_suite_sync", fake_run_suite_sync)
+
+    assert cli.main(
+        [
+            "benchmark",
+            "--benchmark-suite",
+            "smoke",
+            "--provider",
+            "ollama",
+            "--model",
+            "qwen3:27b",
+            "--provider",
+            "openrouter",
+            "--model",
+            "openai/gpt-5.5",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    ) == 0
+
+    assert calls == [("ollama", "qwen3:27b"), ("openrouter", "openai/gpt-5.5")]
+    output = capsys.readouterr().out
+    assert "Freyja Benchmark Report" in output
+    assert list(tmp_path.glob("*benchmark.json"))
+    assert list(tmp_path.glob("*benchmark.md"))
+
+
 async def _async_result(value):
     return value
+
+
+def _report_for_benchmark(
+    provider: str,
+    model: str,
+    score: float,
+    suite_name: str,
+    category: str,
+    latency_ms: float,
+    tokens: int,
+    passed: bool,
+) -> CertificationReport:
+    case = CertificationCase(
+        name="case",
+        prompt="prompt",
+        category=category,
+        suite_name=suite_name,
+        max_score=1.0,
+    )
+    result = grade_response(
+        case,
+        "ok" if passed else "nope",
+        runtime_context={
+            "timing": {"duration_ms": latency_ms},
+            "token_counts": {"total_tokens": tokens},
+            "tool_calls": [{"name": "tool", "success": passed}],
+        },
+        verifier_results=(
+            {"verifier": "router", "passed": passed},
+            {"verifier": "memory", "passed": passed},
+            {"verifier": "connector", "passed": passed},
+            {"verifier": "vision", "passed": passed},
+        ),
+    )
+    return CertificationReport(
+        metadata=ReportMetadata(
+            timestamp="2026-08-03T12:00:00+00:00",
+            git_sha="abc123",
+            branch="main",
+            working_tree="clean",
+            hostname="host",
+            provider=provider,
+            model=model,
+            router_mode="default",
+            suite_name=suite_name,
+            overall_score=score,
+            execution_time=latency_ms / 1000,
+            certification_cli_version="0.1.0",
+        ),
+        suite_description="Benchmark suite.",
+        cases=(result,),
+        category_scores={category: score},
+    )
