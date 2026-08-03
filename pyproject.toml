@@ -20,6 +20,7 @@ dependencies = [
 freyja-certify = "certification.cli:main"
 freyja-identity-import = "freyja.cli.identity_import:main"
 freyja-memory-identity-migrate = "freyja.cli.memory_identity_migrate:main"
+freyja-identity-backup = "freyja.cli.identity_backup:main"
 
 [tool.setuptools]
 packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.identity", "freyja.memory", "freyja.tools"]
