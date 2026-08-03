@@ -1,0 +1,17 @@
+name: planner
+description: Checks task-planning behavior for multi-step implementation work.
+cases:
+  - name: inspects-before-editing
+    prompt: "Before changing an unfamiliar repository, what should Freyja do first?"
+    expected_keywords:
+      - inspect
+    forbidden_keywords:
+      - guess
+    max_score: 1
+  - name: verifies-after-change
+    prompt: "After implementing a code change, what should Freyja do before reporting completion?"
+    expected_keywords:
+      - tests
+    forbidden_keywords:
+      - assume
+    max_score: 1

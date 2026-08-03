@@ -15,6 +15,19 @@ Freyja-OS is a locally controlled personal-agent platform.
 
 Phase 1: repository foundation and Director skeleton.
 
+## Certification CLI
+
+Run certification suites with the default Ollama provider:
+
+```bash
+freyja-certify
+```
+
+The CLI writes timestamped Markdown and JSON reports to
+`certification/reports/` by default. Use `freyja-certify --help` for provider,
+model, router-mode, suite, and output directory options. See
+[`certification/README.md`](certification/README.md) for suite details.
+
 ## Rev 1 host roles
 
 Mars is the Freyja Director and control-plane host. Atlas runs always-on
