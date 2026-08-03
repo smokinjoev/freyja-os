@@ -21,6 +21,8 @@ freyja-certify = "certification.cli:main"
 freyja-identity-import = "freyja.cli.identity_import:main"
 freyja-memory-identity-migrate = "freyja.cli.memory_identity_migrate:main"
 freyja-identity-backup = "freyja.cli.identity_backup:main"
+freyja-identity-import-vcard = "freyja.cli.identity_import_vcard:main"
+freyja-identity-import-apple = "freyja.cli.identity_import_apple:main"
 
 [tool.setuptools]
 packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.identity", "freyja.memory", "freyja.tools"]
@@ -30,6 +32,7 @@ freyja = "src/freyja"
 
 [tool.setuptools.package-data]
 certification = ["suites/**/*.yaml"]
+freyja = ["identity/*.swift"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -5,6 +5,7 @@
 secrets/
 contacts*.json
 identity*.json
+*.vcf
 *.sqlite
 *.sqlite3
 !docs/examples/*.example.json
