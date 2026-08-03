@@ -3,6 +3,11 @@
 .env.*
 !.env.example
 secrets/
+contacts*.json
+identity*.json
+*.sqlite
+*.sqlite3
+!docs/examples/*.example.json
 
 # Python
 __pycache__/
