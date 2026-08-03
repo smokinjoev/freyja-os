@@ -28,6 +28,8 @@ detection, dry runs, and transactional replacement. See
 [`docs/IDENTITY_STORAGE.md`](docs/IDENTITY_STORAGE.md).
 Legacy platform memory can be consolidated safely using the dry-run-first
 [`identity-to-memory migration`](docs/IDENTITY_MEMORY_MIGRATION.md).
+Private identity databases support checksummed backup, verification, and safe
+restore workflows documented in [`docs/IDENTITY_BACKUP.md`](docs/IDENTITY_BACKUP.md).
 
 - Signal and iMessage senders can resolve to a `Person` while preserving legacy
   allowlist syntax.
