@@ -27,8 +27,10 @@ state.
 identifiers into people before downstream services act on them.
 
 Identity data can remain on the deterministic development seed or load from a
-versioned local SQLite store. Private JSON imports support validation, duplicate
-detection, dry runs, and transactional replacement. See
+versioned local SQLite store. Native Apple Contacts, private vCard, and JSON
+imports support validation, duplicate detection, dry runs, and transactional
+replacement. The native Mac bridge is deliberately small and reusable; it does
+not require a separate MacAgent service. See
 [`docs/IDENTITY_STORAGE.md`](docs/IDENTITY_STORAGE.md).
 Legacy platform memory can be consolidated safely using the dry-run-first
 [`identity-to-memory migration`](docs/IDENTITY_MEMORY_MIGRATION.md).
