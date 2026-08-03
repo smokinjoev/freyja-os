@@ -16,6 +16,10 @@ Freyja-OS is a locally controlled personal-agent platform.
 Current phase: Identity Service on top of the Director, Router, Memory,
 Certification, Benchmark, Communications, and Family Calendar foundation.
 
+Every pull request runs the full test suite on Python 3.11-3.13 plus repository
+hygiene checks that reject common credential signatures and tracked runtime
+state.
+
 ## Identity Service
 
 `freyja.identity` is the canonical source of people known to Freyja. It models
