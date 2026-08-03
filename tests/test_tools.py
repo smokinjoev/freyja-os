@@ -92,6 +92,16 @@ def test_discovery(registry: ToolRegistry) -> None:
         "disk_usage",
         "director_health",
         "repository_status",
+        "calendar_today_schedule",
+        "calendar_tomorrow_schedule",
+        "calendar_free_busy",
+        "calendar_list_events",
+        "calendar_search_events",
+        "calendar_create_event",
+        "calendar_modify_event",
+        "calendar_delete_event",
+        "calendar_find_time",
+        "calendar_move_event_if_conflict",
     }
 
 
@@ -376,7 +386,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 9
+    assert len(tools) == 19
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:

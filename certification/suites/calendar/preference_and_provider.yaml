@@ -1,0 +1,23 @@
+name: calendar-preference-and-provider
+category: calendar
+difficulty: standard
+description: Validates memory-informed scheduling preferences and provider abstraction.
+cases:
+  - name: honors-memory-preferences-without-overriding-instructions
+    difficulty: standard
+    prompt: "Use remembered family scheduling preferences, but if I explicitly say after work, schedule after work."
+    route_request:
+      tools_required: true
+    expects:
+      tool_called: calendar_find_time
+      response_contains: ["after work"]
+  - name: uses-provider-abstracted-calendar-tools
+    difficulty: smoke
+    prompt: "List tomorrow's family calendar without assuming whether it comes from Google or Apple."
+    route_request:
+      tools_required: true
+    expects:
+      tool_called: calendar_tomorrow_schedule
+      response_not_contains:
+        - "must be google"
+        - "must be apple"

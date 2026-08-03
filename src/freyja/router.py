@@ -842,6 +842,9 @@ class Router:
                 arguments=arguments,
                 request_id=decision.request_id,
                 actor="freyja_router",
+                metadata={
+                    "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                },
             )
             execution_result = await registry.execute(execution_request)
 

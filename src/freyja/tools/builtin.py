@@ -7,6 +7,7 @@ from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolImplementation, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
+from freyja.tools.calendar import register_calendar_tools
 from freyja.tools.local_host import register_local_host_tools
 from freyja.tools.weather import WeatherRequestType, classify_weather_request, get_weather
 
@@ -101,6 +102,16 @@ _BUILTIN_TOOL_NAMES = (
     "disk_usage",
     "director_health",
     "repository_status",
+    "calendar_today_schedule",
+    "calendar_tomorrow_schedule",
+    "calendar_free_busy",
+    "calendar_list_events",
+    "calendar_search_events",
+    "calendar_create_event",
+    "calendar_modify_event",
+    "calendar_delete_event",
+    "calendar_find_time",
+    "calendar_move_event_if_conflict",
 )
 
 
@@ -122,6 +133,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
     if _registration_is_complete(registry, _BUILTIN_TOOL_NAMES):
         return
     register_local_host_tools(registry)
+    register_calendar_tools(registry)
     registry.register(
         ToolDefinition(
             name="get_weather",

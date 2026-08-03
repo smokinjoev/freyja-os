@@ -1,0 +1,23 @@
+name: calendar-schedule-reasoning
+category: calendar
+difficulty: smoke
+description: Validates family calendar reasoning through Director-observable tools.
+cases:
+  - name: finds-shared-free-time
+    difficulty: smoke
+    prompt: "When are all four of us free for one hour tomorrow?"
+    route_request:
+      tools_required: true
+    expects:
+      tool_called: calendar_find_time
+      response_contains: ["free"]
+  - name: detects-calendar-conflicts
+    difficulty: standard
+    prompt: "Check whether soccer conflicts with dinner tonight before changing anything."
+    route_request:
+      tools_required: true
+    expects:
+      tool_called:
+        - calendar_search_events
+        - calendar_free_busy
+      response_contains: ["conflict"]

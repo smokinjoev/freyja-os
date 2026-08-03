@@ -401,6 +401,9 @@ Examples:
 
 - `memory.search`
 - `memory.write`
+- `calendar.today_schedule`
+- `calendar.find_time`
+- `calendar.create_event`
 - `homeassistant.call_service`
 - `files.read`
 - `files.write`
@@ -438,6 +441,31 @@ Memory should be divided into explicit categories.
 - Stored in Qdrant or pgvector
 
 Memory writes should be deliberate. Freyja should not automatically store every message as permanent memory.
+
+## 6.5.1 Personal Intelligence Services
+
+Personal Intelligence Services are domain services that reason over personal
+state through the existing Director, Router, Memory, Tools, Certification, and
+Benchmark architecture. They are not standalone applications.
+
+The reference implementation is Family Calendar:
+
+- `CalendarService` contains domain reasoning such as free/busy analysis,
+  ranked time selection, conflict detection, travel buffers, and preference
+  scoring.
+- `CalendarProvider` defines the provider boundary for list/create/modify/delete
+  operations.
+- `GoogleCalendarProvider` and `AppleCalendarProvider` plug into the service
+  boundary. Live account access is deliberately outside tests and certification.
+- Family members have calendars, availability rules, preferred working hours,
+  meeting windows, travel buffers, timezones, and scheduling preferences.
+- Director tools expose calendar capabilities to the model so runtime evidence,
+  certification verifiers, and benchmark reports can observe real behavior.
+- Memory preferences influence ranking but must not override explicit
+  instructions from the current request.
+
+Future services should follow the same pattern: domain service first, provider
+adapters second, Director tools third, certification suites fourth.
 
 ## 6.6 Queue and Event Bus
 

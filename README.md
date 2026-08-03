@@ -13,7 +13,22 @@ Freyja-OS is a locally controlled personal-agent platform.
 
 ## Current phase
 
-Phase 1: repository foundation and Director skeleton.
+Current phase: Personal Intelligence Services on top of the Director, Router,
+Memory, Certification, and Benchmark foundation.
+
+## Personal Intelligence Services
+
+Freyja services should integrate with the existing Director tool path instead
+of becoming standalone apps. The first reference service is Family Calendar:
+
+- `CalendarService` owns schedule reasoning.
+- `CalendarProvider` adapters isolate calendar backends.
+- `GoogleCalendarProvider` and `AppleCalendarProvider` preserve provider
+  boundaries without requiring live accounts in tests.
+- Director tools expose schedules, free/busy, event search, CRUD operations,
+  ranked time finding, and conflict-aware event movement.
+- Long-term preferences from memory can influence scheduling, but explicit user
+  instructions remain higher priority.
 
 ## Certification CLI
 

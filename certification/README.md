@@ -13,6 +13,7 @@ certification/suites/
   vision/
   connectors/
   planning/
+  calendar/
 ```
 
 Each YAML file declares `name`, `category`, `difficulty`, `description`, and
@@ -119,6 +120,10 @@ benchmark run writes:
 Benchmark metrics include overall score, category scores, execution time,
 average latency, token usage, tool success rate, verifier correctness for
 routing/memory/connectors/vision, failures, and cost when available.
+
+Calendar suites validate the Family Calendar Personal Intelligence Service:
+schedule reasoning, conflict detection, memory-informed preference handling,
+and provider abstraction.
 
 ## Benchmark Report Format
 
