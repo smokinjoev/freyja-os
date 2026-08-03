@@ -2,9 +2,12 @@
 
 This Compose project runs only the Freyja Director and control plane on Mars.
 Signal remains a separate Atlas deployment under `deploy/compose/signal`.
-The Director uses Iris for local inference and may use OpenRouter under the
-existing routing and budget policy. Hera remains the development and benchmark
-machine.
+The Director uses Hera's Tailscale-reachable Ollama service for the primary
+complex `local_reasoning` model (`gpt-oss:20b`). Iris remains the fast local
+inference tier for lower-latency local work. Hera is not a core always-on host,
+so routing must tolerate Hera being unavailable and return a clear provider
+failure or use configured fallback. OpenRouter fallback requires a configured
+API key, approved models, and routing budget headroom.
 
 ## Private access
 
@@ -13,6 +16,9 @@ Tailscale address so Atlas can connect over the private tailnet. Set the same
 strong `FREYJA_CONNECTOR_TOKEN` in the Mars Director and Atlas Signal `.env`
 files. The health endpoint remains public within the tailnet; other Director
 endpoints require the bearer token when it is configured.
+
+Set `OLLAMA_BASE_URL` to Hera's private Tailscale Ollama endpoint in the
+untracked `.env`. Do not commit private IP addresses, tokens, or API keys.
 
 ## Start and verify
 
@@ -23,7 +29,7 @@ docker compose --env-file deploy/compose/director/.env \
   -f deploy/compose/director/compose.yaml config
 docker compose --env-file deploy/compose/director/.env \
   -f deploy/compose/director/compose.yaml up -d --build
-curl --fail http://100.78.54.102:8000/health
+curl --fail http://<mars-tailscale-host>:8000/health
 ```
 
 Keep the populated `.env` and runtime `data/` directory untracked.

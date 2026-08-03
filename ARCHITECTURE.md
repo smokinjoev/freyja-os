@@ -95,8 +95,8 @@ The architecture assumes these systems may be reassigned as their capabilities a
 
 - Mars: Freyja Director and control plane.
 - Atlas: always-on infrastructure services and Signal connector.
-- Iris: local LLM inference; inference-focused and not a development host.
-- Hera: development, model benchmarking, and experimental inference; not core Freyja infrastructure.
+- Hera: primary complex local_reasoning provider over Tailscale; not core always-on control-plane infrastructure.
+- Iris: fast local inference tier; inference-focused and not a development host.
 
 ---
 
@@ -198,20 +198,21 @@ conversational reasoning authority.
 
 ## 5.3 Iris — Local Inference Node
 
-**Primary role:** Local LLM inference
+**Primary role:** Fast local LLM inference
 
 Recommended responsibilities:
 
-- Ollama models used by the Mars Director for local-first routing
+- Lower-latency Ollama models used by the Mars Director for quick local work
 - Model compatibility and inference-health checks
-- Stable inference service for the Mars control plane
+- Stable fast-inference service for the Mars control plane
 
-Iris should remain the preferred local inference endpoint for Rev 1. It is
-inference-focused, not the development, Director, or always-on Signal host.
+Iris should remain the fast local inference tier for Rev 1. It is
+inference-focused, not the development, Director, complex reasoning, or
+always-on Signal host.
 
 ## 5.4 Hera — Development and Benchmark Node
 
-**Primary role:** Development, verification, and inference benchmarking
+**Primary role:** Development, verification, inference benchmarking, and complex local reasoning
 
 Recommended responsibilities:
 
@@ -219,12 +220,16 @@ Recommended responsibilities:
 - Cross-platform tests and pre-deployment verification
 - Model benchmarking
 - Performance comparison against Iris-hosted models
-- Experimental inference workloads that should not affect core Freyja services
+- Hosting the primary local `local_reasoning` model for complex coding,
+  debugging, planning, architecture, difficult reasoning, and multi-step
+  tool-selection requests
+- Experimental inference workloads that must not affect Director or Signal availability
 
-Hera is the Rev 1 development and benchmarking machine, deliberately separate
-from core Freyja infrastructure. It may provide benchmark data or optional
-inference capacity, but Rev 1 must not depend on Hera for the Director, Signal
-connector, databases, or always-on control path.
+Hera provides high-quality local reasoning to Mars over Tailscale, but it is
+deliberately separate from core always-on infrastructure. Rev 1 must not depend
+on Hera for the Director, Signal connector, databases, or always-on control
+path. If Hera is unavailable, routing must fail cleanly and use configured
+fallback providers rather than inventing an answer.
 
 ## 5.5 NUCBox — Utility Node
 
@@ -706,12 +711,18 @@ The router should not automatically choose the most expensive available model. I
 Expected fallback chain:
 
 ```text
-Preferred local model
-    -> alternate local model
-    -> preferred OpenRouter model
-    -> alternate OpenRouter model
-    -> limited local response with failure notice
+Hera local_reasoning model for complex local tasks
+    -> configured OpenRouter fallback when policy and credentials allow
+    -> explicit provider failure if no fallback is available
+Iris fast local model for routine local tasks
+    -> configured OpenRouter fallback when policy and credentials allow
+    -> explicit provider failure if no fallback is available
 ```
+
+OpenRouter fallback is available only when the Director has a valid API key,
+approved model configuration, and routing policy budget headroom. If Hera or any
+other provider is unavailable and no fallback is configured, the Director should
+return a clear failure instead of fabricating an answer.
 
 The system should not silently discard failed tool calls. Failures should be recorded and surfaced when they affect the result.
 

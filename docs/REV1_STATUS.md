@@ -1,14 +1,15 @@
 # Rev 1 Status
 
 **Date:** 2026-07-30
-**Status:** architecture and deployment layout aligned; staged rollout in progress
+**Status:** architecture and deployment layout aligned; Mars/Hera local reasoning deployed
 
 ## Authoritative host roles
 
 - Mars: Freyja Director and control plane.
 - Atlas: always-on infrastructure services and Signal connector.
-- Iris: local LLM inference; inference-focused.
-- Hera: development, testing, and inference benchmarking; not core Freyja infrastructure.
+- Hera: primary complex local_reasoning provider over Tailscale; not core
+  always-on infrastructure.
+- Iris: fast local inference tier; inference-focused.
 
 ## Conflicting or stale assignments found
 
@@ -37,14 +38,16 @@
   defines a local Director service.
 - A separate Mars Director Compose project preserves repeatable control-plane
   deployment.
-- Iris is documented as the preferred local Ollama inference host.
-- Hera is documented as the development and benchmark machine, separate from
-  the core Freyja control path.
+- Hera is documented and deployed as the primary complex local_reasoning
+  provider for the Mars Director.
+- Iris is documented as the fast local inference tier.
+- Hera remains separate from the core always-on control path; Director routing
+  must tolerate Hera being unavailable.
+- OpenRouter fallback requires configured credentials, approved models, and
+  routing budget headroom.
 
 ## Blockers before deployment
 
-- Deploy the split Mars Director stack on its private Tailscale address and
-  verify that Atlas can reach its health endpoint.
 - Set the same strong `FREYJA_CONNECTOR_TOKEN` on Mars and Atlas.
 - Register or link the Signal account manually in the Atlas REST wrapper state
   volume.
@@ -53,17 +56,20 @@
 
 ## Deployment order
 
-1. On Iris, validate Ollama model availability and record the private endpoint
-   Mars should use.
-2. On Mars, configure and verify the Freyja Director against Iris Ollama and
-   OpenRouter fallback.
-3. From Atlas, verify private-network reachability to the Mars Director health
+1. On Hera, validate `gpt-oss:20b` model availability and expose Ollama only on
+   localhost plus a private Tailscale path to Mars.
+2. On Mars, configure and verify the Freyja Director against Hera
+   `local_reasoning` and the configured fast local inference tier.
+3. Configure OpenRouter fallback credentials and allowlist if cloud fallback is
+   required.
+4. From Atlas, verify private-network reachability to the Mars Director health
    endpoint.
-4. On Atlas, create `deploy/compose/signal/.env` from the example and populate
+5. On Atlas, create `deploy/compose/signal/.env` from the example and populate
    `FREYJA_DIRECTOR_URL`.
-5. On Atlas, validate the Signal Compose config.
-6. Manually register or link the Signal account in the REST wrapper.
-7. Set the Signal account number and sender allowlist.
-8. Enable Signal and start the Atlas Signal connector stack.
-9. Send an authorized Signal message and confirm the request is routed to the
-   Mars Director and then to Iris Ollama or OpenRouter according to policy.
+6. On Atlas, validate the Signal Compose config.
+7. Manually register or link the Signal account in the REST wrapper.
+8. Set the Signal account number and sender allowlist.
+9. Enable Signal and start the Atlas Signal connector stack.
+10. Send an authorized Signal message and confirm the request is routed to the
+   Mars Director and then to Hera, Iris, or OpenRouter according to policy and
+   availability.
