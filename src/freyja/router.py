@@ -690,6 +690,7 @@ class Router:
                 entry = self._tool_history_entry(
                     tool_name=tool_name,
                     success=False,
+                    arguments=arguments,
                     output={},
                     error_code="tool_not_found",
                     public_error_message="Tool not found.",
@@ -706,6 +707,7 @@ class Router:
                 entry = self._tool_history_entry(
                     tool_name=tool_name,
                     success=False,
+                    arguments=arguments,
                     output={},
                     error_code="tool_disabled",
                     public_error_message=f"Tool '{tool_name}' is disabled.",
@@ -722,6 +724,7 @@ class Router:
                 entry = self._tool_history_entry(
                     tool_name=tool_name,
                     success=False,
+                    arguments=arguments,
                     output={},
                     error_code="validation_error",
                     public_error_message="; ".join(validation_errors),
@@ -745,6 +748,7 @@ class Router:
             entry = self._tool_history_entry(
                 tool_name=tool_name,
                 success=execution_result.success,
+                arguments=arguments,
                 output=execution_result.output,
                 error_code=execution_result.error_code,
                 public_error_message=execution_result.public_error_message,
@@ -833,6 +837,7 @@ class Router:
         tool_name: str,
         success: bool,
         output: dict[str, Any],
+        arguments: dict[str, Any] | None = None,
         error_code: str | None = None,
         public_error_message: str | None = None,
         duration_ms: int | None = None,
@@ -842,6 +847,8 @@ class Router:
             "success": success,
             "output": output,
         }
+        if arguments is not None:
+            entry["arguments"] = arguments
         if error_code is not None:
             entry["error_code"] = error_code
         if public_error_message is not None:

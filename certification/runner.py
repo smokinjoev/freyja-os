@@ -6,13 +6,15 @@ import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import yaml
 
 from certification import __version__
+from certification.context import CertificationContext, CertificationExecution, ToolCallEvidence, elapsed_ms, sanitize_arguments
 from certification.grader import grade_response
 from certification.models import CaseResult, CertificationCase, CertificationReport, CertificationSuite, ReportMetadata
+from certification.verifiers import Verifier, discover_verifiers
 
 DEFAULT_SUITE_DIR = Path(__file__).resolve().parent / "suites"
 DIFFICULTIES = ("smoke", "standard", "stress", "chaos")
@@ -22,25 +24,32 @@ class CertificationProvider(Protocol):
     name: str
     model: str
 
-    async def complete(self, prompt: str) -> tuple[str, str | None]:
+    async def complete(self, case: CertificationCase) -> CertificationExecution:
         ...
 
 
 class OllamaCertificationProvider:
     name = "ollama"
 
-    def __init__(self, model: str | None = None, client: object | None = None) -> None:
+    def __init__(self, model: str | None = None, router_instance: object | None = None) -> None:
         from freyja.config import settings
-        from freyja.ollama_client import OllamaClient
+        from freyja.router import router
 
         self.model = model or settings.ollama_chat_model or settings.ollama_model
-        self._client = client or OllamaClient(model=self.model)
+        self._router = router_instance or router
 
-    async def complete(self, prompt: str) -> tuple[str, str | None]:
-        response = await self._client.chat(prompt=prompt, model=self.model)
-        if error := response.get("error"):
-            return "", str(error)
-        return str(response.get("response", "")), None
+    async def complete(self, case: CertificationCase) -> CertificationExecution:
+        from freyja.router import RouteRequest
+
+        request_data = {"prompt": case.prompt, "provider": "local", "model": self.model}
+        request_data.update(case.route_request)
+        request_data["prompt"] = case.prompt
+        start = time.monotonic()
+        result = await self._router.execute(RouteRequest(**request_data))
+        context = _context_from_routing_result(result, elapsed_ms(start))
+        if not result.response:
+            return CertificationExecution(response="", error=result.decision.public_error_message or result.decision.reason, context=context)
+        return CertificationExecution(response=result.response, context=context)
 
 
 def load_suite(name: str, suite_dir: Path = DEFAULT_SUITE_DIR) -> CertificationSuite:
@@ -104,6 +113,8 @@ def _load_suite_file(suite_path: Path, suite_dir: Path = DEFAULT_SUITE_DIR) -> C
             prompt=str(case["prompt"]),
             expected_keywords=tuple(case.get("expected_keywords", ())),
             forbidden_keywords=tuple(case.get("forbidden_keywords", ())),
+            expects=dict(case.get("expects", {})),
+            route_request=dict(case.get("route_request", {})),
             max_score=float(case.get("max_score", 1.0)),
             category=str(case.get("category") or category),
             difficulty=str(case.get("difficulty") or difficulty),
@@ -132,12 +143,27 @@ async def run_suite(
     suite: CertificationSuite,
     provider: CertificationProvider,
     router_mode: str = "default",
+    verifiers: list[Verifier] | None = None,
 ) -> CertificationReport:
     started = time.monotonic()
+    active_verifiers = verifiers if verifiers is not None else discover_verifiers()
     case_results = []
     for case in suite.cases:
-        response, error = await provider.complete(case.prompt)
-        case_results.append(grade_response(case, response, error=error))
+        execution = await provider.complete(case)
+        verification_results = [
+            result
+            for verifier in active_verifiers
+            for result in verifier.verify(case, execution.context, execution.response)
+        ]
+        case_results.append(
+            grade_response(
+                case,
+                execution.response,
+                error=execution.error,
+                runtime_context=execution.context.to_dict(),
+                verifier_results=tuple(result.to_dict() for result in verification_results),
+            )
+        )
 
     execution_time = time.monotonic() - started
     max_score = sum(case.max_score for case in case_results)
@@ -153,8 +179,8 @@ async def run_suite(
             branch=_git(["branch", "--show-current"]),
             working_tree="dirty" if _git(["status", "--porcelain"]) else "clean",
             hostname=socket.gethostname(),
-            provider=provider.name,
-            model=provider.model,
+            provider=_selected_provider(case_results) or provider.name,
+            model=_selected_model(case_results) or provider.model,
             router_mode=router_mode,
             suite_name=suite.name,
             overall_score=overall_score,
@@ -171,8 +197,9 @@ def run_suite_sync(
     suite: CertificationSuite,
     provider: CertificationProvider,
     router_mode: str = "default",
+    verifiers: list[Verifier] | None = None,
 ) -> CertificationReport:
-    return asyncio.run(run_suite(suite=suite, provider=provider, router_mode=router_mode))
+    return asyncio.run(run_suite(suite=suite, provider=provider, router_mode=router_mode, verifiers=verifiers))
 
 
 def _git(args: list[str]) -> str:
@@ -197,3 +224,43 @@ def _category_scores(case_results: list[CaseResult]) -> dict[str, float]:
         category: (earned / max_score if max_score else 0.0)
         for category, (earned, max_score) in sorted(scores.items())
     }
+
+
+def _context_from_routing_result(result: Any, duration_ms: float) -> CertificationContext:
+    decision = result.decision
+    context = CertificationContext(
+        provider_selected=decision.provider,
+        model_selected=decision.model,
+        routing_decision=decision.provider,
+        routing_reason=decision.reason,
+        fallback_events=list(decision.fallback_attempts),
+        timing={"duration_ms": duration_ms},
+        cost=decision.estimated_cost_usd,
+    )
+    for entry in result.tool_results:
+        context.tool_calls.append(
+            ToolCallEvidence(
+                name=str(entry.get("tool_name", "")),
+                arguments=sanitize_arguments(entry.get("arguments", {}) if isinstance(entry.get("arguments"), dict) else {}),
+                success=entry.get("success"),
+                error=entry.get("error_code") or entry.get("public_error_message"),
+                duration_ms=entry.get("duration_ms"),
+            )
+        )
+    return context
+
+
+def _selected_provider(case_results: list[CaseResult]) -> str | None:
+    for case in case_results:
+        provider = case.runtime_context.get("provider_selected")
+        if provider:
+            return str(provider)
+    return None
+
+
+def _selected_model(case_results: list[CaseResult]) -> str | None:
+    for case in case_results:
+        model = case.runtime_context.get("model_selected")
+        if model:
+            return str(model)
+    return None

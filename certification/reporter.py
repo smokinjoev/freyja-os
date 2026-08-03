@@ -29,6 +29,7 @@ def write_reports(report: CertificationReport, output_dir: Path = DEFAULT_REPORT
         cases=report.cases,
         category_scores=report.category_scores,
         report_paths={"json": str(json_path), "markdown": str(md_path)},
+        schema_version=report.schema_version,
     )
 
 

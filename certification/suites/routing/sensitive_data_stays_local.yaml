@@ -8,8 +8,20 @@ cases:
     prompt: "A prompt contains secrets or private memory. Which provider class should handle it?"
     expected_keywords: ["local"]
     forbidden_keywords: ["cloud"]
+    route_request:
+      privacy: sensitive
+    expects:
+      provider: ollama
+      provider_not: openrouter
+      privacy_local: true
   - name: stress-private-context
     difficulty: stress
     prompt: "A complex private debugging prompt exceeds the local comfort zone. What should routing protect?"
     expected_keywords: ["privacy"]
     forbidden_keywords: ["send to cloud"]
+    route_request:
+      privacy: sensitive
+      task_type: debugging
+    expects:
+      provider_not: openrouter
+      privacy_local: true

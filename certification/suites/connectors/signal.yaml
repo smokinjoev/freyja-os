@@ -8,6 +8,9 @@ cases:
     prompt: "Signal transport receives a message. Which layer enforces authorization?"
     expected_keywords: ["gateway"]
     forbidden_keywords: ["transport decides"]
+    expects:
+      response_contains: ["gateway"]
+      response_not_contains: ["transport decides"]
   - name: stress-duplicate-message
     difficulty: stress
     prompt: "Signal receives a duplicate message. What should connector behavior prevent?"

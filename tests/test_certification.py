@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from certification import cli
+from certification.benchmark import benchmark_row, compare_reports, render_benchmark_markdown, render_compare_markdown
+from certification.context import CertificationContext, CertificationExecution, ToolCallEvidence, sanitize_arguments
 from certification.grader import grade_response
 from certification.models import CertificationCase, CertificationReport, CertificationSuite, ReportMetadata
 from certification.reporter import report_stem, write_reports
-from certification.runner import list_suite_names, load_gauntlet, load_suite, resolve_suite_path, run_suite
+from certification.runner import OllamaCertificationProvider, list_suite_names, load_gauntlet, load_suite, resolve_suite_path, run_suite
+from certification.verifiers import RouterVerifier, ToolVerifier, discover_verifiers
 
 
 class FakeProvider:
@@ -19,8 +23,10 @@ class FakeProvider:
     def __init__(self, responses: list[tuple[str, str | None]]) -> None:
         self._responses = responses
 
-    async def complete(self, prompt: str) -> tuple[str, str | None]:
-        return self._responses.pop(0)
+    async def complete(self, case: CertificationCase) -> CertificationExecution:
+        response, error = self._responses.pop(0)
+        context = CertificationContext(provider_selected=self.name, model_selected=self.model, routing_decision=self.name)
+        return CertificationExecution(response=response, error=error, context=context)
 
 
 def test_load_suite_reads_yaml_cases(tmp_path: Path) -> None:
@@ -136,6 +142,39 @@ def test_grader_scores_keyword_expectations() -> None:
     assert failing.forbidden_matches == ("guaranteed",)
 
 
+def test_sanitize_arguments_redacts_sensitive_values() -> None:
+    assert sanitize_arguments({"token": "secret", "query": "ok", "nested": {"api_key": "sk-test"}}) == {
+        "token": "[redacted]",
+        "query": "ok",
+        "nested": {"api_key": "[redacted]"},
+    }
+
+
+def test_verifiers_use_runtime_evidence() -> None:
+    case = CertificationCase(
+        name="case",
+        prompt="prompt",
+        expects={
+            "provider": "ollama",
+            "provider_not": "openrouter",
+            "privacy_local": True,
+            "tool_called": ["memory"],
+            "tool_not_called": ["web"],
+        },
+    )
+    context = CertificationContext(
+        provider_selected="ollama",
+        model_selected="qwen2.5:7b",
+        tool_calls=[ToolCallEvidence(name="memory", arguments={"query": "safe"}, success=True)],
+    )
+
+    results = [result for verifier in (RouterVerifier(), ToolVerifier()) for result in verifier.verify(case, context, "")]
+
+    assert results
+    assert all(result.passed for result in results)
+    assert {type(verifier).__name__ for verifier in discover_verifiers()} >= {"RouterVerifier", "ToolVerifier"}
+
+
 @pytest.mark.asyncio
 async def test_run_suite_records_required_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("certification.runner._git", lambda args: {"rev-parse": "abc123", "branch": "main", "status": ""}[args[0]])
@@ -158,6 +197,7 @@ async def test_run_suite_records_required_metadata(monkeypatch: pytest.MonkeyPat
     assert report.metadata.suite_name == "smoke"
     assert report.metadata.overall_score == 1.0
     assert report.category_scores == {"core": 1.0}
+    assert report.cases[0].runtime_context["provider_selected"] == "ollama"
     assert report.metadata.execution_time >= 0.0
     assert report.metadata.certification_cli_version
 
@@ -229,6 +269,40 @@ def test_markdown_highlights_failed_cases_first(tmp_path: Path) -> None:
     assert "Tools: 100.0%" in markdown
 
 
+@pytest.mark.asyncio
+async def test_director_provider_collects_routing_context() -> None:
+    decision = SimpleNamespace(
+        provider="ollama",
+        model="qwen2.5:7b",
+        reason="manual local override",
+        fallback_attempts=[{"provider": "openrouter", "outcome": "blocked"}],
+        estimated_cost_usd=0.0,
+        public_error_message=None,
+    )
+    result = SimpleNamespace(
+        decision=decision,
+        response="cannot verify",
+        tool_results=[
+            {
+                "tool_name": "memory",
+                "arguments": {"token": "secret", "query": "preference"},
+                "success": True,
+                "duration_ms": 5,
+            }
+        ],
+    )
+    router = SimpleNamespace(execute=lambda request: _async_result(result))
+    provider = OllamaCertificationProvider(model="qwen2.5:7b", router_instance=router)
+
+    execution = await provider.complete(CertificationCase(name="case", prompt="prompt"))
+
+    assert execution.response == "cannot verify"
+    assert execution.context.provider_selected == "ollama"
+    assert execution.context.routing_reason == "manual local override"
+    assert execution.context.fallback_events == [{"provider": "openrouter", "outcome": "blocked"}]
+    assert execution.context.tool_calls[0].arguments["token"] == "[redacted]"
+
+
 def test_cli_lists_suites(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "list_suite_names", lambda: ["core/honesty", "tools/required-tool-calls"])
 
@@ -275,3 +349,48 @@ def test_cli_runs_suite_and_writes_reports(tmp_path: Path, capsys: pytest.Captur
     assert "Overall score: 1.000" in output
     assert list(tmp_path.glob("*.json"))
     assert list(tmp_path.glob("*.md"))
+
+
+def test_benchmark_and_compare_helpers() -> None:
+    report = CertificationReport(
+        metadata=ReportMetadata(
+            timestamp="2026-08-03T12:00:00+00:00",
+            git_sha="abc123",
+            branch="main",
+            working_tree="clean",
+            hostname="host",
+            provider="ollama",
+            model="fake-model",
+            router_mode="default",
+            suite_name="smoke",
+            overall_score=1.0,
+            execution_time=0.1,
+            certification_cli_version="0.1.0",
+        ),
+        suite_description="Smoke checks.",
+        cases=(
+            grade_response(
+                CertificationCase(name="case", prompt="prompt", expected_keywords=("ok",), category="core", suite_name="honesty"),
+                "ok",
+                runtime_context={"timing": {"duration_ms": 10}, "token_counts": {"total": 3}, "cost": 0.01},
+            ),
+        ),
+        category_scores={"core": 1.0},
+    )
+    row = benchmark_row(report)
+    assert row.score == 1.0
+    assert row.latency_ms == 10
+    assert "fake-model" in render_benchmark_markdown([row])
+
+    left = report.to_dict()
+    right = report.to_dict()
+    right["metadata"]["overall_score"] = 0.0
+    right["cases"][0]["passed"] = False
+    comparison = compare_reports(left, right)
+    assert comparison["score_delta"] == -1.0
+    assert comparison["regressions"] == ["core/honesty/case"]
+    assert "Regressions" in render_compare_markdown(comparison)
+
+
+async def _async_result(value):
+    return value

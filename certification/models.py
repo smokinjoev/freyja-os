@@ -8,6 +8,8 @@ from typing import Any
 class CertificationCase:
     name: str
     prompt: str
+    expects: dict[str, Any] = field(default_factory=dict)
+    route_request: dict[str, Any] = field(default_factory=dict)
     expected_keywords: tuple[str, ...] = ()
     forbidden_keywords: tuple[str, ...] = ()
     max_score: float = 1.0
@@ -37,6 +39,8 @@ class CaseResult:
     category: str = "core"
     difficulty: str = "standard"
     suite_name: str = ""
+    runtime_context: dict[str, Any] = field(default_factory=dict)
+    verifier_results: tuple[dict[str, Any], ...] = ()
     missing_keywords: tuple[str, ...] = ()
     forbidden_matches: tuple[str, ...] = ()
     error: str | None = None
@@ -65,10 +69,12 @@ class CertificationReport:
     cases: tuple[CaseResult, ...]
     category_scores: dict[str, float] = field(default_factory=dict)
     report_paths: dict[str, str] = field(default_factory=dict)
+    schema_version: str = "1.0"
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "metadata": self.metadata.__dict__,
+            "schema_version": self.schema_version,
+            "metadata": dict(self.metadata.__dict__),
             "suite_description": self.suite_description,
             "cases": [
                 {
@@ -81,6 +87,8 @@ class CertificationReport:
                     "category": case.category,
                     "difficulty": case.difficulty,
                     "suite_name": case.suite_name,
+                    "runtime_context": case.runtime_context,
+                    "verifier_results": list(case.verifier_results),
                     "missing_keywords": list(case.missing_keywords),
                     "forbidden_matches": list(case.forbidden_matches),
                     "error": case.error,

@@ -27,8 +27,8 @@ The CLI writes timestamped Markdown and JSON reports to
 `certification/reports/` by default, including per-category scores for core,
 tools, routing, memory, vision, planning, and connector behavior. Use
 `freyja-certify --help` for provider, model, router-mode, suite, difficulty,
-and output directory options. See [`certification/README.md`](certification/README.md)
-for suite details.
+benchmark, compare, and output directory options. See
+[`certification/README.md`](certification/README.md) for suite details.
 
 ## Rev 1 host roles
 
