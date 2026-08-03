@@ -7,6 +7,7 @@ import httpx
 
 from connectors.signal.config import settings
 from connectors.signal.models import InboundMessage, OutboundResponse
+from connectors.messaging import AuthorizedSender
 from freyja.memory.principal import build_memory_principal, stable_identity
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class SignalGateway:
     def __init__(self) -> None:
         self._enabled = settings.signal_enabled
         self._allowed_senders = settings.allowed_sender_set
+        self._allowed_identities = settings.allowed_sender_identities
         self._max_message_chars = settings.signal_max_message_chars
         self._director_url = settings.freyja_director_url.rstrip("/")
         self._director_token = settings.freyja_connector_token
@@ -65,7 +67,8 @@ class SignalGateway:
         if message.group_id is not None:
             return self._reject(message, RejectionReason.GROUP_MESSAGE)
 
-        if message.sender not in self._allowed_senders:
+        identity = self._identity_for_sender(message.sender)
+        if identity is None:
             logger.info({
                 "event": "signal_gateway_rejected",
                 "reason": RejectionReason.UNKNOWN_SENDER,
@@ -93,7 +96,7 @@ class SignalGateway:
 
         self._recent_message_ids.append(message.message_id)
 
-        return await self._forward(message)
+        return await self._forward(message, identity)
 
     def _reject(self, message: InboundMessage, reason: str) -> OutboundResponse:
         logger.info({
@@ -110,9 +113,14 @@ class SignalGateway:
             success=False,
         )
 
-    async def _forward(self, message: InboundMessage) -> OutboundResponse:
-        subject = stable_identity("signal", message.sender)
-        conversation_id = stable_identity("signal-conv", message.sender)
+    def _identity_for_sender(self, sender: str) -> AuthorizedSender | None:
+        if self._allowed_identities:
+            return self._allowed_identities.get(sender)
+        if sender in self._allowed_senders:
+            return AuthorizedSender(platform="signal", address=sender)
+        return None
+
+    async def _forward(self, message: InboundMessage, identity: AuthorizedSender) -> OutboundResponse:
         owner = (
             stable_identity("signal-owner", settings.signal_account_number)
             if settings.signal_account_number
@@ -121,9 +129,9 @@ class SignalGateway:
         try:
             principal = build_memory_principal(
                 client_type="signal",
-                client_subject=subject,
+                client_subject=identity.subject,
                 account_owner=owner,
-                conversation_id=conversation_id,
+                conversation_id=identity.conversation_id,
             )
         except ValueError:
             return self._safe_error_response(message)
@@ -136,11 +144,7 @@ class SignalGateway:
 
         try:
             client = await self._client()
-            headers = {
-                "X-Freyja-Client-Type": principal.client_type,
-                "X-Freyja-Client-Subject": principal.client_subject,
-                "X-Freyja-Conversation-Id": principal.conversation_id or "",
-            }
+            headers = identity.safe_headers()
             if principal.account_owner:
                 headers["X-Freyja-Account-Owner"] = principal.account_owner
             if self._director_token:

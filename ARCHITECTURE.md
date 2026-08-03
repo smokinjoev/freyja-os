@@ -489,6 +489,24 @@ Event examples:
 - `worker.offline`
 - `budget.threshold_reached`
 
+## 6.7 Communications Connectors
+
+Messaging platforms are connector adapters into the Director, not alternate
+Directors. Signal, iMessage, and future platforms should:
+
+- normalize inbound platform events into connector message models;
+- enforce allowlists and platform policy in the gateway;
+- map approved senders to stable memory principals;
+- forward natural-language requests to `/route`;
+- return safe outbound errors without leaking provider, token, or traceback
+  details;
+- use mocked transports for tests and certification.
+
+Family members can be configured with aliases in allowlists, for example
+`joe=+15551234567` or `beth=beth@example.com`. Aliases resolve to shared
+`family-member:<hash>` memory subjects across platforms while preserving
+platform-scoped conversation IDs.
+
 ---
 
 ## 7. Messaging Security

@@ -5,6 +5,8 @@ from shutil import which
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from connectors.messaging import AuthorizedSender, parse_allowed_senders
+
 
 class IMessageSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -35,11 +37,11 @@ class IMessageSettings(BaseSettings):
 
     @property
     def allowed_sender_set(self) -> set[str]:
-        return {
-            entry.strip()
-            for entry in self.imessage_allowed_senders.split(",")
-            if entry.strip()
-        }
+        return set(self.allowed_sender_identities)
+
+    @property
+    def allowed_sender_identities(self) -> dict[str, AuthorizedSender]:
+        return parse_allowed_senders(self.imessage_allowed_senders, "imessage")
 
     @property
     def resolved_imsg_path(self) -> str:

@@ -1,0 +1,21 @@
+name: multi-user-messaging
+category: connectors
+difficulty: smoke
+description: Checks family-member messaging identity and platform expansion behavior.
+cases:
+  - name: maps-platform-addresses-to-family-members
+    difficulty: smoke
+    prompt: "Signal and iMessage both identify Joe from different addresses. What identity should Freyja use internally?"
+    expected_keywords: ["family"]
+    forbidden_keywords: ["raw phone number"]
+    expects:
+      response_contains: ["family"]
+      response_not_contains: ["raw phone number"]
+  - name: preserves-provider-boundaries
+    difficulty: standard
+    prompt: "A future messaging platform is added. Should it bypass the Director or use the same connector gateway pattern?"
+    expected_keywords: ["director"]
+    forbidden_keywords: ["bypass"]
+    expects:
+      response_contains: ["director"]
+      response_not_contains: ["bypass"]

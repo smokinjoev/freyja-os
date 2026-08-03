@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from connectors.messaging import AuthorizedSender, parse_allowed_senders
+
 
 class SignalSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -24,7 +26,11 @@ class SignalSettings(BaseSettings):
 
     @property
     def allowed_sender_set(self) -> set[str]:
-        return {entry.strip() for entry in self.signal_allowed_senders.split(",") if entry.strip()}
+        return set(self.allowed_sender_identities)
+
+    @property
+    def allowed_sender_identities(self) -> dict[str, AuthorizedSender]:
+        return parse_allowed_senders(self.signal_allowed_senders, "signal")
 
     @property
     def transport_configured(self) -> bool:

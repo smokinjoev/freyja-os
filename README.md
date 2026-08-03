@@ -30,6 +30,23 @@ of becoming standalone apps. The first reference service is Family Calendar:
 - Long-term preferences from memory can influence scheduling, but explicit user
   instructions remain higher priority.
 
+## Communications
+
+Signal and native iMessage are connector adapters into the existing Director.
+They enforce sender policy in their gateways, map approved senders to memory
+principals, forward requests to `/route`, and return sanitized responses.
+
+Allowed senders may be plain platform addresses for backward compatibility or
+family aliases for multi-user support:
+
+```text
+SIGNAL_ALLOWED_SENDERS=joe=+15551234567,beth=+15557654321
+IMESSAGE_ALLOWED_SENDERS=joe=joe@example.com,beth=+15557654321
+```
+
+Aliases let the same family member keep a stable memory identity across
+messaging platforms while conversation IDs remain platform-specific.
+
 ## Certification CLI
 
 Run the default smoke certification gauntlet with the default Ollama provider:

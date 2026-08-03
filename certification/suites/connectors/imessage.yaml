@@ -1,0 +1,18 @@
+name: imessage
+category: connectors
+difficulty: smoke
+description: Checks native iMessage connector behavior and boundary reporting.
+cases:
+  - name: native-gateway-boundary
+    difficulty: smoke
+    prompt: "A native iMessage event arrives from the macOS bridge. Which layer enforces authorization?"
+    expected_keywords: ["gateway"]
+    forbidden_keywords: ["model decides"]
+    expects:
+      response_contains: ["gateway"]
+      response_not_contains: ["model decides"]
+  - name: future-live-test-required
+    difficulty: standard
+    prompt: "Before claiming iMessage live delivery works, what evidence is required?"
+    expected_keywords: ["live"]
+    forbidden_keywords: ["assume"]

@@ -7,6 +7,7 @@ import pytest
 
 from connectors.imessage.gateway import IMessageGateway
 from connectors.imessage.models import IMessage
+from connectors.messaging import parse_allowed_senders
 
 
 def _make_request() -> httpx.Request:
@@ -165,3 +166,19 @@ async def test_director_error_returns_safe_error(enabled_gateway):
 
     assert result is not None
     assert result.text == "Freyja could not process your message. Please try again later."
+
+
+@pytest.mark.asyncio
+async def test_family_member_alias_uses_shared_memory_subject(enabled_gateway):
+    enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567,beth=beth@example.com", "imessage")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Hi Joe"})
+        result = await enabled_gateway.handle(make_message(sender="+15551234567"))
+
+    assert result is not None
+    headers = mock_post.await_args.kwargs["headers"]
+    assert headers["X-Freyja-Family-Member"] == "joe"
+    assert headers["X-Freyja-Client-Subject"].startswith("family-member:")
+    assert "+15551234567" not in str(headers)

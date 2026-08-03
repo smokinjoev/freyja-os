@@ -7,7 +7,8 @@ import httpx
 
 from connectors.imessage.config import settings
 from connectors.imessage.models import IMessage, IMessageReply
-from freyja.memory.principal import build_memory_principal, stable_identity
+from connectors.messaging import AuthorizedSender
+from freyja.memory.principal import build_memory_principal
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class IMessageGateway:
     def __init__(self) -> None:
         self._enabled = settings.imessage_enabled
         self._allowed_senders = settings.allowed_sender_set
+        self._allowed_identities = settings.allowed_sender_identities
         self._max_message_chars = settings.imessage_max_message_chars
         self._director_url = settings.freyja_director_url.rstrip("/")
         self._director_token = settings.freyja_connector_token
@@ -60,7 +62,8 @@ class IMessageGateway:
             self._log_rejection(message, RejectionReason.GROUP_MESSAGE)
             return None
 
-        if message.sender not in self._allowed_senders:
+        identity = self._identity_for_sender(message.sender)
+        if identity is None:
             self._log_rejection(message, RejectionReason.UNKNOWN_SENDER)
             return None
 
@@ -77,7 +80,7 @@ class IMessageGateway:
             return None
 
         self._recent_message_ids.append(message.message_id)
-        return await self._forward(message)
+        return await self._forward(message, identity)
 
     def _log_rejection(self, message: IMessage, reason: str) -> None:
         logger.info(
@@ -90,15 +93,19 @@ class IMessageGateway:
             }
         )
 
-    async def _forward(self, message: IMessage) -> IMessageReply | None:
-        subject = stable_identity("imessage", message.sender)
-        conversation_seed = message.chat_identifier or str(message.chat_id)
-        conversation_id = stable_identity("imessage-conv", conversation_seed)
+    def _identity_for_sender(self, sender: str) -> AuthorizedSender | None:
+        if self._allowed_identities:
+            return self._allowed_identities.get(sender)
+        if sender in self._allowed_senders:
+            return AuthorizedSender(platform="imessage", address=sender)
+        return None
+
+    async def _forward(self, message: IMessage, identity: AuthorizedSender) -> IMessageReply | None:
         try:
             principal = build_memory_principal(
                 client_type="imessage",
-                client_subject=subject,
-                conversation_id=conversation_id,
+                client_subject=identity.subject,
+                conversation_id=identity.conversation_id,
             )
         except ValueError:
             return self._safe_error_response(message)
@@ -111,11 +118,7 @@ class IMessageGateway:
 
         try:
             client = await self._client()
-            headers = {
-                "X-Freyja-Client-Type": principal.client_type,
-                "X-Freyja-Client-Subject": principal.client_subject,
-                "X-Freyja-Conversation-Id": principal.conversation_id or "",
-            }
+            headers = identity.safe_headers()
             if self._director_token:
                 headers["Authorization"] = f"Bearer {self._director_token}"
             response = await client.post(

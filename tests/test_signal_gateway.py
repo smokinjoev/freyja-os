@@ -8,6 +8,7 @@ import pytest
 from connectors.signal.config import SignalSettings
 from connectors.signal.gateway import RejectionReason, SignalGateway
 from connectors.signal.models import InboundMessage
+from connectors.messaging import parse_allowed_senders
 
 
 def _make_request() -> httpx.Request:
@@ -276,6 +277,29 @@ def test_settings_allowed_sender_set():
     assert s.allowed_sender_set == {"+111", "+222", "+333"}
 
 
+def test_settings_allowed_sender_set_supports_family_aliases():
+    s = SignalSettings(signal_allowed_senders="joe=+111,beth=+222")
+    assert s.allowed_sender_set == {"+111", "+222"}
+    assert s.allowed_sender_identities["+111"].member_id == "joe"
+
+
 def test_settings_allowed_sender_set_empty():
     s = SignalSettings()
     assert s.allowed_sender_set == set()
+
+
+@pytest.mark.asyncio
+async def test_family_member_alias_uses_shared_memory_subject(enabled_gateway):
+    enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567,beth=+15557654321", "signal")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+    message = make_message("+15551234567", "Hello from Joe", "msg-family")
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Hi Joe"})
+        result = await enabled_gateway.handle(message)
+
+    assert result.success is True
+    headers = mock_post.await_args.kwargs["headers"]
+    assert headers["X-Freyja-Family-Member"] == "joe"
+    assert headers["X-Freyja-Client-Subject"].startswith("family-member:")
+    assert "+15551234567" not in str(headers)
