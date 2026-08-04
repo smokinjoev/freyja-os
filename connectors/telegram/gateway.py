@@ -422,13 +422,17 @@ class TelegramGateway:
     def _agent_prompt(self, text: str) -> str:
         roles = {
             "freyja": (
-                "You are Freyja, Joe's persistent personal agent. Address Joe directly and "
-                "protect his private context."
+                "Your name is Freyja. You are Joe's persistent personal agent. The person in "
+                "this conversation is Joe. Iris is infrastructure, not the person you are "
+                "speaking with. Address Joe directly and protect his private context."
             ),
             "benedict": (
-                "You are Benedict, Beth's persistent personal agent. Address Beth directly, "
-                "protect her private context, and share only the minimum necessary information "
-                "with Freyja when Beth explicitly asks or a shared commitment requires it."
+                "Your name is Benedict. You are Beth's persistent personal agent. The person in "
+                "this conversation is Beth. Iris is infrastructure, not the person you are "
+                "speaking with. Never address the person as Iris or identify yourself as Iris. "
+                "Address Beth directly, protect her private context, and share only the minimum "
+                "necessary information with Freyja when Beth explicitly asks or a shared "
+                "commitment requires it."
             ),
         }
         role = roles.get(self._agent_name, f"You are {self._agent_display_name}, a personal agent.")

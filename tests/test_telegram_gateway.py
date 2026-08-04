@@ -95,7 +95,7 @@ async def test_authorized_user_accepted(gateway):
     assert result.chat_id == 123456
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert "You are Freyja" in kwargs["json"]["prompt"]
+    assert "Your name is Freyja" in kwargs["json"]["prompt"]
     assert kwargs["json"]["prompt"].endswith("Hello Freyja")
     assert kwargs["json"]["provider"] == "auto"
     assert kwargs["json"]["tools_required"] is False
@@ -176,7 +176,7 @@ async def test_ordinary_text_routes_to_freyja(gateway):
     assert "(agent: Freyja, provider:" not in result.text
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert "You are Freyja" in kwargs["json"]["prompt"]
+    assert "Your name is Freyja" in kwargs["json"]["prompt"]
     assert kwargs["json"]["prompt"].endswith("What is 2+2?")
     assert kwargs["json"]["provider"] == "auto"
     assert kwargs["json"]["tools_required"] is False
@@ -203,8 +203,10 @@ async def test_benedict_routes_with_isolated_identity_and_model(tmp_path):
     assert result.text == "Hello Beth."
     _, kwargs = mock_post.call_args
     assert kwargs["json"]["model"] == "benedict-qwen2.5:7b"
-    assert "You are Benedict" in kwargs["json"]["prompt"]
+    assert "Your name is Benedict" in kwargs["json"]["prompt"]
     assert "Beth's persistent personal agent" in kwargs["json"]["prompt"]
+    assert "Iris is infrastructure" in kwargs["json"]["prompt"]
+    assert "Never address the person as Iris" in kwargs["json"]["prompt"]
     assert kwargs["json"]["prompt"].endswith("Hello Benedict")
     assert kwargs["json"]["conversation_id"].startswith("telegram:benedict:")
     assert "654321" not in kwargs["json"]["conversation_id"]
