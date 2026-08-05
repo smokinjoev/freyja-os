@@ -2,8 +2,9 @@
 
 ## Current Milestone
 
-Identity Service: make `Person` the canonical representation for people across
-memory, messaging, calendar, Director tools, and future voice/avatar work.
+Home Assistant foundation: deploy the private automation hub on Atlas, inventory
+devices safely, and add explicit approval before Freyja can open pairing or
+control an entity.
 
 ## Completed Work
 
@@ -26,9 +27,10 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
 
 ## Remaining Work
 
-- Replace the in-code default family seed with a persistent contact source.
-- Add production contact import/sync for Google Contacts, Apple Contacts, or a
-  local encrypted contacts file.
+- Deploy Home Assistant OS on Atlas and create its protected Freyja API user.
+- Connect the read-only inventory to the live private endpoint.
+- Add a general controlled-write approval boundary before exposing pairing.
+- Enroll and classify devices deliberately; begin with a harmless test device.
 - Expand relationship coverage beyond the current directed edges.
 - Add future voice/avatar identity adapters when those subsystems are built.
 - Use identity benchmark history for router policy only after benchmark data is
@@ -59,6 +61,5 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
 
 ## Next Milestone
 
-Prepare Identity for persistent household use: configure a durable contact
-store, add import/sync adapters, and migrate production messaging/calendar
-configuration from inline aliases to canonical Person records.
+Complete the Atlas Home Assistant installation, verify backups and inventory,
+then enable time-bounded Zigbee pairing behind explicit approval.

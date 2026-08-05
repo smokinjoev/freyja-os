@@ -196,6 +196,11 @@ Atlas should provide reliable infrastructure and the always-on Signal path. It
 should not host the Freyja Director in Rev 1 and should not become the primary
 conversational reasoning authority.
 
+Home Assistant should run as Home Assistant OS in a bridged VM on Atlas when
+virtualization is available. This preserves managed MQTT, Matter, and Z-Wave
+services while keeping device discovery on the home LAN. Mars accesses its API
+over the private network and remains the authorization authority.
+
 ## 5.3 Iris — Local Inference Node
 
 **Primary role:** Fast local LLM inference
