@@ -30,6 +30,7 @@ import logging
 import signal
 import time
 
+from connectors.telegram.config import configured_telegram_settings  # noqa: E402
 from connectors.telegram.gateway import TelegramGateway  # noqa: E402
 
 logger = logging.getLogger("telegram_gateway_runner")
@@ -63,9 +64,10 @@ def _setup_logging() -> None:
 
 async def main() -> int:
     _setup_logging()
-    gateway = TelegramGateway()
+    gateways = [TelegramGateway(settings=item) for item in configured_telegram_settings()]
+    enabled_gateways = [gateway for gateway in gateways if gateway.enabled]
 
-    if not gateway.enabled:
+    if not enabled_gateways:
         logger.warning("Telegram gateway is disabled; exiting.")
         return 0
 
@@ -78,8 +80,8 @@ async def main() -> int:
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
-    backoff = _MIN_BACKOFF
-    try:
+    async def poll_gateway(gateway: TelegramGateway) -> None:
+        backoff = _MIN_BACKOFF
         while not shutdown_event.is_set():
             try:
                 replies = await gateway.poll_updates()
@@ -87,23 +89,35 @@ async def main() -> int:
                     await gateway.send_reply(reply)
                 backoff = _MIN_BACKOFF
             except Exception:
-                logger.exception("Telegram polling iteration failed")
-                await asyncio.wait_for(
-                    shutdown_event.wait(),
-                    timeout=min(backoff, _MAX_BACKOFF),
+                logger.exception(
+                    "Telegram polling iteration failed agent=%s",
+                    gateway._settings.telegram_agent_name,
                 )
+                try:
+                    await asyncio.wait_for(
+                        shutdown_event.wait(), timeout=min(backoff, _MAX_BACKOFF)
+                    )
+                except asyncio.TimeoutError:
+                    pass
                 backoff = min(backoff * _BACKOFF_FACTOR, _MAX_BACKOFF)
 
             try:
-                poll_interval = gateway._settings.telegram_poll_interval_seconds
                 await asyncio.wait_for(
                     shutdown_event.wait(),
-                    timeout=max(0.0, poll_interval),
+                    timeout=max(0.0, gateway._settings.telegram_poll_interval_seconds),
                 )
             except asyncio.TimeoutError:
                 pass
+
+    tasks = [asyncio.create_task(poll_gateway(gateway)) for gateway in enabled_gateways]
+    try:
+        await shutdown_event.wait()
     finally:
-        await gateway.close()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        for gateway in gateways:
+            await gateway.close()
         logger.info("Telegram gateway stopped.")
 
     return 0

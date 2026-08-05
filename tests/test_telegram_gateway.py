@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from connectors.telegram.config import TelegramSettings
+from connectors.telegram.config import TelegramSettings, configured_telegram_settings
 from connectors.telegram.gateway import RejectionReason, TelegramGateway
 from connectors.telegram.models import TelegramInboundUpdate, TelegramMessage, TelegramUser, TelegramChat
 
@@ -58,6 +58,7 @@ def settings(tmp_path) -> TelegramSettings:
         telegram_enabled=True,
         telegram_bot_token="test-token",
         telegram_allowed_user_ids="123456",
+        telegram_person_user_id=123456,
         telegram_direct_messages_only=True,
         telegram_smith_read_only_enabled=True,
         telegram_state_dir=str(tmp_path / "telegram"),
@@ -95,7 +96,14 @@ async def test_authorized_user_accepted(gateway):
     assert result.chat_id == 123456
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert kwargs["json"] == {"prompt": "Hello Freyja", "provider": "auto", "tools_required": False}
+    assert "Your name is Freyja" in kwargs["json"]["prompt"]
+    assert kwargs["json"]["prompt"].endswith("Hello Freyja")
+    assert kwargs["json"]["provider"] == "auto"
+    assert kwargs["json"]["tools_required"] is False
+    assert kwargs["json"]["conversation_id"].startswith("telegram:freyja:")
+    assert "123456" not in kwargs["json"]["conversation_id"]
+    assert kwargs["headers"]["x-freyja-client-subject"] == "agent:freyja"
+    assert kwargs["headers"]["x-freyja-account-owner"] == "person:joe"
 
 
 @pytest.mark.asyncio
@@ -169,7 +177,90 @@ async def test_ordinary_text_routes_to_freyja(gateway):
     assert "(agent: Freyja, provider:" not in result.text
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert kwargs["json"] == {"prompt": "What is 2+2?", "provider": "auto", "tools_required": False}
+    assert "Your name is Freyja" in kwargs["json"]["prompt"]
+    assert kwargs["json"]["prompt"].endswith("What is 2+2?")
+    assert kwargs["json"]["provider"] == "auto"
+    assert kwargs["json"]["tools_required"] is False
+    assert kwargs["json"]["conversation_id"].startswith("telegram:freyja:")
+
+
+@pytest.mark.asyncio
+async def test_benedict_routes_with_isolated_identity_and_model(tmp_path):
+    benedict = TelegramGateway(settings=TelegramSettings(
+        telegram_enabled=True,
+        telegram_bot_token="benedict-test-token",
+        telegram_allowed_user_ids="654321",
+        telegram_person_user_id=654321,
+        telegram_state_dir=str(tmp_path / "benedict"),
+        telegram_agent_name="benedict",
+        telegram_person_name="beth",
+        telegram_agent_display_name="Benedict",
+        telegram_model="benedict-qwen2.5:7b",
+    ))
+    update = _make_update(1, 654321, 654321, "private", "Hello Benedict")
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Hello Beth."})
+        result = await benedict.handle(update)
+    assert result is not None
+    assert result.text == "Hello Beth."
+    _, kwargs = mock_post.call_args
+    assert kwargs["json"]["model"] == "benedict-qwen2.5:7b"
+    assert "Your name is Benedict" in kwargs["json"]["prompt"]
+    assert "Beth's persistent personal agent" in kwargs["json"]["prompt"]
+    assert "Iris is infrastructure" in kwargs["json"]["prompt"]
+    assert "Never address the person as Iris" in kwargs["json"]["prompt"]
+    assert kwargs["json"]["prompt"].endswith("Hello Benedict")
+    assert kwargs["json"]["conversation_id"].startswith("telegram:benedict:")
+    assert "654321" not in kwargs["json"]["conversation_id"]
+    assert kwargs["headers"]["x-freyja-client-subject"] == "agent:benedict"
+    assert kwargs["headers"]["x-freyja-account-owner"] == "person:beth"
+    assert kwargs["headers"]["x-freyja-person-id"] == "beth"
+    await benedict.close()
+
+
+def test_benedict_environment_creates_separate_bot_identity(monkeypatch, tmp_path):
+    monkeypatch.setenv("TELEGRAM_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "freyja-token")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "111")
+    monkeypatch.setenv("TELEGRAM_STATE_DIR", str(tmp_path / "freyja"))
+    monkeypatch.setenv("TELEGRAM_BENEDICT_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_BENEDICT_BOT_TOKEN", "benedict-token")
+    monkeypatch.setenv("TELEGRAM_BENEDICT_ALLOWED_USER_IDS", "222")
+    monkeypatch.setenv("TELEGRAM_BENEDICT_PERSON_USER_ID", "222")
+    settings = configured_telegram_settings()
+    assert [item.telegram_agent_name for item in settings] == ["freyja", "benedict"]
+    assert settings[0].allowed_user_id_set == {111}
+    assert settings[1].allowed_user_id_set == {222}
+    assert settings[1].telegram_person_name == "beth"
+    assert settings[1].telegram_person_user_id == 222
+    assert settings[0].telegram_bot_token != settings[1].telegram_bot_token
+
+
+@pytest.mark.asyncio
+async def test_allowlisted_tester_cannot_impersonate_agent_owner(tmp_path):
+    benedict = TelegramGateway(settings=TelegramSettings(
+        telegram_enabled=True,
+        telegram_bot_token="benedict-test-token",
+        telegram_allowed_user_ids="111,222",
+        telegram_person_user_id=222,
+        telegram_state_dir=str(tmp_path / "benedict"),
+        telegram_agent_name="benedict",
+        telegram_person_name="beth",
+        telegram_agent_display_name="Benedict",
+    ))
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        result = await benedict.handle(_make_update(1, 111, 111, "private", "Hello Benedict"))
+
+    assert result is not None
+    assert result.success is False
+    assert "not authorized" in result.text.lower()
+    mock_post.assert_not_awaited()
+
+    whoami = await benedict.handle(_make_update(2, 111, 111, "private", "/whoami"))
+    assert whoami is not None
+    assert "111" in whoami.text
+    await benedict.close()
 
 
 @pytest.mark.asyncio
@@ -586,6 +677,7 @@ class TestTelegramToolLoop:
             telegram_enabled=True,
             telegram_bot_token="test-token",
             telegram_allowed_user_ids="123456",
+            telegram_person_user_id=123456,
             telegram_direct_messages_only=True,
             telegram_smith_read_only_enabled=False,
             telegram_tools_enabled=True,

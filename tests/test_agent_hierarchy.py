@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import pytest
+
+from freyja.agents import (
+    AgentHierarchy,
+    AgentName,
+    EscalationTarget,
+    MaintenanceAuthority,
+    MaintenanceResult,
+    PersonName,
+)
+
+
+def test_personal_agents_delegate_to_shared_maintenance_with_separate_scopes() -> None:
+    hierarchy = AgentHierarchy()
+
+    joe = hierarchy.maintenance_request(
+        requested_by=AgentName.FREYJA,
+        owner=PersonName.JOE,
+        objective="Inspect Iris disk health",
+    )
+    beth = hierarchy.maintenance_request(
+        requested_by=AgentName.BENEDICT,
+        owner=PersonName.BETH,
+        objective="Inspect Beth's agent service",
+    )
+
+    assert joe.result_recipient is AgentName.FREYJA
+    assert joe.memory_principal.client_subject == "agent:freyja"
+    assert joe.memory_principal.account_owner == "person:joe"
+    assert beth.result_recipient is AgentName.BENEDICT
+    assert beth.memory_principal.client_subject == "agent:benedict"
+    assert beth.memory_principal.account_owner == "person:beth"
+    assert joe.memory_principal.scope_key != beth.memory_principal.scope_key
+
+
+def test_authenticated_people_message_only_their_primary_agent() -> None:
+    hierarchy = AgentHierarchy()
+
+    joe = hierarchy.route_person_message(person=PersonName.JOE, content="Hello Freyja")
+    beth = hierarchy.route_person_message(person=PersonName.BETH, content="Hello Benedict")
+
+    assert joe.recipient is AgentName.FREYJA
+    assert joe.memory_principal.account_owner == "person:joe"
+    assert beth.recipient is AgentName.BENEDICT
+    assert beth.memory_principal.account_owner == "person:beth"
+    assert joe.memory_principal.scope_key != beth.memory_principal.scope_key
+
+
+def test_agent_cannot_delegate_for_another_agents_person() -> None:
+    hierarchy = AgentHierarchy()
+
+    with pytest.raises(PermissionError, match="primary agent"):
+        hierarchy.maintenance_request(
+            requested_by=AgentName.FREYJA,
+            owner=PersonName.BETH,
+            objective="Read Benedict status",
+        )
+    with pytest.raises(PermissionError, match="primary agent"):
+        hierarchy.maintenance_request(
+            requested_by=AgentName.MAINTENANCE,
+            owner=PersonName.JOE,
+            objective="Delegate work to myself",
+        )
+
+
+def test_results_return_only_to_the_requesting_agent_and_owner() -> None:
+    hierarchy = AgentHierarchy()
+    request = hierarchy.maintenance_request(
+        requested_by=AgentName.BENEDICT,
+        owner=PersonName.BETH,
+        objective="Inspect a service",
+    )
+    result = MaintenanceResult(
+        request_id=request.request_id,
+        owner=request.owner,
+        requested_by=request.requested_by,
+        result_recipient=request.result_recipient,
+        summary="Service is healthy.",
+    )
+
+    assert hierarchy.deliver_result(request, result, recipient=AgentName.BENEDICT, owner=PersonName.BETH) == (
+        "Service is healthy."
+    )
+    with pytest.raises(PermissionError, match="private"):
+        hierarchy.deliver_result(request, result, recipient=AgentName.FREYJA, owner=PersonName.BETH)
+    with pytest.raises(PermissionError, match="private"):
+        hierarchy.deliver_result(request, result, recipient=AgentName.BENEDICT, owner=PersonName.JOE)
+
+    forged = result.model_copy(update={"request_id": "unrelated-request"})
+    with pytest.raises(PermissionError, match="request envelope"):
+        hierarchy.deliver_result(request, forged, recipient=AgentName.BENEDICT, owner=PersonName.BETH)
+
+
+@pytest.mark.parametrize(
+    ("authority", "target"),
+    [
+        (MaintenanceAuthority.INSPECT, EscalationTarget.NONE),
+        (MaintenanceAuthority.SAFE_REVERSIBLE, EscalationTarget.REQUESTING_AGENT),
+        (MaintenanceAuthority.CONSEQUENTIAL, EscalationTarget.PERSON),
+    ],
+)
+def test_escalation_follows_authority_level(authority, target) -> None:
+    request = AgentHierarchy().maintenance_request(
+        requested_by=AgentName.FREYJA,
+        owner=PersonName.JOE,
+        objective="Maintain a service",
+        authority=authority,
+    )
+
+    assert request.escalation_target is target

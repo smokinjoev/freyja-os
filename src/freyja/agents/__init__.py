@@ -3,6 +3,19 @@
 from freyja.tools.builtin import register_smith_read_only_tools, register_smith_write_pilot_tools
 from freyja.tools.iris_maintenance import register_smith_controlled_tools
 
+from .device_trust import DeviceCredentialKind, DeviceRegistry, TrustedDevice
+
+from .hierarchy import (
+    AgentHierarchy,
+    AgentName,
+    EscalationTarget,
+    MaintenanceAuthority,
+    MaintenanceRequest,
+    MaintenanceResult,
+    PersonalAgentMessage,
+    PersonName,
+)
+
 from .models import (
     ApprovalCallback,
     ApprovalRecord,
@@ -23,6 +36,14 @@ from .models import (
     WritePilotState,
 )
 from .policy import AgentPolicy
+from .personal_data import (
+    PersonalDataAction,
+    PersonalDataAuthorization,
+    PersonalDataDecision,
+    PersonalDataPrincipal,
+    PersonalDataResource,
+    PersonalDataScope,
+)
 from .runtime import SmithRuntime
 from .smith import PolicyViolationError, SmithOrchestrator, ToolInvocationError
 
@@ -35,6 +56,8 @@ def register_smith_tools(registry) -> None:
 
 
 __all__ = [
+    "AgentHierarchy",
+    "AgentName",
     "AgentPolicy",
     "ApprovalCallback",
     "ApprovalRecord",
@@ -42,10 +65,24 @@ __all__ = [
     "ApprovalStatus",
     "ApprovalStoreError",
     "AuditEvent",
+    "DeviceCredentialKind",
+    "DeviceRegistry",
+    "EscalationTarget",
+    "MaintenanceAuthority",
+    "MaintenanceRequest",
+    "MaintenanceResult",
     "ObjectiveClass",
     "PolicyCheckResult",
     "PolicyDecision",
     "PolicyViolationError",
+    "PersonalAgentMessage",
+    "PersonName",
+    "PersonalDataAction",
+    "PersonalDataAuthorization",
+    "PersonalDataDecision",
+    "PersonalDataPrincipal",
+    "PersonalDataResource",
+    "PersonalDataScope",
     "SmithOrchestrator",
     "SmithPlan",
     "SmithRunSummary",
@@ -54,6 +91,7 @@ __all__ = [
     "SmithTask",
     "TaskStatus",
     "ToolInvocationError",
+    "TrustedDevice",
     "WritePilotRequest",
     "WritePilotResult",
     "WritePilotState",
