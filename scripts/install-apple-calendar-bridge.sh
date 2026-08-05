@@ -15,8 +15,12 @@ LABEL="${PLIST_NAME%.plist}"
 DOMAIN="gui/$(id -u)"
 
 test -x "${PROJECT_DIR}/.venv/bin/uvicorn"
-mkdir -p "${CONFIG_DIR}" "${HOME}/Library/LaunchAgents" "${HOME}/Library/Logs"
+HELPER_DIR="${HOME}/.local/lib/freyja"
+HELPER_DST="${HELPER_DIR}/apple-eventkit"
+mkdir -p "${CONFIG_DIR}" "${HELPER_DIR}" "${HOME}/Library/LaunchAgents" "${HOME}/Library/Logs"
 chmod 700 "${CONFIG_DIR}"
+/usr/bin/swiftc "${PROJECT_DIR}/src/freyja/calendar/apple_eventkit.swift" -o "${HELPER_DST}"
+chmod 700 "${HELPER_DST}"
 
 if [[ ! -f "${CONFIG_FILE}" ]]; then
     umask 077

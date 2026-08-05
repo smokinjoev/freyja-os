@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -13,13 +14,15 @@ def run_eventkit(
     operation: str,
     arguments: dict[str, Any] | None = None,
     *,
-    helper_path: Path = HELPER_PATH,
+    helper_path: Path | None = None,
     request_access: bool = False,
     timeout_seconds: int = 30,
 ) -> dict[str, Any]:
+    configured_helper = os.getenv("FREYJA_APPLE_CALENDAR_HELPER")
+    helper_path = helper_path or (Path(configured_helper) if configured_helper else HELPER_PATH)
     if not helper_path.is_file():
         raise RuntimeError("Apple Calendar helper is missing")
-    command = ["/usr/bin/swift", str(helper_path), operation]
+    command = [str(helper_path), operation] if os.access(helper_path, os.X_OK) else ["/usr/bin/swift", str(helper_path), operation]
     if request_access:
         command.append("--request-access")
     try:

@@ -33,6 +33,22 @@ def test_native_helper_uses_json_stdin_and_does_not_request_permission_by_defaul
     assert json.loads(seen["kwargs"]["input"]) == {"start": "a", "end": "b"}
 
 
+def test_native_helper_uses_configured_executable(monkeypatch, tmp_path) -> None:
+    helper = tmp_path / "apple-eventkit"
+    helper.write_text("binary")
+    helper.chmod(0o700)
+    monkeypatch.setenv("FREYJA_APPLE_CALENDAR_HELPER", str(helper))
+    seen = {}
+
+    def fake_run(command, **kwargs):
+        seen["command"] = command
+        return subprocess.CompletedProcess(command, 0, stdout='{"available":true}', stderr="")
+
+    monkeypatch.setattr("freyja.calendar.apple_eventkit.subprocess.run", fake_run)
+    assert run_eventkit("status") == {"available": True}
+    assert seen["command"] == [str(helper), "status"]
+
+
 def test_bridge_rejects_missing_or_wrong_token(monkeypatch) -> None:
     monkeypatch.setenv("FREYJA_APPLE_CALENDAR_TOKEN", "correct")
     client = TestClient(app)

@@ -15,6 +15,7 @@ source "${CONFIG_FILE}"
 set +a
 
 export PYTHONPATH="${PROJECT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
+export FREYJA_APPLE_CALENDAR_HELPER="${HOME}/.local/lib/freyja/apple-eventkit"
 
 exec "${PROJECT_DIR}/.venv/bin/uvicorn" freyja.apple_calendar_app:app \
     --host "${FREYJA_APPLE_CALENDAR_BIND_IP:-127.0.0.1}" \
