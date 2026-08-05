@@ -17,3 +17,8 @@ def test_installer_protects_generated_token_file() -> None:
     assert "openssl rand -hex 32" in script
     assert 'chmod 600 "${CONFIG_FILE}"' in script
     assert "sudo" not in script
+
+
+def test_bridge_runner_sets_project_pythonpath() -> None:
+    script = (ROOT / "scripts/run-apple-calendar-bridge.sh").read_text()
+    assert 'export PYTHONPATH="${PROJECT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"' in script
