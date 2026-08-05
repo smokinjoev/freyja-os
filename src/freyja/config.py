@@ -105,6 +105,11 @@ class Settings(BaseSettings):
 
     weather_tool_enabled: bool = False
 
+    home_assistant_base_url: str = "http://127.0.0.1:8123"
+    home_assistant_token: str = ""
+    home_assistant_timeout_seconds: float = 10.0
+    home_assistant_entity_allowlist: str = ""
+
     @property
     def approved_openrouter_models(self) -> list[str]:
         if not self.openrouter_allowlist:
