@@ -6,6 +6,7 @@
     <string>com.freyja-os.apple-calendar</string>
     <key>ProgramArguments</key>
     <array>
+        <string>/bin/bash</string>
         <string>/Users/freyja/freyja-os/scripts/run-apple-calendar-bridge.sh</string>
     </array>
     <key>WorkingDirectory</key>

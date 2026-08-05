@@ -8,7 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_calendar_launchagent_is_user_scoped_and_does_not_embed_token() -> None:
     payload = plistlib.loads((ROOT / "scripts/com.freyja-os.apple-calendar.plist").read_bytes())
     assert payload["Label"] == "com.freyja-os.apple-calendar"
-    assert payload["ProgramArguments"] == ["/Users/freyja/freyja-os/scripts/run-apple-calendar-bridge.sh"]
+    assert payload["ProgramArguments"] == [
+        "/bin/bash",
+        "/Users/freyja/freyja-os/scripts/run-apple-calendar-bridge.sh",
+    ]
     assert "FREYJA_APPLE_CALENDAR_TOKEN" not in str(payload)
 
 
