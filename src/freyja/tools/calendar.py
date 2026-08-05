@@ -4,7 +4,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from freyja.calendar import CalendarService
+from freyja.calendar.providers import AppleCalendarProvider
 from freyja.calendar.service import parse_date, parse_datetime
+from freyja.config import settings
 from freyja.memory.models import MemoryPrincipal
 from freyja.memory.store import get_active_store
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLevel
@@ -17,7 +19,16 @@ _service: CalendarService | None = None
 def get_calendar_service() -> CalendarService:
     global _service
     if _service is None:
-        _service = CalendarService()
+        providers = None
+        if settings.apple_calendar_bridge_url and settings.apple_calendar_bridge_token:
+            providers = {
+                "apple": AppleCalendarProvider(
+                    base_url=settings.apple_calendar_bridge_url,
+                    token=settings.apple_calendar_bridge_token,
+                    timeout_seconds=settings.apple_calendar_bridge_timeout_seconds,
+                )
+            }
+        _service = CalendarService(providers=providers)
     return _service
 
 

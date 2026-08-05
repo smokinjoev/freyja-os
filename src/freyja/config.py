@@ -105,6 +105,10 @@ class Settings(BaseSettings):
 
     weather_tool_enabled: bool = False
 
+    apple_calendar_bridge_url: str = ""
+    apple_calendar_bridge_token: str = ""
+    apple_calendar_bridge_timeout_seconds: float = 15.0
+
     @property
     def approved_openrouter_models(self) -> list[str]:
         if not self.openrouter_allowlist:
