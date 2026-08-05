@@ -244,6 +244,14 @@ class TelegramGateway:
             self._log_rejection(update, RejectionReason.OVERSIZED_MESSAGE)
             return self._reply(message, self._safe_error_text, success=False)
 
+        # An allowlist grants gateway access, not the right to impersonate the
+        # person who owns this personal agent. Keep /whoami available during
+        # onboarding, but fail closed before attaching trusted person headers.
+        command = text.split(maxsplit=1)[0].lower()
+        if command != "/whoami" and user_id != self._settings.telegram_person_user_id:
+            self._log_rejection(update, RejectionReason.UNKNOWN_USER)
+            return self._reply(message, _UNAUTHORIZED_TEXT, success=False)
+
         return await self._route_command(text, message, user_id)
 
     def _log_rejection(self, update: TelegramInboundUpdate, reason: str) -> None:

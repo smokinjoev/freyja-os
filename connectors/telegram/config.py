@@ -28,11 +28,13 @@ class TelegramSettings(BaseSettings):
     freyja_director_url: str = "http://127.0.0.1:8000"
     telegram_agent_name: str = "freyja"
     telegram_person_name: str = "joe"
+    telegram_person_user_id: int | None = None
     telegram_agent_display_name: str = "Freyja"
     telegram_model: str = ""
     telegram_benedict_enabled: bool = False
     telegram_benedict_bot_token: str = ""
     telegram_benedict_allowed_user_ids: str = ""
+    telegram_benedict_person_user_id: int | None = None
     telegram_benedict_tools_enabled: bool = False
     telegram_benedict_state_dir: str = ""
     telegram_benedict_model: str = "benedict-qwen2.5:7b"
@@ -78,6 +80,7 @@ def configured_telegram_settings() -> list[TelegramSettings]:
                 freyja_director_url=primary.freyja_director_url,
                 telegram_agent_name="benedict",
                 telegram_person_name="beth",
+                telegram_person_user_id=primary.telegram_benedict_person_user_id,
                 telegram_agent_display_name="Benedict",
                 telegram_model=primary.telegram_benedict_model,
             )

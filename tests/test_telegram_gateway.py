@@ -58,6 +58,7 @@ def settings(tmp_path) -> TelegramSettings:
         telegram_enabled=True,
         telegram_bot_token="test-token",
         telegram_allowed_user_ids="123456",
+        telegram_person_user_id=123456,
         telegram_direct_messages_only=True,
         telegram_smith_read_only_enabled=True,
         telegram_state_dir=str(tmp_path / "telegram"),
@@ -189,6 +190,7 @@ async def test_benedict_routes_with_isolated_identity_and_model(tmp_path):
         telegram_enabled=True,
         telegram_bot_token="benedict-test-token",
         telegram_allowed_user_ids="654321",
+        telegram_person_user_id=654321,
         telegram_state_dir=str(tmp_path / "benedict"),
         telegram_agent_name="benedict",
         telegram_person_name="beth",
@@ -224,12 +226,41 @@ def test_benedict_environment_creates_separate_bot_identity(monkeypatch, tmp_pat
     monkeypatch.setenv("TELEGRAM_BENEDICT_ENABLED", "true")
     monkeypatch.setenv("TELEGRAM_BENEDICT_BOT_TOKEN", "benedict-token")
     monkeypatch.setenv("TELEGRAM_BENEDICT_ALLOWED_USER_IDS", "222")
+    monkeypatch.setenv("TELEGRAM_BENEDICT_PERSON_USER_ID", "222")
     settings = configured_telegram_settings()
     assert [item.telegram_agent_name for item in settings] == ["freyja", "benedict"]
     assert settings[0].allowed_user_id_set == {111}
     assert settings[1].allowed_user_id_set == {222}
     assert settings[1].telegram_person_name == "beth"
+    assert settings[1].telegram_person_user_id == 222
     assert settings[0].telegram_bot_token != settings[1].telegram_bot_token
+
+
+@pytest.mark.asyncio
+async def test_allowlisted_tester_cannot_impersonate_agent_owner(tmp_path):
+    benedict = TelegramGateway(settings=TelegramSettings(
+        telegram_enabled=True,
+        telegram_bot_token="benedict-test-token",
+        telegram_allowed_user_ids="111,222",
+        telegram_person_user_id=222,
+        telegram_state_dir=str(tmp_path / "benedict"),
+        telegram_agent_name="benedict",
+        telegram_person_name="beth",
+        telegram_agent_display_name="Benedict",
+    ))
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        result = await benedict.handle(_make_update(1, 111, 111, "private", "Hello Benedict"))
+
+    assert result is not None
+    assert result.success is False
+    assert "not authorized" in result.text.lower()
+    mock_post.assert_not_awaited()
+
+    whoami = await benedict.handle(_make_update(2, 111, 111, "private", "/whoami"))
+    assert whoami is not None
+    assert "111" in whoami.text
+    await benedict.close()
 
 
 @pytest.mark.asyncio
@@ -646,6 +677,7 @@ class TestTelegramToolLoop:
             telegram_enabled=True,
             telegram_bot_token="test-token",
             telegram_allowed_user_ids="123456",
+            telegram_person_user_id=123456,
             telegram_direct_messages_only=True,
             telegram_smith_read_only_enabled=False,
             telegram_tools_enabled=True,

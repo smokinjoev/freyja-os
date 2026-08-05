@@ -3,6 +3,8 @@
 from freyja.tools.builtin import register_smith_read_only_tools, register_smith_write_pilot_tools
 from freyja.tools.iris_maintenance import register_smith_controlled_tools
 
+from .device_trust import DeviceCredentialKind, DeviceRegistry, TrustedDevice
+
 from .hierarchy import (
     AgentHierarchy,
     AgentName,
@@ -63,6 +65,8 @@ __all__ = [
     "ApprovalStatus",
     "ApprovalStoreError",
     "AuditEvent",
+    "DeviceCredentialKind",
+    "DeviceRegistry",
     "EscalationTarget",
     "MaintenanceAuthority",
     "MaintenanceRequest",
@@ -87,6 +91,7 @@ __all__ = [
     "SmithTask",
     "TaskStatus",
     "ToolInvocationError",
+    "TrustedDevice",
     "WritePilotRequest",
     "WritePilotResult",
     "WritePilotState",

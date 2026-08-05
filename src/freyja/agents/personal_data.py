@@ -41,14 +41,13 @@ class PersonalDataDecision(StrEnum):
 
 
 class PersonalDataPrincipal(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     person: PersonName
     acting_agent: AgentName
     resource: PersonalDataResource
     account_id: str = Field(min_length=1, max_length=160)
     scope: PersonalDataScope
-    allowed_actions: frozenset[PersonalDataAction]
 
 
 class PersonalDataAuthorization:
@@ -99,7 +98,6 @@ class PersonalDataAuthorization:
             resource=resource,
             account_id=account_id,
             scope=PersonalDataScope.PRIVATE,
-            allowed_actions=self._owner_actions[resource],
         )
 
     def calendar_availability(
@@ -117,7 +115,6 @@ class PersonalDataAuthorization:
             resource=PersonalDataResource.CALENDAR,
             account_id=account_id,
             scope=PersonalDataScope.AVAILABILITY_ONLY,
-            allowed_actions=frozenset({PersonalDataAction.CALENDAR_AVAILABILITY}),
         )
 
     def household_account(
@@ -136,7 +133,6 @@ class PersonalDataAuthorization:
             resource=resource,
             account_id=account_id,
             scope=PersonalDataScope.HOUSEHOLD,
-            allowed_actions=self._owner_actions[resource],
         )
 
     def authorize(
@@ -146,13 +142,26 @@ class PersonalDataAuthorization:
     ) -> PersonalDataDecision:
         if not self._action_matches_resource(principal.resource, action):
             return PersonalDataDecision.DENY
-        if action in principal.allowed_actions:
+        if not self._valid_authority_chain(principal):
+            return PersonalDataDecision.DENY
+        if action in self._policy_actions(principal):
             return PersonalDataDecision.ALLOW
         if principal.scope is not PersonalDataScope.AVAILABILITY_ONLY and action in self._approval_actions:
             return PersonalDataDecision.APPROVAL_REQUIRED
         return PersonalDataDecision.DENY
 
+    def _valid_authority_chain(self, principal: PersonalDataPrincipal) -> bool:
+        if principal.acting_agent not in {AgentName.FREYJA, AgentName.BENEDICT}:
+            return False
+        if principal.scope in {PersonalDataScope.PRIVATE, PersonalDataScope.HOUSEHOLD}:
+            return principal.acting_agent is self._hierarchy.primary_agent(principal.person)
+        return principal.scope is PersonalDataScope.AVAILABILITY_ONLY
+
+    def _policy_actions(self, principal: PersonalDataPrincipal) -> frozenset[PersonalDataAction]:
+        if principal.scope is PersonalDataScope.AVAILABILITY_ONLY:
+            return frozenset({PersonalDataAction.CALENDAR_AVAILABILITY})
+        return self._owner_actions[principal.resource]
+
     @staticmethod
     def _action_matches_resource(resource: PersonalDataResource, action: PersonalDataAction) -> bool:
         return action.value.startswith(f"{resource.value}_")
-

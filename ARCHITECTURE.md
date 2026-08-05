@@ -624,12 +624,16 @@ docker compose -f deploy/compose/signal/compose.yaml config
 Telegram may be retained for development because it is easy to integrate. It must include:
 
 - Allowed user ID checks
+- An explicit owner user ID distinct from the broader onboarding/diagnostic allowlist
 - Disabled group access
 - Restricted bot commands
 - Token stored in a secret manager or protected environment file
 - No public webhook unless protected by authentication and network controls
 
 The main issue is not that every Telegram bot is automatically public. The issue is that a poorly configured bot can accept messages from unauthorized users. Freyja must enforce explicit authorization at the gateway.
+An allowlisted Telegram user may use `/whoami` during onboarding, but only the
+configured owner user ID may receive that person's trusted identity headers or
+route ordinary messages to the personal agent.
 
 ## 7.3 iMessage
 
@@ -682,6 +686,18 @@ worker-speech.freyja.local
 ## 9. Authentication and Authorization
 
 The initial system may support one primary user, but it should still include an authorization model.
+
+People, agents, connectors, and devices are separate principals. A trusted
+device is related to a canonical person through a stable device ID and a
+cryptographic credential fingerprint. Hostnames and IP addresses are not proof
+of identity. Telegram authenticates a user ID rather than a physical device, so
+its user-to-person mapping remains a connector rule instead of a device grant.
+
+Personal-data grants carry person, acting agent, resource, account, and scope
+facts only. Calendar and email permissions are derived again from server policy
+at every authorization decision; callers cannot supply their own allowed-action
+set. Cross-person private access is denied, availability-only grants cannot read
+event details, and consequential email/calendar actions require approval.
 
 Suggested roles:
 

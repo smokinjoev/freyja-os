@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from freyja.agents import (
     AgentName,
     PersonalDataAction,
     PersonalDataAuthorization,
     PersonalDataDecision,
+    PersonalDataPrincipal,
     PersonalDataResource,
     PersonalDataScope,
     PersonName,
@@ -118,3 +120,40 @@ def test_household_account_retains_the_requesting_person_and_agent() -> None:
     assert beth.person is PersonName.BETH
     assert joe.acting_agent is AgentName.FREYJA
     assert beth.acting_agent is AgentName.BENEDICT
+
+
+def test_constructed_principal_cannot_grant_itself_permissions_or_cross_person_access() -> None:
+    authorization = PersonalDataAuthorization()
+    with pytest.raises(ValidationError, match="allowed_actions"):
+        PersonalDataPrincipal(
+            person=PersonName.BETH,
+            acting_agent=AgentName.FREYJA,
+            resource=PersonalDataResource.EMAIL,
+            account_id="beth-mail",
+            scope=PersonalDataScope.PRIVATE,
+            allowed_actions=frozenset({PersonalDataAction.EMAIL_READ, PersonalDataAction.EMAIL_SEND}),
+        )
+
+    cross_person = PersonalDataPrincipal(
+        person=PersonName.BETH,
+        acting_agent=AgentName.FREYJA,
+        resource=PersonalDataResource.EMAIL,
+        account_id="beth-mail",
+        scope=PersonalDataScope.PRIVATE,
+    )
+
+    assert authorization.authorize(cross_person, PersonalDataAction.EMAIL_READ) is PersonalDataDecision.DENY
+    assert authorization.authorize(cross_person, PersonalDataAction.EMAIL_SEND) is PersonalDataDecision.DENY
+
+
+def test_constructed_owner_principal_still_cannot_bypass_send_approval() -> None:
+    authorization = PersonalDataAuthorization()
+    forged = PersonalDataPrincipal(
+        person=PersonName.JOE,
+        acting_agent=AgentName.FREYJA,
+        resource=PersonalDataResource.EMAIL,
+        account_id="joe-mail",
+        scope=PersonalDataScope.PRIVATE,
+    )
+
+    assert authorization.authorize(forged, PersonalDataAction.EMAIL_SEND) is PersonalDataDecision.APPROVAL_REQUIRED
