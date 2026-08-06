@@ -67,8 +67,10 @@ Signal and native iMessage are connector adapters into the existing Director.
 They enforce sender policy in their gateways, map approved senders to memory
 principals, forward requests to `/route`, and return sanitized responses.
 
-Allowed senders may be plain platform addresses for backward compatibility or
-family aliases for multi-user support:
+Allowed senders may be plain platform addresses. When the configured identity
+store contains a matching Signal, iMessage, phone, or email identity, the
+connector attaches canonical Person headers automatically. Legacy inline family
+aliases remain supported for bootstrap and backward compatibility:
 
 ```text
 SIGNAL_ALLOWED_SENDERS=joe=+15551234567,beth=+15557654321

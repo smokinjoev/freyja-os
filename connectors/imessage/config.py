@@ -6,6 +6,7 @@ from shutil import which
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from connectors.messaging import AuthorizedSender, parse_allowed_senders
+from freyja.identity import default_identity_service
 
 
 class IMessageSettings(BaseSettings):
@@ -41,7 +42,11 @@ class IMessageSettings(BaseSettings):
 
     @property
     def allowed_sender_identities(self) -> dict[str, AuthorizedSender]:
-        return parse_allowed_senders(self.imessage_allowed_senders, "imessage")
+        return parse_allowed_senders(
+            self.imessage_allowed_senders,
+            "imessage",
+            identity_service=default_identity_service(),
+        )
 
     @property
     def resolved_imsg_path(self) -> str:

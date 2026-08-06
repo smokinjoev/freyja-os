@@ -21,14 +21,19 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
   connector headers.
 - Calendar service and tools now accept person IDs or aliases and default to
   the resolved sender when available.
+- Persistent SQLite identity storage, JSON import, vCard import, native Apple
+  Contacts import, backup, verification, and restore workflows are available.
+- Signal and iMessage allowlist parsing can resolve approved raw addresses
+  through the configured identity store and attach canonical Person headers
+  without inline family aliases.
 - Identity certification suites were added under
   `certification/suites/identity/`.
 
 ## Remaining Work
 
-- Replace the in-code default family seed with a persistent contact source.
-- Add production contact import/sync for Google Contacts, Apple Contacts, or a
-  local encrypted contacts file.
+- Turn on the persistent identity store in production after importing reviewed
+  household contacts, then disable seed fallback when appropriate.
+- Add recurring production contact sync for the chosen canonical source.
 - Expand relationship coverage beyond the current directed edges.
 - Add future voice/avatar identity adapters when those subsystems are built.
 - Use identity benchmark history for router policy only after benchmark data is
@@ -59,6 +64,7 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
 
 ## Next Milestone
 
-Prepare Identity for persistent household use: configure a durable contact
-store, add import/sync adapters, and migrate production messaging/calendar
-configuration from inline aliases to canonical Person records.
+Prepare Identity for persistent household use in production: import reviewed
+household contacts, enable the durable SQLite store for the Director and
+connectors, remove inline messaging aliases where canonical identities exist,
+and add recurring sync for the chosen contact source.

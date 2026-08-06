@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from connectors.messaging import AuthorizedSender, parse_allowed_senders
+from freyja.identity import default_identity_service
 
 
 class SignalSettings(BaseSettings):
@@ -30,7 +31,11 @@ class SignalSettings(BaseSettings):
 
     @property
     def allowed_sender_identities(self) -> dict[str, AuthorizedSender]:
-        return parse_allowed_senders(self.signal_allowed_senders, "signal")
+        return parse_allowed_senders(
+            self.signal_allowed_senders,
+            "signal",
+            identity_service=default_identity_service(),
+        )
 
     @property
     def transport_configured(self) -> bool:
