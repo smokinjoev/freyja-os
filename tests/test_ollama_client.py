@@ -42,6 +42,7 @@ async def test_chat_sends_system_prompt_first(client: OllamaClient) -> None:
     assert "Do not claim to be Qwen" in messages[0]["content"]
     assert messages[1]["role"] == "user"
     assert messages[1]["content"] == "hi"
+    assert captured["payload"]["keep_alive"] == "30m"
     assert captured["payload"]["options"]["num_predict"] >= 160
 
 

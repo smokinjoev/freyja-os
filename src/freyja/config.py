@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     ollama_default_output_tokens: int = 512
     ollama_retry_output_tokens: int = 1024
     ollama_min_chat_parameters_b: int = 3
+    ollama_keep_alive: str = "30m"
 
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"

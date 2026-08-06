@@ -118,6 +118,7 @@ class OllamaClient:
             ],
             "stream": stream,
             "think": False,
+            "keep_alive": settings.ollama_keep_alive,
             "options": {
                 "temperature": 0.2,
                 "num_predict": output_tokens,
