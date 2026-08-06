@@ -50,7 +50,8 @@ restore workflows documented in [`docs/IDENTITY_BACKUP.md`](docs/IDENTITY_BACKUP
 ## Personal Intelligence Services
 
 Freyja services should integrate with the existing Director tool path instead
-of becoming standalone apps. The first reference service is Family Calendar:
+of becoming standalone apps. The first reference services are Family Calendar
+and Reminders:
 
 - `CalendarService` owns schedule reasoning.
 - `CalendarProvider` adapters isolate calendar backends.
@@ -60,6 +61,10 @@ of becoming standalone apps. The first reference service is Family Calendar:
   ranked time finding, and conflict-aware event movement.
 - Long-term preferences from memory can influence scheduling, but explicit user
   instructions remain higher priority.
+- `ReminderService` exposes reminder lists, active reminder search, creation,
+  completion, and deletion through the same controlled Director tool path.
+- `AppleReminderProvider` uses a narrow authenticated EventKit bridge instead
+  of broad desktop automation.
 
 ## Communications
 

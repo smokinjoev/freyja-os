@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
+
+
+HELPER_PATH = Path(__file__).with_name("apple_eventkit.swift")
+
+
+def run_eventkit(
+    operation: str,
+    arguments: dict[str, Any] | None = None,
+    *,
+    helper_path: Path | None = None,
+    request_access: bool = False,
+    timeout_seconds: int = 30,
+) -> dict[str, Any]:
+    configured_helper = os.getenv("FREYJA_APPLE_REMINDERS_HELPER")
+    helper_path = helper_path or (Path(configured_helper) if configured_helper else HELPER_PATH)
+    if not helper_path.is_file():
+        raise RuntimeError("Apple Reminders helper is missing")
+    command = [str(helper_path), operation] if os.access(helper_path, os.X_OK) else ["/usr/bin/swift", str(helper_path), operation]
+    if request_access:
+        command.append("--request-access")
+    try:
+        result = subprocess.run(
+            command,
+            input=json.dumps(arguments or {}),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("Apple Reminders helper could not be run") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "EventKit reminders operation failed"
+        raise RuntimeError(detail)
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Apple Reminders helper returned invalid data") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("Apple Reminders helper returned an invalid object")
+    return payload

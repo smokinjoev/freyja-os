@@ -21,6 +21,8 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
   connector headers.
 - Calendar service and tools now accept person IDs or aliases and default to
   the resolved sender when available.
+- Reminders service and tools support reminder lists, active reminder listing,
+  creation, completion, deletion, and an authenticated Apple Reminders bridge.
 - Persistent SQLite identity storage, JSON import, vCard import, native Apple
   Contacts import, backup, verification, and restore workflows are available.
 - Signal and iMessage allowlist parsing can resolve approved raw addresses
@@ -60,7 +62,7 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
 - Certification CLI, Gauntlet, runtime behavioral verification, benchmark, and
   comparison framework.
 - Multi-user Communications through Signal and native iMessage connectors.
-- Family Calendar Personal Intelligence Service.
+- Family Calendar and Reminders Personal Intelligence Services.
 
 ## Next Milestone
 
