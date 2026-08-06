@@ -3,6 +3,7 @@ import logging
 import re
 import time
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
@@ -251,14 +252,24 @@ class Router:
         principal: MemoryPrincipal | None,
         evidence: RuntimeEvidence | None = None,
     ) -> str:
+        prompt = f"{self._runtime_context()}\n\nCurrent user request:\n{request.prompt}"
         if principal is None:
-            return request.prompt
+            return prompt
         if provider not in {"ollama", "local_reasoning"} and not settings.memory_recall_include_in_cloud:
-            return request.prompt
+            return prompt
         memories = self._recall_shared_memories(principal, evidence)
         if not memories:
-            return request.prompt
-        return f"{self._format_recalled_memory(memories)}\n\nCurrent user request:\n{request.prompt}"
+            return prompt
+        return f"{self._format_recalled_memory(memories)}\n\n{prompt}"
+
+    def _runtime_context(self) -> str:
+        now = datetime.now(UTC)
+        return (
+            "Runtime context:\n"
+            f"- Current date: {now.date().isoformat()}\n"
+            f"- Current datetime UTC: {now.isoformat()}\n"
+            "- Resolve relative dates such as today, tomorrow, and Saturday against this date."
+        )
 
     def _recall_shared_memories(
         self,

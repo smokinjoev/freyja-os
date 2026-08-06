@@ -10,7 +10,7 @@ from freyja.config import Settings, settings
 from freyja.memory.models import MemoryPrincipal
 from freyja.router import RouteRequest, Router
 from freyja.tools.builtin import register_builtin_tools
-from freyja.tools.models import ToolDefinition, ToolExecutionRequest
+from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
 
 
@@ -78,7 +78,9 @@ async def test_manual_local_override(router: Router) -> None:
     assert result.latency_ms is not None
     router.ollama_client.chat.assert_awaited_once()
     _, kwargs = router.ollama_client.chat.call_args
-    assert kwargs["prompt"] == "hi"
+    assert "Runtime context:" in kwargs["prompt"]
+    assert "Current date:" in kwargs["prompt"]
+    assert kwargs["prompt"].endswith("Current user request:\nhi")
     assert kwargs["model"] == "qwen2.5:7b"
 
 
@@ -389,6 +391,65 @@ async def test_native_tool_call_validated_and_normalized(monkeypatch: pytest.Mon
     assert seen_arguments == [{"location": "Boston", "unit": "fahrenheit"}]
     first_call = r.ollama_client.chat.await_args_list[0].kwargs
     assert first_call["tools"]
+
+
+async def test_explicit_reminder_request_can_execute_controlled_write_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "chat_max_tool_iterations", 2)
+    registry = ToolRegistry(audit_enabled=False)
+    seen_arguments: list[dict[str, Any]] = []
+
+    async def create_reminder(request: ToolExecutionRequest) -> dict:
+        seen_arguments.append(request.arguments)
+        return {"reminder": {"reminder_id": "reminder-1", **request.arguments}}
+
+    registry.register(
+        ToolDefinition(
+            name="reminders_create",
+            description="Create a reminder.",
+            input_schema={
+                "type": "object",
+                "required": ["title"],
+                "properties": {"title": {"type": "string"}, "due": {"type": "string"}},
+            },
+            risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+        ),
+        create_reminder,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.side_effect = [
+        {
+            "model": "qwen2.5:7b",
+            "message": {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "reminders_create",
+                            "arguments": {"title": "Get a chair", "due": "2026-08-08T09:00:00+00:00"},
+                        }
+                    }
+                ],
+            },
+        },
+        {"model": "qwen2.5:7b", "message": {"content": "Done. I added a reminder to get a chair Saturday."}},
+    ]
+
+    result = await r.execute(
+        RouteRequest(
+            prompt="Add a reminder to get a chair Saturday",
+            provider="local",
+            tools_required=True,
+        )
+    )
+
+    assert result.response == "Done. I added a reminder to get a chair Saturday."
+    assert seen_arguments == [{"title": "Get a chair", "due": "2026-08-08T09:00:00+00:00"}]
+    assert result.tool_results[0]["tool_name"] == "reminders_create"
+    first_prompt = r.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+    assert "Runtime context:" in first_prompt
+    assert "Current user request:\nAdd a reminder to get a chair Saturday" in first_prompt
 
 
 async def test_native_tool_call_invalid_arguments_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

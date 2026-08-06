@@ -166,6 +166,28 @@ async def test_chat_includes_maintenance_workflow(client: OllamaClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_tool_prompt_allows_explicit_reminder_writes(client: OllamaClient) -> None:
+    captured: dict[str, object] = {}
+
+    def _capture(*args, **kwargs):
+        request = httpx.Request("POST", str(args[0]))
+        captured["payload"] = kwargs.get("json")
+        return httpx.Response(
+            200,
+            json={"model": "qwen2.5:7b", "message": {"content": "ok"}},
+            request=request,
+        )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=_capture):
+        await client.chat("remind me to get a chair Saturday", tools_required=True)
+
+    system_content = captured["payload"]["messages"][0]["content"]
+    assert "controlled-write tool" in system_content
+    assert "Do not ask whether to use the tool" in system_content
+    assert "reminder or calendar event" in system_content
+
+
+@pytest.mark.asyncio
 async def test_chat_no_model_returns_error() -> None:
     c = OllamaClient(base_url="http://127.0.0.1:11434", model="")
     result = await c.chat("hi")
