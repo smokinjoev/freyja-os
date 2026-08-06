@@ -180,7 +180,7 @@ async def test_ordinary_text_routes_to_freyja(gateway):
     assert "Your name is Freyja" in kwargs["json"]["prompt"]
     assert kwargs["json"]["prompt"].endswith("What is 2+2?")
     assert kwargs["json"]["provider"] == "auto"
-    assert kwargs["json"]["tools_required"] is False
+    assert kwargs["json"]["tools_required"] is True
     assert kwargs["json"]["conversation_id"].startswith("telegram:freyja:")
 
 

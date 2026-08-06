@@ -62,6 +62,8 @@ def test_protected_endpoint_accepts_connector_token(monkeypatch) -> None:
 
 
 def test_ollama_health_reachable() -> None:
+    from freyja.config import settings
+
     with patch("freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock) as mock_healthy:
         mock_healthy.return_value = True
         response = client.get("/ollama/health")
@@ -69,7 +71,7 @@ def test_ollama_health_reachable() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["ollama_reachable"] is True
-    assert data["base_url"] == "http://127.0.0.1:11434"
+    assert data["base_url"] == settings.ollama_base_url
 
 
 def test_local_reasoning_health_available(monkeypatch) -> None:
