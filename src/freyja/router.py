@@ -4,6 +4,7 @@ import re
 import time
 import uuid
 from datetime import UTC, datetime
+from datetime import timedelta
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
@@ -252,7 +253,7 @@ class Router:
         principal: MemoryPrincipal | None,
         evidence: RuntimeEvidence | None = None,
     ) -> str:
-        prompt = f"{self._runtime_context()}\n\nCurrent user request:\n{request.prompt}"
+        prompt = self._base_prompt(request)
         if principal is None:
             return prompt
         if provider not in {"ollama", "local_reasoning"} and not settings.memory_recall_include_in_cloud:
@@ -264,12 +265,43 @@ class Router:
 
     def _runtime_context(self) -> str:
         now = datetime.now(UTC)
+        upcoming = []
+        for offset in range(0, 7):
+            item = now + timedelta(days=offset)
+            upcoming.append(f"{item.strftime('%A')}: {item.date().isoformat()}")
         return (
             "Runtime context:\n"
             f"- Current date: {now.date().isoformat()}\n"
             f"- Current datetime UTC: {now.isoformat()}\n"
-            "- Resolve relative dates such as today, tomorrow, and Saturday against this date."
+            f"- Upcoming dates: {', '.join(upcoming)}\n"
+            "- Resolve relative dates such as today, tomorrow, and Saturday against these dates."
         )
+
+    def _base_prompt(self, request: RouteRequest) -> str:
+        parts = [self._runtime_context()]
+        conversation_context = self._conversation_context(request)
+        if conversation_context:
+            parts.append(conversation_context)
+        parts.append(f"Current user request:\n{request.prompt}")
+        return "\n\n".join(parts)
+
+    def _conversation_context(self, request: RouteRequest) -> str:
+        if not request.conversation_id:
+            return ""
+        try:
+            messages = memory_store.get_active_store().get_messages(request.conversation_id, limit=8).messages
+        except Exception:
+            logger.exception("Conversation recall failed for %s", request.conversation_id)
+            return ""
+        if not messages:
+            return ""
+        lines = ["Recent conversation context:"]
+        for message in messages[-8:]:
+            role = message.role if message.role in {"user", "assistant"} else "message"
+            content = " ".join(message.content.split())
+            if content:
+                lines.append(f"- {role}: {content[:1000]}")
+        return "\n".join(lines) if len(lines) > 1 else ""
 
     def _recall_shared_memories(
         self,
@@ -754,6 +786,7 @@ class Router:
             if evidence is not None:
                 self._record_provider_response(evidence, response, decision.provider)
             if "error" in response:
+                await self._record_memory(request, decision, "", evidence)
                 return self._routing_result(
                     decision=decision,
                     response="",
@@ -767,6 +800,7 @@ class Router:
             clean_content = self._strip_tool_markers(content)
 
             if tool_call is None:
+                await self._record_memory(request, decision, clean_content, evidence)
                 return self._routing_result(
                     decision=decision,
                     response=clean_content,
@@ -804,9 +838,11 @@ class Router:
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
                 self._record_tool_evidence(evidence, entry)
+                response_text = f"Unknown tool '{tool_name}'."
+                await self._record_memory(request, decision, response_text, evidence)
                 return self._routing_result(
                     decision=decision,
-                    response=f"Unknown tool '{tool_name}'.",
+                    response=response_text,
                     tool_results=list(tool_history),
                     evidence=evidence,
                     started=started,
@@ -824,9 +860,11 @@ class Router:
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
                 self._record_tool_evidence(evidence, entry)
+                response_text = f"Tool '{tool_name}' is currently disabled."
+                await self._record_memory(request, decision, response_text, evidence)
                 return self._routing_result(
                     decision=decision,
-                    response=f"Tool '{tool_name}' is currently disabled.",
+                    response=response_text,
                     tool_results=list(tool_history),
                     evidence=evidence,
                     started=started,
@@ -844,9 +882,11 @@ class Router:
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
                 self._record_tool_evidence(evidence, entry)
+                response_text = f"Invalid arguments for '{tool_name}': {'; '.join(validation_errors)}"
+                await self._record_memory(request, decision, response_text, evidence)
                 return self._routing_result(
                     decision=decision,
-                    response=f"Invalid arguments for '{tool_name}': {'; '.join(validation_errors)}",
+                    response=response_text,
                     tool_results=list(tool_history),
                     evidence=evidence,
                     started=started,
@@ -884,6 +924,7 @@ class Router:
                     f" ({execution_result.error_code or 'unknown'}): "
                     f"{message}."
                 )
+                await self._record_memory(request, decision, failure_response, evidence)
                 return self._routing_result(
                     decision=decision,
                     response=failure_response,
@@ -892,9 +933,11 @@ class Router:
                     started=started,
                 )
 
+        response_text = "Tool iteration limit reached without a final answer."
+        await self._record_memory(request, decision, response_text, evidence)
         return self._routing_result(
             decision=decision,
-            response="Tool iteration limit reached without a final answer.",
+            response=response_text,
             tool_results=list(tool_history),
             evidence=evidence,
             started=started,

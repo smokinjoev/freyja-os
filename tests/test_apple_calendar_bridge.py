@@ -87,6 +87,29 @@ async def test_provider_refuses_false_success_without_event_id() -> None:
         await provider.create_event(CalendarEvent("", "cal", "No receipt", _dt(12), _dt(13)))
 
 
+@pytest.mark.asyncio
+async def test_service_uses_default_apple_calendar_when_no_calendar_id() -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(200, json={"event": {"event_id": "apple-real-id", "calendar_id": "default-cal", "title": "Default calendar", "start": "2026-08-08T12:00:00Z", "end": "2026-08-08T13:00:00Z"}})
+
+    from freyja.calendar import CalendarService
+
+    provider = AppleCalendarProvider(base_url="http://iris:8765", token="secret", transport=httpx.MockTransport(handler))
+    service = CalendarService(providers={"apple": provider})
+    created = await service.create_event(
+        title="Default calendar",
+        start=_dt(12),
+        end=_dt(13),
+        provider_name="apple",
+    )
+
+    assert created.event_id == "apple-real-id"
+    assert seen["payload"]["calendar_id"] is None
+
+
 def test_event_update_discards_unapproved_fields(monkeypatch) -> None:
     monkeypatch.setenv("FREYJA_APPLE_CALENDAR_TOKEN", "correct")
     seen = {}
@@ -104,3 +127,19 @@ def test_event_update_discards_unapproved_fields(monkeypatch) -> None:
     )
     assert response.status_code == 200
     assert seen == {"operation": "modify", "arguments": {"event_id": "id", "title": "Allowed"}}
+
+
+def test_bridge_get_event_by_real_identifier(monkeypatch) -> None:
+    monkeypatch.setenv("FREYJA_APPLE_CALENDAR_TOKEN", "correct")
+    seen = {}
+
+    def fake_run(operation, arguments=None, **kwargs):
+        seen.update(operation=operation, arguments=arguments)
+        return {"event": {"event_id": "id", "calendar_id": "cal", "title": "Found", "start": "2026-08-08T12:00:00Z", "end": "2026-08-08T13:00:00Z"}}
+
+    monkeypatch.setattr("freyja.apple_calendar_app.run_eventkit", fake_run)
+    response = TestClient(app).get("/events/id", headers={"Authorization": "Bearer correct"})
+
+    assert response.status_code == 200
+    assert response.json()["event"]["event_id"] == "id"
+    assert seen == {"operation": "get", "arguments": {"event_id": "id"}}

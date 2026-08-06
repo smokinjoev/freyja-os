@@ -14,10 +14,11 @@ from freyja.tools.registry import ToolRegistry
 
 
 _service: CalendarService | None = None
+_auto_write_provider: str | None = None
 
 
 def get_calendar_service() -> CalendarService:
-    global _service
+    global _auto_write_provider, _service
     if _service is None:
         providers = None
         if settings.apple_calendar_bridge_url and settings.apple_calendar_bridge_token:
@@ -28,13 +29,17 @@ def get_calendar_service() -> CalendarService:
                     timeout_seconds=settings.apple_calendar_bridge_timeout_seconds,
                 )
             }
+            _auto_write_provider = "apple"
+        else:
+            _auto_write_provider = None
         _service = CalendarService(providers=providers)
     return _service
 
 
-def set_calendar_service(service: CalendarService | None) -> None:
-    global _service
+def set_calendar_service(service: CalendarService | None, *, write_provider: str | None = None) -> None:
+    global _auto_write_provider, _service
     _service = service
+    _auto_write_provider = write_provider
 
 
 async def _today(request: ToolExecutionRequest) -> dict:
@@ -80,13 +85,15 @@ async def _search_events(request: ToolExecutionRequest) -> dict:
 
 async def _create_event(request: ToolExecutionRequest) -> dict:
     args = request.arguments
-    event = await get_calendar_service().create_event(
+    service = get_calendar_service()
+    provider_name = _write_provider(args)
+    event = await service.create_event(
         title=args["title"],
         start=parse_datetime(args["start"]),
         end=parse_datetime(args["end"]),
         member_ids=_member_ids(request),
         calendar_id=args.get("calendar_id"),
-        provider_name=args.get("provider", "memory"),
+        provider_name=provider_name,
         location=args.get("location"),
         description=args.get("description"),
     )
@@ -95,19 +102,23 @@ async def _create_event(request: ToolExecutionRequest) -> dict:
 
 async def _modify_event(request: ToolExecutionRequest) -> dict:
     args = request.arguments
-    event = await get_calendar_service().modify_event(
+    service = get_calendar_service()
+    provider_name = _write_provider(args)
+    event = await service.modify_event(
         event_id=args["event_id"],
         updates=args.get("updates", {}),
-        provider_name=args.get("provider", "memory"),
+        provider_name=provider_name,
     )
     return {"event": event.to_dict() if event else None, "modified": event is not None}
 
 
 async def _delete_event(request: ToolExecutionRequest) -> dict:
     args = request.arguments
-    deleted = await get_calendar_service().delete_event(
+    service = get_calendar_service()
+    provider_name = _write_provider(args)
+    deleted = await service.delete_event(
         event_id=args["event_id"],
-        provider_name=args.get("provider", "memory"),
+        provider_name=provider_name,
     )
     return {"deleted": deleted}
 
@@ -314,3 +325,12 @@ def _now(request: ToolExecutionRequest) -> datetime:
     if isinstance(value, str):
         return parse_datetime(value)
     return datetime.now(UTC)
+
+
+def _write_provider(args: dict[str, Any]) -> str:
+    explicit = args.get("provider")
+    if explicit and explicit != "memory":
+        return str(explicit)
+    if _auto_write_provider:
+        return _auto_write_provider
+    raise RuntimeError("Calendar writes require a configured persistent provider; refusing temporary in-memory write.")

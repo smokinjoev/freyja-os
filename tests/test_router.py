@@ -80,6 +80,7 @@ async def test_manual_local_override(router: Router) -> None:
     _, kwargs = router.ollama_client.chat.call_args
     assert "Runtime context:" in kwargs["prompt"]
     assert "Current date:" in kwargs["prompt"]
+    assert "Upcoming dates:" in kwargs["prompt"]
     assert kwargs["prompt"].endswith("Current user request:\nhi")
     assert kwargs["model"] == "qwen2.5:7b"
 

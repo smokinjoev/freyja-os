@@ -19,8 +19,12 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
   sender maps to a known person, while preserving legacy allowlist behavior.
 - Router tool execution now receives sanitized person metadata from trusted
   connector headers.
+- Director prompts restore recent conversation context, so follow-up requests
+  such as "put it on my calendar" can retain the prior task and date.
 - Calendar service and tools now accept person IDs or aliases and default to
   the resolved sender when available.
+- Calendar writes require the configured persistent provider and refuse the
+  temporary in-memory provider outside explicit test injection.
 - Reminders service and tools support reminder lists, active reminder listing,
   creation, completion, deletion, and an authenticated Apple Reminders bridge.
 - Persistent SQLite identity storage, JSON import, vCard import, native Apple

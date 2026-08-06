@@ -5,6 +5,8 @@ general-purpose desktop agent access to the host. The service exposes only
 health, calendar discovery, and calendar-event CRUD over an authenticated HTTP
 interface. Every successful create or update is read back from EventKit and
 must include the real Apple event identifier.
+Events can also be retrieved by that Apple identifier for post-write
+verification.
 
 ## Iris installation
 
@@ -44,6 +46,9 @@ APPLE_CALENDAR_BRIDGE_TOKEN=<value-from-iris-config>
 ```
 
 Never commit either the generated token file or a production `.env` file.
+When the bridge is configured, Calendar write tools default to the Apple
+provider. Without a persistent provider, Freyja refuses Calendar writes instead
+of storing them only in the temporary in-memory test provider.
 
 ## Safety properties
 
@@ -52,4 +57,5 @@ Never commit either the generated token file or a production `.env` file.
 - Update fields are allowlisted; callers cannot pass arbitrary EventKit data.
 - The model-facing tool remains a controlled write.
 - Freyja cannot report success unless EventKit returns a persistent event ID.
+- Follow-up requests can verify a created event by Apple event ID.
 - Tests use synthetic payloads and never inspect a real calendar.

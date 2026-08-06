@@ -54,6 +54,11 @@ def list_events(start: str, end: str, calendar_id: list[str] | None = None, _: N
     return run_eventkit("list", {"start": start, "end": end, "calendar_ids": calendar_id or []})
 
 
+@app.get("/events/{event_id}")
+def get_event(event_id: str, _: None = Depends(_authorize)) -> dict[str, Any]:
+    return run_eventkit("get", {"event_id": event_id})
+
+
 @app.post("/events")
 def create_event(payload: EventPayload, _: None = Depends(_authorize)) -> dict[str, Any]:
     return run_eventkit("create", payload.model_dump(exclude_none=True))

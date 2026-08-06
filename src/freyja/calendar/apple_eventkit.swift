@@ -95,6 +95,9 @@ case "list":
     let calendars = requested.isEmpty ? store.calendars(for: .event) : requested.map { calendar($0) }
     let events = store.events(matching: store.predicateForEvents(withStart: start, end: end, calendars: calendars))
     emit(["events": events.map(eventObject)])
+case "get":
+    guard let event = store.event(withIdentifier: string(input, "event_id", required: true)!) else { emit(["event": NSNull()]) }
+    emit(["event": eventObject(event)])
 case "create":
     let event = EKEvent(eventStore: store)
     event.title = string(input, "title", required: true)!

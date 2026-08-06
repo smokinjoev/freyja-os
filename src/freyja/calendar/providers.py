@@ -122,6 +122,10 @@ class AppleCalendarProvider:
             raise RuntimeError("Apple Calendar did not return a confirmed event ID")
         return created
 
+    async def get_event(self, event_id: str) -> CalendarEvent | None:
+        payload = await self._request("GET", f"/events/{event_id}")
+        return _event_from_bridge(payload["event"]) if payload.get("event") else None
+
     async def modify_event(self, event_id: str, updates: dict) -> CalendarEvent | None:
         normalized = {key: value.isoformat() if isinstance(value, datetime) else value for key, value in updates.items()}
         payload = await self._request("PATCH", "/events", json={"event_id": event_id, "updates": normalized})

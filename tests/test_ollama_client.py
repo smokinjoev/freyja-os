@@ -185,6 +185,8 @@ async def test_tool_prompt_allows_explicit_reminder_writes(client: OllamaClient)
     assert "controlled-write tool" in system_content
     assert "Do not ask whether to use the tool" in system_content
     assert "reminder or calendar event" in system_content
+    assert "calendar_create_event" in system_content
+    assert "08:00 America/New_York" in system_content
 
 
 @pytest.mark.asyncio
