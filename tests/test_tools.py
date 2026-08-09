@@ -109,6 +109,9 @@ def test_discovery(registry: ToolRegistry) -> None:
         "reminders_delete",
         "identity_resolution",
         "identity_relationships",
+        "homeassistant_status",
+        "homeassistant_list_entities",
+        "homeassistant_pairing_plan",
     }
 
 
@@ -393,7 +396,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 26
+    assert len(tools) == 29
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:

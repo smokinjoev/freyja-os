@@ -25,7 +25,7 @@ freyja-identity-import-vcard = "freyja.cli.identity_import_vcard:main"
 freyja-identity-import-apple = "freyja.cli.identity_import_apple:main"
 
 [tool.setuptools]
-packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.identity", "freyja.memory", "freyja.reminders", "freyja.tools"]
+packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.homeassistant", "freyja.identity", "freyja.memory", "freyja.reminders", "freyja.tools"]
 
 [tool.setuptools.package-dir]
 freyja = "src/freyja"

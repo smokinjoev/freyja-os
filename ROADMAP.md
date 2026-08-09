@@ -662,11 +662,23 @@ Worker metadata:
 
 ### P0 — Add Home Assistant API adapter
 
+Status: read-only REST adapter and sanitized entity inventory implemented;
+live Atlas configuration pending.
+
 ### P0 — Define allowed entity list
+
+Status: environment-backed exact entity allowlist implemented; new entities
+remain quarantined.
 
 ### P0 — Define low-risk and high-risk actions
 
+Status: initial read-only, controlled, quarantined, and high-risk entity
+classification implemented.
+
 ### P0 — Require confirmation for high-risk actions
+
+Status: pairing service refuses without confirmation, but model-facing pairing
+remains disabled until a general Director controlled-write approval gate exists.
 
 Examples:
 

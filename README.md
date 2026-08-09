@@ -13,8 +13,9 @@ Freyja-OS is a locally controlled personal-agent platform.
 
 ## Current phase
 
-Current phase: Identity Service on top of the Director, Router, Memory,
-Certification, Benchmark, Communications, and Family Calendar foundation.
+Current phase: Home Assistant foundation on top of the Director, Router,
+Memory, Certification, Communications, Family Calendar, persistent Identity,
+and private multi-agent hierarchy.
 
 Every pull request runs the full test suite on Python 3.11-3.13 plus repository
 hygiene checks that reject common credential signatures and tracked runtime
@@ -65,6 +66,15 @@ and Reminders:
   completion, and deletion through the same controlled Director tool path.
 - `AppleReminderProvider` uses a narrow authenticated EventKit bridge instead
   of broad desktop automation.
+
+## Home Assistant
+
+The first Home Assistant slice provides an authenticated REST client, sanitized
+read-only entity inventory, conservative entity classifications, and
+protocol-aware pairing plans. Model-facing tools cannot open pairing or control
+devices yet. Atlas remains the intended Home Assistant host; see
+[`docs/HOME_ASSISTANT.md`](docs/HOME_ASSISTANT.md) for the VM decision, policy,
+and Atlanta installation checklist.
 
 ## Communications
 
