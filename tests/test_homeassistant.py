@@ -77,6 +77,44 @@ async def test_inventory_returns_only_safe_entity_fields_and_policy() -> None:
     assert "must-not-leak" not in serialized
 
 
+@pytest.mark.asyncio
+async def test_summary_rolls_up_inventory_without_raw_attributes() -> None:
+    payload = [
+        {"entity_id": "sensor.temperature", "state": "70", "attributes": {"friendly_name": "Temperature"}},
+        {"entity_id": "binary_sensor.front_door", "state": "off", "attributes": {}},
+        {"entity_id": "switch.lamp", "state": "unavailable", "attributes": {"private_vendor_blob": "secret"}},
+        {"entity_id": "lock.front_door", "state": "locked", "attributes": {}},
+        {"entity_id": "sensor.homekit_controller_status", "state": "ok", "attributes": {}},
+    ]
+
+    service = HomeAssistantService(
+        client(lambda request: httpx.Response(200, json=payload)),
+        allowed_entities={"switch.lamp"},
+    )
+    summary = await service.summary()
+    serialized = json.dumps(summary.model_dump(mode="json"))
+
+    assert summary.entity_total == 5
+    assert summary.domain_counts == {"binary_sensor": 1, "lock": 1, "sensor": 2, "switch": 1}
+    assert summary.access_counts == {
+        EntityAccess.CONTROLLED: 1,
+        EntityAccess.HIGH_RISK: 1,
+        EntityAccess.READ_ONLY: 3,
+    }
+    assert summary.unavailable_count == 1
+    assert summary.unknown_count == 0
+    assert summary.attention_count == 1
+    assert summary.high_risk_count == 1
+    assert summary.controlled_count == 1
+    assert summary.visible_count == 4
+    assert summary.observable_count == 3
+    assert summary.policy_controlled_count == 1
+    assert summary.blocked_control_count == 1
+    assert summary.homekit_like_count == 1
+    assert summary.homekit_like_entities == ["sensor.homekit_controller_status"]
+    assert "private_vendor_blob" not in serialized
+
+
 @pytest.mark.parametrize("duration,expected", [(1, 15), (60, 60), (999, 120)])
 def test_zigbee_pairing_plan_is_bounded(duration: int, expected: int) -> None:
     plan = HomeAssistantService(HomeAssistantClient("http://ha", "token")).pairing_plan(

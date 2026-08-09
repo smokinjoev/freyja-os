@@ -20,6 +20,8 @@ separate services that Freyja-OS must operate and back up.
 The first integration slice is deliberately read-only from the agent loop:
 
 - `homeassistant_status` checks configuration and reachability.
+- `homeassistant_home_summary` summarizes entity counts, access classes, and
+  family-home attention counts without returning raw Home Assistant attributes.
 - `homeassistant_list_entities` returns sanitized states and access classes.
 - `homeassistant_pairing_plan` explains protocol-specific physical and approval
   steps but cannot open pairing.

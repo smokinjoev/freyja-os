@@ -46,6 +46,29 @@ class HomeAssistantEntity(BaseModel):
         )
 
 
+class HomeAssistantSummary(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    entity_total: int
+    domain_counts: dict[str, int]
+    access_counts: dict[EntityAccess, int]
+    state_counts: dict[str, int]
+    unavailable_count: int
+    unknown_count: int
+    attention_count: int
+    high_risk_count: int
+    controlled_count: int
+    read_only_count: int
+    quarantined_count: int
+    visible_count: int
+    observable_count: int
+    policy_controlled_count: int
+    blocked_control_count: int
+    domains_present: list[str]
+    homekit_like_count: int
+    homekit_like_entities: list[str]
+
+
 class PairingPlan(BaseModel):
     model_config = ConfigDict(frozen=True)
 

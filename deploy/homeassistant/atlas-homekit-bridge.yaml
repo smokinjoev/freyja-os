@@ -1,0 +1,105 @@
+# Freyja family HomeKit Bridge for Atlas Home Assistant.
+#
+# This snippet belongs in the Atlas Home Assistant configuration.yaml. It
+# exposes a curated family-home set from Home Assistant back to Apple Home.
+# Freyja control policy is separate: only entities in
+# HOME_ASSISTANT_ENTITY_ALLOWLIST are controllable by Freyja.
+
+homekit:
+  - name: Freyja Test Bridge
+    port: 21065
+    mode: bridge
+    filter:
+      include_entities:
+        - binary_sensor.4_in_1_sensor_motion_detection
+        - binary_sensor.4_in_1_sensor_tampering_product_cover_removed
+        - binary_sensor.front_door_opening
+        - binary_sensor.garage_door_opening
+        - binary_sensor.kitchen_door_opening
+        - binary_sensor.workshop_door_opening
+        - light.basement
+        - light.basement_lamp_near_stairs
+        - light.dimmable_led_light_bulb
+        - light.dining_room_lamp
+        - light.downstairs
+        - light.evening_lights
+        - light.hue_essential_lamp_1
+        - light.jenna_bedroom
+        - light.jenna_color_lamp_1
+        - light.kitchen_floor_lamp
+        - light.liam_bedroom
+        - light.liam_color_lamp_1
+        - light.living_room
+        - light.living_room_2
+        - light.living_room_lamp_front_left
+        - light.living_room_lamp_front_right
+        - light.master_bedroom
+        - light.master_bedroom_floor_lamp
+        - light.master_bedroom_lamp_joe
+        - light.master_hallway_lamp
+        - light.master_table_lamp_beth
+        - light.smart_switch_6
+        - light.upstairs_general
+        - light.upstairs_hallway
+        - media_player.kitchen_homepod
+        - media_player.master_bedroom
+        - remote.kitchen_homepod
+        - remote.master_bedroom
+        - sensor.4_in_1_sensor_air_temperature
+        - sensor.4_in_1_sensor_battery_level
+        - sensor.4_in_1_sensor_humidity
+        - sensor.4_in_1_sensor_illuminance
+        - sensor.4_in_1_sensor_last_seen
+        - sensor.4_in_1_sensor_node_status
+        - sensor.dehumidifier_basement_electric_consumption_kwh_cost_2
+        - sensor.dimmable_led_light_bulb_last_seen
+        - sensor.dimmable_led_light_bulb_node_status
+        - sensor.front_door_battery
+        - sensor.front_door_device_temperature
+        - sensor.garage_door_battery
+        - sensor.garage_door_device_temperature
+        - sensor.home_energy_meter_battery_level
+        - sensor.home_energy_meter_electric_consumption_kwh
+        - sensor.home_energy_meter_electric_consumption_kwh_1
+        - sensor.home_energy_meter_electric_consumption_kwh_2
+        - sensor.home_energy_meter_electric_consumption_kwh_cost
+        - sensor.home_energy_meter_electric_consumption_w
+        - sensor.home_energy_meter_electric_consumption_w_1
+        - sensor.home_energy_meter_electric_consumption_w_2
+        - sensor.home_energy_meter_last_seen
+        - sensor.home_energy_meter_node_status
+        - sensor.home_energy_meter_power
+        - sensor.home_energy_meter_power_1
+        - sensor.home_energy_meter_power_2
+        - sensor.jenna_temp_battery
+        - sensor.jenna_temp_humidity
+        - sensor.jenna_temp_pressure
+        - sensor.jenna_temp_temperature
+        - sensor.kitchen_door_battery
+        - sensor.kitchen_door_device_temperature
+        - sensor.master_bedroom_dimmer_battery
+        - sensor.smart_plug_with_two_usb_ports_electric_consumption_a
+        - sensor.smart_plug_with_two_usb_ports_electric_consumption_kwh
+        - sensor.smart_plug_with_two_usb_ports_electric_consumption_v
+        - sensor.smart_plug_with_two_usb_ports_electric_consumption_w
+        - sensor.smart_plug_with_two_usb_ports_last_seen
+        - sensor.smart_plug_with_two_usb_ports_node_status
+        - sensor.smart_switch_6_electric_consumption_a
+        - sensor.smart_switch_6_electric_consumption_kwh
+        - sensor.smart_switch_6_electric_consumption_v
+        - sensor.smart_switch_6_electric_consumption_w
+        - sensor.smart_switch_6_last_seen
+        - sensor.smart_switch_6_last_seen_2
+        - sensor.smart_switch_6_node_status
+        - sensor.smart_switch_6_node_status_2
+        - sensor.sun_next_dawn
+        - sensor.sun_next_dusk
+        - sensor.sun_next_midnight
+        - sensor.sun_next_noon
+        - sensor.sun_next_rising
+        - sensor.sun_next_setting
+        - sensor.workshop_door_battery
+        - sensor.workshop_door_device_temperature
+        - switch.smart_plug_with_two_usb_ports
+        - switch.smart_switch_6
+        - weather.forecast_home

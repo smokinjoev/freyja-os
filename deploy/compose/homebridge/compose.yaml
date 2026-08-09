@@ -1,0 +1,29 @@
+name: freyja-homebridge-atlas
+
+services:
+  homebridge:
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/homebridge.Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TZ: ${TZ:-America/New_York}
+      HOMEBRIDGE_CONFIG_UI_PORT: ${HOMEBRIDGE_CONFIG_UI_PORT:-8581}
+    volumes:
+      - homebridge-data:/homebridge
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"require('http').get('http://127.0.0.1:' + (process.env.HOMEBRIDGE_CONFIG_UI_PORT || 8581), r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  homebridge-data:

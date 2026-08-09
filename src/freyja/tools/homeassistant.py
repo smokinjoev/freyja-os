@@ -46,6 +46,11 @@ async def _list_entities(request: ToolExecutionRequest) -> dict:
     return {"entities": [item.model_dump(mode="json") for item in entities], "count": len(entities)}
 
 
+async def _home_summary(_request: ToolExecutionRequest) -> dict:
+    summary = await get_homeassistant_service().summary()
+    return summary.model_dump(mode="json")
+
+
 async def _pairing_plan(request: ToolExecutionRequest) -> dict:
     protocol = PairingProtocol(request.arguments["protocol"])
     duration = int(request.arguments.get("duration_seconds", 60))
@@ -81,6 +86,14 @@ def _tool_specs() -> list[tuple[ToolDefinition, Any]]:
                 },
             ),
             _list_entities,
+        ),
+        (
+            _definition(
+                "homeassistant_home_summary",
+                "Summarize the family home inventory from Home Assistant by domain, state, and access class.",
+                {},
+            ),
+            _home_summary,
         ),
         (
             _definition(

@@ -29,6 +29,7 @@ def set_service(handler) -> None:
 def test_homeassistant_tools_are_read_only_and_pairing_plan_cannot_pair(registry: ToolRegistry) -> None:
     definitions = {item.name: item for item in registry.list_tools()}
     assert set(definitions) == {
+        "homeassistant_home_summary",
         "homeassistant_status",
         "homeassistant_list_entities",
         "homeassistant_pairing_plan",
@@ -58,6 +59,25 @@ async def test_entity_tool_filters_sanitized_inventory(registry: ToolRegistry) -
     assert result.success is True
     assert result.output["count"] == 1
     assert result.output["entities"][0]["entity_id"] == "sensor.temperature"
+
+
+@pytest.mark.asyncio
+async def test_home_summary_tool_rolls_up_inventory(registry: ToolRegistry) -> None:
+    payload = [
+        {"entity_id": "sensor.temperature", "state": "70", "attributes": {"friendly_name": "Temperature"}},
+        {"entity_id": "switch.lamp", "state": "unavailable", "attributes": {"friendly_name": "Lamp"}},
+    ]
+    set_service(lambda request: httpx.Response(200, json=payload))
+    result = await registry.execute(ToolExecutionRequest(tool_name="homeassistant_home_summary"))
+    assert result.success is True
+    assert result.output["entity_total"] == 2
+    assert result.output["domain_counts"] == {"sensor": 1, "switch": 1}
+    assert result.output["access_counts"] == {"controlled": 1, "read_only": 1}
+    assert result.output["unavailable_count"] == 1
+    assert result.output["attention_count"] == 1
+    assert result.output["visible_count"] == 2
+    assert result.output["policy_controlled_count"] == 1
+    assert result.output["blocked_control_count"] == 0
 
 
 @pytest.mark.asyncio

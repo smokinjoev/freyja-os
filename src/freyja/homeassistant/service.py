@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable
 
 from .client import HomeAssistantClient
-from .models import EntityAccess, HomeAssistantEntity, PairingPlan, PairingProtocol
+from .models import EntityAccess, HomeAssistantEntity, HomeAssistantSummary, PairingPlan, PairingProtocol
 
 
 _READ_ONLY_DOMAINS = {"binary_sensor", "sensor", "sun", "weather"}
@@ -28,6 +29,41 @@ class HomeAssistantService:
                 raise ValueError("Home Assistant entity requires entity_id")
             entities.append(HomeAssistantEntity.from_api(payload, access=self.classify(entity_id)))
         return sorted(entities, key=lambda item: item.entity_id)
+
+    async def summary(self) -> HomeAssistantSummary:
+        entities = await self.inventory()
+        domain_counts = Counter(entity.entity_id.split(".", 1)[0] for entity in entities)
+        access_counts = Counter(entity.access for entity in entities)
+        state_counts = Counter(entity.state for entity in entities)
+        homekit_like_entities = [
+            entity.entity_id
+            for entity in entities
+            if "homekit" in entity.entity_id.lower() or "homebridge" in entity.entity_id.lower()
+        ]
+        return HomeAssistantSummary(
+            entity_total=len(entities),
+            domain_counts=dict(sorted(domain_counts.items())),
+            access_counts=dict(sorted(access_counts.items(), key=lambda item: item[0].value)),
+            state_counts=dict(sorted(state_counts.items())),
+            unavailable_count=state_counts.get("unavailable", 0),
+            unknown_count=state_counts.get("unknown", 0),
+            attention_count=state_counts.get("unavailable", 0) + state_counts.get("unknown", 0),
+            high_risk_count=access_counts.get(EntityAccess.HIGH_RISK, 0),
+            controlled_count=access_counts.get(EntityAccess.CONTROLLED, 0),
+            read_only_count=access_counts.get(EntityAccess.READ_ONLY, 0),
+            quarantined_count=access_counts.get(EntityAccess.QUARANTINED, 0),
+            visible_count=sum(
+                1 for entity in entities if entity.access in {EntityAccess.READ_ONLY, EntityAccess.CONTROLLED}
+            ),
+            observable_count=access_counts.get(EntityAccess.READ_ONLY, 0),
+            policy_controlled_count=access_counts.get(EntityAccess.CONTROLLED, 0),
+            blocked_control_count=(
+                access_counts.get(EntityAccess.QUARANTINED, 0) + access_counts.get(EntityAccess.HIGH_RISK, 0)
+            ),
+            domains_present=sorted(domain_counts),
+            homekit_like_count=len(homekit_like_entities),
+            homekit_like_entities=homekit_like_entities[:25],
+        )
 
     def classify(self, entity_id: str) -> EntityAccess:
         domain, separator, _name = entity_id.partition(".")
