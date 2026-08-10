@@ -113,6 +113,7 @@ class IMessageGateway:
         payload = {
             "prompt": message.text,
             "provider": "auto",
+            "tools_required": True,
             "conversation_id": principal.conversation_id,
         }
 
