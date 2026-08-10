@@ -756,6 +756,18 @@ class Router:
         max_iterations = min(max(1, settings.chat_max_tool_iterations), 50)
         max_output_chars = max(0, settings.chat_max_tool_output_chars)
 
+        homeassistant_policy_response = await self._maybe_handle_homeassistant_policy_request(
+            request,
+            decision,
+            registry,
+            memory_principal,
+            person_context,
+            evidence,
+            started,
+        )
+        if homeassistant_policy_response is not None:
+            return homeassistant_policy_response
+
         for iteration in range(max_iterations):
             prompt_parts = [
                 self._prompt_for_provider(request, decision.provider, memory_principal, evidence)
@@ -941,6 +953,117 @@ class Router:
             tool_results=list(tool_history),
             evidence=evidence,
             started=started,
+        )
+
+    async def _maybe_handle_homeassistant_policy_request(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        registry: ToolRegistry,
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence | None,
+        started: float | None,
+    ) -> RoutingResult | None:
+        if not self._is_homeassistant_policy_prompt(request.prompt):
+            return None
+        if registry.get_tool("homeassistant_home_summary") is None:
+            return None
+
+        execution_request = ToolExecutionRequest(
+            tool_name="homeassistant_home_summary",
+            arguments={},
+            request_id=decision.request_id,
+            actor="freyja_router",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+            },
+        )
+        execution_result = await registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name="homeassistant_home_summary",
+            success=execution_result.success,
+            arguments={},
+            output=execution_result.output,
+            error_code=execution_result.error_code,
+            public_error_message=execution_result.public_error_message,
+            duration_ms=execution_result.duration_ms,
+        )
+        self._log_tool_execution(entry)
+        self._record_tool_evidence(evidence, entry)
+
+        if not execution_result.success:
+            message = (execution_result.public_error_message or "no details").rstrip(".")
+            response_text = f"Tool 'homeassistant_home_summary' failed ({execution_result.error_code or 'unknown'}): {message}."
+        else:
+            response_text = self._homeassistant_policy_response(request.prompt, execution_result.output)
+
+        await self._record_memory(request, decision, response_text, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response_text,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    def _is_homeassistant_policy_prompt(self, prompt: str) -> bool:
+        lowered = prompt.lower()
+        homeassistant_terms = ("home assistant", "homeassistant", "ha ", "ha-", "ha:")
+        if not any(term in f"{lowered} " for term in homeassistant_terms):
+            return False
+        policy_terms = (
+            "allowed",
+            "allowlist",
+            "blocked",
+            "control",
+            "controllable",
+            "turn off",
+            "turn on",
+            "unlock",
+            "lock ",
+            "open the garage",
+            "garage",
+        )
+        return any(term in lowered for term in policy_terms)
+
+    def _homeassistant_policy_response(self, prompt: str, summary: dict[str, Any]) -> str:
+        controlled_count = int(summary.get("policy_controlled_count") or summary.get("controlled_count") or 0)
+        blocked_count = int(summary.get("blocked_control_count") or 0)
+        visible_count = int(summary.get("visible_count") or 0)
+        entity_total = int(summary.get("entity_total") or 0)
+        access_counts = summary.get("access_counts") if isinstance(summary.get("access_counts"), dict) else {}
+        high_risk_count = int(summary.get("high_risk_count") or access_counts.get("high_risk") or 0)
+        quarantined_count = int(summary.get("quarantined_count") or access_counts.get("quarantined") or 0)
+        lowered = prompt.lower()
+        risky_action = any(term in lowered for term in ("turn off every", "turn on every", "all light", "open the garage")) or any(
+            re.search(pattern, lowered)
+            for pattern in (
+                r"\bunlock\b",
+                r"\block\b",
+                r"\bgarage\b",
+                r"\bdoor\b",
+            )
+        )
+        base = (
+            f"Home Assistant is reachable through Freyja's read-only tool boundary. "
+            f"I can see {visible_count} policy-visible entities out of {entity_total} total. "
+            f"Freyja policy currently allows control for {controlled_count} entity "
+            f"and blocks {blocked_count} entities from control"
+        )
+        if high_risk_count or quarantined_count:
+            base += f" ({quarantined_count} quarantined, {high_risk_count} high-risk)"
+        base += "."
+        if risky_action:
+            return (
+                f"{base} I cannot perform broad Home Assistant actions such as changing every light, "
+                "unlocking doors, or opening the garage. Those actions are outside the current Freyja "
+                "control policy and the Director currently exposes Home Assistant as read-only."
+            )
+        return (
+            f"{base} For control-scope questions, this summary is the authority; narrow entity lists "
+            "do not mean the rest of the home is unblocked."
         )
 
     def _routing_result(

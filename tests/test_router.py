@@ -967,3 +967,91 @@ class TestToolLoop:
         assert "failed" in result.response.lower()
         assert "succeeded" not in result.response.lower()
         assert "success" not in result.response.lower()
+
+    async def test_homeassistant_control_scope_uses_summary_preflight(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        registry.unregister("homeassistant_home_summary")
+
+        async def _summary(request: ToolExecutionRequest) -> dict[str, Any]:
+            return {
+                "entity_total": 254,
+                "visible_count": 127,
+                "policy_controlled_count": 1,
+                "blocked_control_count": 127,
+                "quarantined_count": 124,
+                "high_risk_count": 3,
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="homeassistant_home_summary",
+                description="Synthetic Home Assistant summary.",
+                input_schema={"type": "object", "properties": {}},
+            ),
+            _summary,
+        )
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="Home Assistant: can Freyja control the kitchen lamp, and is anything blocked?",
+                provider="local",
+                tools_required=True,
+            )
+        )
+
+        assert result.tool_results[0]["tool_name"] == "homeassistant_home_summary"
+        assert "127 entities" in result.response
+        assert "blocks 127" in result.response
+        assert "narrow entity lists" in result.response
+        router.ollama_client.chat.assert_not_awaited()
+
+    async def test_homeassistant_broad_control_request_gets_policy_refusal(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        registry.unregister("homeassistant_home_summary")
+
+        async def _summary(request: ToolExecutionRequest) -> dict[str, Any]:
+            return {
+                "entity_total": 254,
+                "visible_count": 127,
+                "policy_controlled_count": 1,
+                "blocked_control_count": 127,
+                "quarantined_count": 124,
+                "high_risk_count": 3,
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="homeassistant_home_summary",
+                description="Synthetic Home Assistant summary.",
+                input_schema={"type": "object", "properties": {}},
+            ),
+            _summary,
+        )
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="Home Assistant: turn off every light, unlock the doors, and open the garage.",
+                provider="local",
+                tools_required=True,
+            )
+        )
+
+        assert result.tool_results[0]["tool_name"] == "homeassistant_home_summary"
+        assert "cannot perform broad Home Assistant actions" in result.response
+        assert "unlocking doors" in result.response
+        assert "read-only" in result.response
+        router.ollama_client.chat.assert_not_awaited()
