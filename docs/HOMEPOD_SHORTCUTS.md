@@ -29,8 +29,10 @@ Actions:
    - Prompt: `What should I tell Freyja?`
    - Input Type: `Text`
    - Allow Multiple Lines: off
-2. `Send Message`
-   - Message: `Provided Input`
+2. `Text`
+   - Text: `Freyja: ` followed by `Provided Input`
+3. `Send Message`
+   - Message: the `Text` value from step 2
    - Recipients: the Freyja iMessage contact
    - Show When Run: off
 
@@ -38,7 +40,7 @@ Expected behavior:
 
 - Saying `Hey Siri, Tell Freyja` prompts for the message.
 - Saying `Hey Siri, Tell Freyja what can you see in Home Assistant?` sends the
-  spoken request directly.
+  spoken request with the required `Freyja:` invocation prefix.
 - Freyja replies in Messages after the native iMessage connector routes the
   request through `/route`.
 

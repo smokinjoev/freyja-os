@@ -121,6 +121,21 @@ async def test_self_message_is_dropped(enabled_gateway):
 
 
 @pytest.mark.asyncio
+async def test_prefixed_self_message_is_forwarded_without_prefix(enabled_gateway):
+    message = make_message(text="Freyja: How many lights are on at home?", is_from_me=True)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Home Assistant reports 2 visible lights currently on."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    assert result.text == "Home Assistant reports 2 visible lights currently on."
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["prompt"] == "How many lights are on at home?"
+    assert payload["tools_required"] is True
+
+
+@pytest.mark.asyncio
 async def test_empty_message_is_dropped(enabled_gateway):
     assert await enabled_gateway.handle(make_message(text=" ")) is None
 

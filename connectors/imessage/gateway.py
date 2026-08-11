@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 _MAX_RECENT_IDS = 1000
 _SAFE_ERROR_TEXT = "Freyja could not process your message. Please try again later."
+_SELF_INVOCATION_PREFIXES = ("freyja:", "tell freyja:")
 
 
 class RejectionReason:
@@ -54,7 +55,8 @@ class IMessageGateway:
             self._log_rejection(message, RejectionReason.DISABLED)
             return None
 
-        if message.is_from_me:
+        prompt = self._prompt_from_message(message)
+        if prompt is None:
             self._log_rejection(message, RejectionReason.SELF_MESSAGE)
             return None
 
@@ -80,7 +82,7 @@ class IMessageGateway:
             return None
 
         self._recent_message_ids.append(message.message_id)
-        return await self._forward(message, identity)
+        return await self._forward(message, identity, prompt)
 
     def _log_rejection(self, message: IMessage, reason: str) -> None:
         logger.info(
@@ -100,7 +102,18 @@ class IMessageGateway:
             return AuthorizedSender(platform="imessage", address=sender)
         return None
 
-    async def _forward(self, message: IMessage, identity: AuthorizedSender) -> IMessageReply | None:
+    def _prompt_from_message(self, message: IMessage) -> str | None:
+        text = message.text.strip()
+        if not message.is_from_me:
+            return text
+        lowered = text.lower()
+        for prefix in _SELF_INVOCATION_PREFIXES:
+            if lowered.startswith(prefix):
+                prompt = text[len(prefix):].strip()
+                return prompt or None
+        return None
+
+    async def _forward(self, message: IMessage, identity: AuthorizedSender, prompt: str) -> IMessageReply | None:
         try:
             principal = build_memory_principal(
                 client_type="imessage",
@@ -111,7 +124,7 @@ class IMessageGateway:
             return self._safe_error_response(message)
 
         payload = {
-            "prompt": message.text,
+            "prompt": prompt,
             "provider": "auto",
             "tools_required": True,
             "conversation_id": principal.conversation_id,
