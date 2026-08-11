@@ -43,7 +43,11 @@ async def test_status_tool_reports_reachability(registry: ToolRegistry) -> None:
     set_service(lambda request: httpx.Response(200, json={"message": "API running"}))
     result = await registry.execute(ToolExecutionRequest(tool_name="homeassistant_status"))
     assert result.success is True
-    assert result.output == {"configured": True, "reachable": True}
+    assert result.output == {
+        "configured": True,
+        "reachable": True,
+        "base_url": "http://homeassistant.test:8123",
+    }
 
 
 @pytest.mark.asyncio

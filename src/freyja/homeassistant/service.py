@@ -19,7 +19,11 @@ class HomeAssistantService:
         self._allowed_entities = frozenset(allowed_entities)
 
     async def status(self) -> dict:
-        return {"configured": self.client.configured, "reachable": await self.client.health()}
+        return {
+            "configured": self.client.configured,
+            "reachable": await self.client.health(),
+            "base_url": self.client.base_url,
+        }
 
     async def inventory(self) -> list[HomeAssistantEntity]:
         entities: list[HomeAssistantEntity] = []

@@ -24,16 +24,28 @@ async def test_health_uses_bearer_auth_without_returning_token() -> None:
         return httpx.Response(200, json={"message": "API running."})
 
     service = HomeAssistantService(client(handler))
-    assert await service.status() == {"configured": True, "reachable": True}
+    assert await service.status() == {
+        "configured": True,
+        "reachable": True,
+        "base_url": "http://homeassistant.test:8123",
+    }
 
 
 @pytest.mark.asyncio
 async def test_unconfigured_or_failed_health_is_honest() -> None:
     unconfigured = HomeAssistantService(HomeAssistantClient("http://homeassistant.test:8123", ""))
-    assert await unconfigured.status() == {"configured": False, "reachable": False}
+    assert await unconfigured.status() == {
+        "configured": False,
+        "reachable": False,
+        "base_url": "http://homeassistant.test:8123",
+    }
 
     failed = HomeAssistantService(client(lambda _request: httpx.Response(401)))
-    assert await failed.status() == {"configured": True, "reachable": False}
+    assert await failed.status() == {
+        "configured": True,
+        "reachable": False,
+        "base_url": "http://homeassistant.test:8123",
+    }
 
 
 @pytest.mark.asyncio
