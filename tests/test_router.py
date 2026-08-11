@@ -1055,3 +1055,56 @@ class TestToolLoop:
         assert "unlocking doors" in result.response
         assert "read-only" in result.response
         router.ollama_client.chat.assert_not_awaited()
+
+    async def test_home_light_status_question_uses_homeassistant_preflight(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        registry.unregister("homeassistant_list_entities")
+
+        async def _list_entities(request: ToolExecutionRequest) -> dict[str, Any]:
+            assert request.arguments == {"domain": "light"}
+            return {
+                "count": 4,
+                "entities": [
+                    {"entity_id": "light.kitchen_floor_lamp", "name": "Kitchen Floor Lamp", "state": "on", "access": "controlled"},
+                    {"entity_id": "light.living_room", "name": "Living Room", "state": "on", "access": "read_only"},
+                    {"entity_id": "light.master_bedroom", "name": "Master Bedroom", "state": "off", "access": "read_only"},
+                    {"entity_id": "light.old_bulb", "name": "Old Bulb", "state": "unavailable", "access": "read_only"},
+                ],
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="homeassistant_list_entities",
+                description="Synthetic Home Assistant entities.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "domain": {"type": "string"},
+                        "access": {"type": "string"},
+                    },
+                },
+            ),
+            _list_entities,
+        )
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="How many lights are on at home currently?",
+                provider="local",
+                tools_required=True,
+            )
+        )
+
+        assert result.tool_results[0]["tool_name"] == "homeassistant_list_entities"
+        assert result.tool_results[0]["arguments"] == {"domain": "light"}
+        assert "2 visible lights currently on" in result.response
+        assert "Kitchen Floor Lamp" in result.response
+        assert "1 light entities are unavailable" in result.response
+        router.ollama_client.chat.assert_not_awaited()

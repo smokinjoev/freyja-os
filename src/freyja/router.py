@@ -768,6 +768,18 @@ class Router:
         if homeassistant_policy_response is not None:
             return homeassistant_policy_response
 
+        homeassistant_inventory_response = await self._maybe_handle_homeassistant_inventory_request(
+            request,
+            decision,
+            registry,
+            memory_principal,
+            person_context,
+            evidence,
+            started,
+        )
+        if homeassistant_inventory_response is not None:
+            return homeassistant_inventory_response
+
         for iteration in range(max_iterations):
             prompt_parts = [
                 self._prompt_for_provider(request, decision.provider, memory_principal, evidence)
@@ -1006,6 +1018,103 @@ class Router:
             tool_results=[entry],
             evidence=evidence,
             started=started,
+        )
+
+    async def _maybe_handle_homeassistant_inventory_request(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        registry: ToolRegistry,
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence | None,
+        started: float | None,
+    ) -> RoutingResult | None:
+        tool_name = self._homeassistant_inventory_tool_name(request.prompt, registry)
+        if tool_name is None:
+            return None
+
+        arguments = {"domain": "light"} if tool_name == "homeassistant_list_entities" else {}
+        execution_request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="freyja_router",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+            },
+        )
+        execution_result = await registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name=tool_name,
+            success=execution_result.success,
+            arguments=arguments,
+            output=execution_result.output,
+            error_code=execution_result.error_code,
+            public_error_message=execution_result.public_error_message,
+            duration_ms=execution_result.duration_ms,
+        )
+        self._log_tool_execution(entry)
+        self._record_tool_evidence(evidence, entry)
+
+        if not execution_result.success:
+            message = (execution_result.public_error_message or "no details").rstrip(".")
+            response_text = f"Tool '{tool_name}' failed ({execution_result.error_code or 'unknown'}): {message}."
+        elif tool_name == "homeassistant_list_entities":
+            response_text = self._homeassistant_light_status_response(execution_result.output)
+        else:
+            response_text = self._homeassistant_summary_status_response(execution_result.output)
+
+        await self._record_memory(request, decision, response_text, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response_text,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    def _homeassistant_inventory_tool_name(self, prompt: str, registry: ToolRegistry) -> str | None:
+        lowered = prompt.lower()
+        home_terms = ("home assistant", "homeassistant", " at home", " my home", "the home", "our home", "house")
+        if not any(term in lowered for term in home_terms):
+            return None
+        light_terms = ("how many lights", "lights are on", "lights on", "which lights", "what lights", "light status")
+        if any(term in lowered for term in light_terms) and registry.get_tool("homeassistant_list_entities") is not None:
+            return "homeassistant_list_entities"
+        summary_terms = ("what can you see", "home status", "home summary", "device status", "devices")
+        if any(term in lowered for term in summary_terms) and registry.get_tool("homeassistant_home_summary") is not None:
+            return "homeassistant_home_summary"
+        return None
+
+    def _homeassistant_light_status_response(self, output: dict[str, Any]) -> str:
+        entities = output.get("entities") if isinstance(output.get("entities"), list) else []
+        on_lights = [
+            item
+            for item in entities
+            if isinstance(item, dict)
+            and str(item.get("state", "")).lower() == "on"
+            and str(item.get("access", "")) in {"read_only", "controlled"}
+        ]
+        unavailable_lights = [
+            item for item in entities if isinstance(item, dict) and str(item.get("state", "")).lower() == "unavailable"
+        ]
+        names = [str(item.get("name") or item.get("entity_id")) for item in on_lights[:8]]
+        response = f"Home Assistant reports {len(on_lights)} visible lights currently on."
+        if names:
+            response += f" On lights include: {', '.join(names)}."
+        if unavailable_lights:
+            response += f" {len(unavailable_lights)} light entities are unavailable, so the count may be incomplete."
+        return response
+
+    def _homeassistant_summary_status_response(self, summary: dict[str, Any]) -> str:
+        visible_count = int(summary.get("visible_count") or 0)
+        entity_total = int(summary.get("entity_total") or 0)
+        attention_count = int(summary.get("attention_count") or 0)
+        return (
+            f"Home Assistant is available. Freyja can see {visible_count} policy-visible entities "
+            f"out of {entity_total} total, with {attention_count} entities currently unknown or unavailable."
         )
 
     def _is_homeassistant_policy_prompt(self, prompt: str) -> bool:

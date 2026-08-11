@@ -65,6 +65,7 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     payload = mock_post.await_args.kwargs["json"]
     assert payload["prompt"] == "Hello Freyja"
     assert payload["provider"] == "auto"
+    assert payload["tools_required"] is True
     assert payload["conversation_id"].startswith("imessage-conv:")
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Client-Type"] == "imessage"
