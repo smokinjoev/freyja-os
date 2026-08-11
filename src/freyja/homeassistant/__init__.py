@@ -1,7 +1,7 @@
 """Safe Home Assistant integration boundary."""
 
 from .client import HomeAssistantClient
-from .models import EntityAccess, HomeAssistantEntity, HomeAssistantSummary, PairingPlan, PairingProtocol
+from .models import EntityAccess, HomeAssistantEntity, HomeAssistantSummary, PairingPlan, PairingProtocol, PairingSession
 from .service import HomeAssistantService
 
 __all__ = [
@@ -12,4 +12,5 @@ __all__ = [
     "HomeAssistantService",
     "PairingPlan",
     "PairingProtocol",
+    "PairingSession",
 ]

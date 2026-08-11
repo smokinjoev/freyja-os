@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Iterable
 
 from .client import HomeAssistantClient
-from .models import EntityAccess, HomeAssistantEntity, HomeAssistantSummary, PairingPlan, PairingProtocol
+from .models import EntityAccess, HomeAssistantEntity, HomeAssistantSummary, PairingPlan, PairingProtocol, PairingSession
 
 
 _READ_ONLY_DOMAINS = {"binary_sensor", "sensor", "sun", "weather"}
@@ -123,10 +123,17 @@ class HomeAssistantService:
         }
         return plans[protocol]
 
-    async def begin_zigbee_pairing(self, *, duration_seconds: int, confirmed: bool) -> dict:
+    async def begin_zigbee_pairing(self, *, duration_seconds: int, confirmed: bool) -> PairingSession:
         """Open ZHA joining only through an explicit non-tool approval path."""
         plan = self.pairing_plan(PairingProtocol.ZIGBEE, duration_seconds=duration_seconds)
         if not confirmed:
             raise PermissionError("explicit confirmation is required before opening pairing")
         await self.client.call_service("zha", "permit", {"duration": plan.duration_seconds})
-        return {"protocol": "zigbee", "pairing_open": True, "duration_seconds": plan.duration_seconds}
+        return PairingSession(
+            protocol=PairingProtocol.ZIGBEE,
+            pairing_open=True,
+            duration_seconds=plan.duration_seconds,
+            service_domain="zha",
+            service_name="permit",
+            safe_summary=f"Zigbee pairing is open for {plan.duration_seconds} seconds.",
+        )

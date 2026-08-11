@@ -158,7 +158,14 @@ async def test_zigbee_pairing_requires_confirmation_and_calls_only_zha_permit() 
     assert requests == []
 
     result = await service.begin_zigbee_pairing(duration_seconds=999, confirmed=True)
-    assert result == {"protocol": "zigbee", "pairing_open": True, "duration_seconds": 120}
+    assert result.model_dump(mode="json") == {
+        "protocol": "zigbee",
+        "pairing_open": True,
+        "duration_seconds": 120,
+        "service_domain": "zha",
+        "service_name": "permit",
+        "safe_summary": "Zigbee pairing is open for 120 seconds.",
+    }
     assert len(requests) == 1
     assert requests[0].url.path == "/api/services/zha/permit"
     assert json.loads(requests[0].content) == {"duration": 120}

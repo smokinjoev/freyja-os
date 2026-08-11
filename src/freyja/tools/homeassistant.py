@@ -57,6 +57,19 @@ async def _pairing_plan(request: ToolExecutionRequest) -> dict:
     return get_homeassistant_service().pairing_plan(protocol, duration_seconds=duration).model_dump(mode="json")
 
 
+async def _begin_pairing(request: ToolExecutionRequest) -> dict:
+    protocol = PairingProtocol(request.arguments["protocol"])
+    if protocol is not PairingProtocol.ZIGBEE:
+        raise PermissionError("automated pairing is currently supported only for Zigbee through ZHA")
+    duration = int(request.arguments.get("duration_seconds", 60))
+    confirmed = bool(request.arguments.get("confirmed", False))
+    session = await get_homeassistant_service().begin_zigbee_pairing(
+        duration_seconds=duration,
+        confirmed=confirmed,
+    )
+    return session.model_dump(mode="json")
+
+
 def register_homeassistant_tools(registry: ToolRegistry) -> None:
     for definition, implementation in _tool_specs():
         if registry.get_tool(definition.name) is None:
@@ -110,6 +123,24 @@ def _tool_specs() -> list[tuple[ToolDefinition, Any]]:
             ),
             _pairing_plan,
         ),
+        (
+            _definition(
+                "homeassistant_begin_pairing",
+                "Open a bounded Zigbee ZHA pairing window after explicit user confirmation.",
+                {
+                    "protocol": {
+                        "type": "string",
+                        "enum": ["zigbee"],
+                    },
+                    "duration_seconds": {"type": "integer"},
+                    "confirmed": {"type": "boolean"},
+                },
+                required=["protocol", "confirmed"],
+                risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+                enabled=False,
+            ),
+            _begin_pairing,
+        ),
     ]
 
 
@@ -119,6 +150,8 @@ def _definition(
     properties: dict[str, Any],
     *,
     required: list[str] | None = None,
+    risk_level: ToolRiskLevel = ToolRiskLevel.READ_ONLY,
+    enabled: bool = True,
 ) -> ToolDefinition:
     return ToolDefinition(
         name=name,
@@ -126,8 +159,8 @@ def _definition(
         version="1.0.0",
         input_schema={"type": "object", "required": required or [], "properties": properties},
         output_schema={"type": "object", "properties": {}},
-        risk_level=ToolRiskLevel.READ_ONLY,
-        enabled=True,
+        risk_level=risk_level,
+        enabled=enabled,
         timeout_seconds=15,
         tags=["home-assistant", "devices", "local"],
     )

@@ -125,6 +125,7 @@ _BUILTIN_TOOL_NAMES = (
     "homeassistant_status",
     "homeassistant_list_entities",
     "homeassistant_pairing_plan",
+    "homeassistant_begin_pairing",
 )
 
 

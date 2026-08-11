@@ -81,5 +81,16 @@ class PairingPlan(BaseModel):
     next_step: str
 
 
+class PairingSession(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    protocol: PairingProtocol
+    pairing_open: bool
+    duration_seconds: int = Field(ge=1, le=120)
+    service_domain: str
+    service_name: str
+    safe_summary: str
+
+
 def _optional_string(value: Any) -> str | None:
     return value if isinstance(value, str) and value.strip() else None

@@ -26,16 +26,20 @@ def set_service(handler) -> None:
     set_homeassistant_service(HomeAssistantService(client, allowed_entities={"switch.lamp"}))
 
 
-def test_homeassistant_tools_are_read_only_and_pairing_plan_cannot_pair(registry: ToolRegistry) -> None:
-    definitions = {item.name: item for item in registry.list_tools()}
+def test_homeassistant_tools_keep_pairing_write_disabled_by_default(registry: ToolRegistry) -> None:
+    definitions = {item.name: item for item in registry.list_tools(include_disabled=True)}
     assert set(definitions) == {
+        "homeassistant_begin_pairing",
         "homeassistant_home_summary",
         "homeassistant_status",
         "homeassistant_list_entities",
         "homeassistant_pairing_plan",
     }
-    assert all(item.risk_level is ToolRiskLevel.READ_ONLY for item in definitions.values())
-    assert "homeassistant_begin_pairing" not in definitions
+    read_only_tools = {name: item for name, item in definitions.items() if name != "homeassistant_begin_pairing"}
+    assert all(item.risk_level is ToolRiskLevel.READ_ONLY for item in read_only_tools.values())
+    assert definitions["homeassistant_begin_pairing"].risk_level is ToolRiskLevel.CONTROLLED_WRITE
+    assert definitions["homeassistant_begin_pairing"].enabled is False
+    assert "homeassistant_begin_pairing" not in {item.name for item in registry.list_tools()}
 
 
 @pytest.mark.asyncio
@@ -96,3 +100,55 @@ async def test_pairing_plan_is_advice_only(registry: ToolRegistry) -> None:
     assert result.output["supported"] is True
     assert result.output["requires_confirmation"] is True
     assert result.output["next_step"].startswith("After explicit confirmation")
+
+
+@pytest.mark.asyncio
+async def test_begin_pairing_tool_is_disabled_until_operator_enables_it(registry: ToolRegistry) -> None:
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="homeassistant_begin_pairing",
+            arguments={"protocol": "zigbee", "duration_seconds": 60, "confirmed": True},
+        )
+    )
+    assert result.success is False
+    assert result.error_code == "tool_disabled"
+
+
+@pytest.mark.asyncio
+async def test_enabled_begin_pairing_tool_requires_confirmation_and_opens_zha_only(registry: ToolRegistry) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=[])
+
+    set_service(handler)
+    assert registry.set_enabled("homeassistant_begin_pairing", True)
+
+    denied = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="homeassistant_begin_pairing",
+            arguments={"protocol": "zigbee", "duration_seconds": 60, "confirmed": False},
+        )
+    )
+    assert denied.success is False
+    assert denied.error_code == "tool_error"
+    assert requests == []
+
+    opened = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="homeassistant_begin_pairing",
+            arguments={"protocol": "zigbee", "duration_seconds": 999, "confirmed": True},
+        )
+    )
+    assert opened.success is True
+    assert opened.output == {
+        "protocol": "zigbee",
+        "pairing_open": True,
+        "duration_seconds": 120,
+        "service_domain": "zha",
+        "service_name": "permit",
+        "safe_summary": "Zigbee pairing is open for 120 seconds.",
+    }
+    assert len(requests) == 1
+    assert requests[0].url.path == "/api/services/zha/permit"

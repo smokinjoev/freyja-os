@@ -25,6 +25,9 @@ The first integration slice is deliberately read-only from the agent loop:
 - `homeassistant_list_entities` returns sanitized states and access classes.
 - `homeassistant_pairing_plan` explains protocol-specific physical and approval
   steps but cannot open pairing.
+- `homeassistant_begin_pairing` can open a bounded Zigbee ZHA pairing window
+  only when deliberately enabled by the operator and called with explicit
+  confirmation. It is registered as `controlled_write` and disabled by default.
 
 The REST client retains only these entity fields in tool output:
 
@@ -47,8 +50,9 @@ New or unrecognized controllable entities start `quarantined`.
 - `high_risk`: locks, cameras, covers, and alarm control panels.
 - `quarantined`: everything else until reviewed.
 
-High-risk classification overrides the allowlist. The current model-facing tool
-loop cannot execute Home Assistant service calls.
+High-risk classification overrides the allowlist. The default model-facing tool
+loop sees only enabled tools, so the Zigbee pairing write path is hidden until
+an operator explicitly enables `homeassistant_begin_pairing`.
 
 ## Private configuration
 
@@ -69,8 +73,15 @@ port 8123 directly to the internet.
 
 The service layer contains a bounded Zigbee pairing operation using
 `zha.permit`, clamped to 15–120 seconds. It refuses unless its caller supplies
-an explicit confirmation. It is intentionally not registered as a Director
-tool until the Director has a general approval gate for controlled writes.
+an explicit confirmation. The corresponding Director tool is registered but
+disabled by default, classified as `controlled_write`, and returns only a safe
+session summary:
+
+- protocol
+- whether pairing is open
+- bounded duration
+- Home Assistant service domain/name
+- human-safe summary text
 
 Protocol behavior:
 
