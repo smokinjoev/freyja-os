@@ -63,11 +63,15 @@ Keep the token in the protected runtime environment, never in Git:
 HOME_ASSISTANT_BASE_URL=http://homeassistant.freyja.local:8123
 HOME_ASSISTANT_TOKEN=<private token>
 HOME_ASSISTANT_TIMEOUT_SECONDS=10
-HOME_ASSISTANT_ENTITY_ALLOWLIST=switch.test_lamp,light.test_bulb
+HOME_ASSISTANT_ENTITY_ALLOWLIST=light.kitchen_floor_lamp,light.living_room
 ```
 
 The Home Assistant endpoint must remain on the LAN or tailnet. Do not publish
 port 8123 directly to the internet.
+
+The active Atlas deployment currently allowlists the reviewed lighting suite
+for Freyja control. Appliance-like switches, locks, covers, cameras, alarms,
+garage doors, and pairing operations remain outside the control allowlist.
 
 ## Pairing behavior
 

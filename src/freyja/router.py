@@ -1155,10 +1155,11 @@ class Router:
                 r"\bdoor\b",
             )
         )
+        entity_label = "entity" if controlled_count == 1 else "entities"
         base = (
             f"Home Assistant is reachable through Freyja's read-only tool boundary. "
             f"I can see {visible_count} policy-visible entities out of {entity_total} total. "
-            f"Freyja policy currently allows control for {controlled_count} entity "
+            f"Freyja policy currently allows control for {controlled_count} {entity_label} "
             f"and blocks {blocked_count} entities from control"
         )
         if high_risk_count or quarantined_count:

@@ -63,8 +63,8 @@ forcing a single-controller move.
 - Sensors, weather, sun, and other observation-only domains can be read by
   default.
 - Locks, covers, alarm systems, cameras, and garage doors remain high-risk.
-- Lights, switches, media players, scenes, and remotes stay quarantined until
-  explicitly allowlisted for Freyja control.
+- Reviewed lights can be explicitly allowlisted for Freyja control. Switches,
+  media players, scenes, and remotes stay quarantined until separately reviewed.
 - Pairing windows and control permissions require explicit operator approval.
 
 ## Next Work Items

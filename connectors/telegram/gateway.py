@@ -349,7 +349,7 @@ class TelegramGateway:
         use_tools = (
             self._settings.telegram_tools_enabled
             and freyja_settings.tools_enabled
-            and not self._looks_like_casual_chat(text)
+            and self._should_require_tools(text)
         )
         return await self._forward_to_agent(text, message, tools_required=use_tools)
 
@@ -400,6 +400,32 @@ class TelegramGateway:
         if any(lowered.startswith(prefix) for prefix in casual_prefixes):
             return True
         return len(text) <= 10 and not any(c.isdigit() for c in text)
+
+    def _should_require_tools(self, text: str) -> bool:
+        """Return True when Telegram text clearly asks for live/local state."""
+
+        if self._looks_like_casual_chat(text):
+            return False
+        lowered = text.lower()
+        tool_terms = (
+            "home assistant",
+            "homekit",
+            "light",
+            "lights",
+            "lamp",
+            "switch",
+            "sensor",
+            "door",
+            "lock",
+            "garage",
+            "host",
+            "hostname",
+            "disk",
+            "memory",
+            "status",
+            "health",
+        )
+        return any(term in lowered for term in tool_terms)
 
     _TOOL_MARKER_PATTERN = re.compile(r"<freyja_tool_call>.*?</freyja_tool_call>", flags=re.DOTALL)
 

@@ -983,7 +983,7 @@ class TestToolLoop:
             return {
                 "entity_total": 254,
                 "visible_count": 127,
-                "policy_controlled_count": 1,
+                "policy_controlled_count": 26,
                 "blocked_control_count": 127,
                 "quarantined_count": 124,
                 "high_risk_count": 3,
@@ -1008,6 +1008,7 @@ class TestToolLoop:
 
         assert result.tool_results[0]["tool_name"] == "homeassistant_home_summary"
         assert "127 entities" in result.response
+        assert "26 entities" in result.response
         assert "blocks 127" in result.response
         assert "narrow entity lists" in result.response
         router.ollama_client.chat.assert_not_awaited()
