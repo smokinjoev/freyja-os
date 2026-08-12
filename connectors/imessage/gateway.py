@@ -15,6 +15,25 @@ logger = logging.getLogger(__name__)
 _MAX_RECENT_IDS = 1000
 _SAFE_ERROR_TEXT = "Freyja could not process your message. Please try again later."
 _SELF_INVOCATION_PREFIXES = ("freyja:", "tell freyja:")
+_SELF_REQUEST_PREFIXES = (
+    "how ",
+    "what ",
+    "which ",
+    "where ",
+    "when ",
+    "why ",
+    "can ",
+    "could ",
+    "do ",
+    "does ",
+    "is ",
+    "are ",
+    "check ",
+    "tell me ",
+    "list ",
+    "add ",
+    "remind ",
+)
 
 
 class RejectionReason:
@@ -111,6 +130,8 @@ class IMessageGateway:
             if lowered.startswith(prefix):
                 prompt = text[len(prefix):].strip()
                 return prompt or None
+        if lowered.startswith(_SELF_REQUEST_PREFIXES):
+            return text
         return None
 
     async def _forward(self, message: IMessage, identity: AuthorizedSender, prompt: str) -> IMessageReply | None:
