@@ -6,6 +6,26 @@ set -euo pipefail
 PLIST_NAME="com.freyja-os.director.plist"
 PROJECT_DIR="/Users/freyja/freyja-os"
 LOG_FILE="${PROJECT_DIR}/logs/director.log"
+ENV_FILE="${PROJECT_DIR}/.env"
+CONNECTOR_TOKEN=""
+HEALTH_OUTPUT=$(mktemp -t freyja-director-health.XXXXXX)
+STATUS_OUTPUT=$(mktemp -t freyja-control-plane-status.XXXXXX)
+trap 'rm -f "${HEALTH_OUTPUT}" "${STATUS_OUTPUT}"' EXIT
+
+if [[ -f "${ENV_FILE}" ]]; then
+    CONNECTOR_TOKEN=$(
+        awk -F= '
+            $1 == "FREYJA_CONNECTOR_TOKEN" {
+                value = substr($0, index($0, "=") + 1)
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+                gsub(/^"|"$/, "", value)
+                gsub(/^'\''|'\''$/, "", value)
+                print value
+                exit
+            }
+        ' "${ENV_FILE}"
+    )
+fi
 
 if [[ "$(id -un)" == "freyja" ]]; then
     UID_VAL=$(id -u)
@@ -34,11 +54,50 @@ fi
 
 echo ""
 echo "=== Health check (http://127.0.0.1:8000/health) ==="
-if curl -s --max-time 3 http://127.0.0.1:8000/health 2>/dev/null; then
-    echo ""
+HEALTH_BODY=""
+HEALTH_CODE=$(curl -s --max-time 3 -w "%{http_code}" -o "${HEALTH_OUTPUT}" \
+    http://127.0.0.1:8000/health 2>/dev/null || true)
+if [[ -s "${HEALTH_OUTPUT}" ]]; then
+    HEALTH_BODY=$(cat "${HEALTH_OUTPUT}")
+fi
+if [[ "${HEALTH_CODE}" == "200" ]]; then
+    echo "${HEALTH_BODY}"
     echo "Director is reachable."
 else
-    echo "Director is not reachable on 127.0.0.1:8000."
+    echo "${HEALTH_BODY}"
+    echo "Director is not healthy on 127.0.0.1:8000 (HTTP ${HEALTH_CODE:-unreachable})."
+fi
+
+echo ""
+echo "=== Control plane status (http://127.0.0.1:8000/control-plane/status) ==="
+STATUS_BODY=""
+if [[ -n "${CONNECTOR_TOKEN}" ]]; then
+    STATUS_CODE=$(curl -s --max-time 3 -w "%{http_code}" -o "${STATUS_OUTPUT}" \
+        -H "Authorization: Bearer ${CONNECTOR_TOKEN}" \
+        http://127.0.0.1:8000/control-plane/status 2>/dev/null || true)
+    if [[ -s "${STATUS_OUTPUT}" ]]; then
+        STATUS_BODY=$(cat "${STATUS_OUTPUT}")
+    fi
+    if [[ "${STATUS_CODE}" == "200" ]]; then
+        echo "${STATUS_BODY}"
+        echo "Control plane status is reachable with connector auth."
+    else
+        echo "${STATUS_BODY}"
+        echo "Control plane status is not healthy with connector auth (HTTP ${STATUS_CODE:-unreachable})."
+    fi
+else
+    STATUS_CODE=$(curl -s --max-time 3 -w "%{http_code}" -o "${STATUS_OUTPUT}" \
+        http://127.0.0.1:8000/control-plane/status 2>/dev/null || true)
+    if [[ -s "${STATUS_OUTPUT}" ]]; then
+        STATUS_BODY=$(cat "${STATUS_OUTPUT}")
+    fi
+    if [[ "${STATUS_CODE}" == "200" ]]; then
+        echo "${STATUS_BODY}"
+        echo "Control plane status is reachable without connector auth."
+    else
+        echo "${STATUS_BODY}"
+        echo "Control plane status is not healthy on 127.0.0.1:8000 (HTTP ${STATUS_CODE:-unreachable})."
+    fi
 fi
 
 echo ""

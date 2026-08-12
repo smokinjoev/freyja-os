@@ -26,6 +26,7 @@ class IMessageSettings(BaseSettings):
     freyja_director_url: str = "http://127.0.0.1:8000"
     freyja_connector_token: str = ""
     imessage_request_timeout_seconds: float = 120.0
+    imessage_command_timeout_seconds: float = 10.0
     imessage_send_timeout_seconds: float = 30.0
     imessage_watch_enabled: bool = True
     imessage_poll_interval_seconds: float = 5.0

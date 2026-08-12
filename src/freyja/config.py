@@ -56,6 +56,29 @@ class Settings(BaseSettings):
     local_max_prompt_chars: int = 8000
     openrouter_allowlist: str = Field(default="", alias="OPENROUTER_ALLOWLIST")
 
+    inference_gateway_enabled: bool = False
+    inference_gateway_monthly_hard_limit: float = 20.0
+    inference_gateway_per_request_limit: float = 1.0
+    inference_gateway_default_tier: str = "FAST"
+    inference_gateway_local_model: str = "qwen2.5:7b"
+    inference_gateway_free_model: str = ""
+    inference_gateway_fast_model: str = "qwen/qwen3.5-flash-02-23"
+    inference_gateway_reasoning_model: str = "moonshotai/kimi-k2.5"
+    inference_gateway_deep_model: str = "z-ai/glm-5"
+    inference_gateway_frontier_model: str = "openai/gpt-5.4"
+    inference_gateway_ollama_cloud_model: str = ""
+    inference_gateway_ollama_cloud_base_url: str = ""
+    inference_gateway_ollama_cloud_api_key: str = ""
+    inference_gateway_openrouter_allowlist: str = Field(default="", alias="INFERENCE_GATEWAY_OPENROUTER_ALLOWLIST")
+    inference_gateway_fast_input_per_m: float = 0.065
+    inference_gateway_fast_output_per_m: float = 0.26
+    inference_gateway_reasoning_input_per_m: float = 0.375
+    inference_gateway_reasoning_output_per_m: float = 2.025
+    inference_gateway_deep_input_per_m: float = 0.60
+    inference_gateway_deep_output_per_m: float = 1.92
+    inference_gateway_frontier_input_per_m: float = 2.50
+    inference_gateway_frontier_output_per_m: float = 15.0
+
     memory_enabled: bool = True
     memory_database_path: str = str(_repo_root() / "data" / "freyja.db")
     memory_max_messages_per_conversation: int = 1000
@@ -123,6 +146,12 @@ class Settings(BaseSettings):
         if not self.openrouter_allowlist:
             return []
         return [model.strip() for model in self.openrouter_allowlist.split(",") if model.strip()]
+
+    @property
+    def approved_inference_gateway_models(self) -> list[str]:
+        if not self.inference_gateway_openrouter_allowlist:
+            return []
+        return [model.strip() for model in self.inference_gateway_openrouter_allowlist.split(",") if model.strip()]
 
 
 settings = Settings()

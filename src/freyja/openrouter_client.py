@@ -4,6 +4,13 @@ from freyja.config import settings
 from freyja.system_prompt import FREYJA_SYSTEM_PROMPT, FREYJA_TOOL_CALL_INSTRUCTION
 
 
+def _strip_reasoning_text(content: str) -> str:
+    """Remove provider reasoning preambles that should not be user-visible."""
+    if "</think>" in content:
+        return content.split("</think>", 1)[1].strip()
+    return content
+
+
 class OpenRouterClient:
     def __init__(
         self,
@@ -79,6 +86,6 @@ class OpenRouterClient:
 
         return {
             "model": data.get("model", target_model),
-            "response": message.get("content", ""),
+            "response": _strip_reasoning_text(message.get("content", "")),
             "usage": usage,
         }

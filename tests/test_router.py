@@ -44,9 +44,25 @@ def reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "ollama_model": "qwen2.5:1.5b",
         "ollama_reasoning_model": "gpt-oss:20b",
         "openrouter_model": "openai/gpt-4o-mini",
+        "inference_gateway_enabled": False,
+        "inference_gateway_monthly_hard_limit": 20.0,
+        "inference_gateway_per_request_limit": 1.0,
+        "inference_gateway_default_tier": "FAST",
+        "inference_gateway_local_model": "qwen2.5:7b",
+        "inference_gateway_free_model": "",
+        "inference_gateway_fast_model": "qwen/qwen3.5-flash-02-23",
+        "inference_gateway_reasoning_model": "moonshotai/kimi-k2.5",
+        "inference_gateway_deep_model": "z-ai/glm-5",
+        "inference_gateway_frontier_model": "openai/gpt-5.4",
+        "inference_gateway_openrouter_allowlist": "",
     }
     for key, value in defaults.items():
         monkeypatch.setattr(settings, key, value)
+
+
+@pytest.fixture(autouse=True)
+def gateway_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", False)
 
 
 def _settings_with_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -157,6 +173,98 @@ async def test_quick_acknowledgement_stays_fast_tier(router: Router, reset_setti
     assert result.decision.provider == "ollama"
     assert result.decision.model == "qwen2.5:7b"
     assert result.response == "ok"
+
+
+async def test_inference_gateway_auto_routes_routine_to_fast_openrouter(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    monkeypatch.setattr(settings, "inference_gateway_openrouter_allowlist", "qwen/qwen3.5-flash-02-23")
+    router.openrouter_client.chat.return_value = {
+        "model": "qwen/qwen3.5-flash-02-23",
+        "response": "fast",
+    }
+
+    result = await router.execute(RouteRequest(prompt="Summarize this note", task_type="chat"))
+
+    assert result.decision.provider == "openrouter"
+    assert result.decision.model == "qwen/qwen3.5-flash-02-23"
+    assert "inference gateway FAST tier selected" == result.decision.reason
+    assert result.response == "fast"
+    router.ollama_client.chat.assert_not_called()
+
+
+async def test_inference_gateway_keeps_tool_requests_local(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    router.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "local tools"},
+    }
+
+    result = await router.execute(RouteRequest(prompt="What host am I on?", tools_required=True))
+
+    assert result.decision.provider == "ollama"
+    assert result.decision.model == "qwen2.5:7b"
+    assert result.decision.reason == "inference gateway LOCAL tier selected"
+    assert result.response == "local tools"
+    router.openrouter_client.chat.assert_not_called()
+
+
+async def test_inference_gateway_deep_provider_routes_to_glm(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    monkeypatch.setattr(settings, "inference_gateway_openrouter_allowlist", "z-ai/glm-5")
+    router.openrouter_client.chat.return_value = {
+        "model": "z-ai/glm-5",
+        "response": "deep",
+    }
+
+    result = await router.execute(RouteRequest(prompt="Design a complex system", provider="deep"))
+
+    assert result.decision.provider == "openrouter"
+    assert result.decision.model == "z-ai/glm-5"
+    assert result.decision.reason == "inference gateway DEEP tier selected"
+    assert result.response == "deep"
+
+
+async def test_inference_gateway_frontier_requires_approval(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+
+    result = await router.execute(RouteRequest(prompt="Use the best model", provider="frontier"))
+
+    assert result.decision.provider == "error"
+    assert "FRONTIER tier requires explicit approval" in result.decision.reason
+    assert result.response == ""
+    router.openrouter_client.chat.assert_not_called()
+
+
+async def test_inference_gateway_sensitive_local_failure_does_not_fall_back_to_cloud(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    router.ollama_client.chat.return_value = {"error": "Ollama down"}
+
+    result = await router.execute(RouteRequest(prompt="My password is secret"))
+
+    assert result.decision.provider == "ollama"
+    assert result.decision.privacy_classification == "sensitive"
+    assert result.response == ""
+    router.openrouter_client.chat.assert_not_called()
 
 
 async def test_sensitive_request_routes_local_when_ollama_healthy(router: Router) -> None:

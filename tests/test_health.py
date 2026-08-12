@@ -11,6 +11,13 @@ from freyja.tools.models import ToolExecutionResult
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def gateway_disabled_by_default(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "inference_gateway_enabled", False)
+
+
 def test_health() -> None:
     response = client.get("/health")
 
@@ -24,6 +31,64 @@ def test_health_remains_public_when_connector_auth_is_enabled(monkeypatch) -> No
     monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
     response = client.get("/health")
     assert response.status_code == 200
+
+
+def test_control_plane_status_requires_connector_token_when_configured(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get("/control-plane/status")
+    assert response.status_code == 401
+
+
+def test_control_plane_status_returns_non_secret_readiness(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "openrouter_api_key", "sk-test-secret")
+    monkeypatch.setattr(settings, "home_assistant_token", "ha-secret")
+    monkeypatch.setattr(settings, "home_assistant_base_url", "http://ha.local:8123")
+
+    response = client.get(
+        "/control-plane/status",
+        headers={"Authorization": "Bearer test-connector-token"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["service"] == "freyja-director"
+    assert data["overall_status"] == "degraded"
+    assert data["auth"] == {"connector_token_configured": True}
+    assert data["providers"]["openrouter"]["api_key_configured"] is True
+    assert data["connectors"]["home_assistant_configured"] is True
+    assert "connector_auth_not_configured" not in data["warnings"]
+    assert "test-connector-token" not in response.text
+    assert "sk-test-secret" not in response.text
+    assert "ha-secret" not in response.text
+
+
+def test_control_plane_status_exposes_tool_registry_counts() -> None:
+    response = client.get("/control-plane/status")
+
+    assert response.status_code == 200
+    tools = response.json()["tools"]
+    assert tools["globally_enabled"] is True
+    assert tools["registered_count"] >= tools["enabled_count"]
+    assert tools["disabled_count"] >= 0
+    assert tools["controlled_write_tools"] == sorted(tools["controlled_write_tools"])
+
+
+def test_control_plane_status_flags_missing_connector_auth(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "")
+    response = client.get("/control-plane/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_status"] == "degraded"
+    assert "connector_auth_not_configured" in data["warnings"]
+    assert "controlled_write_tools_enabled_without_connector_auth" in data["warnings"]
 
 
 def test_protected_endpoint_requires_connector_token(monkeypatch) -> None:

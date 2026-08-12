@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
 from connectors.imessage.config import IMessageSettings
 from connectors.imessage.models import IMessage, IMessageReply
+
+logger = logging.getLogger(__name__)
 
 
 class IMessageTransportError(RuntimeError):
@@ -153,12 +156,23 @@ class IMessageTransport:
             chat_id = chat.get("id") if isinstance(chat, dict) else None
             if not isinstance(chat_id, int):
                 continue
-            for event in await self._run_json_lines(
-                self.history_command(
-                    chat_id=chat_id,
-                    limit=self._settings.imessage_poll_history_limit,
+            try:
+                events = await self._run_json_lines(
+                    self.history_command(
+                        chat_id=chat_id,
+                        limit=self._settings.imessage_poll_history_limit,
+                    )
                 )
-            ):
+            except IMessageTransportError as exc:
+                logger.warning(
+                    {
+                        "event": "imessage_history_skipped",
+                        "chat_id": chat_id,
+                        "reason": str(exc),
+                    }
+                )
+                continue
+            for event in events:
                 try:
                     messages.append(self.parse_event(event))
                 except UnsupportedIMessageEvent:
@@ -168,6 +182,7 @@ class IMessageTransport:
         return messages
 
     async def _run_json_lines(self, command: list[str]) -> list[Any]:
+        process: asyncio.subprocess.Process | None = None
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
@@ -176,9 +191,12 @@ class IMessageTransport:
             )
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=self._settings.imessage_request_timeout_seconds,
+                timeout=self._settings.imessage_command_timeout_seconds,
             )
         except asyncio.TimeoutError as exc:
+            if process is not None:
+                process.kill()
+                await process.wait()
             raise IMessageTransportError("imsg command timed out") from exc
         except OSError as exc:
             raise IMessageTransportError("Unable to start imsg command") from exc

@@ -165,6 +165,65 @@ async def test_recent_messages_reads_recent_chat_history(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_recent_messages_skips_timed_out_chat_history(monkeypatch):
+    transport = IMessageTransport(
+        IMessageSettings(
+            _env_file=None,
+            imessage_imsg_path="/opt/homebrew/bin/imsg",
+            imessage_database_path="/Users/freyja/Library/Messages/chat.db",
+            imessage_command_timeout_seconds=0.01,
+        )
+    )
+    hanging_process = _HangingProcess()
+
+    async def _fake_subprocess(*args, **kwargs):
+        command = list(args)
+        if "chats" in command:
+            return _CompletedProcess(
+                b'{"id":3,"identifier":"+15550000003"}\n'
+                b'{"id":4,"identifier":"+15551234567"}\n'
+            )
+        if "--chat-id" in command and command[command.index("--chat-id") + 1] == "3":
+            return hanging_process
+        return _CompletedProcess(
+            (
+                '{"guid":"msg-4","text":"usable","sender":"+15551234567",'
+                '"chat_id":4,"chat_identifier":"+15551234567",'
+                '"created_at":"2026-07-30T04:09:39.511Z",'
+                '"is_group":false,"is_from_me":false}\n'
+            ).encode()
+        )
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess)
+
+    messages = await transport.recent_messages()
+
+    assert [message.message_id for message in messages] == ["msg-4"]
+    assert hanging_process.killed is True
+
+
+@pytest.mark.asyncio
+async def test_run_json_lines_kills_timed_out_imsg_command(monkeypatch):
+    transport = IMessageTransport(
+        IMessageSettings(
+            _env_file=None,
+            imessage_command_timeout_seconds=0.01,
+        )
+    )
+    process = _HangingProcess()
+
+    async def _fake_subprocess(*args, **kwargs):
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess)
+
+    with pytest.raises(IMessageTransportError, match="imsg command timed out"):
+        await transport._run_json_lines(["imsg", "chats"])
+
+    assert process.killed is True
+
+
+@pytest.mark.asyncio
 async def test_send_times_out_when_imsg_does_not_exit(monkeypatch):
     transport = IMessageTransport(
         IMessageSettings(

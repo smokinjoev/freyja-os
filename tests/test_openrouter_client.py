@@ -52,6 +52,32 @@ async def test_chat_sends_system_prompt_first(client: OpenRouterClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_strips_reasoning_block(client: OpenRouterClient) -> None:
+    def _respond(*args, **kwargs):
+        request = httpx.Request("POST", str(args[0]))
+        return httpx.Response(
+            200,
+            json={
+                "model": "qwen/qwen3.5-flash-02-23",
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Thinking Process:\nprivate reasoning\n</think>\n\nfast route ok"
+                        }
+                    }
+                ],
+                "usage": {"total_tokens": 10},
+            },
+            request=request,
+        )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=_respond):
+        result = await client.chat("hi")
+
+    assert result.get("response") == "fast route ok"
+
+
+@pytest.mark.asyncio
 async def test_chat_no_api_key_returns_error() -> None:
     c = OpenRouterClient(base_url="https://openrouter.ai/api/v1", api_key="", model="openai/gpt-4o-mini")
     result = await c.chat("hi")

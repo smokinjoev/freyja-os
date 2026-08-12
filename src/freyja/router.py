@@ -27,6 +27,7 @@ class RouteRequest(BaseModel):
     task_type: str | None = None
     privacy: str | None = None
     tools_required: StrictBool = False
+    frontier_approved: StrictBool = False
     context_size: int = 0
     conversation_id: str | None = None
 
@@ -171,6 +172,18 @@ COMPLEX_PROMPT_PATTERNS = (
     "tool selection",
     "which tool",
 )
+
+GATEWAY_PROVIDER_ALIASES = {
+    "free": "FREE",
+    "fast": "FAST",
+    "reasoning": "REASONING",
+    "deep": "DEEP",
+    "frontier": "FRONTIER",
+    "ollama_cloud": "OLLAMA_CLOUD",
+    "ollama-cloud": "OLLAMA_CLOUD",
+}
+
+GATEWAY_CLOUD_PROVIDERS = {"FREE", "FAST", "REASONING", "DEEP", "FRONTIER"}
 
 
 def _classify_privacy(prompt: str, explicit: str | None) -> str:
@@ -408,6 +421,161 @@ class Router:
         # Approximate $2 / 1M tokens across allowlisted models.
         return round(tokens * 2.0 / 1_000_000, 6)
 
+    def _gateway_tier_for_auto(self, request: RouteRequest, privacy: str) -> str:
+        if privacy == "sensitive" or request.tools_required:
+            return "LOCAL"
+        task = (request.task_type or "").lower()
+        prompt = request.prompt.lower()
+        if any(term in task for term in {"deep", "architecture", "architectural", "complex"}) or any(
+            term in prompt for term in ("complex systems", "long-horizon", "deep work", "deep reasoning")
+        ):
+            return "DEEP"
+        if _cloud_score(request) > _routine_score(request):
+            return "REASONING"
+        return "FAST"
+
+    def _gateway_tier_model(self, tier: str, requested: str | None = None) -> tuple[str, str, float, float]:
+        if tier == "LOCAL":
+            return "ollama", requested or settings.inference_gateway_local_model, 0.0, 0.0
+        if tier == "FREE":
+            return "openrouter", requested or settings.inference_gateway_free_model, 0.0, 0.0
+        if tier == "FAST":
+            return (
+                "openrouter",
+                requested or settings.inference_gateway_fast_model,
+                settings.inference_gateway_fast_input_per_m,
+                settings.inference_gateway_fast_output_per_m,
+            )
+        if tier == "REASONING":
+            return (
+                "openrouter",
+                requested or settings.inference_gateway_reasoning_model,
+                settings.inference_gateway_reasoning_input_per_m,
+                settings.inference_gateway_reasoning_output_per_m,
+            )
+        if tier == "DEEP":
+            return (
+                "openrouter",
+                requested or settings.inference_gateway_deep_model,
+                settings.inference_gateway_deep_input_per_m,
+                settings.inference_gateway_deep_output_per_m,
+            )
+        if tier == "FRONTIER":
+            return (
+                "openrouter",
+                requested or settings.inference_gateway_frontier_model,
+                settings.inference_gateway_frontier_input_per_m,
+                settings.inference_gateway_frontier_output_per_m,
+            )
+        return "error", "", 0.0, 0.0
+
+    def _gateway_estimate_cost(self, prompt: str, input_per_m: float, output_per_m: float) -> float:
+        input_tokens = max(1, int(len(prompt) * 0.25))
+        output_tokens = max(1, settings.ollama_default_output_tokens)
+        return round(
+            (input_tokens * input_per_m / 1_000_000)
+            + (output_tokens * output_per_m / 1_000_000),
+            6,
+        )
+
+    def _gateway_cloud_model_approved(self, model: str) -> bool:
+        approved = settings.approved_inference_gateway_models or settings.approved_openrouter_models
+        return not approved or model in approved
+
+    def _gateway_decision(
+        self,
+        request: RouteRequest,
+        *,
+        tier: str,
+        privacy: str,
+        spent_this_month: float,
+        fallback_attempts: list[dict[str, Any]] | None = None,
+    ) -> RoutingDecision:
+        fallback_attempts = fallback_attempts or []
+        if tier == "OLLAMA_CLOUD":
+            return RoutingDecision(
+                provider="error",
+                model=settings.inference_gateway_ollama_cloud_model,
+                reason="inference gateway OLLAMA_CLOUD tier is reserved until telemetry proves it wins",
+                privacy_classification=privacy,
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=0.0,
+                public_error_message="Ollama Cloud tier is not enabled yet.",
+            )
+        if tier == "FREE" and not (request.model or settings.inference_gateway_free_model):
+            return RoutingDecision(
+                provider="error",
+                model="",
+                reason="inference gateway FREE tier is not configured",
+                privacy_classification=privacy,
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=0.0,
+                public_error_message="Free cloud tier is not configured.",
+            )
+        if tier == "FRONTIER" and not request.frontier_approved:
+            return RoutingDecision(
+                provider="error",
+                model=settings.inference_gateway_frontier_model,
+                reason="inference gateway FRONTIER tier requires explicit approval",
+                privacy_classification=privacy,
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=0.0,
+                public_error_message="Frontier tier requires explicit approval.",
+            )
+
+        provider, model, input_per_m, output_per_m = self._gateway_tier_model(tier, request.model)
+        estimated_cost = self._gateway_estimate_cost(request.prompt, input_per_m, output_per_m)
+        if tier in GATEWAY_CLOUD_PROVIDERS:
+            if not settings.cloud_enabled:
+                return RoutingDecision(
+                    provider="ollama",
+                    model=settings.inference_gateway_local_model,
+                    reason=f"inference gateway {tier} tier rejected: cloud disabled",
+                    privacy_classification=privacy,
+                    fallback_attempts=fallback_attempts,
+                    estimated_cost_usd=0.0,
+                    limitation_notice="Cloud routing is currently disabled; falling back to local.",
+                )
+            if not self._gateway_cloud_model_approved(model):
+                return RoutingDecision(
+                    provider="error",
+                    model=model,
+                    reason=f"inference gateway {tier} model not allowlisted",
+                    privacy_classification=privacy,
+                    fallback_attempts=fallback_attempts,
+                    estimated_cost_usd=estimated_cost,
+                    public_error_message="Requested inference model is not allowlisted.",
+                )
+            if spent_this_month >= settings.inference_gateway_monthly_hard_limit:
+                return RoutingDecision(
+                    provider="ollama",
+                    model=settings.inference_gateway_local_model,
+                    reason=f"inference gateway {tier} tier rejected: monthly hard budget reached",
+                    privacy_classification=privacy,
+                    fallback_attempts=fallback_attempts,
+                    estimated_cost_usd=estimated_cost,
+                    limitation_notice="Inference gateway monthly budget exhausted; falling back to local.",
+                )
+            if estimated_cost > settings.inference_gateway_per_request_limit:
+                return RoutingDecision(
+                    provider="ollama",
+                    model=settings.inference_gateway_local_model,
+                    reason=f"inference gateway {tier} tier rejected: per-request budget exceeded",
+                    privacy_classification=privacy,
+                    fallback_attempts=fallback_attempts,
+                    estimated_cost_usd=estimated_cost,
+                    limitation_notice="Inference request exceeds per-request budget; falling back to local.",
+                )
+
+        return RoutingDecision(
+            provider=provider,
+            model=model,
+            reason=f"inference gateway {tier} tier selected",
+            privacy_classification=privacy,
+            fallback_attempts=fallback_attempts,
+            estimated_cost_usd=estimated_cost,
+        )
+
     def _record_attempt(self, provider: str, outcome: str) -> dict[str, str]:
         return {"provider": provider, "outcome": outcome}
 
@@ -512,7 +680,8 @@ class Router:
         notice: str | None = None
         reason_tail = ""
 
-        if request.provider not in {"local", "local_reasoning", "cloud", "auto"}:
+        provider_key = request.provider.lower()
+        if provider_key not in {"local", "local_reasoning", "cloud", "auto", *GATEWAY_PROVIDER_ALIASES}:
             return RoutingDecision(
                 provider="error",
                 model="",
@@ -520,6 +689,33 @@ class Router:
                 privacy_classification=privacy,
                 estimated_cost_usd=0.0,
             )
+
+        if settings.inference_gateway_enabled:
+            if provider_key in GATEWAY_PROVIDER_ALIASES:
+                return self._gateway_decision(
+                    request,
+                    tier=GATEWAY_PROVIDER_ALIASES[provider_key],
+                    privacy=privacy,
+                    spent_this_month=spent_this_month,
+                    fallback_attempts=fallback_attempts,
+                )
+            if provider_key == "cloud":
+                return self._gateway_decision(
+                    request,
+                    tier="FAST",
+                    privacy=privacy,
+                    spent_this_month=spent_this_month,
+                    fallback_attempts=fallback_attempts,
+                )
+            if provider_key == "auto":
+                tier = self._gateway_tier_for_auto(request, privacy)
+                return self._gateway_decision(
+                    request,
+                    tier=tier,
+                    privacy=privacy,
+                    spent_this_month=spent_this_month,
+                    fallback_attempts=fallback_attempts,
+                )
 
         if request.provider == "local_reasoning":
             return RoutingDecision(
@@ -676,7 +872,12 @@ class Router:
             if "error" in response:
                 raw_error = response["error"]
                 decision.fallback_attempts.append({"provider": decision.provider, "outcome": raw_error})
-                if settings.cloud_enabled and request.provider != "local":
+                gateway_sensitive_local = (
+                    settings.inference_gateway_enabled
+                    and decision.privacy_classification == "sensitive"
+                    and "inference gateway LOCAL tier" in decision.reason
+                )
+                if settings.cloud_enabled and request.provider != "local" and not gateway_sensitive_local:
                     fallback_result = await self._try_openrouter_fallback(request, decision, memory_principal, evidence, started)
                     fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
                     fallback_result.runtime_evidence.refresh_decision(fallback_result.decision)
