@@ -512,11 +512,13 @@ class TestModelPolicyStillHolds:
         assert _meets_min_chat_capability("qwen2.5:7b")
         assert not _meets_min_chat_capability("qwen2.5:1.5b")
 
-    def test_default_freyja_model_is_7b(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_default_freyja_model_is_hera_14b(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.delenv("OLLAMA_CHAT_MODEL", raising=False)
         monkeypatch.delenv("OLLAMA_CLASSIFICATION_MODEL", raising=False)
+        monkeypatch.delenv("OLLAMA_REASONING_MODEL", raising=False)
         s = Settings(_env_file=None)
-        assert s.ollama_model == "qwen2.5:7b"
-        assert s.ollama_chat_model == "qwen2.5:7b"
+        assert s.ollama_model == "qwen3:14b"
+        assert s.ollama_chat_model == "qwen3:14b"
         assert s.ollama_classification_model == "qwen2.5:1.5b"
+        assert s.ollama_reasoning_model == "qwen3:14b"

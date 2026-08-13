@@ -35,10 +35,10 @@ class Settings(BaseSettings):
     freyja_connector_token: str = ""
 
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen2.5:7b"
-    ollama_chat_model: str = "qwen2.5:7b"
+    ollama_model: str = "qwen3:14b"
+    ollama_chat_model: str = "qwen3:14b"
     ollama_classification_model: str = "qwen2.5:1.5b"
-    ollama_reasoning_model: str = "gpt-oss:20b"
+    ollama_reasoning_model: str = "qwen3:14b"
     ollama_min_output_tokens: int = 160
     ollama_default_output_tokens: int = 512
     ollama_retry_output_tokens: int = 1024
@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     inference_gateway_enabled: bool = False
     inference_gateway_monthly_hard_limit: float = 20.0
     inference_gateway_per_request_limit: float = 1.0
-    inference_gateway_default_tier: str = "FAST"
-    inference_gateway_local_model: str = "qwen2.5:7b"
+    inference_gateway_default_tier: str = "LOCAL"
+    inference_gateway_local_model: str = "qwen3:14b"
     inference_gateway_free_model: str = ""
     inference_gateway_fast_model: str = "qwen/qwen3.5-flash-02-23"
     inference_gateway_reasoning_model: str = "moonshotai/kimi-k2.5"

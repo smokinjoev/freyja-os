@@ -17,7 +17,7 @@ def reset_gateway_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "inference_gateway_monthly_hard_limit": 20.0,
         "inference_gateway_per_request_limit": 1.0,
         "inference_gateway_default_tier": "FAST",
-        "inference_gateway_local_model": "qwen2.5:7b",
+        "inference_gateway_local_model": "qwen3:14b",
         "inference_gateway_free_model": "",
         "inference_gateway_fast_model": "qwen/qwen3.5-flash-02-23",
         "inference_gateway_reasoning_model": "moonshotai/kimi-k2.5",
@@ -53,7 +53,7 @@ def test_sensitive_cloud_request_falls_back_to_local(reset_gateway_settings) -> 
 
     assert decision.tier == InferenceTier.LOCAL
     assert decision.provider == "ollama"
-    assert decision.model == "qwen2.5:7b"
+    assert decision.model == "qwen3:14b"
     assert decision.estimated_cost_usd == 0.0
     assert decision.fallback_attempts[0]["outcome"] == "sensitive request kept local"
 

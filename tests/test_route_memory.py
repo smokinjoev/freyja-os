@@ -54,7 +54,7 @@ def test_route_with_conversation_id_persists_messages(isolated_store):
     assert messages[0].content == "Say hello"
     assert messages[1].role == "assistant"
     assert messages[1].content == "Hello from memory"
-    assert messages[1].model == "qwen2.5:7b"
+    assert messages[1].model == "qwen3:14b"
 
 
 def test_route_without_conversation_id_does_not_persist(isolated_store):

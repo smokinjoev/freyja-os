@@ -32,6 +32,8 @@ def test_inference_gateway_compose_passes_tier_and_budget_settings() -> None:
     environment = compose["services"]["inference-gateway"]["environment"]
 
     assert environment["INFERENCE_GATEWAY_MONTHLY_HARD_LIMIT"] == "${INFERENCE_GATEWAY_MONTHLY_HARD_LIMIT:-20.0}"
+    assert environment["INFERENCE_GATEWAY_DEFAULT_TIER"] == "${INFERENCE_GATEWAY_DEFAULT_TIER:-LOCAL}"
+    assert environment["INFERENCE_GATEWAY_LOCAL_MODEL"] == "${INFERENCE_GATEWAY_LOCAL_MODEL:-qwen3:14b}"
     assert environment["INFERENCE_GATEWAY_FAST_MODEL"] == "${INFERENCE_GATEWAY_FAST_MODEL:-qwen/qwen3.5-flash-02-23}"
     assert environment["INFERENCE_GATEWAY_REASONING_MODEL"] == "${INFERENCE_GATEWAY_REASONING_MODEL:-moonshotai/kimi-k2.5}"
     assert environment["INFERENCE_GATEWAY_DEEP_MODEL"] == "${INFERENCE_GATEWAY_DEEP_MODEL:-z-ai/glm-5}"
@@ -44,4 +46,5 @@ def test_inference_gateway_compose_keeps_local_ollama_warm() -> None:
     environment = compose["services"]["inference-gateway"]["environment"]
 
     assert environment["OLLAMA_WARMUP_ENABLED"] == "${OLLAMA_WARMUP_ENABLED:-true}"
+    assert environment["OLLAMA_WARMUP_MODELS"] == "${OLLAMA_WARMUP_MODELS:-qwen3:14b}"
     assert environment["OLLAMA_WARMUP_INTERVAL_SECONDS"] == "${OLLAMA_WARMUP_INTERVAL_SECONDS:-1200}"

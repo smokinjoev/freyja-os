@@ -87,7 +87,7 @@ async def test_manual_local_override(router: Router) -> None:
     assert result.decision.reason == "manual local override"
     assert result.response == "local"
     assert result.runtime_evidence.provider_selected == "ollama"
-    assert result.runtime_evidence.model_selected == "qwen2.5:7b"
+    assert result.runtime_evidence.model_selected == "qwen3:14b"
     assert result.runtime_evidence.routing_reason == "manual local override"
     assert result.runtime_evidence.token_counts["total_tokens"] == 6
     assert result.runtime_evidence.timing["ollama_latency_ms"] == 12
@@ -98,7 +98,7 @@ async def test_manual_local_override(router: Router) -> None:
     assert "Current date:" in kwargs["prompt"]
     assert "Upcoming dates:" in kwargs["prompt"]
     assert kwargs["prompt"].endswith("Current user request:\nhi")
-    assert kwargs["model"] == "qwen2.5:7b"
+    assert kwargs["model"] == "qwen3:14b"
 
 
 async def test_manual_cloud_override_allowed(router: Router, monkeypatch: pytest.MonkeyPatch, reset_settings) -> None:
@@ -171,7 +171,7 @@ async def test_quick_acknowledgement_stays_fast_tier(router: Router, reset_setti
     result = await router.execute(req)
 
     assert result.decision.provider == "ollama"
-    assert result.decision.model == "qwen2.5:7b"
+    assert result.decision.model == "qwen3:14b"
     assert result.response == "ok"
 
 
@@ -620,6 +620,62 @@ async def test_builtin_weather_prompt_executes_live_data_tool_directly() -> None
     assert "get_weather" in first_prompt
 
 
+async def test_auto_weather_prompt_executes_live_data_tool_directly() -> None:
+    registry = ToolRegistry(audit_enabled=False)
+    seen_arguments: list[dict[str, Any]] = []
+
+    async def weather(request: ToolExecutionRequest) -> dict:
+        seen_arguments.append(request.arguments)
+        return {
+            "live_data_available": True,
+            "location": "Atlanta, Georgia, United States",
+            "request_type": "forecast",
+            "target_label": "next weekend",
+            "summary": "Dense drizzle",
+            "description": "drizzle",
+            "high_f": 99.2,
+            "low_f": 76.5,
+            "humidity_percent": 61,
+            "raw": {"provider": "Open-Meteo"},
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description="Weather",
+            input_schema={
+                "type": "object",
+                "required": ["location", "request_type"],
+                "properties": {
+                    "location": {"type": "string"},
+                    "request_type": {"type": "string", "enum": ["current", "forecast"]},
+                    "target_date": {"type": "string"},
+                    "target_label": {"type": "string"},
+                },
+            },
+            tags=["weather", "live-data"],
+        ),
+        weather,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+
+    result = await r.execute(
+        RouteRequest(
+            prompt="What is the weather next weekend in Atlanta?",
+            provider="auto",
+            tools_required=True,
+        )
+    )
+
+    assert "Forecast for Atlanta, Georgia, United States next weekend" in result.response
+    assert seen_arguments[0]["location"] == "Atlanta"
+    assert seen_arguments[0]["request_type"] == "forecast"
+    assert seen_arguments[0]["target_label"] == "next weekend"
+    r.ollama_client.chat.assert_not_awaited()
+
+
 async def test_weather_without_location_asks_for_place() -> None:
     registry = ToolRegistry(audit_enabled=False)
     registry.register(
@@ -918,6 +974,7 @@ class TestToolLoop:
 
         assert result.decision.provider == "ollama"
         assert "Iris" in result.response or "iris" in result.response.lower()
+        assert router.ollama_client.chat.await_args_list[0].kwargs["retry_on_empty_length"] is False
         assert len(result.tool_results) == 1
         assert result.tool_results[0]["tool_name"] == "hostname"
         assert result.tool_results[0]["success"] is True
@@ -1095,6 +1152,36 @@ class TestToolLoop:
         result = await router.execute(req)
 
         assert result.decision.provider == "openrouter"
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "current_time"
+        assert result.tool_results[0]["success"] is True
+
+    async def test_local_tool_loop_failure_falls_back_to_cloud_tools(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+        monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.ollama_client.chat.return_value = {"error": "Ollama returned empty content", "status": "empty_content"}
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "openai/gpt-4o-mini", "response": self._tool_call("current_time")}
+            return {"model": "openai/gpt-4o-mini", "response": "The time is now."}
+
+        router.openrouter_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="What time is it?", provider="auto", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.decision.provider == "openrouter"
+        assert "tool-loop failure" in result.decision.reason
         assert len(result.tool_results) == 1
         assert result.tool_results[0]["tool_name"] == "current_time"
         assert result.tool_results[0]["success"] is True

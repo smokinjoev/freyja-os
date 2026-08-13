@@ -95,8 +95,8 @@ The architecture assumes these systems may be reassigned as their capabilities a
 
 - Mars: Freyja Director and control plane.
 - Atlas: always-on infrastructure services and Signal connector.
-- Hera: primary complex local_reasoning provider over Tailscale; not core always-on control-plane infrastructure.
-- Iris: fast local inference tier; inference-focused and not a development host.
+- Hera: primary local agent model provider over Tailscale; not core always-on control-plane infrastructure.
+- Iris: optional secondary local inference capacity; inference-focused and not a development host.
 
 ---
 
@@ -211,13 +211,13 @@ Recommended responsibilities:
 - Model compatibility and inference-health checks
 - Stable fast-inference service for the Mars control plane
 
-Iris should remain the fast local inference tier for Rev 1. It is
-inference-focused, not the development, Director, complex reasoning, or
-always-on Signal host.
+Iris can provide secondary local inference capacity for Rev 1. It is
+inference-focused, not the development, Director, primary agent, or always-on
+Signal host.
 
 ## 5.4 Hera — Development and Benchmark Node
 
-**Primary role:** Development, verification, inference benchmarking, and complex local reasoning
+**Primary role:** Development, verification, inference benchmarking, and primary local agent inference
 
 Recommended responsibilities:
 
@@ -225,9 +225,8 @@ Recommended responsibilities:
 - Cross-platform tests and pre-deployment verification
 - Model benchmarking
 - Performance comparison against Iris-hosted models
-- Hosting the primary local `local_reasoning` model for complex coding,
-  debugging, planning, architecture, difficult reasoning, and multi-step
-  tool-selection requests
+- Hosting the primary local agent model (`qwen3:14b`) for routine chat,
+  privacy-sensitive requests, and first-pass tool-selection requests
 - Experimental inference workloads that must not affect Director or Signal availability
 
 Hera provides high-quality local reasoning to Mars over Tailscale, but it is
@@ -817,10 +816,10 @@ The router should not automatically choose the most expensive available model. I
 Expected fallback chain:
 
 ```text
-Hera local_reasoning model for complex local tasks
+Hera qwen3:14b local agent model for local-first tasks
     -> configured OpenRouter fallback when policy and credentials allow
     -> explicit provider failure if no fallback is available
-Iris fast local model for routine local tasks
+Iris secondary local model for optional overflow/experiments
     -> configured OpenRouter fallback when policy and credentials allow
     -> explicit provider failure if no fallback is available
 ```

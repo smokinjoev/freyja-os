@@ -972,6 +972,39 @@ class Router:
         max_output_chars = max(0, settings.chat_max_tool_output_chars)
         tool_catalog = self._format_tool_catalog(registry)
 
+        if request.provider == "auto":
+            direct_result = (
+                await self._maybe_handle_weather_request(
+                    request,
+                    decision,
+                    registry,
+                    memory_principal,
+                    person_context,
+                    evidence,
+                    started,
+                )
+                or await self._maybe_handle_homeassistant_policy_request(
+                    request,
+                    decision,
+                    registry,
+                    memory_principal,
+                    person_context,
+                    evidence,
+                    started,
+                )
+                or await self._maybe_handle_homeassistant_inventory_request(
+                    request,
+                    decision,
+                    registry,
+                    memory_principal,
+                    person_context,
+                    evidence,
+                    started,
+                )
+            )
+            if direct_result is not None:
+                return direct_result
+
         for iteration in range(max_iterations):
             prompt_parts = [
                 self._prompt_for_provider(request, decision.provider, memory_principal, evidence),
@@ -997,12 +1030,54 @@ class Router:
             }
             if decision.provider in {"ollama", "local_reasoning"}:
                 chat_kwargs["tools"] = registry.list_tools()
+                chat_kwargs["retry_on_empty_length"] = False
             if decision.provider == "local_reasoning":
                 chat_kwargs["output_tokens"] = settings.ollama_default_output_tokens
             response = await client.chat(**chat_kwargs)
             if evidence is not None:
                 self._record_provider_response(evidence, response, decision.provider)
             if "error" in response:
+                raw_error = response["error"]
+                decision.fallback_attempts.append({"provider": decision.provider, "outcome": raw_error})
+                if (
+                    decision.provider in {"ollama", "local_reasoning"}
+                    and settings.cloud_enabled
+                    and request.provider != "local"
+                    and decision.privacy_classification != "sensitive"
+                ):
+                    model, reason = self._approved_model(request.model)
+                    if model and self.openrouter_client is not None:
+                        decision.fallback_attempts.append({"provider": "openrouter", "outcome": "attempting fallback"})
+                        fallback_decision = RoutingDecision(
+                            request_id=decision.request_id,
+                            provider="openrouter",
+                            model=model,
+                            reason=f"fallback after local tool-loop failure; {reason}",
+                            privacy_classification=decision.privacy_classification,
+                            fallback_attempts=self._sanitize_fallback_attempts(decision.fallback_attempts),
+                            estimated_cost_usd=decision.estimated_cost_usd,
+                        )
+                        self._log_decision(fallback_decision, request)
+                        fallback_result = await self._execute_with_tools(
+                            request,
+                            fallback_decision,
+                            self.openrouter_client,
+                            registry,
+                            memory_principal,
+                            person_context,
+                            evidence,
+                            started,
+                        )
+                        fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(
+                            fallback_result.decision.fallback_attempts
+                        )
+                        fallback_result.runtime_evidence.refresh_decision(fallback_result.decision)
+                        return fallback_result
+                    decision.fallback_attempts.append(
+                        self._record_attempt("openrouter", "no approved model" if not model else "client unavailable")
+                    )
+                decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
+                decision.public_error_message = self._public_error(decision.provider, decision.fallback_attempts)
                 await self._record_memory(request, decision, "", evidence)
                 return self._routing_result(
                     decision=decision,

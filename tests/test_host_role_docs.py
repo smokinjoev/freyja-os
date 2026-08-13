@@ -20,8 +20,8 @@ def test_current_host_roles_are_documented() -> None:
     )
 
     assert "Mars" in docs and "Director" in docs and "control plane" in docs
-    assert "Hera" in docs and "local_reasoning" in docs and "gpt-oss:20b" in docs
-    assert "Iris" in docs and "fast local inference" in docs
+    assert "Hera" in docs and "local agent model" in docs and "qwen3:14b" in docs
+    assert "Iris" in docs
     assert "Atlas" in docs and "Signal connector" in docs
     assert "Tailscale" in docs
     assert "OpenRouter fallback requires" in docs
