@@ -446,7 +446,7 @@ def test_route_with_tools_required_returns_sanitized_tool_results() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["provider"] == "ollama"
-    assert data["response"] == "Live weather data is unavailable."
+    assert data["response"] == "It is sunny in Oslo."
     assert "tool_results" in data
     tool_results = data["tool_results"]
     assert len(tool_results) == 1

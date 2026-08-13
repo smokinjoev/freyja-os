@@ -970,46 +970,12 @@ class Router:
         tool_history: list[dict[str, Any]] = []
         max_iterations = min(max(1, settings.chat_max_tool_iterations), 50)
         max_output_chars = max(0, settings.chat_max_tool_output_chars)
-
-        homeassistant_policy_response = await self._maybe_handle_homeassistant_policy_request(
-            request,
-            decision,
-            registry,
-            memory_principal,
-            person_context,
-            evidence,
-            started,
-        )
-        if homeassistant_policy_response is not None:
-            return homeassistant_policy_response
-
-        weather_response = await self._maybe_handle_weather_request(
-            request,
-            decision,
-            registry,
-            memory_principal,
-            person_context,
-            evidence,
-            started,
-        )
-        if weather_response is not None:
-            return weather_response
-
-        homeassistant_inventory_response = await self._maybe_handle_homeassistant_inventory_request(
-            request,
-            decision,
-            registry,
-            memory_principal,
-            person_context,
-            evidence,
-            started,
-        )
-        if homeassistant_inventory_response is not None:
-            return homeassistant_inventory_response
+        tool_catalog = self._format_tool_catalog(registry)
 
         for iteration in range(max_iterations):
             prompt_parts = [
-                self._prompt_for_provider(request, decision.provider, memory_principal, evidence)
+                self._prompt_for_provider(request, decision.provider, memory_principal, evidence),
+                tool_catalog,
             ]
             for idx, entry in enumerate(tool_history, start=1):
                 serialized = self._serialize_tool_output(entry["output"], max_output_chars)
@@ -1695,6 +1661,24 @@ class Router:
                 "truncated_at": max_chars,
                 "partial_output": truncated,
             }
+        )
+
+    def _format_tool_catalog(self, registry: ToolRegistry) -> str:
+        tools = [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "risk_level": str(tool.risk_level),
+                "input_schema": tool.input_schema or {"type": "object", "properties": {}},
+            }
+            for tool in registry.list_tools()
+        ]
+        return (
+            "\n\nAvailable registered tools:\n"
+            f"{json.dumps(tools, separators=(',', ':'), default=str)}\n"
+            "Choose a tool when it is needed to answer accurately. "
+            "Emit exactly one <freyja_tool_call> JSON block for one tool call, "
+            "or answer normally if no tool is needed."
         )
 
     def _tool_history_entry(

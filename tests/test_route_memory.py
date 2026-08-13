@@ -107,7 +107,8 @@ def test_route_with_tools_required_records_and_restores_conversation(isolated_st
     assert "Recent conversation context:" in prompt
     assert "Remind me Saturday to buy a chair." in prompt
     assert "I will remember the chair for Saturday." in prompt
-    assert prompt.endswith("Current user request:\nPut it on my calendar.")
+    assert "Current user request:\nPut it on my calendar." in prompt
+    assert "Available registered tools" in prompt
 
 
 def test_route_memory_failure_does_not_crash(isolated_store):

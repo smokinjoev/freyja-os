@@ -140,6 +140,12 @@ def _weekday_from_today(target_weekday: int, today: _datetime.date) -> _datetime
     return today + _datetime.timedelta(days=delta)
 
 
+def _upcoming_saturday(today: _datetime.date) -> _datetime.date:
+    """Return the Saturday in the upcoming weekend window."""
+    days_until_saturday = (calendar.SATURDAY - today.weekday()) % 7
+    return today + _datetime.timedelta(days=days_until_saturday)
+
+
 def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) -> ForecastDecision:
     """Classify weather temporal intent from a natural-language prompt.
 
@@ -207,7 +213,29 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
             error_message="",
         )
 
-    # 4. Named weekdays (case-insensitive, robust).
+    # 4. Weekend phrases. Use Saturday as the representative weekend forecast day.
+    if re.search(r"\b(this|next)?\s*weekend\b", lowered):
+        target_date = _upcoming_saturday(today)
+        delta_days = (target_date - today).days
+        target_label = "next weekend" if "next weekend" in lowered else "this weekend"
+        if delta_days > _OPENMETEO_MAX_FORECAST_DAYS:
+            return ForecastDecision(
+                request_type=WeatherRequestType.FORECAST,
+                target_date=target_date,
+                target_label=target_label,
+                error_message=(
+                    f"Forecasts are only available up to {_OPENMETEO_MAX_FORECAST_DAYS} days out; "
+                    f"{target_label} ({target_date.isoformat()}) is outside that range."
+                ),
+            )
+        return ForecastDecision(
+            request_type=WeatherRequestType.FORECAST,
+            target_date=target_date,
+            target_label=target_label,
+            error_message="",
+        )
+
+    # 5. Named weekdays (case-insensitive, robust).
     weekday_match = re.search(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", lowered)
     if weekday_match:
         weekday_name = weekday_match.group(1)
@@ -232,7 +260,7 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
                 error_message="",
             )
 
-    # 5. Explicit dates (ISO or slash).
+    # 6. Explicit dates (ISO or slash).
     iso_like = re.search(r"\b(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}|\d{1,2}/\d{1,2}/\d{2})\b", prompt)
     if iso_like:
         date_text = iso_like.group(1)
@@ -276,7 +304,7 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
             error_message="",
         )
 
-    # 6. Phrases containing "forecast" but no date -> assume tomorrow (common expectation).
+    # 7. Phrases containing "forecast" but no date -> assume tomorrow (common expectation).
     if "forecast" in lowered:
         target_date = today + _datetime.timedelta(days=1)
         return ForecastDecision(
@@ -286,7 +314,7 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
             error_message="",
         )
 
-    # 7. Default fall-through for bare weather requests: current conditions.
+    # 8. Default fall-through for bare weather requests: current conditions.
     return ForecastDecision(
         request_type=WeatherRequestType.CURRENT,
         target_date=today,
@@ -320,7 +348,12 @@ def _extract_location(prompt: str) -> str:
     # Remove helper verbs and question fragments commonly left in front of the location.
     location = re.sub(r"\b(is|will|be|are|does|do|did|can|could|would|should)\b", "", location, flags=re.IGNORECASE)
     # Remove temporal qualifiers and relative-date phrases.
-    location = re.sub(r"\b(today|tonight|tomorrow|now|currently|this\s+week)\b", "", location, flags=re.IGNORECASE)
+    location = re.sub(
+        r"\b(today|tonight|tomorrow|now|currently|this\s+week|next\s+week|this\s+weekend|next\s+weekend|weekend)\b",
+        "",
+        location,
+        flags=re.IGNORECASE,
+    )
     location = re.sub(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", "", location, flags=re.IGNORECASE)
     location = re.sub(r"\bin\s+\d+\s+days?\b|\b\d+\s+days?\b", "", location, flags=re.IGNORECASE)
     location = re.sub(r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{4}\b|\b\d{1,2}/\d{1,2}/\d{2}\b", "", location)

@@ -585,6 +585,47 @@ def test_builtin_get_weather_forecast_hits_forecast_endpoint(registry: ToolRegis
     assert result.output["high_f"] == 75.0
 
 
+def test_builtin_get_weather_normalizes_agent_weekend_date(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    register_builtin_tools(registry)
+
+    captured_forecast_days: list[int] = []
+    import httpx
+
+    today = _datetime.date(2026, 8, 13)
+    expected = _datetime.date(2026, 8, 15)
+    monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
+
+    def _capture(*args, **kwargs):
+        url = str(args[0]) if args else kwargs.get("url", "")
+        request = httpx.Request("GET", url)
+        if "geocoding-api" in url:
+            return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+        captured_forecast_days.append(int(kwargs.get("params", {}).get("forecast_days")))
+        return httpx.Response(200, json=_openmeteo_forecast_response(expected.isoformat()), request=request)
+
+    with patch("httpx.AsyncClient.get", side_effect=_capture):
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="get_weather",
+                    arguments={
+                        "location": "Atlanta",
+                        "request_type": "forecast",
+                        "target_date": "2026-08-22",
+                        "target_label": "next weekend",
+                    },
+                )
+            )
+        )
+
+    assert result.success is True
+    assert result.output["live_data_available"] is True
+    assert result.output["target_date"] == expected.isoformat()
+    assert result.output["target_label"] == "next weekend"
+    assert captured_forecast_days == [4]
+
+
 def test_builtin_get_weather_current_hits_current_endpoint(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "weather_tool_enabled", True)
     register_builtin_tools(registry)

@@ -135,6 +135,13 @@ class TestTemporalParsing:
         assert decision.target_label == "forecast"
         assert decision.target_date == today + _datetime.timedelta(days=1)
 
+    def test_next_weekend_is_forecast(self):
+        today = _datetime.date(2026, 8, 12)  # Wednesday
+        decision = _classify_temporal_intent("What is the weather next weekend in Atlanta?", today=today)
+        assert decision.request_type == WeatherRequestType.FORECAST
+        assert decision.target_label == "next weekend"
+        assert decision.target_date == _datetime.date(2026, 8, 15)
+
 
 class TestLocationExtraction:
     def test_extract_location_basic(self):
@@ -164,6 +171,9 @@ class TestLocationExtraction:
     def test_extract_location_without_place_returns_empty(self):
         assert _extract_location("What is the weather?") == ""
         assert _extract_location("weather and lights") == ""
+
+    def test_extract_location_strips_weekend_phrase(self):
+        assert _extract_location("What is the weather next weekend in Atlanta?") == "Atlanta"
 
 
 class TestGetWeatherDisabled:
@@ -476,6 +486,13 @@ class TestClassificationIntegration:
         assert req.is_valid
         assert req.request_type == WeatherRequestType.FORECAST
         assert req.target_label == "tomorrow"
+
+    def test_classify_next_weekend_request(self):
+        req = classify_weather_request("What is the weather next weekend in Atlanta?")
+        assert req.is_valid
+        assert req.location == "Atlanta"
+        assert req.request_type == WeatherRequestType.FORECAST
+        assert req.target_label == "next weekend"
 
     def test_classify_outside_range_request(self):
         req = classify_weather_request("What is the weather in 10 days in Aiken?")

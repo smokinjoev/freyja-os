@@ -49,6 +49,11 @@ async def _get_weather_implementation(request: ToolExecutionRequest) -> dict:
                 "summary": "Invalid forecast date.",
                 "detail": "target_date must be in YYYY-MM-DD format.",
             }
+    if request_type == WeatherRequestType.FORECAST and "weekend" in str(target_label).lower():
+        parsed = classify_weather_request(f"weather {target_label} in {location}")
+        if parsed.target_date is not None:
+            target_date = parsed.target_date
+            target_label = parsed.target_label
 
     return await get_weather(
         location=location,
@@ -196,7 +201,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             },
             risk_level=ToolRiskLevel.READ_ONLY,
             enabled=True,
-            timeout_seconds=20,
+            timeout_seconds=35,
             tags=["weather", "live-data"],
         ),
         _get_weather_implementation,

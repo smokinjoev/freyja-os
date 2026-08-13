@@ -492,6 +492,22 @@ async def test_native_tool_call_validated_and_normalized(monkeypatch: pytest.Mon
     r.openrouter_client = AsyncMock()
     r.ollama_client.chat.side_effect = [
         {
+            "model": "qwen2.5:7b",
+            "message": {
+                "content": (
+                    '<freyja_tool_call>{"tool_name":"get_weather","arguments":'
+                    '{"location":"Osaka, Japan","request_type":"current","target_label":"now"}}'
+                    "</freyja_tool_call>"
+                )
+            },
+        },
+        {
+            "model": "qwen2.5:7b",
+            "message": {"content": "Current weather for Osaka, Osaka, Japan: partly cloudy."},
+        },
+    ]
+    r.ollama_client.chat.side_effect = [
+        {
             "model": "gpt-oss:20b",
             "message": {
                 "content": "",
@@ -565,6 +581,22 @@ async def test_builtin_weather_prompt_executes_live_data_tool_directly() -> None
     r = Router(registry=registry)
     r.ollama_client = AsyncMock()
     r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.side_effect = [
+        {
+            "model": "qwen2.5:7b",
+            "message": {
+                "content": (
+                    '<freyja_tool_call>{"tool_name":"get_weather","arguments":'
+                    '{"location":"Osaka, Japan","request_type":"current","target_label":"now"}}'
+                    "</freyja_tool_call>"
+                )
+            },
+        },
+        {
+            "model": "qwen2.5:7b",
+            "message": {"content": "Current weather for Osaka, Osaka, Japan: partly cloudy."},
+        },
+    ]
 
     result = await r.execute(
         RouteRequest(
@@ -575,7 +607,6 @@ async def test_builtin_weather_prompt_executes_live_data_tool_directly() -> None
     )
 
     assert "Current weather for Osaka, Osaka, Japan" in result.response
-    assert "live data from Open-Meteo" in result.response
     assert seen_arguments == [
         {
             "location": "Osaka, Japan",
@@ -584,7 +615,9 @@ async def test_builtin_weather_prompt_executes_live_data_tool_directly() -> None
         }
     ]
     assert result.tool_results[0]["tool_name"] == "get_weather"
-    r.ollama_client.chat.assert_not_awaited()
+    first_prompt = r.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+    assert "Available registered tools" in first_prompt
+    assert "get_weather" in first_prompt
 
 
 async def test_weather_without_location_asks_for_place() -> None:
@@ -608,6 +641,10 @@ async def test_weather_without_location_asks_for_place() -> None:
     r = Router(registry=registry)
     r.ollama_client = AsyncMock()
     r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "Please tell me the city or place for the weather."},
+    }
 
     result = await r.execute(
         RouteRequest(
@@ -619,7 +656,6 @@ async def test_weather_without_location_asks_for_place() -> None:
 
     assert "city or place" in result.response
     assert result.tool_results == []
-    r.ollama_client.chat.assert_not_awaited()
 
 
 async def test_explicit_reminder_request_can_execute_controlled_write_tool(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1225,6 +1261,16 @@ class TestToolLoop:
             ),
             _summary,
         )
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": self._tool_call("homeassistant_home_summary")},
+            },
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": "Freyja can see 127 entities, can control 26 entities, and blocks 127 entities."},
+            },
+        ]
 
         result = await router.execute(
             RouteRequest(
@@ -1238,8 +1284,8 @@ class TestToolLoop:
         assert "127 entities" in result.response
         assert "26 entities" in result.response
         assert "blocks 127" in result.response
-        assert "narrow entity lists" in result.response
-        router.ollama_client.chat.assert_not_awaited()
+        first_prompt = router.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+        assert "homeassistant_home_summary" in first_prompt
 
     async def test_homeassistant_broad_control_request_gets_policy_refusal(
         self,
@@ -1270,6 +1316,21 @@ class TestToolLoop:
             ),
             _summary,
         )
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": self._tool_call("homeassistant_home_summary")},
+            },
+            {
+                "model": "qwen2.5:7b",
+                "message": {
+                    "content": (
+                        "I cannot perform broad Home Assistant actions such as changing every light, "
+                        "unlocking doors, or opening the garage. Home Assistant is read-only here."
+                    )
+                },
+            },
+        ]
 
         result = await router.execute(
             RouteRequest(
@@ -1283,7 +1344,8 @@ class TestToolLoop:
         assert "cannot perform broad Home Assistant actions" in result.response
         assert "unlocking doors" in result.response
         assert "read-only" in result.response
-        router.ollama_client.chat.assert_not_awaited()
+        first_prompt = router.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+        assert "homeassistant_home_summary" in first_prompt
 
     async def test_home_light_status_question_uses_homeassistant_preflight(
         self,
@@ -1322,6 +1384,16 @@ class TestToolLoop:
             ),
             _list_entities,
         )
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": self._tool_call("homeassistant_list_entities", {"domain": "light"})},
+            },
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": "Two visible lights are on, including Kitchen Floor Lamp and Living Room."},
+            },
+        ]
 
         result = await router.execute(
             RouteRequest(
@@ -1333,10 +1405,10 @@ class TestToolLoop:
 
         assert result.tool_results[0]["tool_name"] == "homeassistant_list_entities"
         assert result.tool_results[0]["arguments"] == {"domain": "light"}
-        assert "2 visible lights currently on" in result.response
+        assert "Two visible lights are on" in result.response
         assert "Kitchen Floor Lamp" in result.response
-        assert "1 light entities are unavailable" in result.response
-        router.ollama_client.chat.assert_not_awaited()
+        first_prompt = router.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+        assert "homeassistant_list_entities" in first_prompt
 
     async def test_bare_lights_question_uses_homeassistant_preflight(
         self,
@@ -1372,6 +1444,16 @@ class TestToolLoop:
             ),
             _list_entities,
         )
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": self._tool_call("homeassistant_list_entities", {"domain": "light"})},
+            },
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": "One visible light is on: Kitchen."},
+            },
+        ]
 
         result = await router.execute(
             RouteRequest(
@@ -1382,6 +1464,7 @@ class TestToolLoop:
         )
 
         assert result.tool_results[0]["tool_name"] == "homeassistant_list_entities"
-        assert "1 visible lights currently on" in result.response
+        assert "One visible light is on" in result.response
         assert "Kitchen" in result.response
-        router.ollama_client.chat.assert_not_awaited()
+        first_prompt = router.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+        assert "homeassistant_list_entities" in first_prompt
