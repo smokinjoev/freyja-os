@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 import re
 import time
 import uuid
@@ -12,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from freyja.config import settings
 from freyja.memory import store as memory_store
 from freyja.memory.models import AppendMessageRequest, CreateConversationRequest, MemoryPrincipal
+from freyja.ollama_client import OllamaClient
 from freyja.tools.weather import classify_weather_request
 from freyja.tools.models import ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry, get_registry
@@ -253,12 +255,19 @@ def _local_reasoning_score(request: RouteRequest) -> int:
 class Router:
     def __init__(self, registry: ToolRegistry | None = None) -> None:
         self.ollama_client: Any | None = None
+        self.ollama_fallback_client: Any | None = None
         self.openrouter_client: Any | None = None
         self._registry = registry or get_registry()
 
-    def register_clients(self, ollama_client: Any, openrouter_client: Any) -> None:
+    def register_clients(
+        self,
+        ollama_client: Any,
+        openrouter_client: Any,
+        ollama_fallback_client: Any | None = None,
+    ) -> None:
         self.ollama_client = ollama_client
         self.openrouter_client = openrouter_client
+        self.ollama_fallback_client = ollama_fallback_client
 
     def _prompt_for_provider(
         self,
@@ -270,7 +279,7 @@ class Router:
         prompt = self._base_prompt(request)
         if principal is None:
             return prompt
-        if provider not in {"ollama", "local_reasoning"} and not settings.memory_recall_include_in_cloud:
+        if provider not in {"ollama", "local_reasoning", "ollama_fallback"} and not settings.memory_recall_include_in_cloud:
             return prompt
         memories = self._recall_shared_memories(principal, evidence)
         if not memories:
@@ -443,6 +452,23 @@ class Router:
         if tier in {"LOCAL", "FREE", "FAST", "REASONING", "DEEP"}:
             return tier
         return "FAST"
+
+    def _secondary_ollama_client(self) -> Any | None:
+        if not settings.ollama_fallback_base_url and self.ollama_fallback_client is None:
+            return None
+        if self.ollama_fallback_client is not None:
+            return self.ollama_fallback_client
+        self.ollama_fallback_client = OllamaClient(
+            base_url=settings.ollama_fallback_base_url,
+            model=settings.ollama_fallback_model,
+        )
+        return self.ollama_fallback_client
+
+    def _secondary_ollama_model(self, requested: str | None = None) -> str:
+        model = requested or settings.ollama_fallback_model
+        if not _meets_min_chat_capability(model):
+            return settings.ollama_chat_model
+        return model
 
     def _higher_gateway_tier(self, current: str, minimum: str) -> str:
         rank = {"LOCAL": 0, "FREE": 1, "FAST": 2, "REASONING": 3, "DEEP": 4}
@@ -892,6 +918,19 @@ class Router:
                     and "inference gateway LOCAL tier" in decision.reason
                 )
                 if settings.cloud_enabled and request.provider != "local" and not gateway_sensitive_local:
+                    local_fallback_result = await self._try_secondary_ollama_fallback(
+                        request,
+                        decision,
+                        memory_principal,
+                        evidence,
+                        started,
+                    )
+                    if local_fallback_result.response:
+                        local_fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(
+                            local_fallback_result.decision.fallback_attempts
+                        )
+                        local_fallback_result.runtime_evidence.refresh_decision(local_fallback_result.decision)
+                        return local_fallback_result
                     fallback_result = await self._try_openrouter_fallback(request, decision, memory_principal, evidence, started)
                     fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
                     fallback_result.runtime_evidence.refresh_decision(fallback_result.decision)
@@ -972,39 +1011,6 @@ class Router:
         max_output_chars = max(0, settings.chat_max_tool_output_chars)
         tool_catalog = self._format_tool_catalog(registry)
 
-        if request.provider == "auto":
-            direct_result = (
-                await self._maybe_handle_weather_request(
-                    request,
-                    decision,
-                    registry,
-                    memory_principal,
-                    person_context,
-                    evidence,
-                    started,
-                )
-                or await self._maybe_handle_homeassistant_policy_request(
-                    request,
-                    decision,
-                    registry,
-                    memory_principal,
-                    person_context,
-                    evidence,
-                    started,
-                )
-                or await self._maybe_handle_homeassistant_inventory_request(
-                    request,
-                    decision,
-                    registry,
-                    memory_principal,
-                    person_context,
-                    evidence,
-                    started,
-                )
-            )
-            if direct_result is not None:
-                return direct_result
-
         for iteration in range(max_iterations):
             prompt_parts = [
                 self._prompt_for_provider(request, decision.provider, memory_principal, evidence),
@@ -1033,7 +1039,7 @@ class Router:
                 chat_kwargs["retry_on_empty_length"] = False
             if decision.provider == "local_reasoning":
                 chat_kwargs["output_tokens"] = settings.ollama_default_output_tokens
-            response = await client.chat(**chat_kwargs)
+            response = await self._tool_loop_chat(client, chat_kwargs, decision, request)
             if evidence is not None:
                 self._record_provider_response(evidence, response, decision.provider)
             if "error" in response:
@@ -1045,6 +1051,21 @@ class Router:
                     and request.provider != "local"
                     and decision.privacy_classification != "sensitive"
                 ):
+                    local_fallback_result = await self._try_secondary_ollama_tool_fallback(
+                        request,
+                        decision,
+                        registry,
+                        memory_principal,
+                        person_context,
+                        evidence,
+                        started,
+                    )
+                    if local_fallback_result.response:
+                        local_fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(
+                            local_fallback_result.decision.fallback_attempts
+                        )
+                        local_fallback_result.runtime_evidence.refresh_decision(local_fallback_result.decision)
+                        return local_fallback_result
                     model, reason = self._approved_model(request.model)
                     if model and self.openrouter_client is not None:
                         decision.fallback_attempts.append({"provider": "openrouter", "outcome": "attempting fallback"})
@@ -1092,6 +1113,78 @@ class Router:
             clean_content = self._strip_tool_markers(content)
 
             if tool_call is None:
+                if "<freyja_tool_call" in content:
+                    decision.fallback_attempts.append({"provider": decision.provider, "outcome": "malformed tool call"})
+                    if (
+                        decision.provider in {"ollama", "local_reasoning", "ollama_fallback"}
+                        and settings.cloud_enabled
+                        and request.provider != "local"
+                        and decision.privacy_classification != "sensitive"
+                    ):
+                        if decision.provider != "ollama_fallback":
+                            local_fallback_result = await self._try_secondary_ollama_tool_fallback(
+                                request,
+                                decision,
+                                registry,
+                                memory_principal,
+                                person_context,
+                                evidence,
+                                started,
+                            )
+                            if local_fallback_result.response:
+                                local_fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(
+                                    local_fallback_result.decision.fallback_attempts
+                                )
+                                local_fallback_result.runtime_evidence.refresh_decision(local_fallback_result.decision)
+                                return local_fallback_result
+                        cloud_fallback_result = await self._try_openrouter_tool_fallback(
+                            request,
+                            decision,
+                            registry,
+                            memory_principal,
+                            person_context,
+                            evidence,
+                            started,
+                        )
+                        cloud_fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(
+                            cloud_fallback_result.decision.fallback_attempts
+                        )
+                        cloud_fallback_result.runtime_evidence.refresh_decision(cloud_fallback_result.decision)
+                        return cloud_fallback_result
+                    decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
+                    response_text = "The local model emitted a malformed tool call."
+                    await self._record_memory(request, decision, response_text, evidence)
+                    return self._routing_result(
+                        decision=decision,
+                        response=response_text,
+                        tool_results=list(tool_history),
+                        evidence=evidence,
+                        started=started,
+                    )
+                if (
+                    tool_history
+                    and (
+                        self._tool_answer_is_ungrounded(clean_content, tool_history)
+                        or self._tool_answer_is_incomplete(clean_content, request, tool_history)
+                    )
+                    and decision.provider in {"ollama", "local_reasoning", "ollama_fallback", "openrouter"}
+                    and settings.cloud_enabled
+                    and request.provider != "local"
+                    and decision.privacy_classification != "sensitive"
+                ):
+                    cloud_final = await self._try_openrouter_tool_final_answer(
+                        request,
+                        decision,
+                        tool_history,
+                        memory_principal,
+                        evidence,
+                        started,
+                    )
+                    cloud_final.decision.fallback_attempts = self._sanitize_fallback_attempts(
+                        cloud_final.decision.fallback_attempts
+                    )
+                    cloud_final.runtime_evidence.refresh_decision(cloud_final.decision)
+                    return cloud_final
                 await self._record_memory(request, decision, clean_content, evidence)
                 return self._routing_result(
                     decision=decision,
@@ -1114,6 +1207,7 @@ class Router:
             if not isinstance(arguments, dict):
                 arguments = {}
 
+            arguments = self._normalize_tool_call_arguments(tool_name, arguments)
             arguments, normalization_errors = registry.normalize_arguments(tool_name, arguments)
             validation_errors = normalization_errors or registry.validate_arguments(tool_name, arguments)
             definition = registry.get_tool(tool_name)
@@ -1682,13 +1776,101 @@ class Router:
         lowered = value.lower()
         return any(term in lowered for term in ("bearer ", "sk-", "token=", "api_key="))
 
+    def _normalize_tool_call_arguments(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        nested = arguments.get("parameters")
+        if isinstance(nested, dict):
+            return dict(nested)
+        nested = arguments.get("arguments")
+        if isinstance(nested, dict):
+            return dict(nested)
+        return dict(arguments)
+
+    async def _tool_loop_chat(
+        self,
+        client: Any,
+        chat_kwargs: dict[str, Any],
+        decision: RoutingDecision,
+        request: RouteRequest,
+    ) -> dict[str, Any]:
+        if (
+            decision.provider in {"ollama", "local_reasoning", "ollama_fallback"}
+            and request.provider == "auto"
+            and decision.privacy_classification != "sensitive"
+            and settings.ollama_tool_call_timeout_seconds > 0
+        ):
+            try:
+                return await asyncio.wait_for(
+                    client.chat(**chat_kwargs),
+                    timeout=settings.ollama_tool_call_timeout_seconds,
+                )
+            except TimeoutError:
+                return {
+                    "error": f"Local tool-loop model timed out after {settings.ollama_tool_call_timeout_seconds:g}s",
+                    "model": decision.model,
+                }
+        return await client.chat(**chat_kwargs)
+
+    def _tool_answer_is_ungrounded(self, response_text: str, tool_history: list[dict[str, Any]]) -> bool:
+        lowered_response = response_text.lower()
+        if not lowered_response.strip():
+            return True
+
+        relevant_tools = {"resolve_public_event", "get_weather", "homeassistant_home_summary", "homeassistant_list_entities"}
+        if not any(entry.get("tool_name") in relevant_tools for entry in tool_history):
+            return False
+
+        terms: set[str] = set()
+        for entry in tool_history:
+            output = entry.get("output")
+            if not isinstance(output, dict):
+                continue
+            for key in ("name", "location", "venue", "start_date", "end_date", "target_label", "summary", "detail"):
+                value = output.get(key)
+                if isinstance(value, str):
+                    for term in self._grounding_terms_from_value(value):
+                        terms.add(term)
+            if entry.get("tool_name") == "get_weather":
+                terms.update({"weather", "forecast"})
+            if entry.get("tool_name") == "resolve_public_event":
+                terms.update({"event"})
+
+        meaningful_terms = {term for term in terms if len(term) >= 4}
+        if not meaningful_terms:
+            return False
+        return not any(term in lowered_response for term in meaningful_terms)
+
+    def _tool_answer_is_incomplete(
+        self,
+        response_text: str,
+        request: RouteRequest,
+        tool_history: list[dict[str, Any]],
+    ) -> bool:
+        lowered_response = response_text.lower()
+        lowered_prompt = request.prompt.lower()
+        if not any(term in lowered_prompt for term in ("weather", "forecast", "rain", "temperature")):
+            return False
+        has_event = any(entry.get("tool_name") == "resolve_public_event" and entry.get("success") for entry in tool_history)
+        has_weather = any(entry.get("tool_name") == "get_weather" for entry in tool_history)
+        asks_to_check = "would you like" in lowered_response and any(
+            term in lowered_response for term in ("check the weather", "check the forecast", "weather forecast")
+        )
+        return has_event and not has_weather and asks_to_check
+
+    def _grounding_terms_from_value(self, value: str) -> set[str]:
+        lowered = value.lower()
+        terms = {lowered}
+        for token in re.split(r"[^a-z0-9-]+", lowered):
+            if len(token) >= 4:
+                terms.add(token)
+        return terms
+
     def _extract_response_text(self, response: dict[str, Any], provider: str) -> str:
-        if provider in {"ollama", "local_reasoning"}:
+        if provider in {"ollama", "local_reasoning", "ollama_fallback"}:
             return response.get("message", {}).get("content", "")
         return response.get("response", "")
 
     def _extract_tool_call(self, response: dict[str, Any], content: str, provider: str) -> dict[str, Any] | None:
-        if provider in {"ollama", "local_reasoning"}:
+        if provider in {"ollama", "local_reasoning", "ollama_fallback"}:
             calls = response.get("message", {}).get("tool_calls") or []
             if calls:
                 function = calls[0].get("function", {})
@@ -1898,6 +2080,194 @@ class Router:
         return self._routing_result(
             decision=new_decision,
             response=response.get("response", ""),
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _try_secondary_ollama_fallback(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        memory_principal: MemoryPrincipal | None = None,
+        evidence: RuntimeEvidence | None = None,
+        started: float | None = None,
+    ) -> RoutingResult:
+        client = self._secondary_ollama_client()
+        if client is None:
+            decision.fallback_attempts.append(self._record_attempt("ollama_fallback", "not configured"))
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
+
+        fallback_model = self._secondary_ollama_model(request.model)
+        decision.fallback_attempts.append({"provider": "ollama_fallback", "outcome": "attempting fallback"})
+        response = await client.chat(
+            prompt=self._prompt_for_provider(request, "ollama_fallback", memory_principal, evidence),
+            model=fallback_model or None,
+        )
+        self._record_provider_response(evidence, response, "ollama_fallback")
+        if "error" in response:
+            decision.fallback_attempts.append({"provider": "ollama_fallback", "outcome": response["error"]})
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
+
+        new_decision = RoutingDecision(
+            request_id=decision.request_id,
+            provider="ollama_fallback",
+            model=fallback_model,
+            reason="fallback after primary local failure",
+            privacy_classification=decision.privacy_classification,
+            fallback_attempts=self._sanitize_fallback_attempts(decision.fallback_attempts),
+            estimated_cost_usd=0.0,
+            limitation_notice="Primary local provider failed; returned secondary local response.",
+        )
+        self._log_decision(new_decision, request)
+        return self._routing_result(
+            decision=new_decision,
+            response=response.get("message", {}).get("content", ""),
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _try_secondary_ollama_tool_fallback(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        registry: ToolRegistry,
+        memory_principal: MemoryPrincipal | None = None,
+        person_context: dict[str, str] | None = None,
+        evidence: RuntimeEvidence | None = None,
+        started: float | None = None,
+    ) -> RoutingResult:
+        client = self._secondary_ollama_client()
+        if client is None:
+            decision.fallback_attempts.append(self._record_attempt("ollama_fallback", "not configured"))
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
+
+        fallback_decision = RoutingDecision(
+            request_id=decision.request_id,
+            provider="ollama_fallback",
+            model=self._secondary_ollama_model(request.model),
+            reason="fallback after primary local tool-loop failure",
+            privacy_classification=decision.privacy_classification,
+            fallback_attempts=self._sanitize_fallback_attempts(
+                decision.fallback_attempts + [{"provider": "ollama_fallback", "outcome": "attempting fallback"}]
+            ),
+            estimated_cost_usd=0.0,
+            limitation_notice="Primary local provider failed; trying secondary local provider.",
+        )
+        self._log_decision(fallback_decision, request)
+        return await self._execute_with_tools(
+            request,
+            fallback_decision,
+            client,
+            registry,
+            memory_principal,
+            person_context,
+            evidence,
+            started,
+        )
+
+    async def _try_openrouter_tool_fallback(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        registry: ToolRegistry,
+        memory_principal: MemoryPrincipal | None = None,
+        person_context: dict[str, str] | None = None,
+        evidence: RuntimeEvidence | None = None,
+        started: float | None = None,
+    ) -> RoutingResult:
+        if not settings.cloud_enabled or self.openrouter_client is None:
+            decision.fallback_attempts.append(self._record_attempt("openrouter", "unavailable"))
+            decision.public_error_message = self._public_error("openrouter", decision.fallback_attempts)
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
+
+        model, reason = self._approved_model(request.model)
+        if not model:
+            decision.fallback_attempts.append(self._record_attempt("openrouter", "no approved model"))
+            decision.public_error_message = PUBLIC_ERROR_MESSAGES["none_available"]
+            return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
+
+        fallback_decision = RoutingDecision(
+            request_id=decision.request_id,
+            provider="openrouter",
+            model=model,
+            reason=f"fallback after local tool-loop failure; {reason}",
+            privacy_classification=decision.privacy_classification,
+            fallback_attempts=self._sanitize_fallback_attempts(
+                decision.fallback_attempts + [{"provider": "openrouter", "outcome": "attempting fallback"}]
+            ),
+            estimated_cost_usd=decision.estimated_cost_usd,
+        )
+        self._log_decision(fallback_decision, request)
+        return await self._execute_with_tools(
+            request,
+            fallback_decision,
+            self.openrouter_client,
+            registry,
+            memory_principal,
+            person_context,
+            evidence,
+            started,
+        )
+
+    async def _try_openrouter_tool_final_answer(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        tool_history: list[dict[str, Any]],
+        memory_principal: MemoryPrincipal | None = None,
+        evidence: RuntimeEvidence | None = None,
+        started: float | None = None,
+    ) -> RoutingResult:
+        if self.openrouter_client is None:
+            decision.fallback_attempts.append(self._record_attempt("openrouter", "client unavailable"))
+            decision.public_error_message = self._public_error("openrouter", decision.fallback_attempts)
+            return self._routing_result(decision=decision, response="", tool_results=tool_history, evidence=evidence, started=started)
+
+        model, reason = self._approved_model(request.model)
+        if not model:
+            decision.fallback_attempts.append(self._record_attempt("openrouter", "no approved model"))
+            decision.public_error_message = PUBLIC_ERROR_MESSAGES["none_available"]
+            return self._routing_result(decision=decision, response="", tool_results=tool_history, evidence=evidence, started=started)
+
+        decision.fallback_attempts.append({"provider": decision.provider, "outcome": "ungrounded tool answer"})
+        decision.fallback_attempts.append({"provider": "openrouter", "outcome": "attempting final answer fallback"})
+        max_output_chars = max(0, settings.chat_max_tool_output_chars)
+        prompt_parts = [
+            self._prompt_for_provider(request, "openrouter", memory_principal, evidence),
+            "\n\nThe local model already executed tools, but its final answer was not grounded in the tool results.",
+            "\nUse only the tool results below to answer the family-facing request. Do not ask for details already present.",
+            "\nIf the user asked for weather and an event date/location is already resolved, answer directly. "
+            "If the event dates are outside the live forecast window, say that plainly and include the event dates/location.",
+        ]
+        for idx, entry in enumerate(tool_history, start=1):
+            serialized = self._serialize_tool_output(entry.get("output", {}), max_output_chars)
+            prompt_parts.append(
+                f"\n\n[Tool result {idx}] {entry.get('tool_name')}: "
+                f"success={entry.get('success')} output={serialized}"
+            )
+        response = await self.openrouter_client.chat(prompt="".join(prompt_parts), model=model)
+        self._record_provider_response(evidence, response, "openrouter")
+        if "error" in response:
+            decision.fallback_attempts.append({"provider": "openrouter", "outcome": response["error"]})
+            decision.public_error_message = self._public_error("openrouter", decision.fallback_attempts)
+            return self._routing_result(decision=decision, response="", tool_results=tool_history, evidence=evidence, started=started)
+
+        new_decision = RoutingDecision(
+            request_id=decision.request_id,
+            provider="openrouter",
+            model=model,
+            reason=f"fallback after ungrounded local tool answer; {reason}",
+            privacy_classification=decision.privacy_classification,
+            fallback_attempts=self._sanitize_fallback_attempts(decision.fallback_attempts),
+            estimated_cost_usd=decision.estimated_cost_usd,
+        )
+        self._log_decision(new_decision, request)
+        response_text = response.get("response", "")
+        await self._record_memory(request, new_decision, response_text, evidence)
+        return self._routing_result(
+            decision=new_decision,
+            response=response_text,
+            tool_results=tool_history,
             evidence=evidence,
             started=started,
         )

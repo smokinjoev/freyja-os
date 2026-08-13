@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     ollama_chat_model: str = "qwen3:14b"
     ollama_classification_model: str = "qwen2.5:1.5b"
     ollama_reasoning_model: str = "qwen3:14b"
+    ollama_fallback_base_url: str = ""
+    ollama_fallback_model: str = "benedict-qwen2.5:7b"
     ollama_min_output_tokens: int = 160
     ollama_default_output_tokens: int = 512
     ollama_retry_output_tokens: int = 1024
@@ -48,6 +50,7 @@ class Settings(BaseSettings):
     ollama_warmup_models: str = Field(default="", alias="OLLAMA_WARMUP_MODELS")
     ollama_warmup_interval_seconds: float = 1200.0
     ollama_warmup_timeout_seconds: float = 90.0
+    ollama_tool_call_timeout_seconds: float = 20.0
 
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -163,6 +166,7 @@ class Settings(BaseSettings):
         candidates = configured or [
             self.ollama_chat_model,
             self.inference_gateway_local_model,
+            self.ollama_fallback_model if self.ollama_fallback_base_url else "",
         ]
         models: list[str] = []
         for model in candidates:

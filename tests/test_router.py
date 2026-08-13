@@ -1,4 +1,5 @@
 import json
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -42,6 +43,8 @@ def reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "local_max_prompt_chars": 8000,
         "openrouter_allowlist": "",
         "ollama_model": "qwen2.5:1.5b",
+        "ollama_fallback_base_url": "",
+        "ollama_fallback_model": "benedict-qwen2.5:7b",
         "ollama_reasoning_model": "gpt-oss:20b",
         "openrouter_model": "openai/gpt-4o-mini",
         "inference_gateway_enabled": False,
@@ -400,6 +403,7 @@ async def test_local_failure_falls_back_to_cloud(router: Router, reset_settings,
     _settings_with_allowlist(monkeypatch)
     router.ollama_client.healthy.return_value = True
     router.ollama_client.chat.return_value = {"error": "Ollama down"}
+    router.ollama_fallback_client = None
     router.openrouter_client.chat.return_value = {
         "model": "openai/gpt-4o-mini",
         "response": "cloud fallback",
@@ -413,9 +417,39 @@ async def test_local_failure_falls_back_to_cloud(router: Router, reset_settings,
     assert "fallback" in result.decision.reason
 
 
+async def test_local_failure_uses_secondary_local_before_cloud(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _settings_with_allowlist(monkeypatch)
+    monkeypatch.setattr(settings, "ollama_fallback_base_url", "http://iris:11434")
+    monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+    router.ollama_fallback_client = AsyncMock()
+    router.ollama_client.healthy.return_value = True
+    router.ollama_client.chat.return_value = {"error": "Hera empty"}
+    router.ollama_fallback_client.chat.return_value = {
+        "model": "benedict-qwen2.5:7b",
+        "message": {"content": "iris fallback"},
+    }
+    router.openrouter_client.chat.return_value = {
+        "model": "openai/gpt-4o-mini",
+        "response": "cloud fallback",
+    }
+
+    req = RouteRequest(prompt="Debug this bug and propose a patch", task_type="coding")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "ollama_fallback"
+    assert result.decision.model == "benedict-qwen2.5:7b"
+    assert result.response == "iris fallback"
+    router.openrouter_client.chat.assert_not_awaited()
+
+
 async def test_retry_exhaustion_falls_back_to_cloud(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
     _settings_with_allowlist(monkeypatch)
     router.ollama_client.chat.return_value = {"error": "Ollama returned empty content", "status": "empty_content"}
+    router.ollama_fallback_client = None
     router.openrouter_client.chat.return_value = {
         "model": "openai/gpt-4o-mini",
         "response": "cloud fallback",
@@ -620,7 +654,7 @@ async def test_builtin_weather_prompt_executes_live_data_tool_directly() -> None
     assert "get_weather" in first_prompt
 
 
-async def test_auto_weather_prompt_executes_live_data_tool_directly() -> None:
+async def test_auto_weather_prompt_is_agent_driven() -> None:
     registry = ToolRegistry(audit_enabled=False)
     seen_arguments: list[dict[str, Any]] = []
 
@@ -660,6 +694,22 @@ async def test_auto_weather_prompt_executes_live_data_tool_directly() -> None:
     r = Router(registry=registry)
     r.ollama_client = AsyncMock()
     r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.side_effect = [
+        {
+            "model": "qwen3:14b",
+            "message": {
+                "content": (
+                    '<freyja_tool_call>{"tool_name":"get_weather","arguments":'
+                    '{"location":"Atlanta","request_type":"forecast","target_date":"2026-08-15","target_label":"next weekend"}}'
+                    "</freyja_tool_call>"
+                )
+            },
+        },
+        {
+            "model": "qwen3:14b",
+            "message": {"content": "Forecast for Atlanta, Georgia, United States next weekend: Dense drizzle."},
+        },
+    ]
 
     result = await r.execute(
         RouteRequest(
@@ -673,7 +723,7 @@ async def test_auto_weather_prompt_executes_live_data_tool_directly() -> None:
     assert seen_arguments[0]["location"] == "Atlanta"
     assert seen_arguments[0]["request_type"] == "forecast"
     assert seen_arguments[0]["target_label"] == "next weekend"
-    r.ollama_client.chat.assert_not_awaited()
+    assert r.ollama_client.chat.await_count == 2
 
 
 async def test_weather_without_location_asks_for_place() -> None:
@@ -955,6 +1005,205 @@ class TestToolLoop:
         args = arguments or {}
         return f'<freyja_tool_call>{{"tool_name":"{name}","arguments":{json.dumps(args)}}}</freyja_tool_call>'
 
+    async def test_agent_resolves_event_before_family_logistics_answer(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen3:14b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {
+                    "model": "qwen3:14b",
+                    "message": {"content": self._tool_call("resolve_public_event", {"query": "Dragon Con"})},
+                }
+            assert "Dragon Con is scheduled for 2026-09-03 through 2026-09-07" in prompt
+            return {
+                "model": "qwen3:14b",
+                "message": {
+                    "content": (
+                        "Dragon Con is in downtown Atlanta from September 3-7, 2026. "
+                        "That is outside the current live forecast window, so I cannot give a real forecast yet."
+                    )
+                },
+            }
+
+        router.ollama_client.chat.side_effect = _respond
+        result = await router.execute(
+            RouteRequest(
+                prompt="How's the weather going to be for Dragon Con?",
+                provider="auto",
+                tools_required=True,
+            )
+        )
+
+        assert result.decision.provider == "ollama"
+        assert result.tool_results[0]["tool_name"] == "resolve_public_event"
+        assert "downtown Atlanta" in result.response
+        assert "outside the current live forecast window" in result.response
+
+    async def test_tool_call_parameters_are_unwrapped(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen3:14b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        seen_arguments: list[dict[str, Any]] = []
+
+        async def _weather(request: ToolExecutionRequest) -> dict[str, Any]:
+            seen_arguments.append(request.arguments)
+            return {
+                "live_data_available": False,
+                "summary": "Forecast date outside supported range.",
+                "detail": "Forecasts are only available up to 7 days out.",
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="get_weather_nested_test",
+                description="Synthetic weather tool.",
+                input_schema={
+                    "type": "object",
+                    "required": ["location", "request_type"],
+                    "properties": {
+                        "location": {"type": "string"},
+                        "request_type": {"type": "string"},
+                        "target_date": {"type": "string"},
+                    },
+                },
+            ),
+            _weather,
+        )
+
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen3:14b",
+                "message": {
+                    "content": self._tool_call(
+                        "get_weather_nested_test",
+                        {
+                            "tool_name": "get_weather_nested_test",
+                            "parameters": {
+                                "location": "Atlanta, Georgia",
+                                "request_type": "forecast",
+                                "target_date": "2026-09-03",
+                            },
+                        },
+                    )
+                },
+            },
+            {"model": "qwen3:14b", "message": {"content": "Forecast is outside the live window."}},
+        ]
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="How's the weather going to be for Dragon Con?",
+                provider="auto",
+                tools_required=True,
+            )
+        )
+
+        assert result.response == "Forecast is outside the live window."
+        assert seen_arguments == [
+            {
+                "location": "Atlanta, Georgia",
+                "request_type": "forecast",
+                "target_date": "2026-09-03",
+            }
+        ]
+
+    async def test_ungrounded_local_tool_answer_falls_back_to_cloud_final(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen3:14b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {
+                    "model": "qwen3:14b",
+                    "message": {"content": self._tool_call("resolve_public_event", {"query": "Dragon Con"})},
+                }
+            return {"model": "qwen3:14b", "message": {"content": "Green frogs have moist skin."}}
+
+        router.ollama_client.chat.side_effect = _respond
+        router.openrouter_client.chat.return_value = {
+            "model": "openai/gpt-4o-mini",
+            "response": "Dragon Con is in downtown Atlanta from September 3-7, 2026.",
+        }
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="How's the weather going to be for Dragon Con?",
+                provider="auto",
+                tools_required=True,
+            )
+        )
+
+        assert result.decision.provider == "openrouter"
+        assert "ungrounded local tool answer" in result.decision.reason
+        assert "Dragon Con" in result.response
+        assert "Atlanta" in result.response
+        assert any(attempt["outcome"] == "ungrounded tool answer" for attempt in result.decision.fallback_attempts)
+
+    async def test_event_weather_answer_cannot_stop_at_offer_to_check(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.openrouter_client.chat.side_effect = [
+            {
+                "model": "openai/gpt-4o-mini",
+                "response": self._tool_call("resolve_public_event", {"query": "Dragon Con"}),
+            },
+            {
+                "model": "openai/gpt-4o-mini",
+                "response": (
+                    "Dragon Con is in Atlanta, Georgia, from September 3 to September 7, 2026. "
+                    "Would you like me to check the weather forecast?"
+                ),
+            },
+            {
+                "model": "openai/gpt-4o-mini",
+                "response": (
+                    "Dragon Con is in Atlanta, Georgia, September 3-7, 2026. "
+                    "Those dates are outside the current live forecast window, so I cannot give a real forecast yet."
+                ),
+            },
+        ]
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="How's the weather going to be for Dragon Con?",
+                provider="cloud",
+                tools_required=True,
+            )
+        )
+
+        assert result.decision.provider == "openrouter"
+        assert "outside the current live forecast window" in result.response
+        assert "Would you like" not in result.response
+        assert router.openrouter_client.chat.await_count == 3
+
     async def test_successful_single_tool_request_local(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
         monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
@@ -1164,6 +1413,8 @@ class TestToolLoop:
     ) -> None:
         monkeypatch.setattr(settings, "inference_gateway_enabled", True)
         monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "ollama_fallback_base_url", "")
+        monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
         monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
         monkeypatch.setattr(settings, "cloud_enabled", True)
         router.ollama_client.chat.return_value = {"error": "Ollama returned empty content", "status": "empty_content"}
@@ -1185,6 +1436,108 @@ class TestToolLoop:
         assert len(result.tool_results) == 1
         assert result.tool_results[0]["tool_name"] == "current_time"
         assert result.tool_results[0]["success"] is True
+
+    async def test_local_tool_loop_failure_uses_secondary_local_before_cloud(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+        monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "ollama_fallback_base_url", "http://iris:11434")
+        monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+        router.ollama_fallback_client = AsyncMock()
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.ollama_client.chat.return_value = {"error": "Hera returned empty content", "status": "empty_content"}
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "benedict-qwen2.5:7b", "message": {"content": self._tool_call("current_time")}}
+            return {"model": "benedict-qwen2.5:7b", "message": {"content": "The time is now."}}
+
+        router.ollama_fallback_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="What time is it?", provider="auto", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.decision.provider == "ollama_fallback"
+        assert "primary local tool-loop failure" in result.decision.reason
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "current_time"
+        assert result.tool_results[0]["success"] is True
+        router.openrouter_client.chat.assert_not_awaited()
+
+    async def test_slow_primary_local_tool_loop_times_out_to_secondary_local(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+        monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "ollama_tool_call_timeout_seconds", 0.01)
+        monkeypatch.setattr(settings, "ollama_fallback_base_url", "http://iris:11434")
+        monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+
+        async def _slow_primary(**kwargs: Any) -> dict[str, Any]:
+            await asyncio.sleep(0.05)
+            return {"model": "qwen3:14b", "message": {"content": "too late"}}
+
+        router.ollama_client.chat.side_effect = _slow_primary
+        router.ollama_fallback_client = AsyncMock()
+        router.ollama_fallback_client.chat.return_value = {
+            "model": "benedict-qwen2.5:7b",
+            "message": {"content": "Iris handled it."},
+        }
+
+        result = await router.execute(RouteRequest(prompt="Use a tool.", provider="auto", tools_required=True))
+
+        assert result.decision.provider == "ollama_fallback"
+        assert result.response == "Iris handled it."
+        assert any("timed out" in attempt["outcome"] for attempt in result.decision.fallback_attempts)
+
+    async def test_secondary_local_malformed_tool_call_falls_back_to_cloud(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+        monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "ollama_fallback_base_url", "http://iris:11434")
+        monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.ollama_client.chat.return_value = {"error": "Hera returned empty content", "status": "empty_content"}
+        router.ollama_fallback_client = AsyncMock()
+        router.ollama_fallback_client.chat.return_value = {
+            "model": "benedict-qwen2.5:7b",
+            "message": {"content": '<freyja_tool_call>{"tool_name":"current_time","arguments":{}'},
+        }
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "openai/gpt-4o-mini", "response": self._tool_call("current_time")}
+            return {"model": "openai/gpt-4o-mini", "response": "The time is now."}
+
+        router.openrouter_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="What time is it?", provider="auto", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.decision.provider == "openrouter"
+        assert "tool-loop failure" in result.decision.reason
+        assert any(attempt["outcome"] == "malformed tool call" for attempt in result.decision.fallback_attempts)
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "current_time"
+        assert result.response == "The time is now."
 
     async def test_oversized_tool_output_is_truncated(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")

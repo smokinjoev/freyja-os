@@ -106,6 +106,7 @@ async def test_ollama_warmup_uses_chat_and_gateway_local_models(monkeypatch) -> 
     monkeypatch.setattr(settings, "ollama_warmup_models", "")
     monkeypatch.setattr(settings, "ollama_model", "qwen2.5:1.5b")
     monkeypatch.setattr(settings, "ollama_chat_model", "qwen2.5:7b")
+    monkeypatch.setattr(settings, "ollama_fallback_base_url", "")
     monkeypatch.setattr(settings, "inference_gateway_local_model", "qwen2.5:7b")
 
     mock_warm = AsyncMock(return_value={"status": "ok", "model": "qwen2.5:7b"})

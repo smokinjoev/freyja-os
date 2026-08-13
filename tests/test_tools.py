@@ -86,6 +86,7 @@ def test_discovery(registry: ToolRegistry) -> None:
         "system_health",
         "list_models",
         "recall_conversation",
+        "resolve_public_event",
         "get_weather",
         "hostname",
         "current_time",
@@ -114,6 +115,25 @@ def test_discovery(registry: ToolRegistry) -> None:
         "homeassistant_list_entities",
         "homeassistant_pairing_plan",
     }
+
+
+def test_builtin_resolve_public_event_dragon_con(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="resolve_public_event",
+                arguments={"query": "Dragon Con"},
+            )
+        )
+    )
+
+    assert result.success is True
+    assert result.output["found"] is True
+    assert result.output["name"] == "Dragon Con"
+    assert result.output["location"] == "Atlanta, Georgia"
+    assert result.output["start_date"] == "2026-09-03"
+    assert result.output["end_date"] == "2026-09-07"
 
 
 def test_disable_tool_rejects_execution(registry: ToolRegistry) -> None:
@@ -397,7 +417,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 30
+    assert len(tools) == 31
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:

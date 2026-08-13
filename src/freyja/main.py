@@ -156,6 +156,8 @@ async def control_plane_status() -> dict[str, Any]:
                 "chat_model": settings.ollama_chat_model,
                 "classification_model": settings.ollama_classification_model,
                 "reasoning_model": settings.ollama_reasoning_model,
+                "fallback_base_url": settings.ollama_fallback_base_url,
+                "fallback_model": settings.ollama_fallback_model,
                 "warmup_enabled": settings.ollama_warmup_enabled,
                 "warmup_models": settings.ollama_warmup_model_names,
                 "warmup_interval_seconds": settings.ollama_warmup_interval_seconds,
