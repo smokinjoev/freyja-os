@@ -175,7 +175,27 @@ async def test_quick_acknowledgement_stays_fast_tier(router: Router, reset_setti
     assert result.response == "ok"
 
 
-async def test_inference_gateway_auto_routes_routine_to_fast_openrouter(
+async def test_inference_gateway_auto_routes_routine_to_local(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    router.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "local routine"},
+    }
+
+    result = await router.execute(RouteRequest(prompt="Summarize this note", task_type="chat"))
+
+    assert result.decision.provider == "ollama"
+    assert result.decision.model == "qwen2.5:7b"
+    assert "inference gateway LOCAL tier selected" == result.decision.reason
+    assert result.response == "local routine"
+    router.openrouter_client.chat.assert_not_called()
+
+
+async def test_inference_gateway_tool_requests_use_default_tier(
     router: Router,
     reset_settings,
     monkeypatch: pytest.MonkeyPatch,
@@ -184,36 +204,38 @@ async def test_inference_gateway_auto_routes_routine_to_fast_openrouter(
     monkeypatch.setattr(settings, "inference_gateway_openrouter_allowlist", "qwen/qwen3.5-flash-02-23")
     router.openrouter_client.chat.return_value = {
         "model": "qwen/qwen3.5-flash-02-23",
-        "response": "fast",
+        "response": "cloud tools",
     }
 
-    result = await router.execute(RouteRequest(prompt="Summarize this note", task_type="chat"))
+    result = await router.execute(RouteRequest(prompt="What host am I on?", tools_required=True))
 
     assert result.decision.provider == "openrouter"
     assert result.decision.model == "qwen/qwen3.5-flash-02-23"
-    assert "inference gateway FAST tier selected" == result.decision.reason
-    assert result.response == "fast"
+    assert result.decision.reason == "inference gateway FAST tier selected"
+    assert result.response == "cloud tools"
     router.ollama_client.chat.assert_not_called()
 
 
-async def test_inference_gateway_keeps_tool_requests_local(
+async def test_inference_gateway_default_tier_can_make_auto_deep(
     router: Router,
     reset_settings,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "inference_gateway_enabled", True)
-    router.ollama_client.chat.return_value = {
-        "model": "qwen2.5:7b",
-        "message": {"content": "local tools"},
+    monkeypatch.setattr(settings, "inference_gateway_default_tier", "DEEP")
+    monkeypatch.setattr(settings, "inference_gateway_openrouter_allowlist", "z-ai/glm-5")
+    router.openrouter_client.chat.return_value = {
+        "model": "z-ai/glm-5",
+        "response": "deep default",
     }
 
-    result = await router.execute(RouteRequest(prompt="What host am I on?", tools_required=True))
+    result = await router.execute(RouteRequest(prompt="Please help me plan the day", tools_required=True))
 
-    assert result.decision.provider == "ollama"
-    assert result.decision.model == "qwen2.5:7b"
-    assert result.decision.reason == "inference gateway LOCAL tier selected"
-    assert result.response == "local tools"
-    router.openrouter_client.chat.assert_not_called()
+    assert result.decision.provider == "openrouter"
+    assert result.decision.model == "z-ai/glm-5"
+    assert result.decision.reason == "inference gateway DEEP tier selected"
+    assert result.response == "deep default"
+    router.ollama_client.chat.assert_not_called()
 
 
 async def test_inference_gateway_deep_provider_routes_to_glm(

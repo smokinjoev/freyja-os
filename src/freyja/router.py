@@ -423,8 +423,11 @@ class Router:
         return round(tokens * 2.0 / 1_000_000, 6)
 
     def _gateway_tier_for_auto(self, request: RouteRequest, privacy: str) -> str:
-        if privacy == "sensitive" or request.tools_required:
+        if privacy == "sensitive":
             return "LOCAL"
+        default_tier = self._gateway_default_tier()
+        if request.tools_required:
+            return default_tier
         task = (request.task_type or "").lower()
         prompt = request.prompt.lower()
         if any(term in task for term in {"deep", "architecture", "architectural", "complex"}) or any(
@@ -432,8 +435,18 @@ class Router:
         ):
             return "DEEP"
         if _cloud_score(request) > _routine_score(request):
-            return "REASONING"
+            return self._higher_gateway_tier(default_tier, "REASONING")
+        return "LOCAL"
+
+    def _gateway_default_tier(self) -> str:
+        tier = settings.inference_gateway_default_tier.upper()
+        if tier in {"LOCAL", "FREE", "FAST", "REASONING", "DEEP"}:
+            return tier
         return "FAST"
+
+    def _higher_gateway_tier(self, current: str, minimum: str) -> str:
+        rank = {"LOCAL": 0, "FREE": 1, "FAST": 2, "REASONING": 3, "DEEP": 4}
+        return current if rank.get(current, 0) >= rank[minimum] else minimum
 
     def _gateway_tier_model(self, tier: str, requested: str | None = None) -> tuple[str, str, float, float]:
         if tier == "LOCAL":
