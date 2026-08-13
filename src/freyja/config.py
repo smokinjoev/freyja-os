@@ -35,14 +35,22 @@ class Settings(BaseSettings):
     freyja_connector_token: str = ""
 
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen2.5:7b"
-    ollama_chat_model: str = "qwen2.5:7b"
+    ollama_model: str = "qwen3:14b"
+    ollama_chat_model: str = "qwen3:14b"
     ollama_classification_model: str = "qwen2.5:1.5b"
-    ollama_reasoning_model: str = "gpt-oss:20b"
+    ollama_reasoning_model: str = "qwen3:14b"
+    ollama_fallback_base_url: str = ""
+    ollama_fallback_model: str = "benedict-qwen2.5:7b"
     ollama_min_output_tokens: int = 160
     ollama_default_output_tokens: int = 512
     ollama_retry_output_tokens: int = 1024
     ollama_min_chat_parameters_b: int = 3
+    ollama_keep_alive: str = "30m"
+    ollama_warmup_enabled: bool = False
+    ollama_warmup_models: str = Field(default="", alias="OLLAMA_WARMUP_MODELS")
+    ollama_warmup_interval_seconds: float = 1200.0
+    ollama_warmup_timeout_seconds: float = 90.0
+    ollama_tool_call_timeout_seconds: float = 20.0
 
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -54,6 +62,29 @@ class Settings(BaseSettings):
     openrouter_per_request_limit: float = 1.0
     local_max_prompt_chars: int = 8000
     openrouter_allowlist: str = Field(default="", alias="OPENROUTER_ALLOWLIST")
+
+    inference_gateway_enabled: bool = False
+    inference_gateway_monthly_hard_limit: float = 20.0
+    inference_gateway_per_request_limit: float = 1.0
+    inference_gateway_default_tier: str = "LOCAL"
+    inference_gateway_local_model: str = "qwen3:14b"
+    inference_gateway_free_model: str = ""
+    inference_gateway_fast_model: str = "qwen/qwen3.5-flash-02-23"
+    inference_gateway_reasoning_model: str = "moonshotai/kimi-k2.5"
+    inference_gateway_deep_model: str = "z-ai/glm-5"
+    inference_gateway_frontier_model: str = "openai/gpt-5.4"
+    inference_gateway_ollama_cloud_model: str = ""
+    inference_gateway_ollama_cloud_base_url: str = ""
+    inference_gateway_ollama_cloud_api_key: str = ""
+    inference_gateway_openrouter_allowlist: str = Field(default="", alias="INFERENCE_GATEWAY_OPENROUTER_ALLOWLIST")
+    inference_gateway_fast_input_per_m: float = 0.065
+    inference_gateway_fast_output_per_m: float = 0.26
+    inference_gateway_reasoning_input_per_m: float = 0.375
+    inference_gateway_reasoning_output_per_m: float = 2.025
+    inference_gateway_deep_input_per_m: float = 0.60
+    inference_gateway_deep_output_per_m: float = 1.92
+    inference_gateway_frontier_input_per_m: float = 2.50
+    inference_gateway_frontier_output_per_m: float = 15.0
 
     memory_enabled: bool = True
     memory_database_path: str = str(_repo_root() / "data" / "freyja.db")
@@ -105,11 +136,43 @@ class Settings(BaseSettings):
 
     weather_tool_enabled: bool = False
 
+    apple_calendar_bridge_url: str = ""
+    apple_calendar_bridge_token: str = ""
+    apple_calendar_bridge_timeout_seconds: float = 15.0
+    apple_reminders_bridge_url: str = ""
+    apple_reminders_bridge_token: str = ""
+    apple_reminders_bridge_timeout_seconds: float = 15.0
+
+    home_assistant_base_url: str = "http://127.0.0.1:8123"
+    home_assistant_token: str = ""
+    home_assistant_timeout_seconds: float = 10.0
+    home_assistant_entity_allowlist: str = ""
+
     @property
     def approved_openrouter_models(self) -> list[str]:
         if not self.openrouter_allowlist:
             return []
         return [model.strip() for model in self.openrouter_allowlist.split(",") if model.strip()]
+
+    @property
+    def approved_inference_gateway_models(self) -> list[str]:
+        if not self.inference_gateway_openrouter_allowlist:
+            return []
+        return [model.strip() for model in self.inference_gateway_openrouter_allowlist.split(",") if model.strip()]
+
+    @property
+    def ollama_warmup_model_names(self) -> list[str]:
+        configured = [model.strip() for model in self.ollama_warmup_models.split(",") if model.strip()]
+        candidates = configured or [
+            self.ollama_chat_model,
+            self.inference_gateway_local_model,
+            self.ollama_fallback_model if self.ollama_fallback_base_url else "",
+        ]
+        models: list[str] = []
+        for model in candidates:
+            if model and model not in models:
+                models.append(model)
+        return models
 
 
 settings = Settings()

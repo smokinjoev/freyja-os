@@ -2,8 +2,9 @@
 
 ## Current Milestone
 
-Identity Service: make `Person` the canonical representation for people across
-memory, messaging, calendar, Director tools, and future voice/avatar work.
+Home Assistant foundation: deploy the private automation hub on Atlas, inventory
+devices safely, and add explicit approval before Freyja can open pairing or
+control an entity.
 
 ## Completed Work
 
@@ -19,16 +20,31 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
   sender maps to a known person, while preserving legacy allowlist behavior.
 - Router tool execution now receives sanitized person metadata from trusted
   connector headers.
+- Director prompts restore recent conversation context, so follow-up requests
+  such as "put it on my calendar" can retain the prior task and date.
 - Calendar service and tools now accept person IDs or aliases and default to
   the resolved sender when available.
+- Calendar writes require the configured persistent provider and refuse the
+  temporary in-memory provider outside explicit test injection.
+- Reminders service and tools support reminder lists, active reminder listing,
+  creation, completion, deletion, and an authenticated Apple Reminders bridge.
+- Persistent SQLite identity storage, JSON import, vCard import, native Apple
+  Contacts import, backup, verification, and restore workflows are available.
+- Signal and iMessage allowlist parsing can resolve approved raw addresses
+  through the configured identity store and attach canonical Person headers
+  without inline family aliases.
 - Identity certification suites were added under
   `certification/suites/identity/`.
 
 ## Remaining Work
 
-- Replace the in-code default family seed with a persistent contact source.
-- Add production contact import/sync for Google Contacts, Apple Contacts, or a
-  local encrypted contacts file.
+- Turn on the persistent identity store in production after importing reviewed
+  household contacts, then disable seed fallback when appropriate.
+- Add recurring production contact sync for the chosen canonical source.
+- Deploy Home Assistant OS on Atlas and create its protected Freyja API user.
+- Connect the read-only inventory to the live private endpoint.
+- Add a general controlled-write approval boundary before exposing pairing.
+- Enroll and classify devices deliberately; begin with a harmless test device.
 - Expand relationship coverage beyond the current directed edges.
 - Add future voice/avatar identity adapters when those subsystems are built.
 - Use identity benchmark history for router policy only after benchmark data is
@@ -55,10 +71,12 @@ memory, messaging, calendar, Director tools, and future voice/avatar work.
 - Certification CLI, Gauntlet, runtime behavioral verification, benchmark, and
   comparison framework.
 - Multi-user Communications through Signal and native iMessage connectors.
-- Family Calendar Personal Intelligence Service.
+- Family Calendar and Reminders Personal Intelligence Services.
 
 ## Next Milestone
 
-Prepare Identity for persistent household use: configure a durable contact
-store, add import/sync adapters, and migrate production messaging/calendar
-configuration from inline aliases to canonical Person records.
+Complete the Atlas Home Assistant installation, verify backups and inventory,
+then enable time-bounded Zigbee pairing behind explicit approval. In parallel,
+finish the production identity rollout by importing reviewed household contacts,
+enabling the durable SQLite store for the Director and connectors, and removing
+inline messaging aliases where canonical identities exist.

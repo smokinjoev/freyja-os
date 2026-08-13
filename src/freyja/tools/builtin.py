@@ -1,6 +1,7 @@
 import os
 import subprocess
 from pathlib import Path
+from difflib import SequenceMatcher
 
 from freyja.memory.store import get_active_store
 from freyja.ollama_client import OllamaClient
@@ -9,8 +10,70 @@ from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolImplem
 from freyja.tools.registry import ToolRegistry
 from freyja.tools.calendar import register_calendar_tools
 from freyja.tools.identity import register_identity_tools
+from freyja.tools.homeassistant import register_homeassistant_tools
 from freyja.tools.local_host import register_local_host_tools
+from freyja.tools.reminders import register_reminder_tools
 from freyja.tools.weather import WeatherRequestType, classify_weather_request, get_weather
+
+
+_PUBLIC_EVENTS = {
+    "dragon con": {
+        "name": "Dragon Con",
+        "aliases": ["dragoncon", "dragon con"],
+        "location": "Atlanta, Georgia",
+        "venue": "Downtown Atlanta",
+        "start_date": "2026-09-03",
+        "end_date": "2026-09-07",
+        "source": "Dragon Con 2026 public event listing",
+    },
+}
+
+
+def _normalize_event_query(query: str) -> str:
+    return " ".join(str(query or "").lower().replace("*", " ").split())
+
+
+async def _resolve_public_event_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    query = _normalize_event_query(args.get("query", ""))
+    if not query:
+        return {
+            "found": False,
+            "query": "",
+            "summary": "Missing event query.",
+            "detail": "Provide the event name to resolve.",
+        }
+
+    best_key = ""
+    best_score = 0.0
+    for key, event in _PUBLIC_EVENTS.items():
+        candidates = [key, *event.get("aliases", [])]
+        score = max(SequenceMatcher(None, query, _normalize_event_query(candidate)).ratio() for candidate in candidates)
+        if query in {_normalize_event_query(candidate) for candidate in candidates}:
+            score = 1.0
+        if score > best_score:
+            best_key = key
+            best_score = score
+
+    if not best_key or best_score < 0.72:
+        return {
+            "found": False,
+            "query": query,
+            "summary": "Event not found.",
+            "detail": "I do not have a resolved date/location for that event yet.",
+        }
+
+    event = dict(_PUBLIC_EVENTS[best_key])
+    return {
+        "found": True,
+        "query": query,
+        "confidence": round(best_score, 2),
+        **event,
+        "summary": (
+            f"{event['name']} is scheduled for {event['start_date']} through "
+            f"{event['end_date']} in {event['location']}."
+        ),
+    }
 
 
 async def _get_weather_implementation(request: ToolExecutionRequest) -> dict:
@@ -47,6 +110,11 @@ async def _get_weather_implementation(request: ToolExecutionRequest) -> dict:
                 "summary": "Invalid forecast date.",
                 "detail": "target_date must be in YYYY-MM-DD format.",
             }
+    if request_type == WeatherRequestType.FORECAST and "weekend" in str(target_label).lower():
+        parsed = classify_weather_request(f"weather {target_label} in {location}")
+        if parsed.target_date is not None:
+            target_date = parsed.target_date
+            target_label = parsed.target_label
 
     return await get_weather(
         location=location,
@@ -97,6 +165,7 @@ _BUILTIN_TOOL_NAMES = (
     "system_health",
     "list_models",
     "recall_conversation",
+    "resolve_public_event",
     "get_weather",
     "hostname",
     "current_time",
@@ -113,8 +182,17 @@ _BUILTIN_TOOL_NAMES = (
     "calendar_delete_event",
     "calendar_find_time",
     "calendar_move_event_if_conflict",
+    "reminders_lists",
+    "reminders_list",
+    "reminders_create",
+    "reminders_complete",
+    "reminders_delete",
     "identity_resolution",
     "identity_relationships",
+    "homeassistant_status",
+    "homeassistant_list_entities",
+    "homeassistant_pairing_plan",
+    "homeassistant_begin_pairing",
 )
 
 
@@ -137,7 +215,47 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         return
     register_local_host_tools(registry)
     register_calendar_tools(registry)
+    register_reminder_tools(registry)
     register_identity_tools(registry)
+    register_homeassistant_tools(registry)
+    registry.register(
+        ToolDefinition(
+            name="resolve_public_event",
+            description=(
+                "Resolve a named public event to its known location and dates before answering "
+                "weather, travel, calendar, or family logistics questions. Use this when the "
+                "user names an event instead of a city/date, e.g. Dragon Con."
+            ),
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Event name or alias, e.g. 'Dragon Con' or 'dragoncon'.",
+                    },
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "found": {"type": "boolean"},
+                    "name": {"type": "string"},
+                    "location": {"type": "string"},
+                    "venue": {"type": "string"},
+                    "start_date": {"type": "string"},
+                    "end_date": {"type": "string"},
+                    "summary": {"type": "string"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=5,
+            tags=["events", "logistics", "family", "read-only"],
+        ),
+        _resolve_public_event_implementation,
+    )
     registry.register(
         ToolDefinition(
             name="get_weather",
@@ -183,7 +301,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             },
             risk_level=ToolRiskLevel.READ_ONLY,
             enabled=True,
-            timeout_seconds=20,
+            timeout_seconds=35,
             tags=["weather", "live-data"],
         ),
         _get_weather_implementation,

@@ -7,10 +7,10 @@ This Compose project runs the always-on Signal transport stack on Atlas:
 
 The Freyja Director is not part of this stack. Rev 1 places the Director and
 control plane on Mars. The connector forwards authorized requests to Mars using
-`FREYJA_DIRECTOR_URL`. Hera provides the primary complex `local_reasoning`
-model over Tailscale, while Iris remains the fast local inference tier. Hera is
-not a core always-on control-plane host, so the Director must handle Hera
-unavailability through configured fallback or explicit provider failure.
+`FREYJA_DIRECTOR_URL`. Hera provides the primary local agent model (`qwen3:14b`)
+over Tailscale. Hera is not a core always-on control-plane host, so the Director
+must handle Hera unavailability through configured fallback or explicit provider
+failure.
 
 ## Network and data isolation
 

@@ -3,11 +3,12 @@
 This Compose project runs only the Freyja Director and control plane on Mars.
 Signal remains a separate Atlas deployment under `deploy/compose/signal`.
 The Director uses Hera's Tailscale-reachable Ollama service for the primary
-complex `local_reasoning` model (`gpt-oss:20b`). Iris remains the fast local
-inference tier for lower-latency local work. Hera is not a core always-on host,
-so routing must tolerate Hera being unavailable and return a clear provider
-failure or use configured fallback. OpenRouter fallback requires a configured
-API key, approved models, and routing budget headroom.
+local agent model (`qwen3:14b`). Routing stays local when possible and escalates
+to configured OpenRouter tiers only when local inference cannot satisfy the
+request. Hera is not a core always-on host, so routing must tolerate Hera being
+unavailable and return a clear provider failure or use configured fallback.
+OpenRouter fallback requires a configured API key, approved models, and routing
+budget headroom.
 
 ## Private access
 

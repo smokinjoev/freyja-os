@@ -135,6 +135,13 @@ class TestTemporalParsing:
         assert decision.target_label == "forecast"
         assert decision.target_date == today + _datetime.timedelta(days=1)
 
+    def test_next_weekend_is_forecast(self):
+        today = _datetime.date(2026, 8, 12)  # Wednesday
+        decision = _classify_temporal_intent("What is the weather next weekend in Atlanta?", today=today)
+        assert decision.request_type == WeatherRequestType.FORECAST
+        assert decision.target_label == "next weekend"
+        assert decision.target_date == _datetime.date(2026, 8, 15)
+
 
 class TestLocationExtraction:
     def test_extract_location_basic(self):
@@ -156,6 +163,17 @@ class TestLocationExtraction:
         assert loc.strip() == "Aiken"
         assert "3" not in loc
         assert "days" not in loc.lower()
+
+    def test_extract_location_stops_before_home_light_clause(self):
+        loc = _extract_location("What is the weather in Osaka, Japan and what lights are on?")
+        assert loc == "Osaka, Japan"
+
+    def test_extract_location_without_place_returns_empty(self):
+        assert _extract_location("What is the weather?") == ""
+        assert _extract_location("weather and lights") == ""
+
+    def test_extract_location_strips_weekend_phrase(self):
+        assert _extract_location("What is the weather next weekend in Atlanta?") == "Atlanta"
 
 
 class TestGetWeatherDisabled:
@@ -469,6 +487,13 @@ class TestClassificationIntegration:
         assert req.request_type == WeatherRequestType.FORECAST
         assert req.target_label == "tomorrow"
 
+    def test_classify_next_weekend_request(self):
+        req = classify_weather_request("What is the weather next weekend in Atlanta?")
+        assert req.is_valid
+        assert req.location == "Atlanta"
+        assert req.request_type == WeatherRequestType.FORECAST
+        assert req.target_label == "next weekend"
+
     def test_classify_outside_range_request(self):
         req = classify_weather_request("What is the weather in 10 days in Aiken?")
         assert not req.is_valid
@@ -487,11 +512,13 @@ class TestModelPolicyStillHolds:
         assert _meets_min_chat_capability("qwen2.5:7b")
         assert not _meets_min_chat_capability("qwen2.5:1.5b")
 
-    def test_default_freyja_model_is_7b(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_default_freyja_model_is_hera_14b(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.delenv("OLLAMA_CHAT_MODEL", raising=False)
         monkeypatch.delenv("OLLAMA_CLASSIFICATION_MODEL", raising=False)
+        monkeypatch.delenv("OLLAMA_REASONING_MODEL", raising=False)
         s = Settings(_env_file=None)
-        assert s.ollama_model == "qwen2.5:7b"
-        assert s.ollama_chat_model == "qwen2.5:7b"
+        assert s.ollama_model == "qwen3:14b"
+        assert s.ollama_chat_model == "qwen3:14b"
         assert s.ollama_classification_model == "qwen2.5:1.5b"
+        assert s.ollama_reasoning_model == "qwen3:14b"

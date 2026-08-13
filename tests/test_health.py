@@ -3,12 +3,21 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+import freyja.main as main
 from freyja.main import app
 from freyja.router import router
 from freyja.tools.models import ToolExecutionResult
 
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def gateway_disabled_by_default(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "inference_gateway_enabled", False)
+    monkeypatch.setattr(settings, "ollama_warmup_enabled", False)
 
 
 def test_health() -> None:
@@ -24,6 +33,108 @@ def test_health_remains_public_when_connector_auth_is_enabled(monkeypatch) -> No
     monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
     response = client.get("/health")
     assert response.status_code == 200
+
+
+def test_control_plane_status_requires_connector_token_when_configured(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get("/control-plane/status")
+    assert response.status_code == 401
+
+
+def test_control_plane_status_returns_non_secret_readiness(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "openrouter_api_key", "sk-test-secret")
+    monkeypatch.setattr(settings, "home_assistant_token", "ha-secret")
+    monkeypatch.setattr(settings, "home_assistant_base_url", "http://ha.local:8123")
+
+    response = client.get(
+        "/control-plane/status",
+        headers={"Authorization": "Bearer test-connector-token"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["service"] == "freyja-director"
+    assert data["overall_status"] == "degraded"
+    assert data["auth"] == {"connector_token_configured": True}
+    assert data["providers"]["openrouter"]["api_key_configured"] is True
+    assert data["providers"]["ollama"]["warmup_enabled"] is False
+    assert data["connectors"]["home_assistant_configured"] is True
+    assert "connector_auth_not_configured" not in data["warnings"]
+    assert "test-connector-token" not in response.text
+    assert "sk-test-secret" not in response.text
+    assert "ha-secret" not in response.text
+
+
+def test_control_plane_status_exposes_tool_registry_counts() -> None:
+    response = client.get("/control-plane/status")
+
+    assert response.status_code == 200
+    tools = response.json()["tools"]
+    assert tools["globally_enabled"] is True
+    assert tools["registered_count"] >= tools["enabled_count"]
+    assert tools["disabled_count"] >= 0
+    assert tools["controlled_write_tools"] == sorted(tools["controlled_write_tools"])
+
+
+def test_control_plane_status_flags_missing_connector_auth(monkeypatch) -> None:
+    from freyja.config import settings
+    from freyja.tools.builtin import register_builtin_tools
+    from freyja.tools.registry import get_registry
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "")
+    register_builtin_tools(get_registry())
+    response = client.get("/control-plane/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["overall_status"] == "degraded"
+    assert "connector_auth_not_configured" in data["warnings"]
+    assert "controlled_write_tools_enabled_without_connector_auth" in data["warnings"]
+
+
+@pytest.mark.asyncio
+async def test_ollama_warmup_uses_chat_and_gateway_local_models(monkeypatch) -> None:
+    from freyja.config import settings
+    from freyja.ollama_warmup import warm_local_models_once
+
+    monkeypatch.setattr(settings, "ollama_warmup_enabled", True)
+    monkeypatch.setattr(settings, "ollama_warmup_models", "")
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:1.5b")
+    monkeypatch.setattr(settings, "ollama_chat_model", "qwen2.5:7b")
+    monkeypatch.setattr(settings, "ollama_fallback_base_url", "")
+    monkeypatch.setattr(settings, "inference_gateway_local_model", "qwen2.5:7b")
+
+    mock_warm = AsyncMock(return_value={"status": "ok", "model": "qwen2.5:7b"})
+    monkeypatch.setattr(main.ollama, "warm", mock_warm)
+
+    results = await warm_local_models_once(main.ollama, service_name="director")
+
+    assert [result["model"] for result in results] == ["qwen2.5:7b"]
+    mock_warm.assert_awaited_once_with(model="qwen2.5:7b")
+
+
+@pytest.mark.asyncio
+async def test_ollama_warmup_respects_explicit_model_list(monkeypatch) -> None:
+    from freyja.config import settings
+    from freyja.ollama_warmup import warm_local_models_once
+
+    monkeypatch.setattr(settings, "ollama_warmup_enabled", True)
+    monkeypatch.setattr(settings, "ollama_warmup_models", "qwen2.5:7b,gpt-oss:20b,qwen2.5:7b")
+
+    mock_warm = AsyncMock(side_effect=[
+        {"status": "ok", "model": "qwen2.5:7b"},
+        {"status": "ok", "model": "gpt-oss:20b"},
+    ])
+    monkeypatch.setattr(main.ollama, "warm", mock_warm)
+
+    await warm_local_models_once(main.ollama, service_name="director")
+
+    assert [call.kwargs["model"] for call in mock_warm.await_args_list] == ["qwen2.5:7b", "gpt-oss:20b"]
 
 
 def test_protected_endpoint_requires_connector_token(monkeypatch) -> None:
@@ -62,6 +173,8 @@ def test_protected_endpoint_accepts_connector_token(monkeypatch) -> None:
 
 
 def test_ollama_health_reachable() -> None:
+    from freyja.config import settings
+
     with patch("freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock) as mock_healthy:
         mock_healthy.return_value = True
         response = client.get("/ollama/health")
@@ -69,7 +182,7 @@ def test_ollama_health_reachable() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["ollama_reachable"] is True
-    assert data["base_url"] == "http://127.0.0.1:11434"
+    assert data["base_url"] == settings.ollama_base_url
 
 
 def test_local_reasoning_health_available(monkeypatch) -> None:

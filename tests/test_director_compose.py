@@ -17,10 +17,13 @@ def test_director_passes_local_reasoning_ollama_settings() -> None:
     environment = compose["services"]["director"]["environment"]
 
     assert environment["OLLAMA_BASE_URL"] == "${OLLAMA_BASE_URL}"
-    assert environment["OLLAMA_REASONING_MODEL"] == "${OLLAMA_REASONING_MODEL:-gpt-oss:20b}"
+    assert environment["OLLAMA_REASONING_MODEL"] == "${OLLAMA_REASONING_MODEL:-qwen3:14b}"
     assert environment["OLLAMA_DEFAULT_OUTPUT_TOKENS"] == "${OLLAMA_DEFAULT_OUTPUT_TOKENS:-512}"
     assert environment["OLLAMA_MIN_OUTPUT_TOKENS"] == "${OLLAMA_MIN_OUTPUT_TOKENS:-160}"
     assert environment["OLLAMA_RETRY_OUTPUT_TOKENS"] == "${OLLAMA_RETRY_OUTPUT_TOKENS:-1024}"
+    assert environment["OLLAMA_KEEP_ALIVE"] == "${OLLAMA_KEEP_ALIVE:-30m}"
+    assert environment["OLLAMA_WARMUP_ENABLED"] == "${OLLAMA_WARMUP_ENABLED:-true}"
+    assert environment["OLLAMA_WARMUP_INTERVAL_SECONDS"] == "${OLLAMA_WARMUP_INTERVAL_SECONDS:-1200}"
 
 
 def test_director_uses_persistent_shared_memory_configuration() -> None:

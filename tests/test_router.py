@@ -1,4 +1,5 @@
 import json
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -10,7 +11,7 @@ from freyja.config import Settings, settings
 from freyja.memory.models import MemoryPrincipal
 from freyja.router import RouteRequest, Router
 from freyja.tools.builtin import register_builtin_tools
-from freyja.tools.models import ToolDefinition, ToolExecutionRequest
+from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
 
 
@@ -42,11 +43,29 @@ def reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "local_max_prompt_chars": 8000,
         "openrouter_allowlist": "",
         "ollama_model": "qwen2.5:1.5b",
+        "ollama_fallback_base_url": "",
+        "ollama_fallback_model": "benedict-qwen2.5:7b",
         "ollama_reasoning_model": "gpt-oss:20b",
         "openrouter_model": "openai/gpt-4o-mini",
+        "inference_gateway_enabled": False,
+        "inference_gateway_monthly_hard_limit": 20.0,
+        "inference_gateway_per_request_limit": 1.0,
+        "inference_gateway_default_tier": "FAST",
+        "inference_gateway_local_model": "qwen2.5:7b",
+        "inference_gateway_free_model": "",
+        "inference_gateway_fast_model": "qwen/qwen3.5-flash-02-23",
+        "inference_gateway_reasoning_model": "moonshotai/kimi-k2.5",
+        "inference_gateway_deep_model": "z-ai/glm-5",
+        "inference_gateway_frontier_model": "openai/gpt-5.4",
+        "inference_gateway_openrouter_allowlist": "",
     }
     for key, value in defaults.items():
         monkeypatch.setattr(settings, key, value)
+
+
+@pytest.fixture(autouse=True)
+def gateway_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", False)
 
 
 def _settings_with_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,15 +90,18 @@ async def test_manual_local_override(router: Router) -> None:
     assert result.decision.reason == "manual local override"
     assert result.response == "local"
     assert result.runtime_evidence.provider_selected == "ollama"
-    assert result.runtime_evidence.model_selected == "qwen2.5:7b"
+    assert result.runtime_evidence.model_selected == "qwen3:14b"
     assert result.runtime_evidence.routing_reason == "manual local override"
     assert result.runtime_evidence.token_counts["total_tokens"] == 6
     assert result.runtime_evidence.timing["ollama_latency_ms"] == 12
     assert result.latency_ms is not None
     router.ollama_client.chat.assert_awaited_once()
     _, kwargs = router.ollama_client.chat.call_args
-    assert kwargs["prompt"] == "hi"
-    assert kwargs["model"] == "qwen2.5:7b"
+    assert "Runtime context:" in kwargs["prompt"]
+    assert "Current date:" in kwargs["prompt"]
+    assert "Upcoming dates:" in kwargs["prompt"]
+    assert kwargs["prompt"].endswith("Current user request:\nhi")
+    assert kwargs["model"] == "qwen3:14b"
 
 
 async def test_manual_cloud_override_allowed(router: Router, monkeypatch: pytest.MonkeyPatch, reset_settings) -> None:
@@ -152,8 +174,122 @@ async def test_quick_acknowledgement_stays_fast_tier(router: Router, reset_setti
     result = await router.execute(req)
 
     assert result.decision.provider == "ollama"
-    assert result.decision.model == "qwen2.5:7b"
+    assert result.decision.model == "qwen3:14b"
     assert result.response == "ok"
+
+
+async def test_inference_gateway_auto_routes_routine_to_local(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    router.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "local routine"},
+    }
+
+    result = await router.execute(RouteRequest(prompt="Summarize this note", task_type="chat"))
+
+    assert result.decision.provider == "ollama"
+    assert result.decision.model == "qwen2.5:7b"
+    assert "inference gateway LOCAL tier selected" == result.decision.reason
+    assert result.response == "local routine"
+    router.openrouter_client.chat.assert_not_called()
+
+
+async def test_inference_gateway_tool_requests_use_default_tier(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    monkeypatch.setattr(settings, "inference_gateway_openrouter_allowlist", "qwen/qwen3.5-flash-02-23")
+    router.openrouter_client.chat.return_value = {
+        "model": "qwen/qwen3.5-flash-02-23",
+        "response": "cloud tools",
+    }
+
+    result = await router.execute(RouteRequest(prompt="What host am I on?", tools_required=True))
+
+    assert result.decision.provider == "openrouter"
+    assert result.decision.model == "qwen/qwen3.5-flash-02-23"
+    assert result.decision.reason == "inference gateway FAST tier selected"
+    assert result.response == "cloud tools"
+    router.ollama_client.chat.assert_not_called()
+
+
+async def test_inference_gateway_default_tier_can_make_auto_deep(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    monkeypatch.setattr(settings, "inference_gateway_default_tier", "DEEP")
+    monkeypatch.setattr(settings, "inference_gateway_openrouter_allowlist", "z-ai/glm-5")
+    router.openrouter_client.chat.return_value = {
+        "model": "z-ai/glm-5",
+        "response": "deep default",
+    }
+
+    result = await router.execute(RouteRequest(prompt="Please help me plan the day", tools_required=True))
+
+    assert result.decision.provider == "openrouter"
+    assert result.decision.model == "z-ai/glm-5"
+    assert result.decision.reason == "inference gateway DEEP tier selected"
+    assert result.response == "deep default"
+    router.ollama_client.chat.assert_not_called()
+
+
+async def test_inference_gateway_deep_provider_routes_to_glm(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    monkeypatch.setattr(settings, "inference_gateway_openrouter_allowlist", "z-ai/glm-5")
+    router.openrouter_client.chat.return_value = {
+        "model": "z-ai/glm-5",
+        "response": "deep",
+    }
+
+    result = await router.execute(RouteRequest(prompt="Design a complex system", provider="deep"))
+
+    assert result.decision.provider == "openrouter"
+    assert result.decision.model == "z-ai/glm-5"
+    assert result.decision.reason == "inference gateway DEEP tier selected"
+    assert result.response == "deep"
+
+
+async def test_inference_gateway_frontier_requires_approval(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+
+    result = await router.execute(RouteRequest(prompt="Use the best model", provider="frontier"))
+
+    assert result.decision.provider == "error"
+    assert "FRONTIER tier requires explicit approval" in result.decision.reason
+    assert result.response == ""
+    router.openrouter_client.chat.assert_not_called()
+
+
+async def test_inference_gateway_sensitive_local_failure_does_not_fall_back_to_cloud(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+    router.ollama_client.chat.return_value = {"error": "Ollama down"}
+
+    result = await router.execute(RouteRequest(prompt="My password is secret"))
+
+    assert result.decision.provider == "ollama"
+    assert result.decision.privacy_classification == "sensitive"
+    assert result.response == ""
+    router.openrouter_client.chat.assert_not_called()
 
 
 async def test_sensitive_request_routes_local_when_ollama_healthy(router: Router) -> None:
@@ -267,6 +403,7 @@ async def test_local_failure_falls_back_to_cloud(router: Router, reset_settings,
     _settings_with_allowlist(monkeypatch)
     router.ollama_client.healthy.return_value = True
     router.ollama_client.chat.return_value = {"error": "Ollama down"}
+    router.ollama_fallback_client = None
     router.openrouter_client.chat.return_value = {
         "model": "openai/gpt-4o-mini",
         "response": "cloud fallback",
@@ -280,9 +417,39 @@ async def test_local_failure_falls_back_to_cloud(router: Router, reset_settings,
     assert "fallback" in result.decision.reason
 
 
+async def test_local_failure_uses_secondary_local_before_cloud(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _settings_with_allowlist(monkeypatch)
+    monkeypatch.setattr(settings, "ollama_fallback_base_url", "http://iris:11434")
+    monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+    router.ollama_fallback_client = AsyncMock()
+    router.ollama_client.healthy.return_value = True
+    router.ollama_client.chat.return_value = {"error": "Hera empty"}
+    router.ollama_fallback_client.chat.return_value = {
+        "model": "benedict-qwen2.5:7b",
+        "message": {"content": "iris fallback"},
+    }
+    router.openrouter_client.chat.return_value = {
+        "model": "openai/gpt-4o-mini",
+        "response": "cloud fallback",
+    }
+
+    req = RouteRequest(prompt="Debug this bug and propose a patch", task_type="coding")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "ollama_fallback"
+    assert result.decision.model == "benedict-qwen2.5:7b"
+    assert result.response == "iris fallback"
+    router.openrouter_client.chat.assert_not_awaited()
+
+
 async def test_retry_exhaustion_falls_back_to_cloud(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
     _settings_with_allowlist(monkeypatch)
     router.ollama_client.chat.return_value = {"error": "Ollama returned empty content", "status": "empty_content"}
+    router.ollama_fallback_client = None
     router.openrouter_client.chat.return_value = {
         "model": "openai/gpt-4o-mini",
         "response": "cloud fallback",
@@ -359,6 +526,22 @@ async def test_native_tool_call_validated_and_normalized(monkeypatch: pytest.Mon
     r.openrouter_client = AsyncMock()
     r.ollama_client.chat.side_effect = [
         {
+            "model": "qwen2.5:7b",
+            "message": {
+                "content": (
+                    '<freyja_tool_call>{"tool_name":"get_weather","arguments":'
+                    '{"location":"Osaka, Japan","request_type":"current","target_label":"now"}}'
+                    "</freyja_tool_call>"
+                )
+            },
+        },
+        {
+            "model": "qwen2.5:7b",
+            "message": {"content": "Current weather for Osaka, Osaka, Japan: partly cloudy."},
+        },
+    ]
+    r.ollama_client.chat.side_effect = [
+        {
             "model": "gpt-oss:20b",
             "message": {
                 "content": "",
@@ -389,6 +572,255 @@ async def test_native_tool_call_validated_and_normalized(monkeypatch: pytest.Mon
     assert seen_arguments == [{"location": "Boston", "unit": "fahrenheit"}]
     first_call = r.ollama_client.chat.await_args_list[0].kwargs
     assert first_call["tools"]
+
+
+async def test_builtin_weather_prompt_executes_live_data_tool_directly() -> None:
+    registry = ToolRegistry(audit_enabled=False)
+    seen_arguments: list[dict[str, Any]] = []
+
+    async def weather(request: ToolExecutionRequest) -> dict:
+        seen_arguments.append(request.arguments)
+        return {
+            "live_data_available": True,
+            "request_type": "current",
+            "location": "Osaka, Osaka, Japan",
+            "target_label": "now",
+            "summary": "Partly cloudy",
+            "description": "partly cloudy",
+            "temperature_f": 84.2,
+            "feels_like_f": 88.1,
+            "humidity_percent": 68,
+            "wind_mph": 7.4,
+            "raw": {"provider": "Open-Meteo"},
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description="Weather",
+            input_schema={
+                "type": "object",
+                "required": ["location", "request_type"],
+                "properties": {
+                    "location": {"type": "string"},
+                    "request_type": {"type": "string", "enum": ["current", "forecast"]},
+                    "target_date": {"type": "string"},
+                    "target_label": {"type": "string"},
+                },
+            },
+            tags=["weather", "live-data"],
+        ),
+        weather,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.side_effect = [
+        {
+            "model": "qwen2.5:7b",
+            "message": {
+                "content": (
+                    '<freyja_tool_call>{"tool_name":"get_weather","arguments":'
+                    '{"location":"Osaka, Japan","request_type":"current","target_label":"now"}}'
+                    "</freyja_tool_call>"
+                )
+            },
+        },
+        {
+            "model": "qwen2.5:7b",
+            "message": {"content": "Current weather for Osaka, Osaka, Japan: partly cloudy."},
+        },
+    ]
+
+    result = await r.execute(
+        RouteRequest(
+            prompt="What is the weather in Osaka, Japan?",
+            provider="local",
+            tools_required=True,
+        )
+    )
+
+    assert "Current weather for Osaka, Osaka, Japan" in result.response
+    assert seen_arguments == [
+        {
+            "location": "Osaka, Japan",
+            "request_type": "current",
+            "target_label": "now",
+        }
+    ]
+    assert result.tool_results[0]["tool_name"] == "get_weather"
+    first_prompt = r.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+    assert "Available registered tools" in first_prompt
+    assert "get_weather" in first_prompt
+
+
+async def test_auto_weather_prompt_is_agent_driven() -> None:
+    registry = ToolRegistry(audit_enabled=False)
+    seen_arguments: list[dict[str, Any]] = []
+
+    async def weather(request: ToolExecutionRequest) -> dict:
+        seen_arguments.append(request.arguments)
+        return {
+            "live_data_available": True,
+            "location": "Atlanta, Georgia, United States",
+            "request_type": "forecast",
+            "target_label": "next weekend",
+            "summary": "Dense drizzle",
+            "description": "drizzle",
+            "high_f": 99.2,
+            "low_f": 76.5,
+            "humidity_percent": 61,
+            "raw": {"provider": "Open-Meteo"},
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description="Weather",
+            input_schema={
+                "type": "object",
+                "required": ["location", "request_type"],
+                "properties": {
+                    "location": {"type": "string"},
+                    "request_type": {"type": "string", "enum": ["current", "forecast"]},
+                    "target_date": {"type": "string"},
+                    "target_label": {"type": "string"},
+                },
+            },
+            tags=["weather", "live-data"],
+        ),
+        weather,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.side_effect = [
+        {
+            "model": "qwen3:14b",
+            "message": {
+                "content": (
+                    '<freyja_tool_call>{"tool_name":"get_weather","arguments":'
+                    '{"location":"Atlanta","request_type":"forecast","target_date":"2026-08-15","target_label":"next weekend"}}'
+                    "</freyja_tool_call>"
+                )
+            },
+        },
+        {
+            "model": "qwen3:14b",
+            "message": {"content": "Forecast for Atlanta, Georgia, United States next weekend: Dense drizzle."},
+        },
+    ]
+
+    result = await r.execute(
+        RouteRequest(
+            prompt="What is the weather next weekend in Atlanta?",
+            provider="auto",
+            tools_required=True,
+        )
+    )
+
+    assert "Forecast for Atlanta, Georgia, United States next weekend" in result.response
+    assert seen_arguments[0]["location"] == "Atlanta"
+    assert seen_arguments[0]["request_type"] == "forecast"
+    assert seen_arguments[0]["target_label"] == "next weekend"
+    assert r.ollama_client.chat.await_count == 2
+
+
+async def test_weather_without_location_asks_for_place() -> None:
+    registry = ToolRegistry(audit_enabled=False)
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description="Weather",
+            input_schema={
+                "type": "object",
+                "required": ["location", "request_type"],
+                "properties": {
+                    "location": {"type": "string"},
+                    "request_type": {"type": "string", "enum": ["current", "forecast"]},
+                },
+            },
+            tags=["weather", "live-data"],
+        ),
+        AsyncMock(return_value={}),
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "Please tell me the city or place for the weather."},
+    }
+
+    result = await r.execute(
+        RouteRequest(
+            prompt="weather",
+            provider="local",
+            tools_required=True,
+        )
+    )
+
+    assert "city or place" in result.response
+    assert result.tool_results == []
+
+
+async def test_explicit_reminder_request_can_execute_controlled_write_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "chat_max_tool_iterations", 2)
+    registry = ToolRegistry(audit_enabled=False)
+    seen_arguments: list[dict[str, Any]] = []
+
+    async def create_reminder(request: ToolExecutionRequest) -> dict:
+        seen_arguments.append(request.arguments)
+        return {"reminder": {"reminder_id": "reminder-1", **request.arguments}}
+
+    registry.register(
+        ToolDefinition(
+            name="reminders_create",
+            description="Create a reminder.",
+            input_schema={
+                "type": "object",
+                "required": ["title"],
+                "properties": {"title": {"type": "string"}, "due": {"type": "string"}},
+            },
+            risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+        ),
+        create_reminder,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.side_effect = [
+        {
+            "model": "qwen2.5:7b",
+            "message": {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "reminders_create",
+                            "arguments": {"title": "Get a chair", "due": "2026-08-08T09:00:00+00:00"},
+                        }
+                    }
+                ],
+            },
+        },
+        {"model": "qwen2.5:7b", "message": {"content": "Done. I added a reminder to get a chair Saturday."}},
+    ]
+
+    result = await r.execute(
+        RouteRequest(
+            prompt="Add a reminder to get a chair Saturday",
+            provider="local",
+            tools_required=True,
+        )
+    )
+
+    assert result.response == "Done. I added a reminder to get a chair Saturday."
+    assert seen_arguments == [{"title": "Get a chair", "due": "2026-08-08T09:00:00+00:00"}]
+    assert result.tool_results[0]["tool_name"] == "reminders_create"
+    first_prompt = r.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+    assert "Runtime context:" in first_prompt
+    assert "Current user request:\nAdd a reminder to get a chair Saturday" in first_prompt
 
 
 async def test_native_tool_call_invalid_arguments_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -573,6 +1005,205 @@ class TestToolLoop:
         args = arguments or {}
         return f'<freyja_tool_call>{{"tool_name":"{name}","arguments":{json.dumps(args)}}}</freyja_tool_call>'
 
+    async def test_agent_resolves_event_before_family_logistics_answer(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen3:14b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {
+                    "model": "qwen3:14b",
+                    "message": {"content": self._tool_call("resolve_public_event", {"query": "Dragon Con"})},
+                }
+            assert "Dragon Con is scheduled for 2026-09-03 through 2026-09-07" in prompt
+            return {
+                "model": "qwen3:14b",
+                "message": {
+                    "content": (
+                        "Dragon Con is in downtown Atlanta from September 3-7, 2026. "
+                        "That is outside the current live forecast window, so I cannot give a real forecast yet."
+                    )
+                },
+            }
+
+        router.ollama_client.chat.side_effect = _respond
+        result = await router.execute(
+            RouteRequest(
+                prompt="How's the weather going to be for Dragon Con?",
+                provider="auto",
+                tools_required=True,
+            )
+        )
+
+        assert result.decision.provider == "ollama"
+        assert result.tool_results[0]["tool_name"] == "resolve_public_event"
+        assert "downtown Atlanta" in result.response
+        assert "outside the current live forecast window" in result.response
+
+    async def test_tool_call_parameters_are_unwrapped(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen3:14b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        seen_arguments: list[dict[str, Any]] = []
+
+        async def _weather(request: ToolExecutionRequest) -> dict[str, Any]:
+            seen_arguments.append(request.arguments)
+            return {
+                "live_data_available": False,
+                "summary": "Forecast date outside supported range.",
+                "detail": "Forecasts are only available up to 7 days out.",
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="get_weather_nested_test",
+                description="Synthetic weather tool.",
+                input_schema={
+                    "type": "object",
+                    "required": ["location", "request_type"],
+                    "properties": {
+                        "location": {"type": "string"},
+                        "request_type": {"type": "string"},
+                        "target_date": {"type": "string"},
+                    },
+                },
+            ),
+            _weather,
+        )
+
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen3:14b",
+                "message": {
+                    "content": self._tool_call(
+                        "get_weather_nested_test",
+                        {
+                            "tool_name": "get_weather_nested_test",
+                            "parameters": {
+                                "location": "Atlanta, Georgia",
+                                "request_type": "forecast",
+                                "target_date": "2026-09-03",
+                            },
+                        },
+                    )
+                },
+            },
+            {"model": "qwen3:14b", "message": {"content": "Forecast is outside the live window."}},
+        ]
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="How's the weather going to be for Dragon Con?",
+                provider="auto",
+                tools_required=True,
+            )
+        )
+
+        assert result.response == "Forecast is outside the live window."
+        assert seen_arguments == [
+            {
+                "location": "Atlanta, Georgia",
+                "request_type": "forecast",
+                "target_date": "2026-09-03",
+            }
+        ]
+
+    async def test_ungrounded_local_tool_answer_falls_back_to_cloud_final(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen3:14b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {
+                    "model": "qwen3:14b",
+                    "message": {"content": self._tool_call("resolve_public_event", {"query": "Dragon Con"})},
+                }
+            return {"model": "qwen3:14b", "message": {"content": "Green frogs have moist skin."}}
+
+        router.ollama_client.chat.side_effect = _respond
+        router.openrouter_client.chat.return_value = {
+            "model": "openai/gpt-4o-mini",
+            "response": "Dragon Con is in downtown Atlanta from September 3-7, 2026.",
+        }
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="How's the weather going to be for Dragon Con?",
+                provider="auto",
+                tools_required=True,
+            )
+        )
+
+        assert result.decision.provider == "openrouter"
+        assert "ungrounded local tool answer" in result.decision.reason
+        assert "Dragon Con" in result.response
+        assert "Atlanta" in result.response
+        assert any(attempt["outcome"] == "ungrounded tool answer" for attempt in result.decision.fallback_attempts)
+
+    async def test_event_weather_answer_cannot_stop_at_offer_to_check(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.openrouter_client.chat.side_effect = [
+            {
+                "model": "openai/gpt-4o-mini",
+                "response": self._tool_call("resolve_public_event", {"query": "Dragon Con"}),
+            },
+            {
+                "model": "openai/gpt-4o-mini",
+                "response": (
+                    "Dragon Con is in Atlanta, Georgia, from September 3 to September 7, 2026. "
+                    "Would you like me to check the weather forecast?"
+                ),
+            },
+            {
+                "model": "openai/gpt-4o-mini",
+                "response": (
+                    "Dragon Con is in Atlanta, Georgia, September 3-7, 2026. "
+                    "Those dates are outside the current live forecast window, so I cannot give a real forecast yet."
+                ),
+            },
+        ]
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="How's the weather going to be for Dragon Con?",
+                provider="cloud",
+                tools_required=True,
+            )
+        )
+
+        assert result.decision.provider == "openrouter"
+        assert "outside the current live forecast window" in result.response
+        assert "Would you like" not in result.response
+        assert router.openrouter_client.chat.await_count == 3
+
     async def test_successful_single_tool_request_local(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
         monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
@@ -592,6 +1223,7 @@ class TestToolLoop:
 
         assert result.decision.provider == "ollama"
         assert "Iris" in result.response or "iris" in result.response.lower()
+        assert router.ollama_client.chat.await_args_list[0].kwargs["retry_on_empty_length"] is False
         assert len(result.tool_results) == 1
         assert result.tool_results[0]["tool_name"] == "hostname"
         assert result.tool_results[0]["success"] is True
@@ -773,6 +1405,140 @@ class TestToolLoop:
         assert result.tool_results[0]["tool_name"] == "current_time"
         assert result.tool_results[0]["success"] is True
 
+    async def test_local_tool_loop_failure_falls_back_to_cloud_tools(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+        monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "ollama_fallback_base_url", "")
+        monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.ollama_client.chat.return_value = {"error": "Ollama returned empty content", "status": "empty_content"}
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "openai/gpt-4o-mini", "response": self._tool_call("current_time")}
+            return {"model": "openai/gpt-4o-mini", "response": "The time is now."}
+
+        router.openrouter_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="What time is it?", provider="auto", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.decision.provider == "openrouter"
+        assert "tool-loop failure" in result.decision.reason
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "current_time"
+        assert result.tool_results[0]["success"] is True
+
+    async def test_local_tool_loop_failure_uses_secondary_local_before_cloud(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+        monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "ollama_fallback_base_url", "http://iris:11434")
+        monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+        router.ollama_fallback_client = AsyncMock()
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.ollama_client.chat.return_value = {"error": "Hera returned empty content", "status": "empty_content"}
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "benedict-qwen2.5:7b", "message": {"content": self._tool_call("current_time")}}
+            return {"model": "benedict-qwen2.5:7b", "message": {"content": "The time is now."}}
+
+        router.ollama_fallback_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="What time is it?", provider="auto", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.decision.provider == "ollama_fallback"
+        assert "primary local tool-loop failure" in result.decision.reason
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "current_time"
+        assert result.tool_results[0]["success"] is True
+        router.openrouter_client.chat.assert_not_awaited()
+
+    async def test_slow_primary_local_tool_loop_times_out_to_secondary_local(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+        monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "ollama_tool_call_timeout_seconds", 0.01)
+        monkeypatch.setattr(settings, "ollama_fallback_base_url", "http://iris:11434")
+        monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+
+        async def _slow_primary(**kwargs: Any) -> dict[str, Any]:
+            await asyncio.sleep(0.05)
+            return {"model": "qwen3:14b", "message": {"content": "too late"}}
+
+        router.ollama_client.chat.side_effect = _slow_primary
+        router.ollama_fallback_client = AsyncMock()
+        router.ollama_fallback_client.chat.return_value = {
+            "model": "benedict-qwen2.5:7b",
+            "message": {"content": "Iris handled it."},
+        }
+
+        result = await router.execute(RouteRequest(prompt="Use a tool.", provider="auto", tools_required=True))
+
+        assert result.decision.provider == "ollama_fallback"
+        assert result.response == "Iris handled it."
+        assert any("timed out" in attempt["outcome"] for attempt in result.decision.fallback_attempts)
+
+    async def test_secondary_local_malformed_tool_call_falls_back_to_cloud(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "inference_gateway_enabled", True)
+        monkeypatch.setattr(settings, "inference_gateway_default_tier", "LOCAL")
+        monkeypatch.setattr(settings, "ollama_fallback_base_url", "http://iris:11434")
+        monkeypatch.setattr(settings, "ollama_fallback_model", "benedict-qwen2.5:7b")
+        monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
+        monkeypatch.setattr(settings, "cloud_enabled", True)
+        router.ollama_client.chat.return_value = {"error": "Hera returned empty content", "status": "empty_content"}
+        router.ollama_fallback_client = AsyncMock()
+        router.ollama_fallback_client.chat.return_value = {
+            "model": "benedict-qwen2.5:7b",
+            "message": {"content": '<freyja_tool_call>{"tool_name":"current_time","arguments":{}'},
+        }
+
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "openai/gpt-4o-mini", "response": self._tool_call("current_time")}
+            return {"model": "openai/gpt-4o-mini", "response": "The time is now."}
+
+        router.openrouter_client.chat.side_effect = _respond
+        req = RouteRequest(prompt="What time is it?", provider="auto", tools_required=True)
+        result = await router.execute(req)
+
+        assert result.decision.provider == "openrouter"
+        assert "tool-loop failure" in result.decision.reason
+        assert any(attempt["outcome"] == "malformed tool call" for attempt in result.decision.fallback_attempts)
+        assert len(result.tool_results) == 1
+        assert result.tool_results[0]["tool_name"] == "current_time"
+        assert result.response == "The time is now."
+
     async def test_oversized_tool_output_is_truncated(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
         monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
@@ -905,3 +1671,240 @@ class TestToolLoop:
         assert "failed" in result.response.lower()
         assert "succeeded" not in result.response.lower()
         assert "success" not in result.response.lower()
+
+    async def test_homeassistant_control_scope_uses_summary_preflight(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        registry.unregister("homeassistant_home_summary")
+
+        async def _summary(request: ToolExecutionRequest) -> dict[str, Any]:
+            return {
+                "entity_total": 254,
+                "visible_count": 127,
+                "policy_controlled_count": 26,
+                "blocked_control_count": 127,
+                "quarantined_count": 124,
+                "high_risk_count": 3,
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="homeassistant_home_summary",
+                description="Synthetic Home Assistant summary.",
+                input_schema={"type": "object", "properties": {}},
+            ),
+            _summary,
+        )
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": self._tool_call("homeassistant_home_summary")},
+            },
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": "Freyja can see 127 entities, can control 26 entities, and blocks 127 entities."},
+            },
+        ]
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="Home Assistant: can Freyja control the kitchen lamp, and is anything blocked?",
+                provider="local",
+                tools_required=True,
+            )
+        )
+
+        assert result.tool_results[0]["tool_name"] == "homeassistant_home_summary"
+        assert "127 entities" in result.response
+        assert "26 entities" in result.response
+        assert "blocks 127" in result.response
+        first_prompt = router.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+        assert "homeassistant_home_summary" in first_prompt
+
+    async def test_homeassistant_broad_control_request_gets_policy_refusal(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        registry.unregister("homeassistant_home_summary")
+
+        async def _summary(request: ToolExecutionRequest) -> dict[str, Any]:
+            return {
+                "entity_total": 254,
+                "visible_count": 127,
+                "policy_controlled_count": 1,
+                "blocked_control_count": 127,
+                "quarantined_count": 124,
+                "high_risk_count": 3,
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="homeassistant_home_summary",
+                description="Synthetic Home Assistant summary.",
+                input_schema={"type": "object", "properties": {}},
+            ),
+            _summary,
+        )
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": self._tool_call("homeassistant_home_summary")},
+            },
+            {
+                "model": "qwen2.5:7b",
+                "message": {
+                    "content": (
+                        "I cannot perform broad Home Assistant actions such as changing every light, "
+                        "unlocking doors, or opening the garage. Home Assistant is read-only here."
+                    )
+                },
+            },
+        ]
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="Home Assistant: turn off every light, unlock the doors, and open the garage.",
+                provider="local",
+                tools_required=True,
+            )
+        )
+
+        assert result.tool_results[0]["tool_name"] == "homeassistant_home_summary"
+        assert "cannot perform broad Home Assistant actions" in result.response
+        assert "unlocking doors" in result.response
+        assert "read-only" in result.response
+        first_prompt = router.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+        assert "homeassistant_home_summary" in first_prompt
+
+    async def test_home_light_status_question_uses_homeassistant_preflight(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        registry.unregister("homeassistant_list_entities")
+
+        async def _list_entities(request: ToolExecutionRequest) -> dict[str, Any]:
+            assert request.arguments == {"domain": "light"}
+            return {
+                "count": 4,
+                "entities": [
+                    {"entity_id": "light.kitchen_floor_lamp", "name": "Kitchen Floor Lamp", "state": "on", "access": "controlled"},
+                    {"entity_id": "light.living_room", "name": "Living Room", "state": "on", "access": "read_only"},
+                    {"entity_id": "light.master_bedroom", "name": "Master Bedroom", "state": "off", "access": "read_only"},
+                    {"entity_id": "light.old_bulb", "name": "Old Bulb", "state": "unavailable", "access": "read_only"},
+                ],
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="homeassistant_list_entities",
+                description="Synthetic Home Assistant entities.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "domain": {"type": "string"},
+                        "access": {"type": "string"},
+                    },
+                },
+            ),
+            _list_entities,
+        )
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": self._tool_call("homeassistant_list_entities", {"domain": "light"})},
+            },
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": "Two visible lights are on, including Kitchen Floor Lamp and Living Room."},
+            },
+        ]
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="How many lights are on at home currently?",
+                provider="local",
+                tools_required=True,
+            )
+        )
+
+        assert result.tool_results[0]["tool_name"] == "homeassistant_list_entities"
+        assert result.tool_results[0]["arguments"] == {"domain": "light"}
+        assert "Two visible lights are on" in result.response
+        assert "Kitchen Floor Lamp" in result.response
+        first_prompt = router.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+        assert "homeassistant_list_entities" in first_prompt
+
+    async def test_bare_lights_question_uses_homeassistant_preflight(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        registry.unregister("homeassistant_list_entities")
+
+        async def _list_entities(request: ToolExecutionRequest) -> dict[str, Any]:
+            assert request.arguments == {"domain": "light"}
+            return {
+                "count": 2,
+                "entities": [
+                    {"entity_id": "light.kitchen", "name": "Kitchen", "state": "on", "access": "read_only"},
+                    {"entity_id": "light.hall", "name": "Hall", "state": "off", "access": "read_only"},
+                ],
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="homeassistant_list_entities",
+                description="Synthetic Home Assistant entities.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "domain": {"type": "string"},
+                    },
+                },
+            ),
+            _list_entities,
+        )
+        router.ollama_client.chat.side_effect = [
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": self._tool_call("homeassistant_list_entities", {"domain": "light"})},
+            },
+            {
+                "model": "qwen2.5:7b",
+                "message": {"content": "One visible light is on: Kitchen."},
+            },
+        ]
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="What lights are on?",
+                provider="local",
+                tools_required=True,
+            )
+        )
+
+        assert result.tool_results[0]["tool_name"] == "homeassistant_list_entities"
+        assert "One visible light is on" in result.response
+        assert "Kitchen" in result.response
+        first_prompt = router.ollama_client.chat.await_args_list[0].kwargs["prompt"]
+        assert "homeassistant_list_entities" in first_prompt

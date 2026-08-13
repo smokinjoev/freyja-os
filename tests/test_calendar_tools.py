@@ -31,7 +31,7 @@ def service() -> CalendarService:
         providers={"memory": provider},
         members=[CalendarMember(member_id="joe", display_name="Joe", calendar_ids=("joe",))],
     )
-    set_calendar_service(service)
+    set_calendar_service(service, write_provider="memory")
     return service
 
 
@@ -102,3 +102,23 @@ async def test_calendar_create_modify_delete_tools(registry: ToolRegistry, servi
 
     assert modified.output["event"]["title"] == "Late dinner"
     assert deleted.output["deleted"] is True
+
+
+@pytest.mark.asyncio
+async def test_calendar_write_refuses_default_in_memory_provider(registry: ToolRegistry) -> None:
+    set_calendar_service(CalendarService())
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="calendar_create_event",
+            arguments={
+                "title": "Should not be stored only in memory",
+                "start": "2026-08-03T18:00:00+00:00",
+                "end": "2026-08-03T19:00:00+00:00",
+                "member_ids": ["joe"],
+            },
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "tool_error"
+    assert result.public_error_message == "Tool execution failed."

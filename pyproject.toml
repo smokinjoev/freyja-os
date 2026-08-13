@@ -25,14 +25,14 @@ freyja-identity-import-vcard = "freyja.cli.identity_import_vcard:main"
 freyja-identity-import-apple = "freyja.cli.identity_import_apple:main"
 
 [tool.setuptools]
-packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.identity", "freyja.memory", "freyja.tools"]
+packages = ["certification", "connectors", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.homeassistant", "freyja.identity", "freyja.memory", "freyja.reminders", "freyja.tools"]
 
 [tool.setuptools.package-dir]
 freyja = "src/freyja"
 
 [tool.setuptools.package-data]
 certification = ["suites/**/*.yaml"]
-freyja = ["identity/*.swift"]
+freyja = ["identity/*.swift", "calendar/*.swift", "reminders/*.swift"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

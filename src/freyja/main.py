@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import ipaddress
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -12,19 +13,32 @@ from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprova
 from freyja.agents.runtime import SmithRuntime
 from freyja.config import settings
 from freyja.identity import person_context_from_headers
+from freyja.inference_gateway import inference_gateway_router
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
+from freyja.ollama_warmup import start_ollama_warmup, stop_ollama_warmup
 from freyja.openrouter_client import OpenRouterClient
 from freyja.router import RouteRequest, router
 from freyja.tools.api import tools_router
 from freyja.tools.builtin import register_builtin_tools, register_smith_write_pilot_tools
 from freyja.tools.registry import get_registry
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_ollama_warmup(app, ollama, service_name="director")
+    try:
+        yield
+    finally:
+        await stop_ollama_warmup(app)
+
+
 app = FastAPI(
     title="Freyja Director",
     version="0.1.0",
     description="Core orchestration service for Freyja-OS.",
+    lifespan=lifespan,
 )
 
 
@@ -55,6 +69,7 @@ router.register_clients(ollama, openrouter)
 
 app.include_router(memory_router)
 app.include_router(tools_router)
+app.include_router(inference_gateway_router)
 
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
@@ -79,6 +94,115 @@ async def root() -> dict[str, str]:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "healthy"}
+
+
+@app.get("/control-plane/status")
+async def control_plane_status() -> dict[str, Any]:
+    """Return a non-secret readiness snapshot for operators and connectors.
+
+    This endpoint is intentionally configuration-only: it does not call live
+    providers, read private memory contents, or expose tokens. When
+    FREYJA_CONNECTOR_TOKEN is configured it is protected by the normal Director
+    bearer-token middleware.
+    """
+    registry = get_registry()
+    tools = registry.list_tools(include_disabled=True)
+    enabled_tools = [tool for tool in tools if tool.enabled]
+    disabled_tools = [tool for tool in tools if not tool.enabled]
+    controlled_write_tools = [
+        tool.name for tool in tools if str(tool.risk_level) == "controlled_write"
+    ]
+    enabled_controlled_write_tools = [
+        tool.name for tool in enabled_tools if str(tool.risk_level) == "controlled_write"
+    ]
+    connector_token_configured = bool(settings.freyja_connector_token)
+    openrouter_configured = bool(settings.openrouter_api_key)
+    apple_calendar_bridge_configured = bool(
+        settings.apple_calendar_bridge_url and settings.apple_calendar_bridge_token
+    )
+    apple_reminders_bridge_configured = bool(
+        settings.apple_reminders_bridge_url and settings.apple_reminders_bridge_token
+    )
+    home_assistant_configured = bool(
+        settings.home_assistant_base_url and settings.home_assistant_token
+    )
+    warnings: list[str] = []
+    if not connector_token_configured:
+        warnings.append("connector_auth_not_configured")
+    if settings.cloud_enabled and not openrouter_configured:
+        warnings.append("cloud_enabled_without_openrouter_key")
+    if settings.memory_recall_include_in_cloud:
+        warnings.append("memory_recall_in_cloud_enabled")
+    if settings.identity_provider != "sqlite" and settings.identity_seed_fallback:
+        warnings.append("identity_seed_fallback_active")
+    if enabled_controlled_write_tools and not connector_token_configured:
+        warnings.append("controlled_write_tools_enabled_without_connector_auth")
+    if settings.agent_smith_write_pilot_enabled and not settings.agent_smith_approval_loopback_only:
+        warnings.append("smith_write_pilot_approval_not_loopback_only")
+    overall_status = "ok" if not warnings else "degraded"
+
+    return {
+        "service": "freyja-director",
+        "version": app.version,
+        "overall_status": overall_status,
+        "warnings": warnings,
+        "environment": settings.freyja_env,
+        "auth": {
+            "connector_token_configured": connector_token_configured,
+        },
+        "providers": {
+            "ollama": {
+                "base_url": settings.ollama_base_url,
+                "chat_model": settings.ollama_chat_model,
+                "classification_model": settings.ollama_classification_model,
+                "reasoning_model": settings.ollama_reasoning_model,
+                "fallback_base_url": settings.ollama_fallback_base_url,
+                "fallback_model": settings.ollama_fallback_model,
+                "warmup_enabled": settings.ollama_warmup_enabled,
+                "warmup_models": settings.ollama_warmup_model_names,
+                "warmup_interval_seconds": settings.ollama_warmup_interval_seconds,
+            },
+            "openrouter": {
+                "enabled": settings.cloud_enabled,
+                "base_url": settings.openrouter_base_url,
+                "model": settings.openrouter_model,
+                "api_key_configured": openrouter_configured,
+                "allowlist_count": len(settings.approved_openrouter_models),
+            },
+        },
+        "memory": {
+            "enabled": settings.memory_enabled,
+            "shared_enabled": settings.memory_shared_enabled,
+            "database_configured": bool(settings.memory_database_path),
+            "include_recall_in_cloud": settings.memory_recall_include_in_cloud,
+        },
+        "identity": {
+            "provider": settings.identity_provider,
+            "database_configured": bool(settings.identity_database_path),
+            "seed_fallback": settings.identity_seed_fallback,
+        },
+        "tools": {
+            "globally_enabled": registry.enabled,
+            "registered_count": len(tools),
+            "enabled_count": len(enabled_tools),
+            "disabled_count": len(disabled_tools),
+            "controlled_write_tools": sorted(controlled_write_tools),
+            "enabled_controlled_write_tools": sorted(enabled_controlled_write_tools),
+        },
+        "connectors": {
+            "telegram_enabled": settings.telegram_enabled,
+            "apple_calendar_bridge_configured": apple_calendar_bridge_configured,
+            "apple_reminders_bridge_configured": apple_reminders_bridge_configured,
+            "home_assistant_configured": home_assistant_configured,
+        },
+        "agents": {
+            "smith_enabled": settings.agent_smith_enabled,
+            "smith_dry_run_enabled": settings.agent_smith_dry_run_enabled,
+            "smith_read_only_enabled": settings.agent_smith_read_only_enabled,
+            "smith_write_pilot_enabled": settings.agent_smith_write_pilot_enabled,
+            "smith_approval_loopback_only": settings.agent_smith_approval_loopback_only,
+        },
+    }
 
 
 @app.get("/ollama/health")

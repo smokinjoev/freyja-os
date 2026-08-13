@@ -86,6 +86,7 @@ def test_discovery(registry: ToolRegistry) -> None:
         "system_health",
         "list_models",
         "recall_conversation",
+        "resolve_public_event",
         "get_weather",
         "hostname",
         "current_time",
@@ -102,9 +103,37 @@ def test_discovery(registry: ToolRegistry) -> None:
         "calendar_delete_event",
         "calendar_find_time",
         "calendar_move_event_if_conflict",
+        "reminders_lists",
+        "reminders_list",
+        "reminders_create",
+        "reminders_complete",
+        "reminders_delete",
         "identity_resolution",
         "identity_relationships",
+        "homeassistant_home_summary",
+        "homeassistant_status",
+        "homeassistant_list_entities",
+        "homeassistant_pairing_plan",
     }
+
+
+def test_builtin_resolve_public_event_dragon_con(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="resolve_public_event",
+                arguments={"query": "Dragon Con"},
+            )
+        )
+    )
+
+    assert result.success is True
+    assert result.output["found"] is True
+    assert result.output["name"] == "Dragon Con"
+    assert result.output["location"] == "Atlanta, Georgia"
+    assert result.output["start_date"] == "2026-09-03"
+    assert result.output["end_date"] == "2026-09-07"
 
 
 def test_disable_tool_rejects_execution(registry: ToolRegistry) -> None:
@@ -388,7 +417,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 21
+    assert len(tools) == 31
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
@@ -574,6 +603,47 @@ def test_builtin_get_weather_forecast_hits_forecast_endpoint(registry: ToolRegis
     assert result.output["request_type"] == "forecast"
     assert result.output["target_label"] == "tomorrow"
     assert result.output["high_f"] == 75.0
+
+
+def test_builtin_get_weather_normalizes_agent_weekend_date(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    register_builtin_tools(registry)
+
+    captured_forecast_days: list[int] = []
+    import httpx
+
+    today = _datetime.date(2026, 8, 13)
+    expected = _datetime.date(2026, 8, 15)
+    monkeypatch.setattr("freyja.tools.weather._today", lambda: today)
+
+    def _capture(*args, **kwargs):
+        url = str(args[0]) if args else kwargs.get("url", "")
+        request = httpx.Request("GET", url)
+        if "geocoding-api" in url:
+            return httpx.Response(200, json=_openmeteo_geo_response(), request=request)
+        captured_forecast_days.append(int(kwargs.get("params", {}).get("forecast_days")))
+        return httpx.Response(200, json=_openmeteo_forecast_response(expected.isoformat()), request=request)
+
+    with patch("httpx.AsyncClient.get", side_effect=_capture):
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="get_weather",
+                    arguments={
+                        "location": "Atlanta",
+                        "request_type": "forecast",
+                        "target_date": "2026-08-22",
+                        "target_label": "next weekend",
+                    },
+                )
+            )
+        )
+
+    assert result.success is True
+    assert result.output["live_data_available"] is True
+    assert result.output["target_date"] == expected.isoformat()
+    assert result.output["target_label"] == "next weekend"
+    assert captured_forecast_days == [4]
 
 
 def test_builtin_get_weather_current_hits_current_endpoint(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:

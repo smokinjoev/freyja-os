@@ -38,7 +38,18 @@ FREYJA_SYSTEM_PROMPT = (
 )
 
 FREYJA_TOOL_CALL_INSTRUCTION = (
-    "You may invoke a single registered read-only tool by emitting exactly one block: "
+    "You may invoke a single registered read-only tool, or a controlled-write tool when "
+    "the user explicitly asks you to create, update, complete, delete, schedule, or move "
+    "a reminder or calendar event. Do not ask whether to use the tool when the request "
+    "is explicit and has enough details; act directly. If required details are missing "
+    "or ambiguous, ask a concise clarifying question instead. "
+    "When the current request says to put a prior reminder, task, errand, or plan on the "
+    "calendar, use the prior conversation context to create a calendar event with "
+    "calendar_create_event; do not call a reminders tool for that follow-up. If no time "
+    "was provided for a calendar placement, use 08:00 America/New_York and a 30-minute "
+    "duration. Resolve relative dates against the runtime context and send ISO-8601 "
+    "datetimes with explicit timezone offsets. "
+    "Invoke a tool by emitting exactly one block: "
     "<freyja_tool_call>{\"tool_name\":\"<tool_name>\",\"arguments\":{}}</freyja_tool_call>. "
     "The arguments object must match the tool's JSON schema. "
     "When you do not need a tool, or when you have enough information to answer, "

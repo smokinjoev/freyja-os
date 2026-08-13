@@ -54,7 +54,7 @@ def test_route_with_conversation_id_persists_messages(isolated_store):
     assert messages[0].content == "Say hello"
     assert messages[1].role == "assistant"
     assert messages[1].content == "Hello from memory"
-    assert messages[1].model == "qwen2.5:7b"
+    assert messages[1].model == "qwen3:14b"
 
 
 def test_route_without_conversation_id_does_not_persist(isolated_store):
@@ -70,6 +70,45 @@ def test_route_without_conversation_id_does_not_persist(isolated_store):
 
     assert response.status_code == 200
     assert isolated_store.list_conversations().conversations == []
+
+
+def test_route_with_tools_required_records_and_restores_conversation(isolated_store):
+    with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat:
+        mock_chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"role": "assistant", "content": "I will remember the chair for Saturday."},
+        }
+        first = client.post("/route", json={
+            "prompt": "Remind me Saturday to buy a chair.",
+            "provider": "local",
+            "conversation_id": "conv-calendar-chair",
+            "tools_required": True,
+        })
+
+    assert first.status_code == 200
+    messages = isolated_store.get_messages("conv-calendar-chair").messages
+    assert [message.role for message in messages] == ["user", "assistant"]
+    assert messages[0].content == "Remind me Saturday to buy a chair."
+
+    with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat:
+        mock_chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"role": "assistant", "content": "I can put that on your calendar."},
+        }
+        second = client.post("/route", json={
+            "prompt": "Put it on my calendar.",
+            "provider": "local",
+            "conversation_id": "conv-calendar-chair",
+            "tools_required": True,
+        })
+
+    assert second.status_code == 200
+    prompt = mock_chat.await_args.kwargs["prompt"]
+    assert "Recent conversation context:" in prompt
+    assert "Remind me Saturday to buy a chair." in prompt
+    assert "I will remember the chair for Saturday." in prompt
+    assert "Current user request:\nPut it on my calendar." in prompt
+    assert "Available registered tools" in prompt
 
 
 def test_route_memory_failure_does_not_crash(isolated_store):
