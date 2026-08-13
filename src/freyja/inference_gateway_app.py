@@ -1,4 +1,5 @@
 import hmac
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -6,13 +7,28 @@ from fastapi.responses import JSONResponse
 
 from freyja.config import settings
 from freyja.inference_gateway import inference_gateway_router
+from freyja.ollama_client import OllamaClient
+from freyja.ollama_warmup import start_ollama_warmup, stop_ollama_warmup
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_ollama_warmup(app, ollama, service_name="inference-gateway")
+    try:
+        yield
+    finally:
+        await stop_ollama_warmup(app)
 
 
 app = FastAPI(
     title="Freyja Inference Gateway",
     version="0.1.0",
     description="Semantic tier routing gateway for Freyja inference.",
+    lifespan=lifespan,
 )
+
+
+ollama = OllamaClient(model=settings.inference_gateway_local_model)
 
 
 @app.middleware("http")

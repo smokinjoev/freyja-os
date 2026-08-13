@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from freyja.config import settings
 from freyja.memory import store as memory_store
 from freyja.memory.models import AppendMessageRequest, CreateConversationRequest, MemoryPrincipal
+from freyja.tools.weather import classify_weather_request
 from freyja.tools.models import ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry, get_registry
 
@@ -969,6 +970,18 @@ class Router:
         if homeassistant_policy_response is not None:
             return homeassistant_policy_response
 
+        weather_response = await self._maybe_handle_weather_request(
+            request,
+            decision,
+            registry,
+            memory_principal,
+            person_context,
+            evidence,
+            started,
+        )
+        if weather_response is not None:
+            return weather_response
+
         homeassistant_inventory_response = await self._maybe_handle_homeassistant_inventory_request(
             request,
             decision,
@@ -1164,6 +1177,79 @@ class Router:
             decision=decision,
             response=response_text,
             tool_results=list(tool_history),
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _maybe_handle_weather_request(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        registry: ToolRegistry,
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence | None,
+        started: float | None,
+    ) -> RoutingResult | None:
+        definition = registry.get_tool("get_weather")
+        if definition is None or "live-data" not in definition.tags:
+            return None
+        if not self._is_weather_prompt(request.prompt):
+            return None
+
+        parsed = classify_weather_request(request.prompt)
+        if parsed.error_message:
+            await self._record_memory(request, decision, parsed.error_message, evidence)
+            return self._routing_result(
+                decision=decision,
+                response=parsed.error_message,
+                tool_results=[],
+                evidence=evidence,
+                started=started,
+            )
+
+        arguments: dict[str, Any] = {
+            "location": parsed.location,
+            "request_type": parsed.request_type.value,
+            "target_label": parsed.target_label,
+        }
+        if parsed.request_type.value == "forecast" and parsed.target_date is not None:
+            arguments["target_date"] = parsed.target_date.isoformat()
+
+        execution_request = ToolExecutionRequest(
+            tool_name="get_weather",
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="freyja_router",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+            },
+        )
+        execution_result = await registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name="get_weather",
+            success=execution_result.success,
+            arguments=arguments,
+            output=execution_result.output,
+            error_code=execution_result.error_code,
+            public_error_message=execution_result.public_error_message,
+            duration_ms=execution_result.duration_ms,
+        )
+        self._log_tool_execution(entry)
+        self._record_tool_evidence(evidence, entry)
+
+        if not execution_result.success:
+            message = (execution_result.public_error_message or "no details").rstrip(".")
+            response_text = f"Tool 'get_weather' failed ({execution_result.error_code or 'unknown'}): {message}."
+        else:
+            response_text = self._weather_response(execution_result.output)
+
+        await self._record_memory(request, decision, response_text, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response_text,
+            tool_results=[entry],
             evidence=evidence,
             started=started,
         )
@@ -1375,6 +1461,38 @@ class Router:
         return (
             f"{base} For control-scope questions, this summary is the authority; narrow entity lists "
             "do not mean the rest of the home is unblocked."
+        )
+
+    def _is_weather_prompt(self, prompt: str) -> bool:
+        lowered = prompt.lower()
+        weather_terms = ("weather", "forecast", "temperature", "rain", "raining", "snow", "storm")
+        return any(term in lowered for term in weather_terms)
+
+    def _weather_response(self, output: dict[str, Any]) -> str:
+        if not output.get("live_data_available"):
+            summary = str(output.get("summary") or "Live weather data is unavailable.")
+            detail = str(output.get("detail") or "").strip()
+            return f"{summary}\n\n{detail}".strip()
+
+        source = "Open-Meteo"
+        raw = output.get("raw")
+        if isinstance(raw, dict):
+            source = str(raw.get("provider") or source)
+        if output.get("request_type") == "forecast":
+            return (
+                f"Forecast for {output.get('location')} {output.get('target_label')}:\n"
+                f"{output.get('summary')} ({output.get('description')}).\n"
+                f"High: {output.get('high_f')} F. Low: {output.get('low_f')} F.\n"
+                f"Humidity: {output.get('humidity_percent')}%.\n"
+                f"(live data from {source})"
+            )
+        return (
+            f"Current weather for {output.get('location')}:\n"
+            f"{output.get('summary')} ({output.get('description')}).\n"
+            f"Temperature: {output.get('temperature_f')} F (feels like {output.get('feels_like_f')} F).\n"
+            f"Humidity: {output.get('humidity_percent')}%.\n"
+            f"Wind: {output.get('wind_mph')} mph.\n"
+            f"(live data from {source})"
         )
 
     def _routing_result(

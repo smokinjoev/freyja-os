@@ -37,3 +37,11 @@ def test_inference_gateway_compose_passes_tier_and_budget_settings() -> None:
     assert environment["INFERENCE_GATEWAY_DEEP_MODEL"] == "${INFERENCE_GATEWAY_DEEP_MODEL:-z-ai/glm-5}"
     assert environment["INFERENCE_GATEWAY_FREE_MODEL"] == "${INFERENCE_GATEWAY_FREE_MODEL:-}"
     assert environment["INFERENCE_GATEWAY_OLLAMA_CLOUD_MODEL"] == "${INFERENCE_GATEWAY_OLLAMA_CLOUD_MODEL:-}"
+
+
+def test_inference_gateway_compose_keeps_local_ollama_warm() -> None:
+    compose = _load_gateway_compose()
+    environment = compose["services"]["inference-gateway"]["environment"]
+
+    assert environment["OLLAMA_WARMUP_ENABLED"] == "${OLLAMA_WARMUP_ENABLED:-true}"
+    assert environment["OLLAMA_WARMUP_INTERVAL_SECONDS"] == "${OLLAMA_WARMUP_INTERVAL_SECONDS:-1200}"

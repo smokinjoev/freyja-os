@@ -99,6 +99,45 @@ class OllamaClient:
         self._log_observability(response, status="ok")
         return response
 
+    async def warm(self, model: str | None = None) -> dict[str, Any]:
+        """Load a local model into Ollama without using the full chat prompt."""
+        target_model = model or self.model
+        if not target_model:
+            return {"error": "No Ollama model configured"}
+
+        payload: dict[str, Any] = {
+            "model": target_model,
+            "messages": [{"role": "user", "content": "."}],
+            "stream": False,
+            "think": False,
+            "keep_alive": settings.ollama_keep_alive,
+            "options": {
+                "temperature": 0.0,
+                "num_predict": 1,
+            },
+        }
+
+        start = time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=settings.ollama_warmup_timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.base_url}/api/chat",
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPStatusError as exc:
+            return {"error": f"Ollama HTTP {exc.response.status_code}", "model": target_model}
+        except Exception as exc:
+            return {"error": str(exc), "model": target_model}
+
+        latency_ms = int((time.monotonic() - start) * 1000)
+        return {
+            "status": "ok",
+            "model": data.get("model", target_model),
+            "latency_ms": latency_ms,
+        }
+
     async def _chat_once(
         self,
         *,

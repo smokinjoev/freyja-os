@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     ollama_retry_output_tokens: int = 1024
     ollama_min_chat_parameters_b: int = 3
     ollama_keep_alive: str = "30m"
+    ollama_warmup_enabled: bool = False
+    ollama_warmup_models: str = Field(default="", alias="OLLAMA_WARMUP_MODELS")
+    ollama_warmup_interval_seconds: float = 1200.0
+    ollama_warmup_timeout_seconds: float = 90.0
 
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -152,6 +156,19 @@ class Settings(BaseSettings):
         if not self.inference_gateway_openrouter_allowlist:
             return []
         return [model.strip() for model in self.inference_gateway_openrouter_allowlist.split(",") if model.strip()]
+
+    @property
+    def ollama_warmup_model_names(self) -> list[str]:
+        configured = [model.strip() for model in self.ollama_warmup_models.split(",") if model.strip()]
+        candidates = configured or [
+            self.ollama_chat_model,
+            self.inference_gateway_local_model,
+        ]
+        models: list[str] = []
+        for model in candidates:
+            if model and model not in models:
+                models.append(model)
+        return models
 
 
 settings = Settings()

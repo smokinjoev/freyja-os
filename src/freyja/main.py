@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import ipaddress
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -16,16 +17,28 @@ from freyja.inference_gateway import inference_gateway_router
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
+from freyja.ollama_warmup import start_ollama_warmup, stop_ollama_warmup
 from freyja.openrouter_client import OpenRouterClient
 from freyja.router import RouteRequest, router
 from freyja.tools.api import tools_router
 from freyja.tools.builtin import register_builtin_tools, register_smith_write_pilot_tools
 from freyja.tools.registry import get_registry
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_ollama_warmup(app, ollama, service_name="director")
+    try:
+        yield
+    finally:
+        await stop_ollama_warmup(app)
+
+
 app = FastAPI(
     title="Freyja Director",
     version="0.1.0",
     description="Core orchestration service for Freyja-OS.",
+    lifespan=lifespan,
 )
 
 
@@ -143,6 +156,9 @@ async def control_plane_status() -> dict[str, Any]:
                 "chat_model": settings.ollama_chat_model,
                 "classification_model": settings.ollama_classification_model,
                 "reasoning_model": settings.ollama_reasoning_model,
+                "warmup_enabled": settings.ollama_warmup_enabled,
+                "warmup_models": settings.ollama_warmup_model_names,
+                "warmup_interval_seconds": settings.ollama_warmup_interval_seconds,
             },
             "openrouter": {
                 "enabled": settings.cloud_enabled,

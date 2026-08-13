@@ -47,6 +47,31 @@ async def test_chat_sends_system_prompt_first(client: OllamaClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_warm_loads_model_with_minimal_prompt(client: OllamaClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr("freyja.config.settings.ollama_warmup_timeout_seconds", 12.0)
+
+    def _capture(*args, **kwargs):
+        request = httpx.Request("POST", str(args[0]))
+        captured["payload"] = kwargs.get("json")
+        return httpx.Response(
+            200,
+            json={"model": "qwen2.5:7b", "message": {"content": "ok"}},
+            request=request,
+        )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=_capture):
+        result = await client.warm("qwen2.5:7b")
+
+    assert result["status"] == "ok"
+    assert result["model"] == "qwen2.5:7b"
+    payload = captured["payload"]
+    assert payload["messages"] == [{"role": "user", "content": "."}]
+    assert payload["keep_alive"] == "30m"
+    assert payload["options"]["num_predict"] == 1
+
+
+@pytest.mark.asyncio
 async def test_chat_excludes_thinking_from_result(client: OllamaClient) -> None:
     def _capture(*args, **kwargs):
         request = httpx.Request("POST", str(args[0]))

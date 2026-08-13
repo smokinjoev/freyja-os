@@ -502,6 +502,69 @@ async def test_native_tool_call_validated_and_normalized(monkeypatch: pytest.Mon
     assert first_call["tools"]
 
 
+async def test_builtin_weather_prompt_executes_live_data_tool_directly() -> None:
+    registry = ToolRegistry(audit_enabled=False)
+    seen_arguments: list[dict[str, Any]] = []
+
+    async def weather(request: ToolExecutionRequest) -> dict:
+        seen_arguments.append(request.arguments)
+        return {
+            "live_data_available": True,
+            "request_type": "current",
+            "location": "Osaka, Osaka, Japan",
+            "target_label": "now",
+            "summary": "Partly cloudy",
+            "description": "partly cloudy",
+            "temperature_f": 84.2,
+            "feels_like_f": 88.1,
+            "humidity_percent": 68,
+            "wind_mph": 7.4,
+            "raw": {"provider": "Open-Meteo"},
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description="Weather",
+            input_schema={
+                "type": "object",
+                "required": ["location", "request_type"],
+                "properties": {
+                    "location": {"type": "string"},
+                    "request_type": {"type": "string", "enum": ["current", "forecast"]},
+                    "target_date": {"type": "string"},
+                    "target_label": {"type": "string"},
+                },
+            },
+            tags=["weather", "live-data"],
+        ),
+        weather,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+
+    result = await r.execute(
+        RouteRequest(
+            prompt="What is the weather in Osaka, Japan?",
+            provider="local",
+            tools_required=True,
+        )
+    )
+
+    assert "Current weather for Osaka, Osaka, Japan" in result.response
+    assert "live data from Open-Meteo" in result.response
+    assert seen_arguments == [
+        {
+            "location": "Osaka, Japan",
+            "request_type": "current",
+            "target_label": "now",
+        }
+    ]
+    assert result.tool_results[0]["tool_name"] == "get_weather"
+    r.ollama_client.chat.assert_not_awaited()
+
+
 async def test_explicit_reminder_request_can_execute_controlled_write_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "chat_max_tool_iterations", 2)
     registry = ToolRegistry(audit_enabled=False)
