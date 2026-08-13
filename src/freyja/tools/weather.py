@@ -310,6 +310,12 @@ def _extract_location(prompt: str) -> str:
         count=1,
         flags=re.IGNORECASE,
     )
+    location = re.sub(
+        r"\b(?:and|,)\s+(?:what\s+|which\s+|how\s+many\s+)?(?:lights?|light\s+status|home\s+assistant|homeassistant|devices?|switches?).*$",
+        "",
+        location,
+        flags=re.IGNORECASE,
+    )
 
     # Remove helper verbs and question fragments commonly left in front of the location.
     location = re.sub(r"\b(is|will|be|are|does|do|did|can|could|would|should)\b", "", location, flags=re.IGNORECASE)
@@ -325,9 +331,8 @@ def _extract_location(prompt: str) -> str:
     location = re.sub(r"\?$", "", location)
 
     cleaned = _sanitize_location_query(location)
-    # If extraction wipes everything, fall back to a sanitized version of the prompt.
-    if not cleaned and prompt:
-        cleaned = _sanitize_location_query(prompt)
+    if cleaned.lower() in {"weather", "forecast", "temperature", "outside", "lights", "light status", "lights status"}:
+        return ""
     return cleaned
 
 

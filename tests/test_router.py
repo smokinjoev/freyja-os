@@ -565,6 +565,41 @@ async def test_builtin_weather_prompt_executes_live_data_tool_directly() -> None
     r.ollama_client.chat.assert_not_awaited()
 
 
+async def test_weather_without_location_asks_for_place() -> None:
+    registry = ToolRegistry(audit_enabled=False)
+    registry.register(
+        ToolDefinition(
+            name="get_weather",
+            description="Weather",
+            input_schema={
+                "type": "object",
+                "required": ["location", "request_type"],
+                "properties": {
+                    "location": {"type": "string"},
+                    "request_type": {"type": "string", "enum": ["current", "forecast"]},
+                },
+            },
+            tags=["weather", "live-data"],
+        ),
+        AsyncMock(return_value={}),
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+
+    result = await r.execute(
+        RouteRequest(
+            prompt="weather",
+            provider="local",
+            tools_required=True,
+        )
+    )
+
+    assert "city or place" in result.response
+    assert result.tool_results == []
+    r.ollama_client.chat.assert_not_awaited()
+
+
 async def test_explicit_reminder_request_can_execute_controlled_write_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "chat_max_tool_iterations", 2)
     registry = ToolRegistry(audit_enabled=False)
@@ -1279,4 +1314,52 @@ class TestToolLoop:
         assert "2 visible lights currently on" in result.response
         assert "Kitchen Floor Lamp" in result.response
         assert "1 light entities are unavailable" in result.response
+        router.ollama_client.chat.assert_not_awaited()
+
+    async def test_bare_lights_question_uses_homeassistant_preflight(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        registry: ToolRegistry,
+    ) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        registry.unregister("homeassistant_list_entities")
+
+        async def _list_entities(request: ToolExecutionRequest) -> dict[str, Any]:
+            assert request.arguments == {"domain": "light"}
+            return {
+                "count": 2,
+                "entities": [
+                    {"entity_id": "light.kitchen", "name": "Kitchen", "state": "on", "access": "read_only"},
+                    {"entity_id": "light.hall", "name": "Hall", "state": "off", "access": "read_only"},
+                ],
+            }
+
+        registry.register(
+            ToolDefinition(
+                name="homeassistant_list_entities",
+                description="Synthetic Home Assistant entities.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "domain": {"type": "string"},
+                    },
+                },
+            ),
+            _list_entities,
+        )
+
+        result = await router.execute(
+            RouteRequest(
+                prompt="What lights are on?",
+                provider="local",
+                tools_required=True,
+            )
+        )
+
+        assert result.tool_results[0]["tool_name"] == "homeassistant_list_entities"
+        assert "1 visible lights currently on" in result.response
+        assert "Kitchen" in result.response
         router.ollama_client.chat.assert_not_awaited()

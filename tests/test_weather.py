@@ -157,6 +157,14 @@ class TestLocationExtraction:
         assert "3" not in loc
         assert "days" not in loc.lower()
 
+    def test_extract_location_stops_before_home_light_clause(self):
+        loc = _extract_location("What is the weather in Osaka, Japan and what lights are on?")
+        assert loc == "Osaka, Japan"
+
+    def test_extract_location_without_place_returns_empty(self):
+        assert _extract_location("What is the weather?") == ""
+        assert _extract_location("weather and lights") == ""
+
 
 class TestGetWeatherDisabled:
     @pytest.mark.asyncio

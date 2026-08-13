@@ -1207,6 +1207,16 @@ class Router:
                 evidence=evidence,
                 started=started,
             )
+        if not parsed.location:
+            response_text = "Please tell me the city or place for the weather, for example: weather in Osaka, Japan."
+            await self._record_memory(request, decision, response_text, evidence)
+            return self._routing_result(
+                decision=decision,
+                response=response_text,
+                tool_results=[],
+                evidence=evidence,
+                started=started,
+            )
 
         arguments: dict[str, Any] = {
             "location": parsed.location,
@@ -1365,11 +1375,21 @@ class Router:
     def _homeassistant_inventory_tool_name(self, prompt: str, registry: ToolRegistry) -> str | None:
         lowered = prompt.lower()
         home_terms = ("home assistant", "homeassistant", " at home", " my home", "the home", "our home", "house")
-        if not any(term in lowered for term in home_terms):
-            return None
-        light_terms = ("how many lights", "lights are on", "lights on", "which lights", "what lights", "light status")
+        light_terms = (
+            "how many lights",
+            "lights are on",
+            "lights on",
+            "which lights",
+            "what lights",
+            "light status",
+            "lights status",
+        )
         if any(term in lowered for term in light_terms) and registry.get_tool("homeassistant_list_entities") is not None:
             return "homeassistant_list_entities"
+        if lowered.strip(" ?.!,") in {"lights", "light status", "lights status"} and registry.get_tool("homeassistant_list_entities") is not None:
+            return "homeassistant_list_entities"
+        if not any(term in lowered for term in home_terms):
+            return None
         summary_terms = ("what can you see", "home status", "home summary", "device status", "devices")
         if any(term in lowered for term in summary_terms) and registry.get_tool("homeassistant_home_summary") is not None:
             return "homeassistant_home_summary"
