@@ -7,15 +7,17 @@ Freyja-OS is a locally controlled personal-agent platform.
 - Mars: Freyja Director and control plane
 - Atlas: always-on infrastructure services and Signal connector
 - Hera: primary local agent model provider through Tailscale; not an always-on control-plane host
-- Iris: optional secondary local inference capacity; inference-focused
+- Iris: always-on, kept-warm secondary local inference capacity; inference-focused
+- Future new PC: Layer 1 heavy local inference node once purchased and installed
+- OpenRouter/Ollama Cloud: approved cloud escalation layers, not the source of truth
 - Raspberry Pi: future edge automation node
 - Additional computers: optional worker nodes
 
 ## Current phase
 
-Current phase: Home Assistant foundation on top of the Director, Router,
-Memory, Certification, Communications, Family Calendar, persistent Identity,
-and private multi-agent hierarchy.
+Current phase: Cloyd-parity family assistant on top of the Director, Router,
+Memory, Certification, Communications, Family Calendar, Reminders, Home
+Assistant, persistent Identity, and private multi-agent hierarchy.
 
 Every pull request runs the full test suite on Python 3.11-3.13 plus repository
 hygiene checks that reject common credential signatures and tracked runtime
@@ -69,12 +71,14 @@ and Reminders:
 
 ## Home Assistant
 
-The first Home Assistant slice provides an authenticated REST client, sanitized
-read-only entity inventory, conservative entity classifications, and
-protocol-aware pairing plans. Model-facing tools cannot open pairing or control
-devices yet. Atlas remains the intended Home Assistant host; see
+The Home Assistant slice provides an authenticated REST client, sanitized entity
+inventory, conservative entity classifications, live summary/list tools,
+reviewed lighting control policy, and protocol-aware pairing plans. The active
+runtime has a reviewed lighting suite enabled for Freyja control; appliance-like
+switches, locks, covers/garage, cameras, alarms, and pairing remain blocked
+unless deliberately enabled behind policy. Atlas remains the Home Assistant host; see
 [`docs/HOME_ASSISTANT.md`](docs/HOME_ASSISTANT.md) for the VM decision, policy,
-and Atlanta installation checklist.
+and Atlas installation checklist.
 
 ## Communications
 
@@ -114,12 +118,13 @@ benchmark, compare, and output directory options. See
 
 Mars is the Freyja Director and control-plane host. Atlas runs always-on
 infrastructure services and the Signal connector. Hera currently provides the
-primary local agent model (`qwen3:14b`) over Tailscale. Director routing stays
-local when possible and escalates to configured OpenRouter tiers only when local
-inference cannot satisfy the request. Hera is not a core always-on host, so
-Director routing must tolerate Hera being unavailable and use configured
-fallback paths instead of fabricating an answer. OpenRouter fallback requires a
-configured API key and approved model allowlist.
+primary local agent model (`qwen3:14b`) over Tailscale. Iris is the kept-warm
+secondary local fallback. The future new PC belongs as the Layer 1 heavy local
+inference node once installed; it should not replace Mars as Director or Atlas
+as infrastructure. Director routing stays agent-led and local when possible,
+falls through Hera -> Iris -> approved cloud fallback when policy allows, and
+returns explicit provider failures instead of fabricating answers. OpenRouter
+fallback requires a configured API key and approved model allowlist.
 
 The Signal connector deployment uses
 [`bbernhard/signal-cli-rest-api`](https://github.com/bbernhard/signal-cli-rest-api)

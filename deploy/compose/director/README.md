@@ -3,12 +3,16 @@
 This Compose project runs only the Freyja Director and control plane on Mars.
 Signal remains a separate Atlas deployment under `deploy/compose/signal`.
 The Director uses Hera's Tailscale-reachable Ollama service for the primary
-local agent model (`qwen3:14b`). Routing stays local when possible and escalates
-to configured OpenRouter tiers only when local inference cannot satisfy the
-request. Hera is not a core always-on host, so routing must tolerate Hera being
-unavailable and return a clear provider failure or use configured fallback.
-OpenRouter fallback requires a configured API key, approved models, and routing
-budget headroom.
+local agent model (`qwen3:14b`). Iris is configured separately as the kept-warm
+secondary local fallback when `OLLAMA_FALLBACK_BASE_URL` is populated. The future
+new PC should be added later as a private Layer 1 heavy-inference provider, not
+as a Director or connector host.
+
+Routing stays agent-led and local when possible, then falls through Hera -> Iris
+-> approved cloud fallback when policy allows. Hera is not a core always-on
+host, so routing must tolerate Hera being unavailable and return a clear
+provider failure or use configured fallback. OpenRouter fallback requires a
+configured API key, approved models, and routing budget headroom.
 
 ## Private access
 
@@ -19,7 +23,9 @@ files. The health endpoint remains public within the tailnet; other Director
 endpoints require the bearer token when it is configured.
 
 Set `OLLAMA_BASE_URL` to Hera's private Tailscale Ollama endpoint in the
-untracked `.env`. Do not commit private IP addresses, tokens, or API keys.
+untracked `.env`. Set `OLLAMA_FALLBACK_BASE_URL` to Iris only when the fallback
+provider is ready and should be used by production routing. Do not commit
+private IP addresses, tokens, or API keys.
 
 ## Start and verify
 

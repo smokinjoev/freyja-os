@@ -2,9 +2,9 @@
 
 ## Current Milestone
 
-Home Assistant foundation: deploy the private automation hub on Atlas, inventory
-devices safely, and add explicit approval before Freyja can open pairing or
-control an entity.
+Cloyd-parity family assistant: keep the agent at the center, route through Hera
+first, fall back to kept-warm Iris and approved cloud when needed, and preserve
+fast, grounded Home Assistant/iMessage/HomePod behavior.
 
 ## Completed Work
 
@@ -35,16 +35,26 @@ control an entity.
   without inline family aliases.
 - Identity certification suites were added under
   `certification/suites/identity/`.
+- HomePod/Siri can enter through the native iMessage connector path.
+- Home Assistant is reachable on Atlas through the private/Tailscale path.
+- The reviewed lighting suite is enabled for Freyja control; appliance-like
+  switches, locks, covers/garage, cameras, alarms, and pairing remain blocked.
+- Hera is the Rev 1 primary local agent model provider (`qwen3:14b`).
+- Iris is the kept-warm secondary local fallback.
+- The future new PC is reserved for Layer 1 heavy local inference, not Director
+  or connector duties.
 
 ## Remaining Work
 
 - Turn on the persistent identity store in production after importing reviewed
   household contacts, then disable seed fallback when appropriate.
 - Add recurring production contact sync for the chosen canonical source.
-- Deploy Home Assistant OS on Atlas and create its protected Freyja API user.
-- Connect the read-only inventory to the live private endpoint.
-- Add a general controlled-write approval boundary before exposing pairing.
-- Enroll and classify devices deliberately; begin with a harmless test device.
+- Keep expanding Home Assistant control only through reviewed low-risk
+  allowlists.
+- Add a general controlled-write approval boundary before exposing pairing or
+  higher-risk actions.
+- Document and wire the future new PC as a private heavy-inference provider when
+  it exists.
 - Expand relationship coverage beyond the current directed edges.
 - Add future voice/avatar identity adapters when those subsystems are built.
 - Use identity benchmark history for router policy only after benchmark data is
@@ -63,6 +73,9 @@ control an entity.
   terms of canonical person IDs where practical.
 - Tests use mocked contacts, mocked connectors, and in-memory calendar
   providers. No live services are required.
+- The model/agent path is the assistant's center. Deterministic weather and
+  Home Assistant shortcuts are guardrails for table-stakes family behavior, not
+  the general intelligence layer.
 
 ## Completed Foundation
 
@@ -72,11 +85,13 @@ control an entity.
   comparison framework.
 - Multi-user Communications through Signal and native iMessage connectors.
 - Family Calendar and Reminders Personal Intelligence Services.
+- Home Assistant visibility, reviewed lighting control, HomeKit/HomePod
+  runbooks, and iMessage/HomePod routing.
 
 ## Next Milestone
 
-Complete the Atlas Home Assistant installation, verify backups and inventory,
-then enable time-bounded Zigbee pairing behind explicit approval. In parallel,
-finish the production identity rollout by importing reviewed household contacts,
-enabling the durable SQLite store for the Director and connectors, and removing
-inline messaging aliases where canonical identities exist.
+Improve Cloyd-parity response quality and latency: tune Hera -> Iris -> cloud
+fallback thresholds, keep Iris warm, preserve direct HA/weather reliability, and
+then finish the production identity rollout by importing reviewed household
+contacts, enabling the durable SQLite store for the Director and connectors,
+and removing inline messaging aliases where canonical identities exist.

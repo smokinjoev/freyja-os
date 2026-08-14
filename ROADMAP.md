@@ -230,7 +230,7 @@ Fallback example:
 primary local model -> alternate local model -> error response
 ```
 
-### P0 — Validate Iris local inference limits
+### P0 — Validate Hera and Iris local inference limits
 
 Document:
 
@@ -238,14 +238,17 @@ Document:
 - Expected response speed
 - Maximum practical context
 - Concurrency limit
+- Which host owns primary agent inference vs kept-warm fallback
 
 ### P1 — Add remote Ollama node support
 
 Support Ollama running on another private-network node.
 
-Rev 1 default: Mars calls Iris for local Ollama inference. Hera may be tested as
-a separate benchmark or optional inference machine, but it is not core
-infrastructure.
+Rev 1 default: Mars calls Hera for primary local agent inference and uses Iris
+as the kept-warm secondary local fallback. Hera is not core always-on
+infrastructure; Mars must tolerate Hera failure or timeout. The future new PC is
+reserved as the Layer 1 heavy local inference node when installed, using the
+same private provider boundary.
 
 ### P1 — Add local model benchmark script
 
@@ -662,13 +665,14 @@ Worker metadata:
 
 ### P0 — Add Home Assistant API adapter
 
-Status: read-only REST adapter and sanitized entity inventory implemented;
-live Atlas configuration pending.
+Status: REST adapter, sanitized entity inventory, live Atlas/Tailscale
+configuration, and family-home summary tools implemented.
 
 ### P0 — Define allowed entity list
 
 Status: environment-backed exact entity allowlist implemented; new entities
-remain quarantined.
+remain quarantined. Reviewed lighting entities are enabled for Freyja control;
+appliance-like switches and high-risk domains remain blocked.
 
 ### P0 — Define low-risk and high-risk actions
 
@@ -677,7 +681,7 @@ classification implemented.
 
 ### P0 — Require confirmation for high-risk actions
 
-Status: pairing service refuses without confirmation, but model-facing pairing
+Status: pairing service refuses without confirmation, and model-facing pairing
 remains disabled until a general Director controlled-write approval gate exists.
 
 Examples:
@@ -699,13 +703,18 @@ Examples:
 
 # Milestone 12 — iMessage Interface
 
-**Goal:** Add Apple-native messaging after the Signal path is stable.
+**Goal:** Harden Apple-native messaging and HomePod entry after the basic text
+path is working.
 
 **Target release:** `v0.7.0`
 
 ## Issues
 
 ### P0 — Select iMessage bridge
+
+Status: native Python iMessage connector implemented as the current Apple
+client-adapter path. HomePod/Siri enters through a Shortcut that sends iMessage
+to Freyja.
 
 Evaluate:
 

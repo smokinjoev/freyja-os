@@ -97,7 +97,7 @@ Protocol behavior:
   proxy; there is no universal network pairing window.
 - Vendor integrations: follow the integration's own onboarding flow.
 
-## Atlanta installation checklist
+## Atlas installation checklist
 
 1. Confirm Atlas virtualization support and free storage.
 2. Create the bridged Home Assistant OS VM and reserve its LAN address.

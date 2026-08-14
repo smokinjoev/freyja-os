@@ -1,7 +1,7 @@
 # Freyja-OS Architecture
 
 **Version:** 0.1 Rev 1
-**Status:** Rev 1 host-role baseline
+**Status:** Rev 1 family-assistant baseline with Hera/Iris/cloud fallback
 **Primary owner:** Joe  
 **Project:** Freyja-OS
 
@@ -11,8 +11,10 @@ Freyja-OS is a personal AI orchestration platform designed to combine local mode
 
 The system should:
 
+- Preserve the "Cloyd parity" family-assistant experience: one capable assistant
+  that knows the household context, uses tools, and answers naturally.
 - Prefer local inference when practical.
-- Escalate difficult work to cloud models through OpenRouter.
+- Escalate difficult work or failed local answers to approved cloud models.
 - Remain usable from a phone through secure messaging.
 - Reuse existing computers as specialized worker nodes.
 - Keep model providers, messaging platforms, and tools replaceable.
@@ -33,11 +35,17 @@ No worker agent should independently accept arbitrary public commands.
 
 ### 2.2 Local First, Cloud When Necessary
 
-The system should use local Ollama models for routine work and escalate to OpenRouter only when the task requires stronger reasoning, larger context, better tool use, or a specialized cloud model.
+The system should use local Ollama models for routine work and escalate only
+when the task requires stronger reasoning, larger context, better tool use, or a
+specialized cloud model. Routing policy must serve the family-assistant
+experience first; cost optimization is secondary to useful, grounded answers.
 
 ### 2.3 Secure Entry Points
 
-Signal is the preferred remote interface. iMessage may be added as a secondary Apple-native interface. Telegram may remain available for testing, but it should not be treated as the primary secure control path.
+Signal is the preferred remote interface. Native iMessage is the Apple-native
+secondary interface and HomePod/Shortcut entry path. Telegram may remain
+available for testing, but it should not be treated as the primary secure
+control path.
 
 ### 2.4 Capability Services, Not Uncontrolled Agents
 
@@ -88,15 +96,24 @@ The current known hardware pool includes:
 - Two older 2011 Mac minis
 - Several additional older PCs
 - An avatar computer with display, speaker, camera, and local interaction capability
+- Future high-capacity local inference PC, when purchased and installed
 
-The architecture assumes these systems may be reassigned as their capabilities are tested.
+The architecture assumes existing systems may be reassigned as their
+capabilities are tested. The future high-capacity PC is a new Layer 1 inference
+node, not a Director replacement and not a public entry point.
 
 ### 3.3 Rev 1 Authoritative Host Roles
 
 - Mars: Freyja Director and control plane.
 - Atlas: always-on infrastructure services and Signal connector.
-- Hera: primary local agent model provider over Tailscale; not core always-on control-plane infrastructure.
-- Iris: optional secondary local inference capacity; inference-focused and not a development host.
+- Hera: primary local agent model provider over Tailscale for Rev 1; not core
+  always-on control-plane infrastructure.
+- Iris: always-on, kept-warm secondary local inference capacity;
+  inference-focused and not a development host.
+- Future inference PC: dedicated Layer 1 local heavy-inference node when
+  available; it should implement the same private provider contract.
+- OpenRouter and future Ollama Cloud: approved cloud escalation layers, not the
+  default source of truth.
 
 ---
 
@@ -110,8 +127,8 @@ The architecture assumes these systems may be reassigned as their capabilities a
                                     |
                   +-----------------+-----------------+
                   |                                   |
-             Signal Bridge                      iMessage Bridge
-             Primary Remote                     Secondary / Later
+             Signal Bridge                      iMessage / HomePod
+             Primary Remote                     Secondary Apple Path
                   |                                   |
                   +-----------------+-----------------+
                                     |
@@ -201,23 +218,27 @@ virtualization is available. This preserves managed MQTT, Matter, and Z-Wave
 services while keeping device discovery on the home LAN. Mars accesses its API
 over the private network and remains the authorization authority.
 
-## 5.3 Iris — Local Inference Node
+## 5.3 Iris — Always-Hot Secondary Local Inference Node
 
-**Primary role:** Fast local LLM inference
+**Primary role:** kept-warm fast local fallback inference
 
 Recommended responsibilities:
 
-- Lower-latency Ollama models used by the Mars Director for quick local work
+- Lower-latency Ollama models used after Hera failure or timeout
 - Model compatibility and inference-health checks
-- Stable fast-inference service for the Mars control plane
+- Stable fast-inference service for family-assistant continuity
+- Warmup loop for the configured secondary local chat model
+- Fast handling of ordinary household questions when selected by policy
 
-Iris can provide secondary local inference capacity for Rev 1. It is
-inference-focused, not the development, Director, primary agent, or always-on
-Signal host.
+Iris is the always-on local safety net for Rev 1. It is inference-focused, not
+the development, Director, primary agent, or Signal host. The Director should
+keep an Iris-capable model warm when Iris is configured as
+`OLLAMA_FALLBACK_BASE_URL`, so the family-assistant path does not wait on a cold
+model after Hera fails or times out.
 
-## 5.4 Hera — Development and Benchmark Node
+## 5.4 Hera — Primary Local Agent and Benchmark Node
 
-**Primary role:** Development, verification, inference benchmarking, and primary local agent inference
+**Primary role:** primary local agent inference, development, verification, and benchmarking
 
 Recommended responsibilities:
 
@@ -227,13 +248,50 @@ Recommended responsibilities:
 - Performance comparison against Iris-hosted models
 - Hosting the primary local agent model (`qwen3:14b`) for routine chat,
   privacy-sensitive requests, and first-pass tool-selection requests
+- Running explicit deep-reasoning experiments, such as larger local models, only
+  when they do not starve avatar or interactive workloads
 - Experimental inference workloads that must not affect Director or Signal availability
 
 Hera provides high-quality local reasoning to Mars over Tailscale, but it is
 deliberately separate from core always-on infrastructure. Rev 1 must not depend
 on Hera for the Director, Signal connector, databases, or always-on control
-path. If Hera is unavailable, routing must fail cleanly and use configured
-fallback providers rather than inventing an answer.
+path. If Hera is unavailable or exceeds the local agent turn timeout, routing
+falls through to Iris and then to approved cloud fallback when policy,
+credentials, and budget allow. If no fallback is available, Freyja must return a
+clear provider failure rather than inventing an answer.
+
+## 5.4.1 Future High-Capacity Inference PC — Layer 1 Local Brain
+
+**Primary role:** dedicated heavy local inference once the new PC exists
+
+The new PC belongs in the architecture as the future Layer 1 local inference
+machine. It should run larger local models behind the same private Ollama,
+vLLM, llama.cpp server, or OpenAI-compatible provider boundary used by Hera and
+Iris.
+
+Responsibilities:
+
+- Heavy local reasoning and coding tasks that exceed Hera or Iris.
+- Long-context local model serving where hardware allows.
+- Benchmarking against Hera, Iris, OpenRouter, and Ollama Cloud.
+- Private-network-only provider endpoint for Mars.
+
+Non-responsibilities:
+
+- It should not host the Director by default.
+- It should not host Signal or iMessage connectors.
+- It should not become a public remote-control endpoint.
+- It should not own memory or home-automation policy.
+
+When installed, the expected high-level stack becomes:
+
+```text
+Mars Director/control plane
+    -> Hera primary Rev 1 local agent / deep-thought experiments
+    -> Iris kept-warm fast local fallback
+    -> New PC Layer 1 heavy local inference
+    -> Ollama Cloud / OpenRouter cloud escalation
+```
 
 ## 5.5 NUCBox — Utility Node
 
@@ -320,11 +378,11 @@ Responsibilities:
 - Forward requests to the Director
 - Return formatted responses
 
-Initial connectors:
+Current and initial connectors:
 
 1. Signal
 2. Telegram for development and fallback
-3. iMessage in a later phase
+3. Native iMessage for Apple/HomePod entry
 4. Optional web interface
 
 ## 6.2 Freyja Director
@@ -356,6 +414,29 @@ Suggested initial implementation:
 ## 6.3 Model Router
 
 The Model Router decides where inference should occur.
+
+Rev 1 treats the model as the center of the assistant, not as an accessory
+behind parser shortcuts. The default family-assistant route is:
+
+```text
+Hera qwen3:14b agent/tool loop
+    -> Iris secondary local Ollama fallback when configured
+    -> future new-PC Layer 1 heavy local inference when available
+    -> approved OpenRouter/cloud finalization or fallback when policy allows
+    -> explicit provider failure if no path is available
+```
+
+The router may still use deterministic preflights for table-stakes household
+operations where failing into generic chat is worse than a narrow tool call.
+Current examples are Home Assistant light/status questions and live weather
+questions. Those paths still produce normal tool results and do not grant new
+authority.
+
+The optional Mars inference gateway exposes semantic tiers (`LOCAL`, `FREE`,
+`FAST`, `REASONING`, `DEEP`, `FRONTIER`, `OLLAMA_CLOUD`) and maps them to
+concrete providers. It is a provider-selection boundary, not a second Director.
+`FRONTIER` requires explicit approval, sensitive prompts are kept local, and
+cloud models must be allowlisted.
 
 Initial routing criteria:
 
@@ -405,10 +486,14 @@ Examples:
 
 - `memory.search`
 - `memory.write`
+- `resolve_public_event`
 - `calendar.today_schedule`
 - `calendar.find_time`
 - `calendar.create_event`
+- `reminders.create`
 - `homeassistant.call_service`
+- `homeassistant.home_summary`
+- `homeassistant.begin_pairing`
 - `files.read`
 - `files.write`
 - `web.search`
@@ -641,15 +726,23 @@ route ordinary messages to the personal agent.
 
 ## 7.3 iMessage
 
-iMessage integration is a later-phase feature because Apple does not provide a general-purpose official bot API.
+iMessage is the Apple-native secondary connector and the current HomePod voice
+entry path. Apple still does not provide a general-purpose official bot API, so
+the connector remains a macOS client adapter with explicit allowlists, bounded
+message handling, duplicate suppression, and safe outbound behavior.
 
-Possible implementation paths:
+Implemented and supported path:
 
-- BlueBubbles server on macOS
-- AppleScript or Shortcuts-based bridge
-- macOS Messages database watcher with a controlled sender allowlist
+- Native Python iMessage connector on a signed-in macOS account.
+- Optional HomePod/Siri Shortcut that sends `Freyja: <request>` by iMessage.
+- Forgiving handling for question-like self-authored Shortcut messages.
+- Tool-capable `/route` calls so Home Assistant and other Director tools can be
+  used from iMessage.
+- Separate short timeout for `imsg` commands so one stuck Messages chat cannot
+  wedge the connector.
 
-Any iMessage bridge should be treated as a client adapter, not as the Director itself.
+Any iMessage bridge should be treated as a client adapter, not as the Director
+itself. Attachments, groups, and broad outbound messaging remain deferred.
 
 ---
 
@@ -817,9 +910,8 @@ Expected fallback chain:
 
 ```text
 Hera qwen3:14b local agent model for local-first tasks
-    -> configured OpenRouter fallback when policy and credentials allow
-    -> explicit provider failure if no fallback is available
-Iris secondary local model for optional overflow/experiments
+    -> Iris secondary local Ollama model when configured
+    -> future new-PC Layer 1 heavy local inference when available
     -> configured OpenRouter fallback when policy and credentials allow
     -> explicit provider failure if no fallback is available
 ```
@@ -828,6 +920,10 @@ OpenRouter fallback is available only when the Director has a valid API key,
 approved model configuration, and routing policy budget headroom. If Hera or any
 other provider is unavailable and no fallback is configured, the Director should
 return a clear failure instead of fabricating an answer.
+
+Local agent tool-loop turns are bounded by `OLLAMA_TOOL_CALL_TIMEOUT_SECONDS`.
+This prevents a slow or wedged local model from blocking iMessage/HomePod or
+Signal responses for minutes before Iris or cloud fallback can respond.
 
 The system should not silently discard failed tool calls. Failures should be recorded and surfaced when they affect the result.
 
@@ -843,105 +939,117 @@ Each service should provide:
 
 ## 14. Repository Structure
 
-Recommended initial repository structure:
+Current repository structure:
 
 ```text
-Freyja/
+freyja-os/
 ├── README.md
 ├── ARCHITECTURE.md
 ├── ROADMAP.md
-├── LICENSE
+├── SECURITY.md
+├── CONTRIBUTING.md
 ├── .gitignore
 ├── .env.example
+├── certification/
+│   ├── cli.py
+│   └── suites/
+├── config/
 ├── docs/
-│   ├── decisions/
-│   ├── diagrams/
-│   ├── operations/
-│   └── security/
+│   ├── HOME_ASSISTANT.md
+│   ├── HOMEPOD_SHORTCUTS.md
+│   ├── IDENTITY_STORAGE.md
+│   └── ...
 ├── src/
 │   └── freyja/
-│       ├── api/
-│       ├── director/
-│       ├── gateway/
-│       ├── models/
-│       ├── providers/
-│       ├── tools/
+│       ├── agents/
+│       ├── calendar/
+│       ├── homeassistant/
+│       ├── identity/
 │       ├── memory/
-│       ├── security/
-│       └── observability/
+│       ├── reminders/
+│       ├── tools/
+│       ├── main.py
+│       ├── router.py
+│       ├── inference_gateway.py
+│       ├── ollama_client.py
+│       └── openrouter_client.py
 ├── connectors/
 │   ├── signal/
 │   ├── telegram/
 │   └── imessage/
-├── workers/
-│   ├── speech/
-│   ├── vision/
-│   └── documents/
 ├── deploy/
 │   ├── docker/
 │   ├── compose/
-│   └── systemd/
+│   └── homeassistant/
+├── scripts/
 ├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── security/
-└── scripts/
+└── data/        # runtime only; ignored
 ```
 
 ---
 
-## 15. Initial API Contract
+## 15. Current API Contract
 
-A normalized request should resemble:
+The Director exposes the current family-assistant route at `/route`.
+A normalized route request resembles:
 
 ```json
 {
-  "request_id": "uuid",
-  "user_id": "joe",
-  "source": "signal",
+  "prompt": "How many lights are on at home?",
+  "provider": "auto",
+  "source": "imessage",
   "conversation_id": "string",
-  "message": "user text",
-  "attachments": [],
-  "permissions": ["chat", "memory.read"],
-  "timestamp": "ISO-8601"
+  "tools_required": true,
+  "privacy": "household"
 }
 ```
 
-A normalized response should resemble:
+A route response includes the final answer, routing evidence, and tool evidence:
 
 ```json
 {
-  "request_id": "uuid",
-  "status": "completed",
-  "message": "assistant response",
+  "response": "Home Assistant reports 1 visible light currently on...",
   "provider": "ollama",
-  "model": "model-name",
-  "tool_calls": [],
-  "estimated_cost_usd": 0.0,
-  "latency_ms": 1200
+  "model": "qwen3:14b",
+  "routing": {
+    "reason": "auto local-first route",
+    "estimated_cost_usd": 0.0
+  },
+  "tool_results": []
 }
 ```
+
+Other supported internal surfaces include `/health`, `/control-plane/status`,
+`/tools`, `/memory`, and `/inference-gateway/*`. Non-public endpoints require
+`FREYJA_CONNECTOR_TOKEN` when configured.
 
 ---
 
 ## 16. Initial Deployment Target
 
-The first working release should prove this path:
+The first working release should prove these paths:
 
 ```text
 Signal
   -> Gateway
   -> Director
-  -> Local Ollama or OpenRouter
+  -> Hera, Iris, new-PC Layer 1 when available, or approved cloud fallback
   -> Director
   -> Signal response
+
+HomePod / Siri Shortcut
+  -> iMessage
+  -> iMessage connector
+  -> Director
+  -> Home Assistant or model/tool route
+  -> iMessage response
 ```
 
 Minimum acceptance criteria:
 
 - Only the authorized Signal account can issue requests
-- Director can reach at least one local Ollama model
-- Director can reach at least one OpenRouter model
+- Director can reach Hera and any configured Iris/new-PC local inference endpoint
+- Director can reach an approved cloud fallback when enabled
 - Routing can be selected manually and automatically
 - Every request is logged with model, latency, and estimated cost
 - Cloud use can be disabled globally
@@ -951,13 +1059,14 @@ Minimum acceptance criteria:
 
 ## 17. Deferred Features
 
-The following features are intentionally deferred until the core pipeline is stable:
+The following features are intentionally deferred until the family-assistant
+baseline is stable:
 
 - Autonomous multi-agent collaboration
 - Avatar personality system
 - Continuous microphone listening
-- Advanced home automation
-- Full iMessage support
+- Broad home automation beyond reviewed low-risk entities
+- iMessage attachments, groups, and broad outbound messaging
 - Multi-user support
 - Self-modifying code
 - Automatic privilege escalation
@@ -969,6 +1078,11 @@ The following features are intentionally deferred until the core pipeline is sta
 
 ## 18. Definition of Freyja-OS v0.1
 
-Freyja-OS v0.1 is complete when Joe can send an authorized Signal message from his phone, receive a response generated by either a local Ollama model or an OpenRouter model, and inspect a log showing how the request was routed, how long it took, and what it cost.
+Freyja-OS v0.1 is complete when Joe can send an authorized message from a
+phone or HomePod path, receive a useful family-assistant answer generated by
+Hera, Iris, the future new-PC local layer, or an approved cloud fallback, and
+inspect evidence showing routing, tool use, latency, and cost.
 
-That release establishes the core platform. Memory, tools, voice, vision, iMessage, home automation, and distributed workers are added after this foundation is reliable.
+That release establishes the core platform. Memory, tools, voice, vision,
+expanded home automation, and distributed workers deepen the assistant after
+the family-facing experience is reliable.

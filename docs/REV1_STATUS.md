@@ -1,15 +1,19 @@
 # Rev 1 Status
 
-**Date:** 2026-07-30
-**Status:** architecture and deployment layout aligned; Mars/Hera local-first agent routing deployed
+**Date:** 2026-08-13
+**Status:** architecture and deployment layout aligned; family-assistant routing deployed
 
 ## Authoritative host roles
 
 - Mars: Freyja Director and control plane.
 - Atlas: always-on infrastructure services and Signal connector.
-- Hera: primary local agent model provider over Tailscale; not core
+- Hera: primary local agent model provider over Tailscale for Rev 1; not core
   always-on infrastructure.
-- Iris: optional secondary local inference capacity; inference-focused.
+- Iris: always-on, kept-warm secondary local inference capacity;
+  inference-focused.
+- Future new PC: Layer 1 heavy local inference node when installed; not a
+  Director, connector, or public entry point.
+- OpenRouter/Ollama Cloud: approved cloud escalation layers.
 
 ## Conflicting or stale assignments found
 
@@ -40,11 +44,17 @@
   deployment.
 - Hera is documented and deployed as the primary local agent model provider for
   the Mars Director.
-- Iris is documented as optional secondary local inference capacity.
+- Iris is documented as kept-warm secondary local inference capacity.
+- The future new PC is documented as the next local heavy-inference layer, not
+  as a replacement for Mars, Atlas, Hera, or Iris.
 - Hera remains separate from the core always-on control path; Director routing
   must tolerate Hera being unavailable.
 - OpenRouter fallback requires configured credentials, approved models, and
   routing budget headroom.
+- HomePod/Siri uses the native iMessage connector path; iMessage is no longer
+  purely "later phase" for basic text requests.
+- Home Assistant is live through Atlas with reviewed lighting control enabled;
+  high-risk and appliance-like entities remain outside Freyja control.
 
 ## Blockers before deployment
 
@@ -70,6 +80,7 @@
 7. Manually register or link the Signal account in the REST wrapper.
 8. Set the Signal account number and sender allowlist.
 9. Enable Signal and start the Atlas Signal connector stack.
-10. Send an authorized Signal message and confirm the request is routed to the
-   Mars Director and then to Hera, Iris, or OpenRouter according to policy and
-   availability.
+10. Send an authorized Signal or iMessage/HomePod message and confirm the
+   request is routed to the Mars Director and then to Hera, Iris, the future
+   new-PC layer when available, or approved cloud fallback according to policy
+   and availability.
