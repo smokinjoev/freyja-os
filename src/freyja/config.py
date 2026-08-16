@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     ollama_retry_output_tokens: int = 1024
     ollama_min_chat_parameters_b: int = 3
 
+    # Rev 2: Iris is the always-hot routing/reflex node. These settings are
+    # intentionally separate from the legacy Ollama provider so Iris can be
+    # introduced in shadow mode without changing production routing behavior.
+    iris_router_enabled: bool = False
+    iris_router_shadow_enabled: bool = False
+    iris_ollama_base_url: str = "http://iris:11434"
+    iris_router_model: str = "qwen2.5:7b"
+    iris_router_timeout_seconds: float = 4.0
+    iris_router_keep_alive: str = "-1"
+    iris_router_max_prompt_chars: int = 12000
+
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "openai/gpt-4o-mini"
