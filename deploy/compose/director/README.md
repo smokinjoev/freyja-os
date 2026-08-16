@@ -1,24 +1,34 @@
-# Freyja Director on Mars
+# Freyja Director on Atlas — Rev 2 Shadow Routing
 
-This Compose project runs only the Freyja Director and control plane on Mars.
-Signal remains a separate Atlas deployment under `deploy/compose/signal`.
-The Director uses Hera's Tailscale-reachable Ollama service for the primary
-complex `local_reasoning` model (`gpt-oss:20b`). Iris remains the fast local
-inference tier for lower-latency local work. Hera is not a core always-on host,
-so routing must tolerate Hera being unavailable and return a clear provider
-failure or use configured fallback. OpenRouter fallback requires a configured
-API key, approved models, and routing budget headroom.
+This Compose project runs the Freyja Director/control plane on Atlas. Signal
+remains a separate Atlas service under `deploy/compose/signal`. Iris is the
+always-hot Apple/MacAgent and fast-routing node; its resident 7B model observes
+Director traffic in shadow mode. The shadow classifier cannot select providers,
+authorize tools, mutate responses, or block requests.
+
+The existing Director routing path remains authoritative during the shadow
+period. `OLLAMA_BASE_URL` continues to identify the currently configured
+execution provider while `IRIS_OLLAMA_BASE_URL` points specifically to Iris's
+private Ollama endpoint.
 
 ## Private access
 
-The published port binds to `FREYJA_DIRECTOR_BIND_IP`. Rev 1 uses Mars's
-Tailscale address so Atlas can connect over the private tailnet. Set the same
-strong `FREYJA_CONNECTOR_TOKEN` in the Mars Director and Atlas Signal `.env`
-files. The health endpoint remains public within the tailnet; other Director
-endpoints require the bearer token when it is configured.
+Bind the published Director port to Atlas's private Tailscale address with
+`FREYJA_DIRECTOR_BIND_IP`. Use the same strong `FREYJA_CONNECTOR_TOKEN` for
+trusted connectors. Do not commit private IP addresses, tokens, or API keys.
 
-Set `OLLAMA_BASE_URL` to Hera's private Tailscale Ollama endpoint in the
-untracked `.env`. Do not commit private IP addresses, tokens, or API keys.
+Set `IRIS_OLLAMA_BASE_URL` to Iris's private Tailscale Ollama endpoint. Shadow
+mode defaults on in the Rev 2 Compose file:
+
+```text
+IRIS_ROUTER_ENABLED=true
+IRIS_ROUTER_SHADOW_ENABLED=true
+IRIS_ROUTER_MODEL=qwen2.5:7b
+IRIS_ROUTER_KEEP_ALIVE=-1
+```
+
+`IRIS_ROUTER_KEEP_ALIVE=-1` requests indefinite model residency so the routing
+model remains hot between requests.
 
 ## Start and verify
 
@@ -29,7 +39,39 @@ docker compose --env-file deploy/compose/director/.env \
   -f deploy/compose/director/compose.yaml config
 docker compose --env-file deploy/compose/director/.env \
   -f deploy/compose/director/compose.yaml up -d --build
-curl --fail http://<mars-tailscale-host>:8000/health
+curl --fail http://<atlas-tailscale-host>:8000/health
+curl --fail http://<atlas-tailscale-host>:8000/iris-router/health
+curl --fail -X POST http://<atlas-tailscale-host>:8000/iris-router/warm
 ```
 
-Keep the populated `.env` and runtime `data/` directory untracked.
+The Atlas app logs an `iris_shadow_route` event for each shadowed `/route`
+request after the normal Director response has already been sent. Each event
+contains the final Director provider/model, Iris tier/target/confidence and
+latency, and whether the recommendation agreed with the provider that actually
+served the request.
+
+## Run the certification gauntlet through Iris
+
+Run this on Atlas after Director can reach Iris:
+
+```bash
+IRIS_ROUTER_ENABLED=true \
+IRIS_OLLAMA_BASE_URL=http://<iris-tailscale-host>:11434 \
+IRIS_ROUTER_MODEL=qwen2.5:7b \
+python -m certification.iris_shadow --difficulty smoke
+```
+
+The runner warms Iris first, then records for every case:
+
+1. the Director's initial routing decision;
+2. Iris's 7B shadow recommendation;
+3. the final provider after execution/fallback;
+4. Iris latency and confidence;
+5. agreement/disagreement with both Director and final provider.
+
+JSON and Markdown reports are written under `certification/reports/`. Move from
+`smoke` to `standard`, `stress`, then `chaos` only after the preceding tier is
+stable.
+
+Keep the populated `.env`, generated reports that contain sensitive prompts, and
+runtime `data/` directory untracked as appropriate.
