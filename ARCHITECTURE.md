@@ -1,970 +1,735 @@
 # Freyja-OS Architecture
 
-**Version:** 0.1 Rev 1
-**Status:** Rev 1 host-role baseline
+**Version:** 0.2 Rev 2  
+**Status:** Rev 2 authoritative architecture baseline  
 **Primary owner:** Joe  
 **Project:** Freyja-OS
 
 ## 1. Purpose
 
-Freyja-OS is a personal AI orchestration platform designed to combine local models, cloud models, secure messaging, automation tools, memory, and distributed worker computers behind one consistent interface.
+Freyja-OS is a local-first household intelligence system. It combines persistent identity and memory, secure communications, Apple-native services, home automation, replaceable local and cloud inference engines, and isolated worker capabilities behind one trusted Director.
 
-The system should:
+Freyja is not a single model and is not tied to a single computer. Models, hosts, interfaces, and workers are replaceable resources. Identity, memory policy, authorization, routing policy, and audit remain stable as hardware and models change.
 
-- Prefer local inference when practical.
-- Escalate difficult work to cloud models through OpenRouter.
-- Remain usable from a phone through secure messaging.
-- Reuse existing computers as specialized worker nodes.
-- Keep model providers, messaging platforms, and tools replaceable.
-- Avoid exposing individual agents directly to the public internet.
-- Centralize policy, authentication, routing, logging, and cost controls.
+The core design rule is:
 
-Freyja-OS is not intended to be a collection of independent chatbots. It is a coordinated system with one primary Director and a set of controlled capabilities.
+> Keep the control plane stable; swap inference engines and interfaces as needed.
 
 ---
 
-## 2. Design Principles
+## 2. Rev 2 Decisions
 
-### 2.1 One Director
+Rev 2 supersedes the Rev 1 host-role baseline.
 
-All user requests pass through the Freyja Director. The Director decides which model, tool, memory source, or worker node should handle the request.
+### 2.1 Atlas is the control plane
 
-No worker agent should independently accept arbitrary public commands.
+Atlas is the authoritative always-on Freyja Director host.
 
-### 2.2 Local First, Cloud When Necessary
+Atlas owns:
 
-The system should use local Ollama models for routine work and escalate to OpenRouter only when the task requires stronger reasoning, larger context, better tool use, or a specialized cloud model.
+- Director API
+- request/session orchestration
+- identity and principal resolution
+- memory policy
+- capability authorization
+- inference routing policy
+- provider health and failover state
+- audit and request metadata
+- Signal and other Linux-native connector services where practical
+- shared infrastructure services
 
-### 2.3 Secure Entry Points
+Inference hosts may recommend routes or tool choices, but they do not authorize privileged actions.
 
-Signal is the preferred remote interface. iMessage may be added as a secondary Apple-native interface. Telegram may remain available for testing, but it should not be treated as the primary secure control path.
+### 2.2 Iris is the Apple gateway and hot reflex/router node
 
-### 2.4 Capability Services, Not Uncontrolled Agents
+Iris remains powered on and keeps a small approximately 7B local model resident.
 
-Most system functions should be implemented as services with explicit inputs and outputs:
+Iris owns two distinct responsibilities:
 
-- Search
-- Memory
-- Home automation
-- File operations
-- Vision
-- Speech-to-text
-- Text-to-speech
-- Code execution
-- Notifications
+1. **MacAgent / Apple-native capability gateway**
+   - iMessage
+   - Apple Calendar and Contacts adapters
+   - Shortcuts and macOS automation
+   - Apple-family integrations that require macOS
+   - future HomePod-facing Apple hooks
 
-The Director invokes these services through defined APIs or tool interfaces.
+2. **Always-hot low-latency inference**
+   - request classification
+   - routing recommendation
+   - simple conversation
+   - lightweight extraction/summarization
+   - tool-selection hints
+   - fast fallback responses where policy permits
 
-### 2.5 Least Privilege
+The Iris 7B model is advisory. It may classify intent, complexity, sensitivity, or preferred execution tier, but Atlas Director remains authoritative for routing, permissions, and tool execution.
 
-Each service should receive only the permissions required for its function. Messaging connectors, file tools, shell tools, and home automation tools should be isolated and permission-scoped.
+### 2.3 The new inference machine is the heavy local reasoning tier
 
-### 2.6 Replaceable Components
+The new inference machine is a replaceable compute resource, not a control-plane host.
 
-Freyja-OS should avoid hard dependencies on one model provider, vector database, messaging service, or orchestration framework.
+Its responsibilities include:
+
+- large local reasoning models
+- advanced coding/debugging
+- deep planning
+- long-context work
+- vision or multimodal inference when supported
+- high-quality tool-planning inference when local execution is preferred
+- benchmark and model-evaluation workloads
+
+Director, identity, trusted memory policy, and capability authorization must not depend on this machine being online.
+
+### 2.4 Hera becomes a presence/development node, not the permanent heavy reasoning authority
+
+Hera may continue to provide development, benchmarking, experimental inference, and avatar/presence services. Rev 2 does not require Hera to host Freyja's primary complex reasoning model.
+
+When deployed as the kitchen avatar, Hera is a Freyja Presence Node: microphones, speaker, display/avatar, wake word, local conversation cache, speech services, and optional small local model. It remains a client of Atlas Director.
+
+### 2.5 Mars is no longer the primary Director host
+
+Mars remains available as an immutable utility, fallback, monitoring, testing, or infrastructure node, but Rev 2 does not assign it the authoritative Director role.
 
 ---
 
-## 3. Current Operating Constraints
+## 3. Design Principles
 
-### 3.1 Monthly Cloud Budget
+### 3.1 One trusted Director
 
-Current recurring AI spending:
+All meaningful requests converge on the Atlas Director before privileged action. Messaging connectors and inference nodes are not alternate Directors.
 
-- ChatGPT Plus: approximately $20/month
-- OpenRouter budget or credits: approximately $20/month
-- Total recurring AI spend: approximately $40/month
+### 3.2 Models advise; policy authorizes
 
-ChatGPT Plus is used as an interactive engineering and planning environment. It does not replace an API account. OpenRouter is the primary cloud inference path for Freyja-OS.
+No LLM is a security boundary.
 
-### 3.2 Available Hardware
+A model may propose:
 
-The current known hardware pool includes:
+- an inference tier
+- an intent
+- a tool call
+- structured arguments
+- a response
 
-- Mac mini M4 with 24 GB unified memory
-- Atlas Ryzen Linux server with 32 GB RAM
-- NUCBox N105-class mini PC
-- Raspberry Pi named Cloyd
-- Two older 2011 Mac minis
-- Several additional older PCs
-- An avatar computer with display, speaker, camera, and local interaction capability
+The Director and Capability Broker decide whether the request is authorized and executable.
 
-The architecture assumes these systems may be reassigned as their capabilities are tested.
+### 3.3 Local first, not local only
 
-### 3.3 Rev 1 Authoritative Host Roles
+Freyja prefers local processing when practical, especially for private household data. Cloud inference remains available when policy permits and stronger reasoning, specialized capability, or reliability justifies it.
 
-- Mars: Freyja Director and control plane.
-- Atlas: always-on infrastructure services and Signal connector.
-- Hera: primary complex local_reasoning provider over Tailscale; not core always-on control-plane infrastructure.
-- Iris: fast local inference tier; inference-focused and not a development host.
+Cloud providers receive the minimum context needed for the task.
+
+### 3.4 Fast path before heavy reasoning
+
+Simple requests should not wake a large model unnecessarily.
+
+The system should prefer deterministic handlers, direct tools, memory lookup, or the resident Iris 7B model before escalating to heavy local or cloud inference.
+
+### 3.5 Trust boundaries matter more than prompt discipline
+
+External content such as web pages, email bodies, documents, and unknown messages is untrusted data. Untrusted content must not gain authority merely because an LLM interpreted it.
+
+### 3.6 Replaceable components
+
+Freyja must avoid hard dependencies on one model provider, model family, vector database, connector, or host.
 
 ---
 
 ## 4. High-Level Architecture
 
 ```text
-                         +----------------------+
-                         |        User          |
-                         | iPad / iPhone / Mac   |
-                         +----------+-----------+
-                                    |
-                  +-----------------+-----------------+
-                  |                                   |
-             Signal Bridge                      iMessage Bridge
-             Primary Remote                     Secondary / Later
-                  |                                   |
-                  +-----------------+-----------------+
-                                    |
-                         +----------v-----------+
-                         |   Freyja Gateway      |
-                         | Auth / Rate Limits    |
-                         | Session Handling      |
-                         +----------+-----------+
-                                    |
-                         +----------v-----------+
-                         |  Freyja Director      |
-                         | Intent Classification |
-                         | Policy Enforcement    |
-                         | Model Routing         |
-                         | Tool Orchestration    |
-                         +---+---------+---------+
-                             |         |
-              +--------------+         +----------------+
-              |                                         |
-       +------v------+                           +------v------+
-       | Local LLMs  |                           | Cloud LLMs  |
-       | Ollama      |                           | OpenRouter  |
-       +------+------+                           +------+------+
-              |                                         |
-              +------------------+----------------------+
-                                 |
-                        +--------v---------+
-                        | Capability Layer |
-                        +--------+---------+
-                                 |
-       +-------------------------+---------------------------+
-       |             |              |             |          |
-   Memory         Search         Automation      Files     Voice/Vision
-       |             |              |             |          |
-   PostgreSQL     Web/MCP       Home Assistant   Storage   Worker Nodes
-   Vector Store
+                    Household / Users
+                           |
+          +----------------+----------------+
+          |                |                |
+       Signal           iMessage         Voice/Avatar
+          |                |                |
+          |           Iris MacAgent       Hera Presence
+          |                |                |
+          +----------------+----------------+
+                           |
+                    +------v------+
+                    |    ATLAS    |
+                    |  DIRECTOR   |
+                    +------+------+ 
+                           |
+         +-----------------+------------------+
+         |                 |                  |
+   Identity/Memory   Capability Broker   Inference Router
+         |                 |                  |
+         |        +--------+--------+         |
+         |        |        |        |         |
+         |     Calendar   Home    Files       |
+         |               Assistant            |
+         |                                     |
+         +------------------+------------------+
+                            |
+              +-------------+-------------+
+              |             |             |
+            IRIS       NEW INFERENCE     CLOUD
+          hot 7B          MACHINE       PROVIDERS
+        router/reflex    heavy local    escalation
+              |          reasoning
+              |
+          MacAgent
+        Apple services
 ```
 
 ---
 
 ## 5. Node Roles
 
-## 5.1 Mars — Director and Control Plane
+## 5.1 Atlas — Director and trusted control plane
 
-**Primary role:** Freyja authority, routing, policy, and control plane
+**Primary role:** authority, orchestration, policy, and shared services.
 
-Recommended responsibilities:
+Responsibilities:
 
-- Freyja Director service
-- Request routing
-- Conversation state
-- Policy and permission checks
-- OpenRouter client
-- Tool registry
-- Session management
-- Cost accounting
-- Administrative interface
+- Freyja Director
+- Gateway-facing route API
+- Identity Service
+- memory coordination and policy
+- Capability Broker
+- inference/provider registry
+- routing and failover policy
+- tool registry
+- conversation/session state
+- cost accounting
+- audit metadata
+- health aggregation
+- Signal connector and supporting Linux services where practical
+- PostgreSQL/Redis/vector services as deployed
+- Home Assistant integration boundary
 
-Mars is the logical center of Freyja-OS. It should remain the single authority
-for deciding how requests are processed. Messaging connectors and worker nodes
-must forward requests to Mars rather than making independent routing decisions.
+Atlas should remain usable even when every optional inference node is unavailable.
 
-## 5.2 Atlas Ryzen Server — Infrastructure and Signal Node
+## 5.2 Iris — MacAgent and always-hot router/reflex node
 
-**Primary role:** Always-on backend services
+**Primary role:** Apple-native capabilities plus low-latency local intelligence.
 
-Recommended responsibilities:
+Responsibilities:
 
-- PostgreSQL
-- Redis or equivalent message/cache service
-- Vector database, initially Qdrant or pgvector
-- Always-on Signal REST wrapper and Freyja Signal connector
-- Home Assistant
-- Shared storage
-- Backups
-- Monitoring
-- MCP servers
-- Container hosting
-- Internal DNS or service discovery
+- MacAgent
+- iMessage bridge
+- Apple Calendar/Contacts provider adapters
+- Shortcuts/macOS automation
+- other Apple-native services
+- resident approximately 7B Ollama model
+- structured route classification
+- low-cost local chat/extraction
+- provider health endpoint
 
-Atlas should provide reliable infrastructure and the always-on Signal path. It
-should not host the Freyja Director in Rev 1 and should not become the primary
-conversational reasoning authority.
+The resident model should remain loaded across requests. Director should treat Iris as the preferred first inference hop for tasks that actually require model classification but do not justify heavy reasoning.
 
-## 5.3 Iris — Local Inference Node
+Iris must not grant itself permissions or directly bypass the Atlas Capability Broker.
 
-**Primary role:** Fast local LLM inference
+## 5.3 New inference machine — heavy local compute
 
-Recommended responsibilities:
+**Primary role:** high-capability local inference.
 
-- Lower-latency Ollama models used by the Mars Director for quick local work
-- Model compatibility and inference-health checks
-- Stable fast-inference service for the Mars control plane
+Responsibilities:
 
-Iris should remain the fast local inference tier for Rev 1. It is
-inference-focused, not the development, Director, complex reasoning, or
-always-on Signal host.
+- large reasoning model(s)
+- coding models
+- long-context inference
+- optional vision/multimodal workloads
+- model benchmarking
+- speculative or experimental inference backends
 
-## 5.4 Hera — Development and Benchmark Node
+The machine exposes one or more authenticated provider endpoints to Atlas over the private network/Tailscale.
 
-**Primary role:** Development, verification, inference benchmarking, and complex local reasoning
+No user-facing connector should depend directly on it.
 
-Recommended responsibilities:
+## 5.4 Hera — presence, avatar, development, and experimental compute
 
-- Development environment and repository work
-- Cross-platform tests and pre-deployment verification
-- Model benchmarking
-- Performance comparison against Iris-hosted models
-- Hosting the primary local `local_reasoning` model for complex coding,
-  debugging, planning, architecture, difficult reasoning, and multi-step
-  tool-selection requests
-- Experimental inference workloads that must not affect Director or Signal availability
+**Primary role:** human-facing embodied interface and development/benchmark node.
 
-Hera provides high-quality local reasoning to Mars over Tailscale, but it is
-deliberately separate from core always-on infrastructure. Rev 1 must not depend
-on Hera for the Director, Signal connector, databases, or always-on control
-path. If Hera is unavailable, routing must fail cleanly and use configured
-fallback providers rather than inventing an answer.
+Possible responsibilities:
 
-## 5.5 NUCBox — Utility Node
+- wake word
+- microphone/camera input
+- speaker/TTS
+- avatar rendering
+- local speech-to-text
+- local short-lived conversation cache
+- small local model when useful
+- development and pre-deployment verification
+- experimental inference
 
-**Primary role:** Low-power always-on gateway
+Hera is a body/interface for Freyja, not an independent Freyja authority.
 
-Recommended responsibilities:
+## 5.5 Mars — utility/fallback node
 
-- Optional fallback messaging bridge
-- Telegram bridge for testing
-- Reverse proxy restricted to the local network or VPN
-- Health monitoring
-- Lightweight worker services
-- Optional low-resource Ollama model
-- Queue consumer for background utilities
+**Primary role:** immutable utility host.
 
-The NUCBox is a suitable place for services that must remain online continuously but do not require high compute performance.
+Possible responsibilities:
 
-## 5.6 Raspberry Pi “Cloyd” — Edge Automation Node
+- monitoring
+- health checks
+- low-risk worker services
+- fallback infrastructure
+- test/staging services
+- backup queue or connector support
 
-**Primary role:** Sensor and local automation edge node
-
-Recommended responsibilities:
-
-- GPIO and sensor interfaces
-- Local device control
-- Wake-word or room-presence services
-- MQTT client or broker support
-- Home Assistant satellite functions
-- Local fallback automations
-
-Cloyd should not host the central Director.
-
-## 5.7 Avatar Computer — Human Interface Node
-
-**Primary role:** Local embodied interface
-
-Recommended responsibilities:
-
-- Camera capture
-- Microphone input
-- Speaker output
-- Avatar rendering
-- Wake-word detection
-- Speech-to-text client
-- Text-to-speech client
-- WebSocket connection to the Director
-
-The avatar computer should function as a client and presentation device, not an independent authority.
-
-## 5.8 Older Computers — Worker Pool
-
-Older systems should be assigned one function at a time based on operating system, CPU, GPU, memory, and reliability.
-
-Possible roles:
-
-- Whisper transcription worker
-- Vision worker
-- Document conversion worker
-- Web scraping worker
-- Backup server
-- Test environment
-- Build runner
-- Monitoring station
-- Experimental model host
-
-Worker nodes should communicate through authenticated internal APIs or a queue. They should not receive unrestricted remote shell commands from messaging platforms.
+Mars is not the Rev 2 authoritative Director host.
 
 ---
 
-## 6. Core Software Components
+## 6. Director Responsibilities
 
-## 6.1 Freyja Gateway
-
-The Gateway receives messages from external interfaces and converts them into a common internal request format.
+The Director is responsible for turning an authenticated request into an authorized execution plan.
 
 Responsibilities:
 
-- Identify the user and source platform
-- Validate sender allowlists
-- Reject unknown or unauthorized senders
-- Normalize attachments and text
-- Apply rate limits
-- Create a request ID
-- Forward requests to the Director
-- Return formatted responses
+- accept normalized requests
+- resolve the acting principal
+- identify relevant household/person scope
+- select deterministic handling, tool execution, memory lookup, or inference
+- request route classification from Iris when useful
+- select an inference tier/provider
+- enforce privacy and cloud-use policy
+- authorize capabilities
+- manage retries and failover
+- record latency/provider/tool metadata
+- return a final response to the originating connector
 
-Initial connectors:
+The Director should not require a large model merely to decide which model to use.
 
-1. Signal
-2. Telegram for development and fallback
-3. iMessage in a later phase
-4. Optional web interface
+---
 
-## 6.2 Freyja Director
+## 7. Tiered Inference Routing
 
-The Director is the central orchestration service.
+Rev 2 defines explicit inference tiers.
 
-Responsibilities:
+### Tier 0 — deterministic/direct
 
-- Determine request intent
-- Select local or cloud inference
-- Select tools and worker services
-- Track conversation context
-- Enforce policy
-- Manage retries and fallbacks
-- Record costs and latency
-- Format the final response
-
-The Director should expose a stable internal API independent of any messaging platform.
-
-Suggested initial implementation:
-
-- Python 3.12+
-- FastAPI
-- Pydantic models
-- Async HTTP clients
-- Structured JSON logging
-- Provider adapters for Ollama and OpenRouter
-
-## 6.3 Model Router
-
-The Model Router decides where inference should occur.
-
-Initial routing criteria:
-
-- Task complexity
-- Required context length
-- Tool-calling reliability
-- Model availability
-- Expected latency
-- Privacy sensitivity
-- Estimated token cost
-- Current monthly budget usage
-
-Example routing policy:
-
-```text
-Simple summarization, extraction, classification, or routine chat
-    -> local Ollama
-
-Private household information that can be handled locally
-    -> local Ollama
-
-Large context, difficult planning, advanced coding, or weak local result
-    -> OpenRouter
-
-Cloud provider unavailable or budget threshold reached
-    -> local fallback with a limitation notice
-```
-
-## 6.4 Capability Registry
-
-The Capability Registry contains the tools the Director is allowed to call.
-
-Each capability should define:
-
-- Name
-- Description
-- Input schema
-- Output schema
-- Authentication requirement
-- Permission level
-- Timeout
-- Retry policy
-- Host node
-- Health status
+Use no generative model when a direct capability or deterministic parser can reliably satisfy the request.
 
 Examples:
 
-- `memory.search`
+- health/status checks
+- exact device commands
+- known Home Assistant entity operations
+- simple database lookups
+- connector administration
+
+### Tier 1 — Iris hot 7B reflex/router
+
+Use the resident Iris model for:
+
+- intent classification
+- complexity scoring
+- task-type classification
+- lightweight chat
+- extraction and short summarization
+- simple tool-selection recommendations
+
+Expected output for routing should be structured and bounded, for example:
+
+```json
+{
+  "task_type": "coding",
+  "complexity": 4,
+  "sensitivity": "private",
+  "needs_tools": false,
+  "preferred_tier": 3,
+  "confidence": 0.93
+}
+```
+
+This response is a recommendation, not authorization.
+
+### Tier 2 — stronger routine local inference
+
+Use an appropriate local model for medium-complexity tasks that exceed the hot 7B model but do not require the largest reasoning model.
+
+This tier may reside on Iris or another registered inference host depending on available memory, model quality, and latency.
+
+### Tier 3 — heavy local reasoning
+
+Use the new inference machine for:
+
+- difficult reasoning
+- coding/debugging
+- long-context planning
+- complex multi-step analysis
+- strong local tool planning
+- local multimodal work
+
+### Tier 4 — cloud/frontier escalation
+
+Use configured cloud providers only when policy permits and the task materially benefits from them.
+
+Before cloud dispatch, Director minimizes and sanitizes context. Raw household memory should not be sent by default.
+
+---
+
+## 8. Provider and Health Registry
+
+Director should maintain a live registry of inference resources rather than hard-coding one Ollama host.
+
+Each provider registration should include:
+
+- provider/host ID
+- endpoint
+- model name
+- model family
+- capability tags
+- context window
+- expected latency class
+- tool-use support
+- vision support
+- privacy locality
+- approximate cost
+- health state
+- model residency state when detectable
+- current load when available
+- fallback priority
+
+Example capability tags:
+
+- `router`
+- `fast_chat`
+- `coding`
+- `reasoning`
+- `vision`
+- `long_context`
+- `embeddings`
+- `cloud_frontier`
+
+Routing policy selects by required capability plus health, privacy, latency, and cost.
+
+---
+
+## 9. Latency and Model Residency
+
+Cold-start delay is a system concern, not an operator inconvenience.
+
+Rev 2 requirements:
+
+- Iris keeps the primary 7B routing/reflex model resident.
+- Director health checks should distinguish host availability from model readiness.
+- Director should avoid escalating simple requests to a cold large model.
+- Inference hosts may expose warm-up/readiness endpoints.
+- Heavy models may be prewarmed when memory and power policy permit.
+- Provider telemetry should record time-to-first-token separately from total latency when available.
+
+A desired request flow is:
+
+```text
+request
+  -> Atlas Director
+  -> deterministic fast path if possible
+  -> otherwise Iris hot 7B classification
+  -> Atlas applies policy
+  -> direct tool / Iris answer / heavy local / cloud escalation
+```
+
+---
+
+## 10. Capability Broker
+
+Rev 2 separates model reasoning from execution authority.
+
+Every privileged tool should define:
+
+- capability name
+- authenticated principal requirements
+- allowed subject/resource scope
+- read/write/consequential classification
+- required approval policy
+- host/service endpoint
+- input/output schema
+- timeout/retry policy
+- health state
+
+Examples:
+
+- `memory.read`
 - `memory.write`
-- `calendar.today_schedule`
-- `calendar.find_time`
-- `calendar.create_event`
-- `homeassistant.call_service`
+- `calendar.read`
+- `calendar.write`
+- `messages.send`
+- `home.read`
+- `home.control`
 - `files.read`
 - `files.write`
-- `web.search`
-- `speech.transcribe`
-- `speech.synthesize`
-- `vision.describe`
-- `notifications.send`
+- `web.research`
+- `code.execute`
 
-## 6.5 Memory System
-
-Memory should be divided into explicit categories.
-
-### Short-Term Memory
-
-- Current conversation
-- Recent tool results
-- Current task state
-- Stored in Redis or process memory initially
-
-### Long-Term Structured Memory
-
-- User preferences
-- Device inventory
-- Project decisions
-- Configuration records
-- Stored in PostgreSQL
-
-### Semantic Memory
-
-- Architecture documents
-- Notes
-- Manuals
-- Past conversations selected for indexing
-- Stored in Qdrant or pgvector
-
-Memory writes should be deliberate. Freyja should not automatically store every message as permanent memory.
-
-## 6.5.1 Personal Intelligence Services
-
-Personal Intelligence Services are domain services that reason over personal
-state through the existing Director, Router, Memory, Tools, Certification, and
-Benchmark architecture. They are not standalone applications.
-
-The reference implementation is Family Calendar:
-
-- `CalendarService` contains domain reasoning such as free/busy analysis,
-  ranked time selection, conflict detection, travel buffers, and preference
-  scoring.
-- `CalendarProvider` defines the provider boundary for list/create/modify/delete
-  operations.
-- `GoogleCalendarProvider` and `AppleCalendarProvider` plug into the service
-  boundary. Live account access is deliberately outside tests and certification.
-- Family members have calendars, availability rules, preferred working hours,
-  meeting windows, travel buffers, timezones, and scheduling preferences.
-- Director tools expose calendar capabilities to the model so runtime evidence,
-  certification verifiers, and benchmark reports can observe real behavior.
-- Memory preferences influence ranking but must not override explicit
-  instructions from the current request.
-
-Future services should follow the same pattern: domain service first, provider
-adapters second, Director tools third, certification suites fourth.
-
-## 6.5.2 Identity Service
-
-The Identity Service is the authoritative source for people known to Freyja.
-Its resolver consumes an identity-provider boundary. Rev 1 providers are the
-deterministic in-memory seed and a versioned SQLite repository stored outside
-the source tree. A small native Apple Contacts reader and an offline vCard
-reader feed validated `Person` records into that repository. They are import
-adapters, not a MacAgent service or a synchronization daemon. Future MacAgent
-or Google adapters must implement this boundary rather than bypassing canonical
-`Person` records.
-Subsystems should resolve raw identifiers into a `Person` as early as practical
-and pass canonical person context through the existing Director and tool path.
-
-Core model:
-
-- `Person`: canonical person ID, display name, preferred name, aliases,
-  identities, and non-sensitive metadata.
-- `Identity`: typed external identifier such as phone, email, Signal,
-  iMessage, calendar, voice, avatar, or account identity.
-- `Alias`: natural-language names such as Dad, Father, Joe, or Joseph.
-- `Relationship`: directed relationship edge such as spouse or child.
-
-Current integrations:
-
-- Messaging connectors resolve configured Signal and iMessage senders to
-  `Person` metadata while preserving legacy allowlists and platform-scoped
-  conversation IDs.
-- The Director extracts trusted `X-Freyja-Person-*` connector headers and
-  forwards sanitized person context in tool metadata.
-- Calendar tools default to the resolved person when no explicit members are
-  provided, and `CalendarService` accepts person IDs or aliases.
-- Memory remains scoped by existing principals, but known people use the stable
-  family-member memory subject so preferences attach to a person rather than a
-  raw contact identifier.
-
-Identity is intentionally not a replacement router or message bus. It is a
-shared resolver and query service used by existing Director, connector, memory,
-and Personal Intelligence Service boundaries.
-
-## 6.6 Queue and Event Bus
-
-A queue is recommended once multiple nodes are active.
-
-Initial options:
-
-- Redis Streams
-- NATS
-- RabbitMQ
-
-Redis Streams is sufficient for the first implementation because Redis may already be used for caching and session state.
-
-Event examples:
-
-- `request.received`
-- `request.completed`
-- `tool.started`
-- `tool.failed`
-- `worker.online`
-- `worker.offline`
-- `budget.threshold_reached`
-
-## 6.7 Communications Connectors
-
-Messaging platforms are connector adapters into the Director, not alternate
-Directors. Signal, iMessage, and future platforms should:
-
-- normalize inbound platform events into connector message models;
-- enforce allowlists and platform policy in the gateway;
-- map approved senders to stable memory principals;
-- forward natural-language requests to `/route`;
-- return safe outbound errors without leaking provider, token, or traceback
-  details;
-- use mocked transports for tests and certification.
-
-Family members can be configured with aliases in allowlists, for example
-`joe=+15551234567` or `beth=beth@example.com`. Aliases resolve to shared
-Person-backed `family-member:<hash>` memory subjects across platforms while
-preserving platform-scoped conversation IDs.
+An LLM requesting a tool does not imply permission to execute it.
 
 ---
 
-## 7. Messaging Security
+## 11. Trust Domains and Untrusted Workers
 
-## 7.1 Signal
+External content is treated as untrusted data.
 
-Signal is the preferred remote control interface.
+The target architecture separates:
 
-Implementation should use a dedicated Freyja Signal account or number rather than a personal primary account where possible.
+1. **Trusted Core**
+   - Director
+   - Identity
+   - memory policy
+   - Capability Broker
+   - authorization
 
-Required controls:
+2. **Trusted local capability services**
+   - MacAgent
+   - Home Assistant adapter
+   - calendar providers
+   - approved file services
 
-- Sender allowlist
-- One-user default policy
-- No group processing in the first release
-- Attachment size limits
-- Command rate limits
-- Administrative commands restricted to a separate allowlist
-- No direct shell execution from arbitrary natural-language requests
+3. **Untrusted-content workers**
+   - web research
+   - arbitrary email/document ingestion
+   - scraping
+   - external-content summarization
 
-Potential bridge technologies include `signal-cli` or a maintained REST wrapper around it. The selected bridge should run on an always-on Linux system when possible.
+4. **Inference providers**
+   - local models
+   - cloud models
 
-### Current Signal connector deployment
-
-Atlas is the always-on Signal connector host. Mars remains the Director and
-control-plane host. The selected bridge is
-`bbernhard/signal-cli-rest-api` running in `native` mode. Native mode supports
-the HTTP receive endpoint, which the separate `SignalRestTransport` adapter
-polls on a configurable interval. The adapter parses transport envelopes into
-`InboundMessage` objects, calls `SignalGateway`, and delivers the returned
-`OutboundResponse` through the wrapper's send endpoint.
-
-The responsibility boundary is deliberate:
-
-- `SignalRestTransport` owns the REST API, wire payload parsing, polling,
-  outbound delivery, and recoverable transport errors.
-- `SignalGateway` owns enablement, sender allowlisting, group rejection,
-  message-size validation, attachment-only rejection, duplicate suppression,
-  forwarding to the Mars Director, and safe error responses.
-
-Transport code must not bypass or duplicate gateway policy. Unauthorized
-senders and group messages remain rejected by the gateway.
-
-Required deployment configuration includes:
-
-- `SIGNAL_ENABLED`
-- `SIGNAL_ACCOUNT_NUMBER`
-- `SIGNAL_ALLOWED_SENDERS`
-- `SIGNAL_REST_API_URL`
-- `FREYJA_DIRECTOR_URL`
-- `SIGNAL_POLL_INTERVAL_SECONDS`
-- `SIGNAL_TRANSPORT_TIMEOUT_SECONDS`
-- `SIGNAL_REQUEST_TIMEOUT_SECONDS`
-
-Retry bounds and message limits are configured with
-`SIGNAL_RECONNECT_MAX_SECONDS` and `SIGNAL_MAX_MESSAGE_CHARS`.
-
-The Atlas Compose deployment places the REST wrapper only on a private Docker
-network and publishes no REST API port. The connector has outbound access to
-the private Mars Director endpoint. Signal account keys and registration state
-live in a named volume rather than an image or Git. First-time account
-registration or device linking is a manual operator action performed according
-to the wrapper's upstream documentation; no account is registered by Freyja.
-
-Create `deploy/compose/signal/.env` from its example, populate it locally, and
-set its filesystem mode to `0600`. Detailed deployment steps are maintained in
-`deploy/compose/signal/README.md`. The Compose model can be validated without
-starting or pulling containers:
-
-```bash
-docker compose -f deploy/compose/signal/compose.yaml config
-```
-
-## 7.2 Telegram
-
-Telegram may be retained for development because it is easy to integrate. It must include:
-
-- Allowed user ID checks
-- An explicit owner user ID distinct from the broader onboarding/diagnostic allowlist
-- Disabled group access
-- Restricted bot commands
-- Token stored in a secret manager or protected environment file
-- No public webhook unless protected by authentication and network controls
-
-The main issue is not that every Telegram bot is automatically public. The issue is that a poorly configured bot can accept messages from unauthorized users. Freyja must enforce explicit authorization at the gateway.
-An allowlisted Telegram user may use `/whoami` during onboarding, but only the
-configured owner user ID may receive that person's trusted identity headers or
-route ordinary messages to the personal agent.
-
-## 7.3 iMessage
-
-iMessage integration is a later-phase feature because Apple does not provide a general-purpose official bot API.
-
-Possible implementation paths:
-
-- BlueBubbles server on macOS
-- AppleScript or Shortcuts-based bridge
-- macOS Messages database watcher with a controlled sender allowlist
-
-Any iMessage bridge should be treated as a client adapter, not as the Director itself.
+Untrusted-content workers should receive only capabilities needed for their task and should return structured results. They must not automatically inherit memory-write, messaging-send, home-control, or administrative capabilities.
 
 ---
 
-## 8. Network Architecture
+## 12. Memory and Provenance
 
-All Freyja services should communicate over a private network.
+Long-term memory should preserve source and trust information.
 
-Preferred access methods:
+Target memory metadata includes:
 
-1. Local LAN
-2. Tailscale or another WireGuard-based private overlay network
-3. Reverse proxy only when required
+- memory ID
+- subject/person ID
+- scope
+- content or structured fact
+- source type
+- source identifier
+- observed timestamp
+- created/updated timestamp
+- confidence
+- sensitivity
+- trust level
+- derivation/provenance links
+- optional expiration
 
-Recommended rules:
+External content must not become authoritative household memory merely because a model summarized it.
 
-- No Ollama API exposed directly to the public internet
-- No PostgreSQL, Redis, Qdrant, or Home Assistant ports exposed publicly
-- Use host firewalls
-- Use service-level API tokens
-- Use TLS where practical
-- Use separate credentials per service
-- Restrict administrative APIs to the local network or VPN
-
-Suggested internal service names:
+Suggested progression:
 
 ```text
-director.freyja.local
-atlas.freyja.local
-gateway.freyja.local
-memory.freyja.local
-homeassistant.freyja.local
-worker-vision.freyja.local
-worker-speech.freyja.local
+untrusted observation
+      -> corroboration / trusted confirmation
+      -> verified fact
+      -> long-term authoritative memory
 ```
 
----
+Memory scopes should support at minimum:
 
-## 9. Authentication and Authorization
-
-The initial system may support one primary user, but it should still include an authorization model.
-
-People, agents, connectors, and devices are separate principals. A trusted
-device is related to a canonical person through a stable device ID and a
-cryptographic credential fingerprint. Hostnames and IP addresses are not proof
-of identity. Telegram authenticates a user ID rather than a physical device, so
-its user-to-person mapping remains a connector rule instead of a device grant.
-
-Personal-data grants carry person, acting agent, resource, account, and scope
-facts only. Calendar and email permissions are derived again from server policy
-at every authorization decision; callers cannot supply their own allowed-action
-set. Cross-person private access is denied, availability-only grants cannot read
-event details, and consequential email/calendar actions require approval.
-
-Suggested roles:
-
-- `owner`
-- `trusted_user`
-- `guest`
-- `service`
-
-Suggested permission groups:
-
-- Chat only
-- Read memory
-- Write memory
-- Read files
-- Write files
-- Home automation
-- Administrative configuration
-- Shell or code execution
-
-High-risk actions should require explicit confirmation or a second authorization step.
-
-Examples:
-
-- Deleting files
-- Unlocking doors
-- Disabling alarms
-- Sending email
-- Spending money
-- Running privileged shell commands
+- private person scope
+- shared household scope
+- guest/session scope
+- system/configuration scope
 
 ---
 
-## 10. Secrets Management
+## 13. Communications and MacAgent
 
-Secrets should never be committed to GitHub.
+Messaging platforms remain connector adapters into Director.
 
-Initial secrets include:
+### Signal
 
-- OpenRouter API key
-- Signal bridge credentials
-- Telegram bot token
-- Database passwords
-- Home Assistant token
-- Internal service tokens
+Signal remains a supported secure remote interface. The connector should authenticate senders, normalize messages, resolve principals, and forward requests to Atlas Director.
 
-Initial implementation may use `.env` files with strict filesystem permissions. A later version should migrate to Docker secrets, SOPS, 1Password CLI, Vault, or another dedicated secret system.
+### iMessage
 
-Repository requirements:
+iMessage is now an active Apple-native integration path rather than a merely deferred concept.
 
-- Include `.env.example`
-- Add `.env` and secret files to `.gitignore`
-- Rotate any key accidentally committed
-- Never place live keys in documentation or issue comments
-
----
-
-## 11. Logging, Monitoring, and Audit
-
-Each request should receive a unique request ID.
-
-Minimum log fields:
-
-- Timestamp
-- Request ID
-- User ID
-- Source platform
-- Selected model
-- Provider
-- Tool calls
-- Latency
-- Token use
-- Estimated cost
-- Outcome
-- Error category
-
-Sensitive content should not be logged by default. Logs should capture metadata and failure information while minimizing stored message content.
-
-Initial monitoring:
-
-- Service health endpoints
-- Disk usage
-- Memory usage
-- CPU usage
-- Ollama availability
-- OpenRouter availability
-- Queue depth
-- Monthly cloud spend
-- Worker heartbeat
-
----
-
-## 12. Cost Controls
-
-The Director should maintain a monthly OpenRouter budget.
-
-Initial controls:
-
-- Configurable monthly soft limit
-- Configurable per-request maximum cost
-- Model allowlist
-- Daily cost summary
-- Warning at 50%, 75%, and 90% of monthly budget
-- Local fallback after the hard limit
-- Manual override available only to the owner
-
-The router should not automatically choose the most expensive available model. It should choose the least expensive model that is likely to complete the task reliably.
-
----
-
-## 13. Reliability and Fallback Behavior
-
-Expected fallback chain:
+The preferred architecture is:
 
 ```text
-Hera local_reasoning model for complex local tasks
-    -> configured OpenRouter fallback when policy and credentials allow
-    -> explicit provider failure if no fallback is available
-Iris fast local model for routine local tasks
-    -> configured OpenRouter fallback when policy and credentials allow
-    -> explicit provider failure if no fallback is available
+iMessage
+  -> MacAgent on Iris
+  -> identity resolution
+  -> Atlas Director
+  -> authorized execution/inference
+  -> MacAgent
+  -> iMessage response
 ```
 
-OpenRouter fallback is available only when the Director has a valid API key,
-approved model configuration, and routing policy budget headroom. If Hera or any
-other provider is unavailable and no fallback is configured, the Director should
-return a clear failure instead of fabricating an answer.
+MacAgent is not an alternate Director.
 
-The system should not silently discard failed tool calls. Failures should be recorded and surfaced when they affect the result.
+### Telegram
 
-Each service should provide:
-
-- Health endpoint
-- Timeout
-- Retry limit
-- Circuit breaker or temporary disable behavior
-- Clear error response
+Telegram may remain available for testing or approved household use subject to explicit allowlists and identity mapping.
 
 ---
 
-## 14. Repository Structure
+## 14. Household Identity Model
 
-Recommended initial repository structure:
+Freyja is designed for a household, not only one user.
+
+Identity should support:
+
+- canonical Person records
+- platform identities
+- aliases
+- family relationships
+- devices
+- private memory scope
+- household-shared memory scope
+- per-capability authorization
+
+A family member's authenticated identity must be resolved before private memory or consequential capabilities are accessed.
+
+---
+
+## 15. Network Architecture
+
+Core services communicate over LAN or Tailscale/private overlay networking.
+
+Rules:
+
+- no Ollama endpoint exposed to the public internet
+- no database or Home Assistant service exposed publicly unless explicitly fronted by an approved gateway
+- per-service credentials where practical
+- host firewalling
+- administrative interfaces restricted to private networks
+- inference hosts treated as registered internal services, not trusted merely by hostname
+
+---
+
+## 16. Reliability and Fallback
+
+The system should fail by capability, not fail as a whole.
+
+Illustrative routing fallback:
 
 ```text
-Freyja/
-├── README.md
-├── ARCHITECTURE.md
-├── ROADMAP.md
-├── LICENSE
-├── .gitignore
-├── .env.example
-├── docs/
-│   ├── decisions/
-│   ├── diagrams/
-│   ├── operations/
-│   └── security/
-├── src/
-│   └── freyja/
-│       ├── api/
-│       ├── director/
-│       ├── gateway/
-│       ├── models/
-│       ├── providers/
-│       ├── tools/
-│       ├── memory/
-│       ├── security/
-│       └── observability/
-├── connectors/
-│   ├── signal/
-│   ├── telegram/
-│   └── imessage/
-├── workers/
-│   ├── speech/
-│   ├── vision/
-│   └── documents/
-├── deploy/
-│   ├── docker/
-│   ├── compose/
-│   └── systemd/
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── security/
-└── scripts/
+Tier 0 deterministic path
+    -> execute or explicit capability failure
+
+Iris hot 7B
+    -> alternate local model if configured
+    -> heavy local inference if appropriate
+    -> cloud only if policy permits
+
+Heavy local inference machine
+    -> alternate local provider
+    -> cloud if policy permits
+    -> explicit provider failure
 ```
+
+If the new inference machine is offline, Freyja must still retain messaging, memory, Apple integration, Home Assistant, and basic conversational capability.
 
 ---
 
-## 15. Initial API Contract
+## 17. Observability
 
-A normalized request should resemble:
+Each request should record at minimum:
 
-```json
-{
-  "request_id": "uuid",
-  "user_id": "joe",
-  "source": "signal",
-  "conversation_id": "string",
-  "message": "user text",
-  "attachments": [],
-  "permissions": ["chat", "memory.read"],
-  "timestamp": "ISO-8601"
-}
-```
+- request ID
+- authenticated principal/person
+- source connector
+- route classification
+- selected tier
+- selected provider/model
+- provider health state
+- model readiness/residency state when available
+- capability requests and authorization outcomes
+- time to first token when available
+- total latency
+- token/cost metadata
+- fallback events
+- final outcome
 
-A normalized response should resemble:
-
-```json
-{
-  "request_id": "uuid",
-  "status": "completed",
-  "message": "assistant response",
-  "provider": "ollama",
-  "model": "model-name",
-  "tool_calls": [],
-  "estimated_cost_usd": 0.0,
-  "latency_ms": 1200
-}
-```
+Sensitive content should not be logged by default.
 
 ---
 
-## 16. Initial Deployment Target
+## 18. Rev 2 Implementation Sequence
 
-The first working release should prove this path:
+Rev 2 should be implemented incrementally without breaking existing connectors.
 
-```text
-Signal
-  -> Gateway
-  -> Director
-  -> Local Ollama or OpenRouter
-  -> Director
-  -> Signal response
-```
+### Phase A — host-role/config cleanup
 
-Minimum acceptance criteria:
+- make Atlas the documented Director target everywhere
+- remove stale Mars-as-Director assumptions from deployment docs/config examples
+- document Iris MacAgent and inference endpoints
+- register the new inference machine as a provider host rather than a control-plane host
 
-- Only the authorized Signal account can issue requests
-- Director can reach at least one local Ollama model
-- Director can reach at least one OpenRouter model
-- Routing can be selected manually and automatically
-- Every request is logged with model, latency, and estimated cost
-- Cloud use can be disabled globally
-- System survives a service restart
+### Phase B — provider registry and health
+
+- add provider capability metadata
+- add health/readiness checks
+- record model residency/readiness when possible
+- support multiple local inference hosts cleanly
+
+### Phase C — Iris route classifier
+
+- define a strict structured classifier response
+- keep the 7B model resident
+- add confidence threshold and deterministic fallback rules
+- benchmark classification latency and accuracy
+- ensure Director treats classifier output as advisory
+
+### Phase D — tiered routing
+
+- implement Tier 0 through Tier 4 routing decisions
+- add latency, privacy, health, and cost inputs
+- prefer the least expensive/lowest-latency capable tier
+- add clean failover
+
+### Phase E — Capability Broker hardening
+
+- move authorization decisions outside model output
+- add principal/resource/action checks
+- isolate consequential actions
+- add audit events for allow/deny decisions
+
+### Phase F — trust-aware memory/workers
+
+- add provenance/trust metadata to memory
+- prevent untrusted external content from directly creating authoritative memory
+- isolate web/document/email workers from privileged capabilities
 
 ---
 
-## 17. Deferred Features
+## 19. Rev 2 Certification Targets
 
-The following features are intentionally deferred until the core pipeline is stable:
+Add certification coverage for:
 
-- Autonomous multi-agent collaboration
-- Avatar personality system
-- Continuous microphone listening
-- Advanced home automation
-- Full iMessage support
-- Multi-user support
-- Self-modifying code
-- Automatic privilege escalation
-- Unrestricted shell access
-- Financial transactions
-- Public internet access to internal services
+- Iris classifier chooses the expected tier for representative prompts
+- low-confidence classification fails safely
+- classifier output cannot grant capabilities
+- Atlas continues operating when Iris is offline
+- Atlas continues operating when the heavy inference machine is offline
+- heavy reasoning requests prefer the heavy local provider when healthy
+- cloud fallback respects privacy and budget policy
+- unknown principals cannot invoke private or consequential capabilities
+- web/document content cannot directly authorize tools
+- untrusted content cannot directly create authoritative long-term memory
+- MacAgent requests pass through Atlas policy before consequential action
+- provider cold/warm latency is measured separately
 
 ---
 
-## 18. Definition of Freyja-OS v0.1
+## 20. Rev 2 Architectural Invariants
 
-Freyja-OS v0.1 is complete when Joe can send an authorized Signal message from his phone, receive a response generated by either a local Ollama model or an OpenRouter model, and inspect a log showing how the request was routed, how long it took, and what it cost.
+These rules should remain true even as hardware changes:
 
-That release establishes the core platform. Memory, tools, voice, vision, iMessage, home automation, and distributed workers are added after this foundation is reliable.
+1. Atlas Director is the authoritative control plane unless a future explicit architecture revision changes it.
+2. No LLM is an authorization boundary.
+3. Iris remains the Apple-native gateway while macOS capabilities are required there.
+4. A small Iris model may recommend routing but never authorize privileged action.
+5. Heavy inference machines are replaceable compute resources.
+6. Connectors do not become alternate Directors.
+7. Private memory and permissions are scoped to authenticated principals.
+8. External content is untrusted until promoted through explicit trust/provenance rules.
+9. Cloud models receive minimum necessary context.
+10. Failure of a large model must not take down basic household control and communication.
+
+---
+
+## 21. Definition of the Rev 2 Target State
+
+Rev 2 is operational when a household request can enter through Signal, iMessage/MacAgent, or a local presence node; be authenticated and normalized by the appropriate connector; reach Atlas Director; use the resident Iris 7B model for low-latency route classification when needed; execute directly, locally, on the heavy inference machine, or in an approved cloud model according to policy; invoke only authorized capabilities; and return a response with auditable route, latency, provider, and authorization metadata.
