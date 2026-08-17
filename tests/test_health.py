@@ -61,7 +61,10 @@ def test_protected_endpoint_accepts_connector_token(monkeypatch) -> None:
     assert response.json() == {"models": ["tinyllama:latest"]}
 
 
-def test_ollama_health_reachable() -> None:
+def test_ollama_health_reachable(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "ollama_base_url", "http://127.0.0.1:11434")
     with patch("freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock) as mock_healthy:
         mock_healthy.return_value = True
         response = client.get("/ollama/health")

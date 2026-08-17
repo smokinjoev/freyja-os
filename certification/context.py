@@ -28,12 +28,17 @@ class ToolCallEvidence:
 
 @dataclass
 class CertificationContext:
+    request_id: str | None = None
+    interface: str | None = None
+    principal: dict[str, Any] | None = None
+    person: dict[str, str] | None = None
     provider_selected: str | None = None
     model_selected: str | None = None
     routing_decision: str | None = None
     routing_reason: str | None = None
     fallback_events: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[ToolCallEvidence] = field(default_factory=list)
+    capability_authorizations: list[dict[str, Any]] = field(default_factory=list)
     memory_lookups: list[dict[str, Any]] = field(default_factory=list)
     connector_operations: list[dict[str, Any]] = field(default_factory=list)
     vision_executions: list[dict[str, Any]] = field(default_factory=list)
@@ -43,12 +48,17 @@ class CertificationContext:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "request_id": self.request_id,
+            "interface": self.interface,
+            "principal": dict(self.principal) if self.principal else None,
+            "person": dict(self.person) if self.person else None,
             "provider_selected": self.provider_selected,
             "model_selected": self.model_selected,
             "routing_decision": self.routing_decision,
             "routing_reason": self.routing_reason,
             "fallback_events": list(self.fallback_events),
             "tool_calls": [call.to_dict() for call in self.tool_calls],
+            "capability_authorizations": list(self.capability_authorizations),
             "memory_lookups": list(self.memory_lookups),
             "connector_operations": list(self.connector_operations),
             "vision_executions": list(self.vision_executions),

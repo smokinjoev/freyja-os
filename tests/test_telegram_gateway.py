@@ -61,6 +61,7 @@ def settings(tmp_path) -> TelegramSettings:
         telegram_person_user_id=123456,
         telegram_direct_messages_only=True,
         telegram_smith_read_only_enabled=True,
+        telegram_tools_enabled=False,
         telegram_state_dir=str(tmp_path / "telegram"),
         freyja_director_url="http://127.0.0.1:8000",
     )

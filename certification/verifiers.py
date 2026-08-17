@@ -64,6 +64,24 @@ class ToolVerifier(Verifier):
         return results
 
 
+class CapabilityVerifier(Verifier):
+    name = "capability"
+
+    def verify(self, case: CertificationCase, context: CertificationContext, response: str) -> list[VerificationResult]:
+        expects = case.expects
+        results: list[VerificationResult] = []
+        authorized = {
+            str(item.get("capability")): bool(item.get("allowed"))
+            for item in context.capability_authorizations
+            if isinstance(item, dict)
+        }
+        for capability in _as_list(expects.get("capability_authorized")):
+            results.append(_result(self.name, "capability_authorized", True, authorized.get(str(capability))))
+        for capability in _as_list(expects.get("capability_denied")):
+            results.append(_result(self.name, "capability_denied", False, authorized.get(str(capability))))
+        return results
+
+
 class MemoryVerifier(Verifier):
     name = "memory"
 

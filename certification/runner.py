@@ -20,6 +20,15 @@ DEFAULT_SUITE_DIR = Path(__file__).resolve().parent / "suites"
 DIFFICULTIES = ("smoke", "standard", "stress", "chaos")
 
 
+def split_route_request_context(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, str] | None]:
+    route_data = dict(data)
+    principal_data = route_data.pop("certification_memory_principal", None)
+    person_data = route_data.pop("certification_person", None)
+    principal = principal_data if isinstance(principal_data, dict) else None
+    person = {str(key): str(value) for key, value in person_data.items()} if isinstance(person_data, dict) else None
+    return route_data, principal, person
+
+
 class CertificationProvider(Protocol):
     name: str
     model: str
@@ -34,9 +43,12 @@ class OllamaCertificationProvider:
     def __init__(self, model: str | None = None, router_instance: object | None = None) -> None:
         from freyja.config import settings
         from freyja.router import router
+        from freyja.tools.builtin import register_builtin_tools
+        from freyja.tools.registry import get_registry
 
         self.model = model or settings.ollama_chat_model or settings.ollama_model
         self._router = router_instance or router
+        register_builtin_tools(get_registry())
 
     async def complete(self, case: CertificationCase) -> CertificationExecution:
         from freyja.router import RouteRequest
@@ -44,8 +56,22 @@ class OllamaCertificationProvider:
         request_data = {"prompt": case.prompt, "provider": "local", "model": self.model}
         request_data.update(case.route_request)
         request_data["prompt"] = case.prompt
+        request_data, principal_data, person_context = split_route_request_context(request_data)
+        memory_principal = None
+        if principal_data is not None:
+            from freyja.memory.models import MemoryPrincipal
+
+            memory_principal = MemoryPrincipal(**principal_data)
         start = time.monotonic()
-        result = await self._router.execute(RouteRequest(**request_data))
+        route_request = RouteRequest(**request_data)
+        if memory_principal is None and person_context is None:
+            result = await self._router.execute(route_request)
+        else:
+            result = await self._router.execute(
+                route_request,
+                memory_principal=memory_principal,
+                person_context=person_context,
+            )
         context = _context_from_routing_result(result, elapsed_ms(start))
         if not result.response:
             return CertificationExecution(response="", error=result.decision.public_error_message or result.decision.reason, context=context)
@@ -58,9 +84,12 @@ class OpenRouterCertificationProvider:
     def __init__(self, model: str | None = None, router_instance: object | None = None) -> None:
         from freyja.config import settings
         from freyja.router import router
+        from freyja.tools.builtin import register_builtin_tools
+        from freyja.tools.registry import get_registry
 
         self.model = model or settings.openrouter_model or "default"
         self._router = router_instance or router
+        register_builtin_tools(get_registry())
 
     async def complete(self, case: CertificationCase) -> CertificationExecution:
         from freyja.router import RouteRequest
@@ -70,8 +99,22 @@ class OpenRouterCertificationProvider:
         request_data["prompt"] = case.prompt
         request_data["provider"] = "cloud"
         request_data["model"] = self.model
+        request_data, principal_data, person_context = split_route_request_context(request_data)
+        memory_principal = None
+        if principal_data is not None:
+            from freyja.memory.models import MemoryPrincipal
+
+            memory_principal = MemoryPrincipal(**principal_data)
         start = time.monotonic()
-        result = await self._router.execute(RouteRequest(**request_data))
+        route_request = RouteRequest(**request_data)
+        if memory_principal is None and person_context is None:
+            result = await self._router.execute(route_request)
+        else:
+            result = await self._router.execute(
+                route_request,
+                memory_principal=memory_principal,
+                person_context=person_context,
+            )
         context = _context_from_routing_result(result, elapsed_ms(start))
         if not result.response:
             return CertificationExecution(response="", error=result.decision.public_error_message or result.decision.reason, context=context)
@@ -275,6 +318,10 @@ def _context_from_routing_result(result: Any, duration_ms: float) -> Certificati
             except (TypeError, ValueError):
                 continue
         context = CertificationContext(
+            request_id=data.get("request_id"),
+            interface=data.get("interface"),
+            principal=data.get("principal") if isinstance(data.get("principal"), dict) else None,
+            person=data.get("person") if isinstance(data.get("person"), dict) else None,
             provider_selected=data.get("provider_selected"),
             model_selected=data.get("model_selected"),
             routing_decision=data.get("routing_decision"),
@@ -287,6 +334,7 @@ def _context_from_routing_result(result: Any, duration_ms: float) -> Certificati
             token_counts=token_counts,
             cost=data.get("cost"),
         )
+        context.capability_authorizations = list(data.get("capability_authorizations") or [])
         context.tool_calls = [
             ToolCallEvidence(
                 name=str(entry.get("name", "")),

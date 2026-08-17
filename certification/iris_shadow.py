@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from certification.runner import DIFFICULTIES, load_gauntlet
+from certification.runner import DIFFICULTIES, load_gauntlet, split_route_request_context
 from freyja.config import settings
 from freyja.iris_router import IrisRouterClient
 from freyja.ollama_client import OllamaClient
@@ -59,6 +59,7 @@ async def compare_case(case: Any, iris: IrisRouterClient) -> IrisComparison:
     request_data: dict[str, Any] = {"prompt": case.prompt, "provider": "auto"}
     request_data.update(case.route_request)
     request_data["prompt"] = case.prompt
+    request_data, _principal_data, _person_context = split_route_request_context(request_data)
     request = RouteRequest(**request_data)
 
     director_decision, iris_result = await asyncio.gather(
