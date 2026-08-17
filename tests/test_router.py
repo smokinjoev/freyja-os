@@ -171,22 +171,52 @@ async def test_sensitive_request_routes_local_when_ollama_healthy(router: Router
     assert "healthy local" in result.decision.reason
 
 
-async def test_sensitive_request_falls_back_when_ollama_unhealthy(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_sensitive_request_fails_closed_when_ollama_unhealthy(router: Router, reset_settings, monkeypatch: pytest.MonkeyPatch) -> None:
     _settings_with_allowlist(monkeypatch)
     router.ollama_client.healthy.return_value = False
     router.openrouter_client.healthy.return_value = True
-    router.openrouter_client.chat.return_value = {
-        "model": "openai/gpt-4o-mini",
-        "response": "cloud fallback",
-    }
 
     req = RouteRequest(prompt="My SSN is 123-45-6789")
     result = await router.execute(req)
 
-    assert result.decision.provider == "openrouter"
+    assert result.decision.provider == "error"
+    assert result.response == ""
     assert any(a["provider"] == "ollama" and a["outcome"] == "unhealthy" for a in result.decision.fallback_attempts)
-    assert result.runtime_evidence.provider_selected == "openrouter"
+    assert "requires internal model" in result.decision.reason
+    router.openrouter_client.chat.assert_not_called()
     assert any(a["provider"] == "ollama" and a["outcome"] == "unhealthy" for a in result.runtime_evidence.fallback_events)
+
+
+async def test_private_manual_cloud_override_routes_internal(router: Router) -> None:
+    router.ollama_client.healthy.return_value = True
+    router.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "internal"},
+    }
+
+    req = RouteRequest(prompt="Use my private family context", provider="cloud", privacy="private")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "ollama"
+    assert result.decision.privacy_classification == "private"
+    assert "manual cloud override rejected" in result.decision.reason
+    assert "privacy requires internal model" in result.decision.reason
+    router.openrouter_client.chat.assert_not_called()
+
+
+async def test_sensitive_complex_request_routes_internal_heavy(router: Router, reset_settings) -> None:
+    router.ollama_client.chat.return_value = {
+        "model": "gpt-oss:20b",
+        "message": {"content": "internal heavy"},
+    }
+
+    req = RouteRequest(prompt="Debug this private stack trace", task_type="debug", privacy="sensitive")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "local_reasoning"
+    assert result.decision.privacy_classification == "sensitive"
+    assert "privacy requires internal local_reasoning" in result.decision.reason
+    router.openrouter_client.chat.assert_not_called()
 
 
 async def test_runtime_evidence_records_connector_origin(router: Router) -> None:

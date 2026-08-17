@@ -182,6 +182,10 @@ def _classify_privacy(prompt: str, explicit: str | None) -> str:
     return "routine"
 
 
+def _requires_internal_model(privacy: str) -> bool:
+    return privacy in {"private", "sensitive"}
+
+
 def _model_parameter_count_b(model: str) -> int | None:
     """Return the claimed parameter count in billions for a model name, or None."""
     match = re.search(r"(\d+)(?:\.\d+)?[bB]", model)
@@ -372,11 +376,10 @@ class Router:
         self,
         request: RouteRequest,
         *,
-        spent_this_month: float,
-        estimated_cost: float,
+        privacy: str,
         fallback_attempts: list[dict[str, Any]],
-    ) -> RoutingDecision | None:
-        """Try to keep sensitive data local; fall back to cloud only when local is unhealthy and cloud is allowed."""
+    ) -> RoutingDecision:
+        """Keep private and sensitive data on internal models; fail closed if unavailable."""
         local_model = request.model or settings.ollama_model
         if not _meets_min_chat_capability(local_model):
             local_model = settings.ollama_chat_model
@@ -387,75 +390,19 @@ class Router:
                 provider="ollama",
                 model=local_model,
                 reason="sensitive/private request with healthy local model",
-                privacy_classification="sensitive",
+                privacy_classification=privacy,
                 fallback_attempts=fallback_attempts,
                 estimated_cost_usd=0.0,
             )
         fallback_attempts.append(self._record_attempt("ollama", "unhealthy"))
-
-        if not settings.cloud_enabled:
-            return RoutingDecision(
-                provider="ollama",
-                model=local_model,
-                reason="sensitive request defaults to local; cloud disabled",
-                privacy_classification="sensitive",
-                fallback_attempts=fallback_attempts,
-                estimated_cost_usd=0.0,
-                limitation_notice="Cloud routing is currently disabled; falling back to local.",
-            )
-        if spent_this_month >= settings.openrouter_monthly_hard_limit:
-            return RoutingDecision(
-                provider="ollama",
-                model=local_model,
-                reason="sensitive request defaults to local; hard budget reached",
-                privacy_classification="sensitive",
-                fallback_attempts=fallback_attempts,
-                estimated_cost_usd=estimated_cost,
-                limitation_notice="Monthly cloud budget exhausted; falling back to local.",
-            )
-        if estimated_cost > settings.openrouter_per_request_limit:
-            return RoutingDecision(
-                provider="ollama",
-                model=local_model,
-                reason="sensitive request defaults to local; per-request cost limit exceeded",
-                privacy_classification="sensitive",
-                fallback_attempts=fallback_attempts,
-                estimated_cost_usd=estimated_cost,
-                limitation_notice="Request exceeds per-request cost limit; falling back to local.",
-            )
-
-        openrouter_healthy = await self._openrouter_healthy()
-        if not openrouter_healthy:
-            fallback_attempts.append(self._record_attempt("openrouter", "unhealthy"))
-            return RoutingDecision(
-                provider="ollama",
-                model=local_model,
-                reason="sensitive request defaults to local; openrouter unhealthy",
-                privacy_classification="sensitive",
-                fallback_attempts=fallback_attempts,
-                estimated_cost_usd=estimated_cost,
-                limitation_notice="Cloud provider unhealthy; falling back to local.",
-            )
-
-        model, reason = self._approved_model(request.model)
-        if not model:
-            fallback_attempts.append(self._record_attempt("openrouter", "no approved model"))
-            return RoutingDecision(
-                provider="ollama",
-                model=local_model,
-                reason="sensitive request defaults to local; no approved cloud model",
-                privacy_classification="sensitive",
-                fallback_attempts=fallback_attempts,
-                estimated_cost_usd=estimated_cost,
-                limitation_notice="No approved OpenRouter model; falling back to local.",
-            )
         return RoutingDecision(
-            provider="openrouter",
-            model=model,
-            reason=f"sensitive request falls back to cloud; {reason}",
-            privacy_classification="sensitive",
+            provider="error",
+            model="",
+            reason="sensitive/private request requires internal model; local model unhealthy",
+            privacy_classification=privacy,
             fallback_attempts=fallback_attempts,
-            estimated_cost_usd=estimated_cost,
+            estimated_cost_usd=0.0,
+            public_error_message="Internal model is unavailable for private data.",
         )
 
     async def decide(
@@ -502,6 +449,25 @@ class Router:
         estimated_cost = self._estimate_cost(request.prompt)
 
         if request.provider == "cloud":
+            if _requires_internal_model(privacy):
+                if _local_reasoning_score(request) > _routine_score(request):
+                    return RoutingDecision(
+                        provider="local_reasoning",
+                        model=self._reasoning_model(request.model),
+                        reason="manual cloud override rejected: privacy requires internal local_reasoning",
+                        privacy_classification=privacy,
+                        estimated_cost_usd=0.0,
+                    )
+                local_model = request.model or settings.ollama_model
+                if not _meets_min_chat_capability(local_model):
+                    local_model = settings.ollama_chat_model
+                return RoutingDecision(
+                    provider="ollama",
+                    model=local_model,
+                    reason="manual cloud override rejected: privacy requires internal model",
+                    privacy_classification=privacy,
+                    estimated_cost_usd=0.0,
+                )
             if not settings.cloud_enabled:
                 return RoutingDecision(
                     provider="ollama",
@@ -539,24 +505,25 @@ class Router:
             )
 
         # provider == "auto"
-        if privacy == "sensitive":
-            sensitive_decision = await self._route_sensitive(
-                request,
-                spent_this_month=spent_this_month,
-                estimated_cost=estimated_cost,
-                fallback_attempts=fallback_attempts,
-            )
-            if sensitive_decision is not None:
-                return sensitive_decision
-
         if _local_reasoning_score(request) > _routine_score(request):
             return RoutingDecision(
                 provider="local_reasoning",
                 model=self._reasoning_model(request.model),
-                reason="local_reasoning preferred for complex local task",
+                reason=(
+                    "privacy requires internal local_reasoning"
+                    if _requires_internal_model(privacy)
+                    else "local_reasoning preferred for complex local task"
+                ),
                 privacy_classification=privacy,
                 fallback_attempts=fallback_attempts,
                 estimated_cost_usd=0.0,
+            )
+
+        if _requires_internal_model(privacy):
+            return await self._route_sensitive(
+                request,
+                privacy=privacy,
+                fallback_attempts=fallback_attempts,
             )
 
         local_reason = "routine/sensitive request defaults to local"
@@ -633,7 +600,11 @@ class Router:
             if "error" in response:
                 raw_error = response["error"]
                 decision.fallback_attempts.append({"provider": decision.provider, "outcome": raw_error})
-                if settings.cloud_enabled and request.provider != "local":
+                if (
+                    settings.cloud_enabled
+                    and request.provider != "local"
+                    and not _requires_internal_model(decision.privacy_classification)
+                ):
                     fallback_result = await self._try_openrouter_fallback(request, decision, memory_principal, evidence, started)
                     fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
                     fallback_result.runtime_evidence.refresh_decision(fallback_result.decision)
