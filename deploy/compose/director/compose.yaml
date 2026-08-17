@@ -62,7 +62,7 @@ services:
       TOOLS_AUDIT_LOG_ENABLED: ${TOOLS_AUDIT_LOG_ENABLED:-true}
       WEATHER_TOOL_ENABLED: ${WEATHER_TOOL_ENABLED:-false}
     ports:
-      - "${FREYJA_DIRECTOR_BIND_IP:-127.0.0.1}:8000:8000"
+      - "${FREYJA_DIRECTOR_BIND_IP:-127.0.0.1}:${FREYJA_DIRECTOR_HOST_PORT:-8000}:8000"
     volumes:
       - ../../../data:/app/data
     read_only: true

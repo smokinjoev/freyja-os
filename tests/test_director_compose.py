@@ -35,3 +35,10 @@ def test_director_uses_persistent_shared_memory_configuration() -> None:
     assert environment["MEMORY_SHARED_MAX_ITEMS_PER_PRINCIPAL"] == "${MEMORY_SHARED_MAX_ITEMS_PER_PRINCIPAL:-200}"
     assert environment["MEMORY_SHARED_MAX_GLOBAL_ITEMS"] == "${MEMORY_SHARED_MAX_GLOBAL_ITEMS:-10000}"
     assert environment["MEMORY_RECALL_INCLUDE_IN_CLOUD"] == "${MEMORY_RECALL_INCLUDE_IN_CLOUD:-false}"
+
+
+def test_director_host_port_is_configurable() -> None:
+    compose = _load_director_compose()
+    service = compose["services"]["director"]
+
+    assert "${FREYJA_DIRECTOR_BIND_IP:-127.0.0.1}:${FREYJA_DIRECTOR_HOST_PORT:-8000}:8000" in service["ports"]

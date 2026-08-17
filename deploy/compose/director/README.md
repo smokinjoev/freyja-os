@@ -15,8 +15,10 @@ specifically to Iris's private Ollama endpoint.
 ## Private access
 
 Bind the published Director port to Atlas's private Tailscale address with
-`FREYJA_DIRECTOR_BIND_IP`. Use the same strong `FREYJA_CONNECTOR_TOKEN` for
-trusted connectors. Do not commit private IP addresses, tokens, or API keys.
+`FREYJA_DIRECTOR_BIND_IP`. If another service already owns host port `8000`,
+set `FREYJA_DIRECTOR_HOST_PORT` to an unused private port; the container still
+listens on `8000`. Use the same strong `FREYJA_CONNECTOR_TOKEN` for trusted
+connectors. Do not commit private IP addresses, tokens, or API keys.
 
 Set `IRIS_OLLAMA_BASE_URL` to Iris's private Tailscale Ollama endpoint. Shadow
 mode defaults on in the Rev 2 Compose file:
@@ -58,6 +60,9 @@ curl --fail -X POST http://<atlas-tailscale-host>:8000/local-reasoning/warm
 curl --fail http://<atlas-tailscale-host>:8000/iris-router/health
 curl --fail -X POST http://<atlas-tailscale-host>:8000/iris-router/warm
 ```
+
+Replace `8000` with `FREYJA_DIRECTOR_HOST_PORT` when Atlas publishes Director
+on an alternate private host port.
 
 The Atlas app logs an `iris_shadow_route` event for each shadowed `/route`
 request after the normal Director response has already been sent. Each event
