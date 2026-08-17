@@ -147,6 +147,7 @@ CLOUD_TASK_TYPES = {
     "architectural",
     "reason",
     "reasoning",
+    "analysis",
     "complex",
     "difficult",
     "large_context",
