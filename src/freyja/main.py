@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from freyja.agents import AgentHierarchy, PersonName
 from freyja.agents.approval_provider import PersistentApprovalProvider
 from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprovals
 from freyja.agents.runtime import SmithRuntime
@@ -241,6 +242,13 @@ class SmithReadOnlyRequest(BaseModel):
     request_id: str | None = None
 
 
+class FamilyIssueReviewRequest(BaseModel):
+    objective: str = "diagnose Director health, repository status, routing configuration, and test readiness"
+    owners: list[str] | None = None
+    actor_prefix: str = "family_issue_review"
+    request_id: str | None = None
+
+
 class SmithWritePilotRequest(BaseModel):
     objective: str
     target_path: str
@@ -276,6 +284,56 @@ async def smith_read_only(request: SmithReadOnlyRequest) -> dict[str, Any]:
         request_id=request.request_id,
     )
     return summary.model_dump(mode="json")
+
+
+@app.post("/agents/family/issue-review")
+async def family_issue_review(request: FamilyIssueReviewRequest) -> dict[str, Any]:
+    if not settings.agent_smith_enabled or not settings.agent_smith_read_only_enabled:
+        raise HTTPException(
+            status_code=404 if not settings.agent_smith_enabled else 403,
+            detail="Agent Smith read-only mode is not enabled.",
+        )
+
+    hierarchy = AgentHierarchy()
+    try:
+        owners = tuple(PersonName(owner) for owner in request.owners) if request.owners else None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Unknown family issue-review owner.") from exc
+
+    maintenance_requests = hierarchy.family_issue_review_requests(
+        objective=request.objective,
+        owners=owners,
+    )
+    reviews: list[dict[str, Any]] = []
+    for index, maintenance_request in enumerate(maintenance_requests, start=1):
+        runtime = SmithRuntime()
+        request_id = (
+            f"{request.request_id}:{maintenance_request.owner.value}"
+            if request.request_id
+            else maintenance_request.request_id
+        )
+        summary = await runtime.run_read_only(
+            maintenance_request.objective,
+            actor=f"{request.actor_prefix}:{maintenance_request.requested_by.value}",
+            request_id=request_id,
+        )
+        reviews.append(
+            {
+                "index": index,
+                "owner": maintenance_request.owner.value,
+                "agent": maintenance_request.requested_by.value,
+                "authority": maintenance_request.authority.value,
+                "escalation_target": maintenance_request.escalation_target.value,
+                "memory_principal": maintenance_request.memory_principal.model_dump(mode="json"),
+                "summary": summary.model_dump(mode="json"),
+            }
+        )
+
+    return {
+        "objective": request.objective,
+        "review_count": len(reviews),
+        "reviews": reviews,
+    }
 
 
 @app.post("/agents/smith/write-pilot")

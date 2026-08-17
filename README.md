@@ -63,9 +63,10 @@ of becoming standalone apps. The first reference service is Family Calendar:
 
 ## Communications
 
-Signal and native iMessage are connector adapters into the existing Director.
-They enforce sender policy in their gateways, map approved senders to memory
-principals, forward requests to `/route`, and return sanitized responses.
+Signal is the preferred protected remote connector. Native iMessage remains an
+Apple-native connector path. Both adapters enforce sender policy in their
+gateways, map approved senders to memory principals, forward requests to
+`/route`, and return sanitized responses.
 
 Allowed senders may be plain platform addresses for backward compatibility or
 family aliases for multi-user support:
@@ -75,8 +76,12 @@ SIGNAL_ALLOWED_SENDERS=joe=+15551234567,beth=+15557654321
 IMESSAGE_ALLOWED_SENDERS=joe=joe@example.com,beth=+15557654321
 ```
 
-Aliases let the same family member keep a stable Person-backed memory identity
-across messaging platforms while conversation IDs remain platform-specific.
+For Signal, aliases also select the protected agent context: `joe` routes as
+Cloyd Gibbler with `person:joe`, `beth` routes as Benedict with `person:beth`,
+and `family` routes as Freyja with `person:family`. Signal-originated requests
+are marked private before they reach Atlas so cloud routing is blocked by
+default. Conversation IDs remain platform-specific and raw phone numbers are
+not forwarded in Director headers.
 
 ## Certification CLI
 

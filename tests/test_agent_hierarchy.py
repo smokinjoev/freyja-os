@@ -16,7 +16,7 @@ def test_personal_agents_delegate_to_shared_maintenance_with_separate_scopes() -
     hierarchy = AgentHierarchy()
 
     joe = hierarchy.maintenance_request(
-        requested_by=AgentName.FREYJA,
+        requested_by=AgentName.CLOYD_GIBBLER,
         owner=PersonName.JOE,
         objective="Inspect Iris disk health",
     )
@@ -26,8 +26,8 @@ def test_personal_agents_delegate_to_shared_maintenance_with_separate_scopes() -
         objective="Inspect Beth's agent service",
     )
 
-    assert joe.result_recipient is AgentName.FREYJA
-    assert joe.memory_principal.client_subject == "agent:freyja"
+    assert joe.result_recipient is AgentName.CLOYD_GIBBLER
+    assert joe.memory_principal.client_subject == "agent:cloyd-gibbler"
     assert joe.memory_principal.account_owner == "person:joe"
     assert beth.result_recipient is AgentName.BENEDICT
     assert beth.memory_principal.client_subject == "agent:benedict"
@@ -38,13 +38,17 @@ def test_personal_agents_delegate_to_shared_maintenance_with_separate_scopes() -
 def test_authenticated_people_message_only_their_primary_agent() -> None:
     hierarchy = AgentHierarchy()
 
-    joe = hierarchy.route_person_message(person=PersonName.JOE, content="Hello Freyja")
+    family = hierarchy.route_person_message(person=PersonName.FAMILY, content="Hello Freyja")
+    joe = hierarchy.route_person_message(person=PersonName.JOE, content="Hello Cloyd")
     beth = hierarchy.route_person_message(person=PersonName.BETH, content="Hello Benedict")
 
-    assert joe.recipient is AgentName.FREYJA
+    assert family.recipient is AgentName.FREYJA
+    assert family.memory_principal.account_owner == "person:family"
+    assert joe.recipient is AgentName.CLOYD_GIBBLER
     assert joe.memory_principal.account_owner == "person:joe"
     assert beth.recipient is AgentName.BENEDICT
     assert beth.memory_principal.account_owner == "person:beth"
+    assert family.memory_principal.scope_key != joe.memory_principal.scope_key
     assert joe.memory_principal.scope_key != beth.memory_principal.scope_key
 
 
@@ -54,8 +58,8 @@ def test_agent_cannot_delegate_for_another_agents_person() -> None:
     with pytest.raises(PermissionError, match="primary agent"):
         hierarchy.maintenance_request(
             requested_by=AgentName.FREYJA,
-            owner=PersonName.BETH,
-            objective="Read Benedict status",
+            owner=PersonName.JOE,
+            objective="Read Cloyd status",
         )
     with pytest.raises(PermissionError, match="primary agent"):
         hierarchy.maintenance_request(
@@ -103,10 +107,26 @@ def test_results_return_only_to_the_requesting_agent_and_owner() -> None:
 )
 def test_escalation_follows_authority_level(authority, target) -> None:
     request = AgentHierarchy().maintenance_request(
-        requested_by=AgentName.FREYJA,
+        requested_by=AgentName.CLOYD_GIBBLER,
         owner=PersonName.JOE,
         objective="Maintain a service",
         authority=authority,
     )
 
     assert request.escalation_target is target
+
+
+def test_family_issue_review_belongs_to_freyja_and_stays_inspect_only() -> None:
+    requests = AgentHierarchy().family_issue_review_requests(
+        objective="Diagnose household system health and report issues"
+    )
+
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.owner is PersonName.FAMILY
+    assert request.requested_by is AgentName.FREYJA
+    assert request.result_recipient is AgentName.FREYJA
+    assert request.authority is MaintenanceAuthority.INSPECT
+    assert request.escalation_target is EscalationTarget.NONE
+    assert request.memory_principal.client_subject == "agent:freyja"
+    assert request.memory_principal.account_owner == "person:family"

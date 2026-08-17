@@ -538,7 +538,15 @@ Messaging platforms remain connector adapters into Director.
 
 ### Signal
 
-Signal remains a supported secure remote interface. The connector should authenticate senders, normalize messages, resolve principals, and forward requests to Atlas Director.
+Signal is the preferred protected remote interface. The connector authenticates senders, normalizes messages, resolves the sender to an agent/person context, marks the route request private, and forwards it to Atlas Director. Atlas remains authoritative for routing and tool authorization.
+
+Current Signal agent mapping:
+
+- `family` -> Freyja / `person:family`
+- `joe` -> Cloyd Gibbler / `person:joe`
+- `beth` -> Benedict / `person:beth`
+
+Signal logs and Director headers must not contain raw phone numbers.
 
 ### iMessage
 
@@ -560,7 +568,7 @@ MacAgent is not an alternate Director.
 
 ### Telegram
 
-Telegram may remain available for testing or approved household use subject to explicit allowlists and identity mapping.
+Telegram is not the primary protected connector. It may remain available for testing only, subject to explicit allowlists and identity mapping, and should not be used for sensitive/private household operations.
 
 ---
 

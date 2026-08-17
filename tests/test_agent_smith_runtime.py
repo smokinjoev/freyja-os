@@ -982,6 +982,118 @@ def test_read_only_endpoint_allows_when_enabled(test_client, monkeypatch):
         settings.agent_smith_read_only_enabled = original_read_only
 
 
+def test_family_issue_review_endpoint_runs_as_freyja_family_agent(test_client, monkeypatch):
+    from freyja.config import settings
+
+    original_enabled = settings.agent_smith_enabled
+    original_read_only = settings.agent_smith_read_only_enabled
+    try:
+        settings.agent_smith_enabled = True
+        settings.agent_smith_read_only_enabled = True
+
+        async def _mock_run_read_only(self, objective, /, actor=None, request_id=None):
+            from freyja.agents.models import SmithRunSummary
+
+            return SmithRunSummary(
+                request_id=request_id or "mock-id",
+                objective=objective,
+                total_tasks=1,
+                completed_tasks=1,
+                failed_tasks=0,
+                escalated_tasks=0,
+                approval_required_count=0,
+                status="complete",
+                message="ok",
+                actor=actor or "agent_smith",
+                metadata={"classification": "diagnostics"},
+            )
+
+        monkeypatch.setattr("freyja.main.SmithRuntime.run_read_only", _mock_run_read_only)
+        response = test_client.post(
+            "/agents/family/issue-review",
+            json={"objective": "diagnose Director health and report issues", "request_id": "family-review"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["review_count"] == 1
+        review = body["reviews"][0]
+        assert review["owner"] == "family"
+        assert review["agent"] == "freyja"
+        assert review["authority"] == "inspect"
+        assert review["escalation_target"] == "none"
+        assert review["memory_principal"]["client_subject"] == "agent:freyja"
+        assert review["memory_principal"]["account_owner"] == "person:family"
+        assert review["summary"]["actor"] == "family_issue_review:freyja"
+        assert review["summary"]["request_id"] == "family-review:family"
+    finally:
+        settings.agent_smith_enabled = original_enabled
+        settings.agent_smith_read_only_enabled = original_read_only
+
+
+def test_family_issue_review_endpoint_can_target_personal_agents(test_client, monkeypatch):
+    from freyja.config import settings
+
+    original_enabled = settings.agent_smith_enabled
+    original_read_only = settings.agent_smith_read_only_enabled
+    try:
+        settings.agent_smith_enabled = True
+        settings.agent_smith_read_only_enabled = True
+
+        async def _mock_run_read_only(self, objective, /, actor=None, request_id=None):
+            from freyja.agents.models import SmithRunSummary
+
+            return SmithRunSummary(
+                request_id=request_id or "mock-id",
+                objective=objective,
+                total_tasks=1,
+                completed_tasks=1,
+                failed_tasks=0,
+                escalated_tasks=0,
+                approval_required_count=0,
+                status="complete",
+                message="ok",
+                actor=actor or "agent_smith",
+                metadata={"classification": "inspection"},
+            )
+
+        monkeypatch.setattr("freyja.main.SmithRuntime.run_read_only", _mock_run_read_only)
+        response = test_client.post(
+            "/agents/family/issue-review",
+            json={"objective": "inspect repository status", "owners": ["joe", "beth"]},
+        )
+
+        assert response.status_code == 200
+        reviews = response.json()["reviews"]
+        assert [(review["owner"], review["agent"]) for review in reviews] == [
+            ("joe", "cloyd-gibbler"),
+            ("beth", "benedict"),
+        ]
+    finally:
+        settings.agent_smith_enabled = original_enabled
+        settings.agent_smith_read_only_enabled = original_read_only
+
+
+def test_family_issue_review_endpoint_rejects_unknown_owner(test_client, monkeypatch):
+    from freyja.config import settings
+
+    original_enabled = settings.agent_smith_enabled
+    original_read_only = settings.agent_smith_read_only_enabled
+    try:
+        settings.agent_smith_enabled = True
+        settings.agent_smith_read_only_enabled = True
+
+        response = test_client.post(
+            "/agents/family/issue-review",
+            json={"owners": ["nobody"]},
+        )
+
+        assert response.status_code == 400
+    finally:
+        settings.agent_smith_enabled = original_enabled
+        settings.agent_smith_read_only_enabled = original_read_only
+
+
 def test_enable_smith_read_only_script_exists_and_is_executable():
     script = Path(__file__).parent.parent / "scripts" / "enable-smith-read-only.sh"
     assert script.exists()

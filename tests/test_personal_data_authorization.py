@@ -15,11 +15,11 @@ from freyja.agents import (
 )
 
 
-def test_freyja_and_benedict_receive_separate_private_accounts() -> None:
+def test_cloyd_and_benedict_receive_separate_private_accounts() -> None:
     authorization = PersonalDataAuthorization()
     joe = authorization.private_account(
         person=PersonName.JOE,
-        acting_agent=AgentName.FREYJA,
+        acting_agent=AgentName.CLOYD_GIBBLER,
         resource=PersonalDataResource.EMAIL,
         account_id="joe-mail",
     )
@@ -41,7 +41,7 @@ def test_cross_person_private_access_is_rejected() -> None:
     with pytest.raises(PermissionError, match="primary agent"):
         authorization.private_account(
             person=PersonName.BETH,
-            acting_agent=AgentName.FREYJA,
+            acting_agent=AgentName.CLOYD_GIBBLER,
             resource=PersonalDataResource.CALENDAR,
             account_id="beth-calendar",
         )
@@ -79,7 +79,7 @@ def test_calendar_create_is_allowed_but_responses_and_deletes_require_approval()
     authorization = PersonalDataAuthorization()
     grant = authorization.private_account(
         person=PersonName.JOE,
-        acting_agent=AgentName.FREYJA,
+        acting_agent=AgentName.CLOYD_GIBBLER,
         resource=PersonalDataResource.CALENDAR,
         account_id="joe-calendar",
     )
@@ -93,7 +93,7 @@ def test_resource_type_cannot_be_confused() -> None:
     authorization = PersonalDataAuthorization()
     email = authorization.private_account(
         person=PersonName.JOE,
-        acting_agent=AgentName.FREYJA,
+        acting_agent=AgentName.CLOYD_GIBBLER,
         resource=PersonalDataResource.EMAIL,
         account_id="joe-mail",
     )
@@ -105,7 +105,7 @@ def test_household_account_retains_the_requesting_person_and_agent() -> None:
     authorization = PersonalDataAuthorization()
     joe = authorization.household_account(
         person=PersonName.JOE,
-        acting_agent=AgentName.FREYJA,
+        acting_agent=AgentName.CLOYD_GIBBLER,
         resource=PersonalDataResource.CALENDAR,
         account_id="household-calendar",
     )
@@ -118,7 +118,7 @@ def test_household_account_retains_the_requesting_person_and_agent() -> None:
 
     assert joe.person is PersonName.JOE
     assert beth.person is PersonName.BETH
-    assert joe.acting_agent is AgentName.FREYJA
+    assert joe.acting_agent is AgentName.CLOYD_GIBBLER
     assert beth.acting_agent is AgentName.BENEDICT
 
 
@@ -127,7 +127,7 @@ def test_constructed_principal_cannot_grant_itself_permissions_or_cross_person_a
     with pytest.raises(ValidationError, match="allowed_actions"):
         PersonalDataPrincipal(
             person=PersonName.BETH,
-            acting_agent=AgentName.FREYJA,
+            acting_agent=AgentName.CLOYD_GIBBLER,
             resource=PersonalDataResource.EMAIL,
             account_id="beth-mail",
             scope=PersonalDataScope.PRIVATE,
@@ -136,7 +136,7 @@ def test_constructed_principal_cannot_grant_itself_permissions_or_cross_person_a
 
     cross_person = PersonalDataPrincipal(
         person=PersonName.BETH,
-        acting_agent=AgentName.FREYJA,
+        acting_agent=AgentName.CLOYD_GIBBLER,
         resource=PersonalDataResource.EMAIL,
         account_id="beth-mail",
         scope=PersonalDataScope.PRIVATE,
@@ -150,10 +150,44 @@ def test_constructed_owner_principal_still_cannot_bypass_send_approval() -> None
     authorization = PersonalDataAuthorization()
     forged = PersonalDataPrincipal(
         person=PersonName.JOE,
-        acting_agent=AgentName.FREYJA,
+        acting_agent=AgentName.CLOYD_GIBBLER,
         resource=PersonalDataResource.EMAIL,
         account_id="joe-mail",
         scope=PersonalDataScope.PRIVATE,
     )
 
     assert authorization.authorize(forged, PersonalDataAction.EMAIL_SEND) is PersonalDataDecision.APPROVAL_REQUIRED
+
+
+def test_freyja_is_family_agent_not_joes_private_agent() -> None:
+    authorization = PersonalDataAuthorization()
+
+    with pytest.raises(PermissionError, match="primary agent"):
+        authorization.private_account(
+            person=PersonName.JOE,
+            acting_agent=AgentName.FREYJA,
+            resource=PersonalDataResource.EMAIL,
+            account_id="joe-mail",
+        )
+
+    household = authorization.household_account(
+        person=PersonName.FAMILY,
+        acting_agent=AgentName.FREYJA,
+        resource=PersonalDataResource.CALENDAR,
+        account_id="family-calendar",
+    )
+
+    assert household.scope is PersonalDataScope.HOUSEHOLD
+    assert authorization.authorize(household, PersonalDataAction.CALENDAR_READ) is PersonalDataDecision.ALLOW
+
+
+def test_family_owner_cannot_receive_private_personal_account() -> None:
+    authorization = PersonalDataAuthorization()
+
+    with pytest.raises(PermissionError, match="individual person"):
+        authorization.private_account(
+            person=PersonName.FAMILY,
+            acting_agent=AgentName.FREYJA,
+            resource=PersonalDataResource.EMAIL,
+            account_id="family-mail",
+        )

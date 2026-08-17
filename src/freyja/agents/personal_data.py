@@ -90,6 +90,8 @@ class PersonalDataAuthorization:
         resource: PersonalDataResource,
         account_id: str,
     ) -> PersonalDataPrincipal:
+        if person is PersonName.FAMILY:
+            raise PermissionError("private personal data requires an individual person")
         if acting_agent is not self._hierarchy.primary_agent(person):
             raise PermissionError("private personal data is available only to the person's primary agent")
         return PersonalDataPrincipal(
@@ -107,7 +109,7 @@ class PersonalDataAuthorization:
         acting_agent: AgentName,
         account_id: str,
     ) -> PersonalDataPrincipal:
-        if acting_agent not in {AgentName.FREYJA, AgentName.BENEDICT}:
+        if acting_agent not in self._hierarchy.primary_agents():
             raise PermissionError("only a personal agent may request shared availability")
         return PersonalDataPrincipal(
             person=calendar_owner,
@@ -151,9 +153,13 @@ class PersonalDataAuthorization:
         return PersonalDataDecision.DENY
 
     def _valid_authority_chain(self, principal: PersonalDataPrincipal) -> bool:
-        if principal.acting_agent not in {AgentName.FREYJA, AgentName.BENEDICT}:
+        if principal.acting_agent not in self._hierarchy.primary_agents():
             return False
-        if principal.scope in {PersonalDataScope.PRIVATE, PersonalDataScope.HOUSEHOLD}:
+        if principal.scope is PersonalDataScope.PRIVATE:
+            if principal.person is PersonName.FAMILY:
+                return False
+            return principal.acting_agent is self._hierarchy.primary_agent(principal.person)
+        if principal.scope is PersonalDataScope.HOUSEHOLD:
             return principal.acting_agent is self._hierarchy.primary_agent(principal.person)
         return principal.scope is PersonalDataScope.AVAILABILITY_ONLY
 

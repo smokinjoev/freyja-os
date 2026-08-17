@@ -1,5 +1,14 @@
 # Freyja Operations TODO
 
+## Agent Roles
+
+- [ ] Treat `freyja` as the family/household agent and shared issue-review coordinator.
+- [ ] Treat `cloyd-gibbler` as Joe's private personal agent.
+- [ ] Treat `benedict` as Beth's private personal agent.
+- [ ] Keep `smith` as the maintenance agent: read-only diagnostics by default, writes only through approval gates.
+- [ ] Keep private memories, accounts, and connector credentials scoped to each person's primary agent.
+- [ ] Use Freyja for household status, shared home commands, family calendar views, and `/agents/family/issue-review`.
+
 ## Iris Account Migration
 
 - [ ] Log in directly as the `freyja` macOS account on Iris.
