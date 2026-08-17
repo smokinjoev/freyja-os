@@ -161,6 +161,31 @@ class ToolRegistry:
                 required_permission=permission,
             )
 
+        if permission == "household:home.control":
+            if person_id not in {"joe", "beth", "family"}:
+                return ToolAuthorizationDecision(
+                    allowed=False,
+                    reason="canonical household principal required",
+                    required_permission=permission,
+                )
+            if metadata.get("director_authorized") is not True:
+                return ToolAuthorizationDecision(
+                    allowed=False,
+                    reason="Director authorization required",
+                    required_permission=permission,
+                )
+            if metadata.get("approval_granted") is not True:
+                return ToolAuthorizationDecision(
+                    allowed=False,
+                    reason="explicit approval required for household control",
+                    required_permission=permission,
+                )
+            return ToolAuthorizationDecision(
+                allowed=True,
+                reason=f"principal {person_id} may control household state with approval",
+                required_permission=permission,
+            )
+
         if permission == "household:calendar.write":
             if person_id in {"joe", "beth", "family"} and metadata.get("director_authorized") is True:
                 return ToolAuthorizationDecision(

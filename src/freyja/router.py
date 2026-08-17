@@ -610,6 +610,30 @@ class Router:
                 started,
             )
 
+        home_control = self._deterministic_home_control_request(request)
+        if home_control is not None:
+            privacy = _classify_privacy(request.prompt, request.privacy)
+            decision = RoutingDecision(
+                request_id=request.request_id,
+                provider="deterministic",
+                model="",
+                reason="deterministic Home Assistant control capability",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+            evidence = RuntimeEvidence.from_decision(decision)
+            self._record_connector_origin(evidence, memory_principal)
+            self._record_principal(evidence, memory_principal, person_context)
+            return await self._execute_deterministic_home_control(
+                request,
+                decision,
+                home_control,
+                memory_principal,
+                person_context,
+                evidence,
+                started,
+            )
+
         calendar_read = self._deterministic_calendar_read_request(request)
         if calendar_read is not None:
             privacy = _classify_privacy(request.prompt, request.privacy)
@@ -1053,6 +1077,16 @@ class Router:
             return None
         return {"area": "downstairs", "domain": "light", "entity_id": "light.downstairs"}
 
+    def _deterministic_home_control_request(self, request: RouteRequest) -> dict[str, Any] | None:
+        if not request.tools_required:
+            return None
+        prompt = request.prompt.lower()
+        if "light" not in prompt or "downstairs" not in prompt:
+            return None
+        if not any(marker in prompt for marker in ("turn off", "switch off", "shut off")):
+            return None
+        return {"entity_id": "light.downstairs", "state": "off"}
+
     def _deterministic_calendar_read_request(self, request: RouteRequest) -> dict[str, Any] | None:
         if not request.tools_required:
             return None
@@ -1158,6 +1192,88 @@ class Router:
             response = "No, the downstairs lights are off."
         else:
             response = "I couldn't determine whether the downstairs lights are on."
+        await self._record_memory(request, decision, response, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _execute_deterministic_home_control(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        arguments: dict[str, Any],
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence,
+        started: float,
+    ) -> RoutingResult:
+        tool_name = "home_assistant_control_state"
+        definition = self._registry.get_tool(tool_name)
+        if definition is None:
+            return self._routing_result(
+                decision=decision,
+                response="Home Assistant control capability is not registered.",
+                evidence=evidence,
+                started=started,
+            )
+        execution_request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="atlas_director",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+                "director_authorized": True,
+            },
+        )
+        authorization = self._registry.authorize(definition, execution_request)
+        evidence.capability_authorizations.append(
+            {
+                "capability": tool_name,
+                "allowed": authorization.allowed,
+                "reason": authorization.reason,
+                "required_permission": authorization.required_permission,
+            }
+        )
+        if not authorization.allowed:
+            entry = self._tool_history_entry(
+                tool_name=tool_name,
+                success=False,
+                arguments=arguments,
+                output={},
+                error_code="authorization_denied",
+                public_error_message="Tool authorization denied.",
+            )
+            self._record_tool_evidence(evidence, entry)
+            return self._routing_result(
+                decision=decision,
+                response="I need explicit approval before changing the downstairs lights.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        result = await self._registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name=tool_name,
+            success=result.success,
+            arguments=arguments,
+            output=result.output,
+            error_code=result.error_code,
+            public_error_message=result.public_error_message,
+            duration_ms=result.duration_ms,
+        )
+        self._record_tool_evidence(evidence, entry)
+        response = (
+            "I turned the downstairs lights off."
+            if result.success and result.output.get("changed")
+            else result.public_error_message or "Home Assistant control failed."
+        )
         await self._record_memory(request, decision, response, evidence)
         return self._routing_result(
             decision=decision,

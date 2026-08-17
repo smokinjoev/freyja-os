@@ -743,6 +743,37 @@ class TestToolLoop:
         assert result.tool_results[0]["error_code"] == "authorization_denied"
         assert "can't read household state" in result.response
 
+    async def test_home_assistant_control_slice_requires_explicit_approval(self, router: Router) -> None:
+        principal = MemoryPrincipal(client_type="imessage", client_subject="family-member:abc")
+
+        result = await router.execute(
+            RouteRequest(
+                request_id="req-home-control",
+                prompt="Turn off the downstairs lights.",
+                provider="auto",
+                tools_required=True,
+            ),
+            memory_principal=principal,
+            person_context={"person_id": "joe", "display_name": "Joe", "preferred_name": "Joe"},
+        )
+
+        assert result.decision.provider == "deterministic"
+        assert result.decision.reason == "deterministic Home Assistant control capability"
+        assert result.tool_results[0]["tool_name"] == "home_assistant_control_state"
+        assert result.tool_results[0]["success"] is False
+        assert result.tool_results[0]["error_code"] == "authorization_denied"
+        assert result.runtime_evidence.capability_authorizations == [
+            {
+                "capability": "home_assistant_control_state",
+                "allowed": False,
+                "reason": "explicit approval required for household control",
+                "required_permission": "household:home.control",
+            }
+        ]
+        assert "explicit approval" in result.response
+        router.ollama_client.chat.assert_not_called()
+        router.openrouter_client.chat.assert_not_called()
+
     async def test_calendar_read_slice_is_director_authorized_deterministic(self, router: Router) -> None:
         principal = MemoryPrincipal(
             client_type="imessage",

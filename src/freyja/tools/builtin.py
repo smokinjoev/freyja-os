@@ -150,6 +150,7 @@ _BUILTIN_TOOL_NAMES = (
     "identity_resolution",
     "identity_relationships",
     "home_assistant_read_state",
+    "home_assistant_control_state",
     "memory_recall_shared",
 )
 

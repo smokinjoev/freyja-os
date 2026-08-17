@@ -105,6 +105,7 @@ def test_discovery(registry: ToolRegistry) -> None:
         "identity_resolution",
         "identity_relationships",
         "home_assistant_read_state",
+        "home_assistant_control_state",
         "memory_recall_shared",
     }
 
@@ -390,7 +391,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 23
+    assert len(tools) == 24
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
@@ -722,6 +723,28 @@ def test_memory_recall_shared_requires_principal(registry: ToolRegistry) -> None
             ToolExecutionRequest(
                 tool_name="memory_recall_shared",
                 arguments={"limit": 5},
+            )
+        )
+    )
+    assert result.success is False
+    assert result.error_code == "authorization_denied"
+
+
+def test_home_assistant_control_requires_explicit_approval(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_control_state",
+                arguments={"entity_id": "light.downstairs", "state": "off"},
+                metadata={
+                    "director_authorized": True,
+                    "memory_principal": {
+                        "client_type": "imessage",
+                        "client_subject": "family-member:abc",
+                    },
+                    "person": {"person_id": "joe"},
+                },
             )
         )
     )
