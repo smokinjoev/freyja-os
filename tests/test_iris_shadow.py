@@ -21,6 +21,7 @@ def _comparison(**overrides):
         iris_confidence=0.9,
         iris_latency_ms=120,
         iris_error=None,
+        case_error=None,
         agrees_with_director=True,
         agrees_with_final=True,
     )
@@ -92,6 +93,23 @@ def test_shadow_summary_reports_under_routing() -> None:
 
     assert summary["under_routing_cases"] == ["too-simple"]
     assert summary["under_routing_count"] == 1
+
+
+def test_timeout_comparison_is_recorded_as_failure() -> None:
+    from certification.iris_shadow import timeout_comparison
+
+    class Case:
+        name = "stuck"
+        category = "routing"
+        difficulty = "smoke"
+
+    comparison = timeout_comparison(Case(), 12.0)
+
+    assert comparison.case == "stuck"
+    assert comparison.response_ok is False
+    assert comparison.iris_ok is False
+    assert comparison.case_error == "case timed out after 12.0s"
+    assert comparison.agrees_with_director is False
 
 
 def test_parse_route_request_accepts_valid_request() -> None:

@@ -38,6 +38,7 @@ class IrisComparison:
     iris_confidence: float | None
     iris_latency_ms: int | None
     iris_error: str | None
+    case_error: str | None
     agrees_with_director: bool
     agrees_with_final: bool
 
@@ -98,8 +99,34 @@ async def compare_case(case: Any, iris: IrisRouterClient) -> IrisComparison:
         iris_confidence=recommendation.confidence if recommendation else None,
         iris_latency_ms=iris_result.latency_ms,
         iris_error=iris_result.error,
+        case_error=None,
         agrees_with_director=bool(iris_target and director_target and iris_target == director_target),
         agrees_with_final=bool(iris_target and final_target and iris_target == final_target),
+    )
+
+
+def timeout_comparison(case: Any, timeout_seconds: float) -> IrisComparison:
+    return IrisComparison(
+        case=case.name,
+        category=case.category,
+        difficulty=case.difficulty,
+        director_provider="timeout",
+        director_model="",
+        director_target=None,
+        final_provider="timeout",
+        final_model="",
+        final_target=None,
+        response_ok=False,
+        iris_ok=False,
+        iris_tier=None,
+        iris_target=None,
+        iris_task=None,
+        iris_confidence=None,
+        iris_latency_ms=None,
+        iris_error=None,
+        case_error=f"case timed out after {timeout_seconds:.1f}s",
+        agrees_with_director=False,
+        agrees_with_final=False,
     )
 
 
@@ -177,20 +204,21 @@ def render_markdown(difficulty: str, summary: dict[str, Any], results: list[Iris
         "",
         "## Disagreements",
         "",
-        "| Case | Director | Iris | Final | Confidence | Iris ms |",
-        "|---|---|---|---|---:|---:|",
+        "| Case | Director | Iris | Final | Confidence | Iris ms | Error |",
+        "|---|---|---|---|---:|---:|---|",
     ]
     disagreements = [item for item in results if not item.agrees_with_director or not item.agrees_with_final]
     if not disagreements:
-        lines.append("| _none_ | | | | | |")
+        lines.append("| _none_ | | | | | | |")
     else:
         for item in disagreements:
             confidence = f"{item.iris_confidence:.2f}" if item.iris_confidence is not None else "-"
             latency = str(item.iris_latency_ms) if item.iris_latency_ms is not None else "-"
+            error = item.case_error or item.iris_error or ""
             lines.append(
                 f"| {item.case} | {item.director_target or item.director_provider} | "
                 f"{item.iris_target or 'ERROR'} | {item.final_target or item.final_provider} | "
-                f"{confidence} | {latency} |"
+                f"{confidence} | {latency} | {error} |"
             )
     under_routing_cases = set(summary["under_routing_cases"])
     under_routing = [item for item in results if item.case in under_routing_cases]
@@ -212,7 +240,7 @@ def _fmt_ms(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.1f} ms"
 
 
-async def run(difficulty: str, report_dir: Path) -> tuple[Path, Path, dict[str, Any]]:
+async def run(difficulty: str, report_dir: Path, *, case_timeout_seconds: float = 60.0) -> tuple[Path, Path, dict[str, Any]]:
     if not settings.iris_router_enabled:
         raise RuntimeError("IRIS_ROUTER_ENABLED must be true for the shadow gauntlet")
 
@@ -227,8 +255,12 @@ async def run(difficulty: str, report_dir: Path) -> tuple[Path, Path, dict[str, 
 
     suite = load_gauntlet(difficulty=difficulty)
     results: list[IrisComparison] = []
-    for case in suite.cases:
-        results.append(await compare_case(case, iris))
+    for index, case in enumerate(suite.cases, start=1):
+        print(f"[{index}/{len(suite.cases)}] {case.name}", flush=True)
+        try:
+            results.append(await asyncio.wait_for(compare_case(case, iris), timeout=case_timeout_seconds))
+        except TimeoutError:
+            results.append(timeout_comparison(case, case_timeout_seconds))
 
     summary = summarize(results)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -257,9 +289,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Compare Iris 7B shadow routing against Freyja Director decisions")
     parser.add_argument("--difficulty", choices=DIFFICULTIES, default="smoke")
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR)
+    parser.add_argument("--case-timeout", type=float, default=60.0, help="Maximum seconds allowed for each case")
     args = parser.parse_args()
 
-    json_path, markdown_path, summary = asyncio.run(run(args.difficulty, args.report_dir))
+    json_path, markdown_path, summary = asyncio.run(
+        run(args.difficulty, args.report_dir, case_timeout_seconds=args.case_timeout)
+    )
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"JSON report: {json_path}")
     print(f"Markdown report: {markdown_path}")
