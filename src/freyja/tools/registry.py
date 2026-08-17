@@ -36,7 +36,23 @@ def _safe_public_error(code: str, message: str | None) -> str:
         return message or "Invalid tool arguments."
     if code == "tool_timeout":
         return "Tool execution timed out."
+    if code == "authorization_denied":
+        return "Tool authorization denied."
     return "Tool execution failed."
+
+
+class ToolAuthorizationDecision:
+    def __init__(self, *, allowed: bool, reason: str, required_permission: str | None = None) -> None:
+        self.allowed = allowed
+        self.reason = reason
+        self.required_permission = required_permission
+
+    def model_dump(self) -> dict[str, Any]:
+        return {
+            "allowed": self.allowed,
+            "reason": self.reason,
+            "required_permission": self.required_permission,
+        }
 
 
 class ToolRegistry:
@@ -107,6 +123,54 @@ class ToolRegistry:
             return dict(arguments), []
         return _normalize_against_schema(arguments, schema)
 
+    def authorize(self, definition: ToolDefinition, request: ToolExecutionRequest) -> ToolAuthorizationDecision:
+        permission = definition.required_permission
+        if not permission:
+            return ToolAuthorizationDecision(allowed=True, reason="no explicit permission required")
+
+        metadata = request.metadata or {}
+        person = metadata.get("person") if isinstance(metadata.get("person"), dict) else {}
+        principal = metadata.get("memory_principal") if isinstance(metadata.get("memory_principal"), dict) else {}
+        person_id = str(person.get("person_id") or "").strip().lower()
+        has_principal = bool(principal.get("client_type") and principal.get("client_subject"))
+
+        if permission == "household:home.read":
+            if person_id in {"joe", "beth", "family"}:
+                return ToolAuthorizationDecision(
+                    allowed=True,
+                    reason=f"principal {person_id} may read household state",
+                    required_permission=permission,
+                )
+            if person_id:
+                return ToolAuthorizationDecision(
+                    allowed=False,
+                    reason="canonical household principal required",
+                    required_permission=permission,
+                )
+            if has_principal and metadata.get("director_authorized") is True:
+                return ToolAuthorizationDecision(
+                    allowed=True,
+                    reason="Director-authorized connector principal may read household state",
+                    required_permission=permission,
+                )
+            return ToolAuthorizationDecision(
+                allowed=False,
+                reason="canonical household principal required",
+                required_permission=permission,
+            )
+
+        if metadata.get("director_authorized") is True:
+            return ToolAuthorizationDecision(
+                allowed=True,
+                reason="Director authorization present",
+                required_permission=permission,
+            )
+        return ToolAuthorizationDecision(
+            allowed=False,
+            reason="Director authorization required",
+            required_permission=permission,
+        )
+
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         start = time.monotonic()
         name = request.tool_name
@@ -145,6 +209,17 @@ class ToolRegistry:
                     "; ".join(validation_errors),
                     duration_ms=_elapsed_ms(start),
                 )
+
+            authorization = self.authorize(definition, request)
+            if not authorization.allowed:
+                result = self._error_result(
+                    request,
+                    "authorization_denied",
+                    authorization.reason,
+                    duration_ms=_elapsed_ms(start),
+                )
+                self._audit(request, result, internal_error=None)
+                return result
 
             implementation = self._implementations.get(name)
             if implementation is None:

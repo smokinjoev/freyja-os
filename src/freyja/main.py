@@ -227,6 +227,8 @@ async def route(request: RouteRequest, raw_request: Request) -> dict:
     }
     if request.tools_required and result.tool_results:
         response_payload["tool_results"] = _sanitize_tool_results(result.tool_results)
+    if request.include_trace:
+        response_payload["trace"] = result.runtime_evidence.model_dump(mode="json")
     return response_payload
 
 

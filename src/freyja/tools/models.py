@@ -19,6 +19,11 @@ class ToolDefinition(BaseModel):
     input_schema: dict[str, Any] = Field(default_factory=dict)
     output_schema: dict[str, Any] = Field(default_factory=dict)
     risk_level: ToolRiskLevel = ToolRiskLevel.READ_ONLY
+    host_service: str | None = None
+    required_permission: str | None = None
+    confirmation_policy: str = "none"
+    audit_policy: str = "standard"
+    health: str = "unknown"
     enabled: bool = True
     timeout_seconds: int = 30
     tags: list[str] = Field(default_factory=list)

@@ -35,7 +35,8 @@ def isolated_store(tmp_path, monkeypatch):
         os.remove(db_path)
 
 
-def test_route_with_conversation_id_persists_messages(isolated_store):
+def test_route_with_conversation_id_persists_messages(isolated_store, monkeypatch):
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
     with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat:
         mock_chat.return_value = {
             "model": "qwen2.5:7b",
@@ -70,6 +71,38 @@ def test_route_without_conversation_id_does_not_persist(isolated_store):
 
     assert response.status_code == 200
     assert isolated_store.list_conversations().conversations == []
+
+
+def test_route_trace_for_home_assistant_read_slice(isolated_store, monkeypatch):
+    monkeypatch.setattr(settings, "home_assistant_state_fixture", '{"light.downstairs":"on"}')
+    response = client.post(
+        "/route",
+        json={
+            "request_id": "req-api-home-read",
+            "prompt": "Are the downstairs lights on?",
+            "provider": "auto",
+            "tools_required": True,
+            "include_trace": True,
+        },
+        headers={
+            **PRINCIPAL_HEADERS,
+            "X-Freyja-Person-Id": "joe",
+            "X-Freyja-Person-Display-Name": "Joe",
+            "X-Freyja-Person-Preferred-Name": "Joe",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["request_id"] == "req-api-home-read"
+    assert data["provider"] == "deterministic"
+    assert data["response"] == "Yes, the downstairs lights are on."
+    trace = data["trace"]
+    assert trace["request_id"] == "req-api-home-read"
+    assert trace["interface"] == "signal"
+    assert trace["person"]["person_id"] == "joe"
+    assert trace["capability_authorizations"][0]["capability"] == "home_assistant_read_state"
+    assert trace["capability_authorizations"][0]["allowed"] is True
 
 
 def test_route_memory_failure_does_not_crash(isolated_store):

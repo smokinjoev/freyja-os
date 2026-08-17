@@ -104,6 +104,7 @@ def test_discovery(registry: ToolRegistry) -> None:
         "calendar_move_event_if_conflict",
         "identity_resolution",
         "identity_relationships",
+        "home_assistant_read_state",
     }
 
 
@@ -388,7 +389,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 21
+    assert len(tools) == 22
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
@@ -675,6 +676,42 @@ def test_api_execute_validation_error(client: TestClient, registry: ToolRegistry
     )
     assert response.status_code == 400
     assert "Missing required argument" in response.json()["detail"]
+
+
+def test_home_assistant_read_requires_canonical_principal(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_read_state",
+                arguments={"entity_id": "light.downstairs"},
+            )
+        )
+    )
+    assert result.success is False
+    assert result.error_code == "authorization_denied"
+
+
+def test_home_assistant_read_allows_director_authorized_joe(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_read_state",
+                arguments={"entity_id": "light.downstairs"},
+                metadata={
+                    "director_authorized": True,
+                    "memory_principal": {
+                        "client_type": "imessage",
+                        "client_subject": "family-member:abc",
+                    },
+                    "person": {"person_id": "joe"},
+                },
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["state"] == "on"
 
 
 # Helper to run async tool implementations in synchronous tests.

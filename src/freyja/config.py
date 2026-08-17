@@ -116,6 +116,7 @@ class Settings(BaseSettings):
     telegram_state_dir: str = str(_default_state_dir() / "telegram")
 
     weather_tool_enabled: bool = False
+    home_assistant_state_fixture: str = '{"light.downstairs":"on"}'
 
     @property
     def approved_openrouter_models(self) -> list[str]:

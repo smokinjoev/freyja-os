@@ -54,7 +54,8 @@ def _settings_with_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "openrouter_allowlist", "openai/gpt-4o-mini")
 
 
-async def test_manual_local_override(router: Router) -> None:
+async def test_manual_local_override(router: Router, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
     router.ollama_client.healthy.return_value = True
     router.ollama_client.chat.return_value = {
         "model": "qwen2.5:7b",
@@ -645,6 +646,89 @@ class TestToolLoop:
         assert result.tool_results[0]["duration_ms"] is not None
         assert result.runtime_evidence.tool_calls[0].name == "hostname"
         assert result.runtime_evidence.tool_calls[0].success is True
+
+    async def test_home_assistant_read_slice_is_director_authorized_deterministic(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "home_assistant_state_fixture", '{"light.downstairs":"on"}')
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": "model should not run"},
+        }
+        principal = MemoryPrincipal(
+            client_type="imessage",
+            client_subject="family-member:abc",
+            conversation_id="imessage-conv:test",
+        )
+
+        result = await router.execute(
+            RouteRequest(
+                request_id="req-home-read",
+                prompt="Are the downstairs lights on?",
+                provider="auto",
+                tools_required=True,
+                include_trace=True,
+            ),
+            memory_principal=principal,
+            person_context={"person_id": "joe", "display_name": "Joe", "preferred_name": "Joe"},
+        )
+
+        assert result.decision.request_id == "req-home-read"
+        assert result.decision.provider == "deterministic"
+        assert result.response == "Yes, the downstairs lights are on."
+        assert result.tool_results[0]["tool_name"] == "home_assistant_read_state"
+        assert result.tool_results[0]["success"] is True
+        assert result.runtime_evidence.interface == "imessage"
+        assert result.runtime_evidence.person == {"person_id": "joe", "display_name": "Joe", "preferred_name": "Joe"}
+        assert result.runtime_evidence.capability_authorizations == [
+            {
+                "capability": "home_assistant_read_state",
+                "allowed": True,
+                "reason": "principal joe may read household state",
+                "required_permission": "household:home.read",
+            }
+        ]
+        router.ollama_client.chat.assert_not_called()
+        router.openrouter_client.chat.assert_not_called()
+
+    async def test_home_assistant_read_slice_survives_inference_outages(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(settings, "home_assistant_state_fixture", '{"light.downstairs":"on"}')
+        router.ollama_client.healthy.return_value = False
+        router.reasoning_ollama_client = AsyncMock()
+        router.reasoning_ollama_client.healthy.return_value = False
+        router.openrouter_client.healthy.return_value = False
+        principal = MemoryPrincipal(client_type="signal", client_subject="family-member:abc")
+
+        result = await router.execute(
+            RouteRequest(prompt="Are the downstairs lights on?", provider="auto", tools_required=True),
+            memory_principal=principal,
+            person_context={"person_id": "joe"},
+        )
+
+        assert result.decision.provider == "deterministic"
+        assert result.response == "Yes, the downstairs lights are on."
+        router.ollama_client.chat.assert_not_called()
+        router.reasoning_ollama_client.chat.assert_not_called()
+        router.openrouter_client.chat.assert_not_called()
+
+    async def test_home_assistant_read_slice_denies_unknown_principal(self, router: Router) -> None:
+        principal = MemoryPrincipal(client_type="signal", client_subject="family-member:abc")
+
+        result = await router.execute(
+            RouteRequest(prompt="Are the downstairs lights on?", provider="auto", tools_required=True),
+            memory_principal=principal,
+            person_context={"person_id": "unknown"},
+        )
+
+        assert result.decision.provider == "deterministic"
+        assert result.tool_results[0]["error_code"] == "authorization_denied"
+        assert "can't read household state" in result.response
 
     async def test_tool_request_receives_resolved_person_context(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
