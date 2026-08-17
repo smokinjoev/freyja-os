@@ -41,7 +41,7 @@ async def test_warm_requests_indefinite_residency() -> None:
 
     _, kwargs = mock_http.post.call_args
     assert kwargs["json"]["model"] == "qwen2.5:7b"
-    assert kwargs["json"]["keep_alive"] == "-1"
+    assert kwargs["json"]["keep_alive"] == -1
 
 
 async def test_recommend_parses_strict_route_json() -> None:
@@ -73,8 +73,9 @@ async def test_recommend_parses_strict_route_json() -> None:
     _, kwargs = mock_http.post.call_args
     payload = kwargs["json"]
     assert payload["think"] is False
-    assert payload["keep_alive"] == "-1"
-    assert isinstance(payload["format"], dict)
+    assert payload["keep_alive"] == -1
+    assert payload["format"] == "json"
+    assert payload["options"]["num_predict"] == 100
 
 
 async def test_recommend_rejects_invalid_model_output() -> None:

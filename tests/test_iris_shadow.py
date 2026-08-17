@@ -66,6 +66,32 @@ def test_shadow_summary_reports_agreement_and_latency() -> None:
     assert summary["agreement_with_final_provider_rate"] == 2 / 3
     assert summary["iris_latency_ms_mean"] == 160.0
     assert summary["iris_latency_ms_p95"] == 200.0
+    assert summary["iris_confidence_distribution"] == {
+        "0.00-0.49": 0,
+        "0.50-0.74": 0,
+        "0.75-0.89": 0,
+        "0.90-1.00": 3,
+    }
+    assert summary["under_routing_count"] == 0
+
+
+def test_shadow_summary_reports_under_routing() -> None:
+    summary = summarize([
+        _comparison(
+            case="too-simple",
+            director_provider="local_reasoning",
+            director_target="local_heavy",
+            final_provider="local_reasoning",
+            final_target="local_heavy",
+            iris_tier=2,
+            iris_target="iris",
+            agrees_with_director=False,
+            agrees_with_final=False,
+        )
+    ])
+
+    assert summary["under_routing_cases"] == ["too-simple"]
+    assert summary["under_routing_count"] == 1
 
 
 def test_parse_route_request_accepts_valid_request() -> None:

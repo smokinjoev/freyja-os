@@ -28,7 +28,14 @@ IRIS_ROUTER_KEEP_ALIVE=-1
 ```
 
 `IRIS_ROUTER_KEEP_ALIVE=-1` requests indefinite model residency so the routing
-model remains hot between requests.
+model remains hot between requests. Ollama expects that value as a numeric JSON
+payload field; the Director keeps the env value string-friendly and converts
+numeric values before calling Iris.
+
+The Iris client uses Ollama JSON mode plus strict Director-side schema
+validation. Full JSON-schema generation was too slow for the 4 second shadow
+budget on the resident 7B model; compact JSON mode keeps the recommendation
+non-authoritative while preserving malformed-output rejection.
 
 ## Start and verify
 
@@ -67,7 +74,8 @@ The runner warms Iris first, then records for every case:
 2. Iris's 7B shadow recommendation;
 3. the final provider after execution/fallback;
 4. Iris latency and confidence;
-5. agreement/disagreement with both Director and final provider.
+5. agreement/disagreement with both Director and final provider;
+6. confidence distribution and under-routing cases.
 
 JSON and Markdown reports are written under `certification/reports/`. Move from
 `smoke` to `standard`, `stress`, then `chaos` only after the preceding tier is

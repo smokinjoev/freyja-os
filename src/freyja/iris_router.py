@@ -35,26 +35,24 @@ class IrisShadowResult(BaseModel):
 
 
 IRIS_ROUTER_SYSTEM_PROMPT = """You are the Freyja-OS routing classifier running on Iris.
-You do not answer the user's request and you do not authorize tools.
-Classify the request only.
-
-Routing tiers:
-0 = deterministic/no LLM needed
-1 = tiny/simple reflex work
-2 = routine local conversational/tool-selection work on Iris
-3 = heavy local reasoning/coding/vision
-4 = cloud/frontier escalation when local capability is insufficient and policy allows
-
-preferred_target meanings:
-deterministic = Director/tool logic without an LLM
-iris = resident Iris model
-local_heavy = dedicated heavy local inference machine
-isolated_worker = untrusted web/email/document worker
-cloud = approved cloud inference
-
-Return only JSON matching the supplied schema. Never include markdown or prose outside JSON.
-The Director is the final authority; this is only a recommendation.
+Classify only. Do not answer the request and do not authorize tools.
+Return only one compact JSON object with exactly these required keys:
+tier, task, needs_tools, sensitivity, confidence, preferred_target, reason.
+tier: 0 deterministic, 1 tiny reflex, 2 routine Iris, 3 heavy local, 4 cloud.
+sensitivity: public, routine, private, sensitive.
+preferred_target: deterministic, iris, local_heavy, isolated_worker, cloud.
+confidence must be a decimal from 0.0 to 1.0, for example 0.75.
+reason must be 3 to 8 words.
+No markdown, prose, or extra keys. Director is final authority.
 """
+
+
+def _ollama_keep_alive_value() -> str | int:
+    value = settings.iris_router_keep_alive.strip()
+    try:
+        return int(value)
+    except ValueError:
+        return value
 
 
 class IrisRouterClient:
@@ -85,7 +83,7 @@ class IrisRouterClient:
             "model": self.model,
             "prompt": "",
             "stream": False,
-            "keep_alive": settings.iris_router_keep_alive,
+            "keep_alive": _ollama_keep_alive_value(),
         }
         try:
             async with httpx.AsyncClient(timeout=max(self.timeout_seconds, 30.0)) as client:
@@ -115,7 +113,6 @@ class IrisRouterClient:
             "tools_required": tools_required,
             "context_size": context_size,
         }
-        schema = IrisRouteRecommendation.model_json_schema()
         payload = {
             "model": self.model,
             "messages": [
@@ -124,11 +121,11 @@ class IrisRouterClient:
             ],
             "stream": False,
             "think": False,
-            "format": schema,
-            "keep_alive": settings.iris_router_keep_alive,
+            "format": "json",
+            "keep_alive": _ollama_keep_alive_value(),
             "options": {
                 "temperature": 0,
-                "num_predict": 180,
+                "num_predict": 100,
             },
         }
 
@@ -139,11 +136,12 @@ class IrisRouterClient:
                 response.raise_for_status()
                 data = response.json()
         except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
             return IrisShadowResult(
                 ok=False,
                 model=self.model,
                 latency_ms=int((time.monotonic() - started) * 1000),
-                error=str(exc),
+                error=error.strip(),
             )
 
         latency_ms = int((time.monotonic() - started) * 1000)

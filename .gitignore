@@ -21,6 +21,8 @@ venv/
 # Runtime data
 logs/*
 data/*
+certification/reports/iris-shadow-*.json
+certification/reports/iris-shadow-*.md
 !logs/.gitkeep
 !data/.gitkeep
 

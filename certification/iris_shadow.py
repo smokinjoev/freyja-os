@@ -111,6 +111,15 @@ def summarize(results: list[IrisComparison]) -> dict[str, Any]:
     response_ok = sum(1 for item in results if item.response_ok)
     latencies = [item.iris_latency_ms for item in results if item.iris_latency_ms is not None]
     confidences = [item.iris_confidence for item in results if item.iris_confidence is not None]
+    under_routing = [
+        item.case
+        for item in results
+        if item.iris_target in {"deterministic", "iris"}
+        and (
+            item.director_target in {"local_heavy", "cloud", "isolated_worker"}
+            or item.final_target in {"local_heavy", "cloud", "isolated_worker"}
+        )
+    ]
 
     return {
         "cases": total,
@@ -125,6 +134,9 @@ def summarize(results: list[IrisComparison]) -> dict[str, Any]:
         "iris_latency_ms_mean": statistics.fmean(latencies) if latencies else None,
         "iris_latency_ms_p95": _percentile(latencies, 0.95),
         "iris_confidence_mean": statistics.fmean(confidences) if confidences else None,
+        "iris_confidence_distribution": _confidence_distribution(confidences),
+        "under_routing_cases": under_routing,
+        "under_routing_count": len(under_routing),
     }
 
 
@@ -136,7 +148,17 @@ def _percentile(values: list[int], fraction: float) -> float | None:
     return float(ordered[index])
 
 
+def _confidence_distribution(values: list[float]) -> dict[str, int]:
+    return {
+        "0.00-0.49": sum(1 for value in values if value < 0.5),
+        "0.50-0.74": sum(1 for value in values if 0.5 <= value < 0.75),
+        "0.75-0.89": sum(1 for value in values if 0.75 <= value < 0.9),
+        "0.90-1.00": sum(1 for value in values if value >= 0.9),
+    }
+
+
 def render_markdown(difficulty: str, summary: dict[str, Any], results: list[IrisComparison]) -> str:
+    distribution = summary["iris_confidence_distribution"]
     lines = [
         f"# Iris Shadow Routing Report — {difficulty}",
         "",
@@ -147,6 +169,11 @@ def render_markdown(difficulty: str, summary: dict[str, Any], results: list[Iris
         f"- Successful responses: {summary['successful_response_rate']:.1%}",
         f"- Iris mean latency: {_fmt_ms(summary['iris_latency_ms_mean'])}",
         f"- Iris p95 latency: {_fmt_ms(summary['iris_latency_ms_p95'])}",
+        f"- Confidence distribution: 0.00-0.49={distribution['0.00-0.49']}, "
+        f"0.50-0.74={distribution['0.50-0.74']}, "
+        f"0.75-0.89={distribution['0.75-0.89']}, "
+        f"0.90-1.00={distribution['0.90-1.00']}",
+        f"- Under-routing cases: {summary['under_routing_count']}",
         "",
         "## Disagreements",
         "",
@@ -164,6 +191,18 @@ def render_markdown(difficulty: str, summary: dict[str, Any], results: list[Iris
                 f"| {item.case} | {item.director_target or item.director_provider} | "
                 f"{item.iris_target or 'ERROR'} | {item.final_target or item.final_provider} | "
                 f"{confidence} | {latency} |"
+            )
+    under_routing_cases = set(summary["under_routing_cases"])
+    under_routing = [item for item in results if item.case in under_routing_cases]
+    lines.extend(["", "## Under-Routing", "", "| Case | Director | Iris | Final | Confidence |", "|---|---|---|---|---:|"])
+    if not under_routing:
+        lines.append("| _none_ | | | | |")
+    else:
+        for item in under_routing:
+            confidence = f"{item.iris_confidence:.2f}" if item.iris_confidence is not None else "-"
+            lines.append(
+                f"| {item.case} | {item.director_target or item.director_provider} | "
+                f"{item.iris_target or 'ERROR'} | {item.final_target or item.final_provider} | {confidence} |"
             )
     lines.append("")
     return "\n".join(lines)
