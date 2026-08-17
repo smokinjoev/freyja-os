@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from freyja.config import Settings, settings
-from freyja.memory.models import MemoryPrincipal
+from freyja.memory.models import MemoryPrincipal, PutSharedMemoryRequest
+from freyja.memory.store import MemoryStore, set_store
 from freyja.router import RouteRequest, Router
 from freyja.tools.builtin import register_builtin_tools
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest
@@ -20,6 +21,18 @@ def router() -> Router:
     r.ollama_client = AsyncMock()
     r.openrouter_client = AsyncMock()
     return r
+
+
+@pytest.fixture
+def isolated_memory_store(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    db_path = str(tmp_path / "router_memory.db")
+    monkeypatch.setattr(settings, "memory_database_path", db_path)
+    monkeypatch.setattr(settings, "memory_enabled", True)
+    store = MemoryStore(database_path=db_path, max_messages_per_conversation=1000, retention_days=90)
+    set_store(store)
+    store.initialize()
+    yield store
+    set_store(None)
 
 
 @pytest.fixture
@@ -729,6 +742,134 @@ class TestToolLoop:
         assert result.decision.provider == "deterministic"
         assert result.tool_results[0]["error_code"] == "authorization_denied"
         assert "can't read household state" in result.response
+
+    async def test_calendar_read_slice_is_director_authorized_deterministic(self, router: Router) -> None:
+        principal = MemoryPrincipal(
+            client_type="imessage",
+            client_subject="family-member:abc",
+            conversation_id="imessage-conv:test",
+        )
+
+        result = await router.execute(
+            RouteRequest(
+                request_id="req-calendar-read",
+                prompt="What is on my calendar today?",
+                provider="auto",
+                tools_required=True,
+            ),
+            memory_principal=principal,
+            person_context={"person_id": "joe", "display_name": "Joe", "preferred_name": "Joe"},
+        )
+
+        assert result.decision.request_id == "req-calendar-read"
+        assert result.decision.provider == "deterministic"
+        assert result.decision.reason == "deterministic calendar read capability"
+        assert result.tool_results[0]["tool_name"] == "calendar_today_schedule"
+        assert result.tool_results[0]["success"] is True
+        assert result.runtime_evidence.capability_authorizations == [
+            {
+                "capability": "calendar_today_schedule",
+                "allowed": True,
+                "reason": "principal joe may read household calendar",
+                "required_permission": "household:calendar.read",
+            }
+        ]
+        router.ollama_client.chat.assert_not_called()
+        router.openrouter_client.chat.assert_not_called()
+
+    async def test_calendar_read_slice_survives_inference_outages(self, router: Router) -> None:
+        router.ollama_client.healthy.return_value = False
+        router.reasoning_ollama_client = AsyncMock()
+        router.reasoning_ollama_client.healthy.return_value = False
+        router.openrouter_client.healthy.return_value = False
+        principal = MemoryPrincipal(client_type="signal", client_subject="family-member:abc")
+
+        result = await router.execute(
+            RouteRequest(prompt="What is on my calendar today?", provider="auto", tools_required=True),
+            memory_principal=principal,
+            person_context={"person_id": "joe"},
+        )
+
+        assert result.decision.provider == "deterministic"
+        assert "calendar" in result.response.lower()
+        router.ollama_client.chat.assert_not_called()
+        router.reasoning_ollama_client.chat.assert_not_called()
+        router.openrouter_client.chat.assert_not_called()
+
+    async def test_calendar_read_slice_denies_unknown_principal(self, router: Router) -> None:
+        principal = MemoryPrincipal(client_type="signal", client_subject="family-member:abc")
+
+        result = await router.execute(
+            RouteRequest(prompt="What is on my calendar today?", provider="auto", tools_required=True),
+            memory_principal=principal,
+            person_context={"person_id": "unknown"},
+        )
+
+        assert result.decision.provider == "deterministic"
+        assert result.tool_results[0]["error_code"] == "authorization_denied"
+        assert "can't read calendar state" in result.response
+
+    async def test_memory_read_slice_is_director_authorized_deterministic(
+        self,
+        router: Router,
+        isolated_memory_store,
+    ) -> None:
+        principal = MemoryPrincipal(
+            client_type="imessage",
+            client_subject="family-member:abc",
+            conversation_id="imessage-conv:test",
+        )
+        isolated_memory_store.put_shared_memory(
+            principal,
+            PutSharedMemoryRequest(
+                memory_id="calendar-pref",
+                kind="preference",
+                content="Joe prefers morning calendar events.",
+                source="test",
+                metadata={"domain": "calendar"},
+            ),
+        )
+
+        result = await router.execute(
+            RouteRequest(
+                request_id="req-memory-read",
+                prompt="What do you remember about my preferences?",
+                provider="auto",
+                tools_required=True,
+            ),
+            memory_principal=principal,
+            person_context={"person_id": "joe", "display_name": "Joe", "preferred_name": "Joe"},
+        )
+
+        assert result.decision.request_id == "req-memory-read"
+        assert result.decision.provider == "deterministic"
+        assert result.tool_results[0]["tool_name"] == "memory_recall_shared"
+        assert result.tool_results[0]["success"] is True
+        assert "Joe prefers morning calendar events." in result.response
+        assert result.runtime_evidence.capability_authorizations == [
+            {
+                "capability": "memory_recall_shared",
+                "allowed": True,
+                "reason": "Director-authorized principal may read scoped memory",
+                "required_permission": "personal:memory.read",
+            }
+        ]
+        assert result.runtime_evidence.memory_lookups[0]["operation"] == "shared_capability_recall"
+        router.ollama_client.chat.assert_not_called()
+        router.openrouter_client.chat.assert_not_called()
+
+    async def test_memory_read_slice_denies_unknown_principal(self, router: Router) -> None:
+        principal = MemoryPrincipal(client_type="signal", client_subject="family-member:abc")
+
+        result = await router.execute(
+            RouteRequest(prompt="What do you remember about my preferences?", provider="auto", tools_required=True),
+            memory_principal=principal,
+            person_context={"person_id": "unknown"},
+        )
+
+        assert result.decision.provider == "deterministic"
+        assert result.tool_results[0]["error_code"] == "authorization_denied"
+        assert "can't read memory" in result.response
 
     async def test_tool_request_receives_resolved_person_context(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")

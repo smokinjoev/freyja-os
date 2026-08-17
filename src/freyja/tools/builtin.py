@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 from freyja.memory.store import get_active_store
+from freyja.memory.models import MemoryPrincipal
 from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolImplementation, ToolRiskLevel
@@ -94,6 +95,38 @@ async def _recall_conversation_implementation(request: ToolExecutionRequest) -> 
     }
 
 
+async def _memory_recall_shared_implementation(request: ToolExecutionRequest) -> dict:
+    principal_data = request.metadata.get("memory_principal")
+    if not isinstance(principal_data, dict):
+        return {"memories": [], "count": 0, "error": "Missing memory principal."}
+    try:
+        principal = MemoryPrincipal(**principal_data)
+    except Exception:
+        return {"memories": [], "count": 0, "error": "Invalid memory principal."}
+
+    args = request.arguments or {}
+    limit = max(1, min(int(args.get("limit", 12)), 50))
+    kind = args.get("kind")
+    kinds = [str(kind)] if kind else None
+    query = str(args.get("query") or "").strip().lower()
+    domain = str(args.get("domain") or "").strip().lower()
+    response = get_active_store().list_shared_memories(principal, kinds=kinds, limit=limit)
+    memories = []
+    for memory in response.memories:
+        metadata = memory.metadata or {}
+        memory_domain = str(metadata.get("domain") or "").lower()
+        searchable = " ".join(
+            str(part).lower()
+            for part in (memory.memory_id, memory.kind, memory.content, memory.source, memory_domain)
+        )
+        if query and query not in searchable:
+            continue
+        if domain and domain != memory_domain:
+            continue
+        memories.append(memory.model_dump(mode="json"))
+    return {"memories": memories, "count": len(memories)}
+
+
 _BUILTIN_TOOL_NAMES = (
     "system_health",
     "list_models",
@@ -117,6 +150,7 @@ _BUILTIN_TOOL_NAMES = (
     "identity_resolution",
     "identity_relationships",
     "home_assistant_read_state",
+    "memory_recall_shared",
 )
 
 
@@ -251,6 +285,39 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             tags=["memory", "recall"],
         ),
         _recall_conversation_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="memory_recall_shared",
+            description="Read scoped shared memory for the authenticated principal.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "kind": {"type": "string"},
+                    "domain": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "memories": {"type": "array"},
+                    "count": {"type": "integer"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="atlas.memory",
+            required_permission="personal:memory.read",
+            confirmation_policy="none",
+            audit_policy="request_result",
+            health="available",
+            enabled=True,
+            timeout_seconds=10,
+            tags=["memory", "recall", "shared", "capability"],
+        ),
+        _memory_recall_shared_implementation,
     )
 
 

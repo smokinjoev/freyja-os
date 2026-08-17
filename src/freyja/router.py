@@ -610,6 +610,54 @@ class Router:
                 started,
             )
 
+        calendar_read = self._deterministic_calendar_read_request(request)
+        if calendar_read is not None:
+            privacy = _classify_privacy(request.prompt, request.privacy)
+            decision = RoutingDecision(
+                request_id=request.request_id,
+                provider="deterministic",
+                model="",
+                reason="deterministic calendar read capability",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+            evidence = RuntimeEvidence.from_decision(decision)
+            self._record_connector_origin(evidence, memory_principal)
+            self._record_principal(evidence, memory_principal, person_context)
+            return await self._execute_deterministic_calendar_read(
+                request,
+                decision,
+                calendar_read,
+                memory_principal,
+                person_context,
+                evidence,
+                started,
+            )
+
+        memory_read = self._deterministic_memory_read_request(request)
+        if memory_read is not None:
+            privacy = _classify_privacy(request.prompt, request.privacy)
+            decision = RoutingDecision(
+                request_id=request.request_id,
+                provider="deterministic",
+                model="",
+                reason="deterministic memory read capability",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+            evidence = RuntimeEvidence.from_decision(decision)
+            self._record_connector_origin(evidence, memory_principal)
+            self._record_principal(evidence, memory_principal, person_context)
+            return await self._execute_deterministic_memory_read(
+                request,
+                decision,
+                memory_read,
+                memory_principal,
+                person_context,
+                evidence,
+                started,
+            )
+
         decision = await self.decide(request, spent_this_month=spent_this_month)
         decision.request_id = request.request_id
         self._log_decision(decision, request)
@@ -1005,6 +1053,28 @@ class Router:
             return None
         return {"area": "downstairs", "domain": "light", "entity_id": "light.downstairs"}
 
+    def _deterministic_calendar_read_request(self, request: RouteRequest) -> dict[str, Any] | None:
+        if not request.tools_required:
+            return None
+        prompt = request.prompt.lower()
+        if "today" not in prompt:
+            return None
+        if not any(marker in prompt for marker in ("calendar", "schedule", "agenda")):
+            return None
+        if not any(marker in prompt for marker in ("what", "what's", "whats", "show", "list", "read", "anything")):
+            return None
+        return {}
+
+    def _deterministic_memory_read_request(self, request: RouteRequest) -> dict[str, Any] | None:
+        if not request.tools_required:
+            return None
+        prompt = request.prompt.lower()
+        if not any(marker in prompt for marker in ("remember", "memory", "preference", "preferences")):
+            return None
+        if not any(marker in prompt for marker in ("what", "what's", "whats", "show", "list", "recall", "read")):
+            return None
+        return {"limit": 5}
+
     async def _execute_deterministic_home_read(
         self,
         request: RouteRequest,
@@ -1088,6 +1158,201 @@ class Router:
             response = "No, the downstairs lights are off."
         else:
             response = "I couldn't determine whether the downstairs lights are on."
+        await self._record_memory(request, decision, response, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _execute_deterministic_calendar_read(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        arguments: dict[str, Any],
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence,
+        started: float,
+    ) -> RoutingResult:
+        tool_name = "calendar_today_schedule"
+        definition = self._registry.get_tool(tool_name)
+        if definition is None:
+            return self._routing_result(
+                decision=decision,
+                response="Calendar read capability is not registered.",
+                evidence=evidence,
+                started=started,
+            )
+        execution_request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="atlas_director",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+                "director_authorized": True,
+            },
+        )
+        authorization = self._registry.authorize(definition, execution_request)
+        evidence.capability_authorizations.append(
+            {
+                "capability": tool_name,
+                "allowed": authorization.allowed,
+                "reason": authorization.reason,
+                "required_permission": authorization.required_permission,
+            }
+        )
+        if not authorization.allowed:
+            entry = self._tool_history_entry(
+                tool_name=tool_name,
+                success=False,
+                arguments=arguments,
+                output={},
+                error_code="authorization_denied",
+                public_error_message="Tool authorization denied.",
+            )
+            self._record_tool_evidence(evidence, entry)
+            return self._routing_result(
+                decision=decision,
+                response="I can't read calendar state for that principal.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        result = await self._registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name=tool_name,
+            success=result.success,
+            arguments=arguments,
+            output=result.output,
+            error_code=result.error_code,
+            public_error_message=result.public_error_message,
+            duration_ms=result.duration_ms,
+        )
+        self._record_tool_evidence(evidence, entry)
+        if not result.success:
+            return self._routing_result(
+                decision=decision,
+                response=result.public_error_message or "Calendar read failed.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+        events = result.output.get("events") if isinstance(result.output.get("events"), list) else []
+        if not events:
+            response = "You have no calendar events today."
+        elif len(events) == 1:
+            title = str(events[0].get("title") or "Untitled event")
+            response = f"You have one calendar event today: {title}."
+        else:
+            titles = ", ".join(str(event.get("title") or "Untitled event") for event in events[:5])
+            response = f"You have {len(events)} calendar events today: {titles}."
+        await self._record_memory(request, decision, response, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _execute_deterministic_memory_read(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        arguments: dict[str, Any],
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence,
+        started: float,
+    ) -> RoutingResult:
+        tool_name = "memory_recall_shared"
+        definition = self._registry.get_tool(tool_name)
+        if definition is None:
+            return self._routing_result(
+                decision=decision,
+                response="Memory read capability is not registered.",
+                evidence=evidence,
+                started=started,
+            )
+        execution_request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="atlas_director",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+                "director_authorized": True,
+            },
+        )
+        authorization = self._registry.authorize(definition, execution_request)
+        evidence.capability_authorizations.append(
+            {
+                "capability": tool_name,
+                "allowed": authorization.allowed,
+                "reason": authorization.reason,
+                "required_permission": authorization.required_permission,
+            }
+        )
+        if not authorization.allowed:
+            entry = self._tool_history_entry(
+                tool_name=tool_name,
+                success=False,
+                arguments=arguments,
+                output={},
+                error_code="authorization_denied",
+                public_error_message="Tool authorization denied.",
+            )
+            self._record_tool_evidence(evidence, entry)
+            return self._routing_result(
+                decision=decision,
+                response="I can't read memory for that principal.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        result = await self._registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name=tool_name,
+            success=result.success,
+            arguments=arguments,
+            output=result.output,
+            error_code=result.error_code,
+            public_error_message=result.public_error_message,
+            duration_ms=result.duration_ms,
+        )
+        self._record_tool_evidence(evidence, entry)
+        if not result.success:
+            return self._routing_result(
+                decision=decision,
+                response=result.public_error_message or "Memory read failed.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+        memories = result.output.get("memories") if isinstance(result.output.get("memories"), list) else []
+        if not memories:
+            response = "I don't have matching memory for that principal."
+        elif len(memories) == 1:
+            response = f"I found one memory: {memories[0].get('content', '')}"
+        else:
+            response = f"I found {len(memories)} memories: " + "; ".join(
+                str(memory.get("content") or "") for memory in memories[:5]
+            )
+        evidence.memory_lookups.append(
+            {
+                "operation": "shared_capability_recall",
+                "success": result.success,
+                "count": len(memories),
+            }
+        )
         await self._record_memory(request, decision, response, evidence)
         return self._routing_result(
             decision=decision,

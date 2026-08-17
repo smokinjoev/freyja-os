@@ -105,6 +105,7 @@ def test_discovery(registry: ToolRegistry) -> None:
         "identity_resolution",
         "identity_relationships",
         "home_assistant_read_state",
+        "memory_recall_shared",
     }
 
 
@@ -389,7 +390,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 22
+    assert len(tools) == 23
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
@@ -712,6 +713,20 @@ def test_home_assistant_read_allows_director_authorized_joe(registry: ToolRegist
     )
     assert result.success is True
     assert result.output["state"] == "on"
+
+
+def test_memory_recall_shared_requires_principal(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="memory_recall_shared",
+                arguments={"limit": 5},
+            )
+        )
+    )
+    assert result.success is False
+    assert result.error_code == "authorization_denied"
 
 
 # Helper to run async tool implementations in synchronous tests.

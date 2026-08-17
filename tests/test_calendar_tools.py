@@ -14,6 +14,18 @@ def _dt(hour: int) -> datetime:
     return datetime(2026, 8, 3, hour, tzinfo=UTC)
 
 
+def _director_metadata(person_id: str = "joe") -> dict:
+    return {
+        "director_authorized": True,
+        "memory_principal": {
+            "client_type": "imessage",
+            "client_subject": f"family-member:{person_id}",
+            "conversation_id": f"imessage-conv:{person_id}",
+        },
+        "person": {"person_id": person_id},
+    }
+
+
 @pytest.fixture
 def registry() -> ToolRegistry:
     registry = ToolRegistry(audit_enabled=False)
@@ -45,6 +57,7 @@ async def test_calendar_list_events_tool_uses_service(registry: ToolRegistry, se
                 "end": "2026-08-04T00:00:00+00:00",
                 "member_ids": ["joe"],
             },
+            metadata=_director_metadata(),
         )
     )
 
@@ -65,6 +78,7 @@ async def test_calendar_find_time_tool_returns_ranked_options(registry: ToolRegi
                 "member_ids": ["joe"],
                 "memory_preferences": ["Joe prefers mornings."],
             },
+            metadata=_director_metadata(),
         )
     )
 
@@ -84,6 +98,7 @@ async def test_calendar_create_modify_delete_tools(registry: ToolRegistry, servi
                 "end": "2026-08-03T19:00:00+00:00",
                 "member_ids": ["joe"],
             },
+            metadata=_director_metadata(),
         )
     )
 
@@ -94,11 +109,50 @@ async def test_calendar_create_modify_delete_tools(registry: ToolRegistry, servi
         ToolExecutionRequest(
             tool_name="calendar_modify_event",
             arguments={"event_id": event_id, "updates": {"title": "Late dinner"}},
+            metadata=_director_metadata(),
         )
     )
     deleted = await registry.execute(
-        ToolExecutionRequest(tool_name="calendar_delete_event", arguments={"event_id": event_id})
+        ToolExecutionRequest(
+            tool_name="calendar_delete_event",
+            arguments={"event_id": event_id},
+            metadata=_director_metadata(),
+        )
     )
 
     assert modified.output["event"]["title"] == "Late dinner"
     assert deleted.output["deleted"] is True
+
+
+@pytest.mark.asyncio
+async def test_calendar_read_requires_canonical_principal(registry: ToolRegistry, service: CalendarService) -> None:
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="calendar_list_events",
+            arguments={
+                "start": "2026-08-03T00:00:00+00:00",
+                "end": "2026-08-04T00:00:00+00:00",
+            },
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "authorization_denied"
+
+
+@pytest.mark.asyncio
+async def test_calendar_write_requires_director_authorization(registry: ToolRegistry, service: CalendarService) -> None:
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="calendar_create_event",
+            arguments={
+                "title": "Family dinner",
+                "start": "2026-08-03T18:00:00+00:00",
+                "end": "2026-08-03T19:00:00+00:00",
+            },
+            metadata={"person": {"person_id": "joe"}},
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "authorization_denied"

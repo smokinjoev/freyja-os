@@ -134,11 +134,12 @@ class ToolRegistry:
         person_id = str(person.get("person_id") or "").strip().lower()
         has_principal = bool(principal.get("client_type") and principal.get("client_subject"))
 
-        if permission == "household:home.read":
+        if permission in {"household:home.read", "household:calendar.read"}:
             if person_id in {"joe", "beth", "family"}:
+                resource = "household state" if permission == "household:home.read" else "household calendar"
                 return ToolAuthorizationDecision(
                     allowed=True,
-                    reason=f"principal {person_id} may read household state",
+                    reason=f"principal {person_id} may read {resource}",
                     required_permission=permission,
                 )
             if person_id:
@@ -148,14 +149,47 @@ class ToolRegistry:
                     required_permission=permission,
                 )
             if has_principal and metadata.get("director_authorized") is True:
+                resource = "household state" if permission == "household:home.read" else "household calendar"
                 return ToolAuthorizationDecision(
                     allowed=True,
-                    reason="Director-authorized connector principal may read household state",
+                    reason=f"Director-authorized connector principal may read {resource}",
                     required_permission=permission,
                 )
             return ToolAuthorizationDecision(
                 allowed=False,
                 reason="canonical household principal required",
+                required_permission=permission,
+            )
+
+        if permission == "household:calendar.write":
+            if person_id in {"joe", "beth", "family"} and metadata.get("director_authorized") is True:
+                return ToolAuthorizationDecision(
+                    allowed=True,
+                    reason=f"principal {person_id} may request controlled calendar write",
+                    required_permission=permission,
+                )
+            return ToolAuthorizationDecision(
+                allowed=False,
+                reason="canonical household principal and Director authorization required",
+                required_permission=permission,
+            )
+
+        if permission == "personal:memory.read":
+            if person_id and person_id not in {"joe", "beth", "family"}:
+                return ToolAuthorizationDecision(
+                    allowed=False,
+                    reason="canonical memory principal required",
+                    required_permission=permission,
+                )
+            if has_principal and metadata.get("director_authorized") is True:
+                return ToolAuthorizationDecision(
+                    allowed=True,
+                    reason="Director-authorized principal may read scoped memory",
+                    required_permission=permission,
+                )
+            return ToolAuthorizationDecision(
+                allowed=False,
+                reason="trusted memory principal required",
                 required_permission=permission,
             )
 

@@ -105,6 +105,82 @@ def test_route_trace_for_home_assistant_read_slice(isolated_store, monkeypatch):
     assert trace["capability_authorizations"][0]["allowed"] is True
 
 
+def test_route_trace_for_calendar_read_slice(isolated_store):
+    response = client.post(
+        "/route",
+        json={
+            "request_id": "req-api-calendar-read",
+            "prompt": "What is on my calendar today?",
+            "provider": "auto",
+            "tools_required": True,
+            "include_trace": True,
+        },
+        headers={
+            **PRINCIPAL_HEADERS,
+            "X-Freyja-Person-Id": "joe",
+            "X-Freyja-Person-Display-Name": "Joe",
+            "X-Freyja-Person-Preferred-Name": "Joe",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["request_id"] == "req-api-calendar-read"
+    assert data["provider"] == "deterministic"
+    assert "calendar" in data["response"].lower()
+    trace = data["trace"]
+    assert trace["request_id"] == "req-api-calendar-read"
+    assert trace["person"]["person_id"] == "joe"
+    assert trace["capability_authorizations"][0]["capability"] == "calendar_today_schedule"
+    assert trace["capability_authorizations"][0]["allowed"] is True
+
+
+def test_route_trace_for_memory_read_slice(isolated_store):
+    principal = MemoryPrincipal(
+        client_type="signal",
+        client_subject="signal:abc",
+        account_owner="signal-owner:main",
+        conversation_id="signal-conv:abc",
+    )
+    isolated_store.put_shared_memory(
+        principal,
+        PutSharedMemoryRequest(
+            memory_id="timezone",
+            kind="preference",
+            content="Joe prefers Eastern time.",
+            source="test",
+            metadata={"domain": "profile"},
+        ),
+    )
+    response = client.post(
+        "/route",
+        json={
+            "request_id": "req-api-memory-read",
+            "prompt": "What do you remember about my preferences?",
+            "provider": "auto",
+            "tools_required": True,
+            "include_trace": True,
+        },
+        headers={
+            **PRINCIPAL_HEADERS,
+            "X-Freyja-Person-Id": "joe",
+            "X-Freyja-Person-Display-Name": "Joe",
+            "X-Freyja-Person-Preferred-Name": "Joe",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["request_id"] == "req-api-memory-read"
+    assert data["provider"] == "deterministic"
+    assert "Joe prefers Eastern time." in data["response"]
+    trace = data["trace"]
+    assert trace["request_id"] == "req-api-memory-read"
+    assert trace["capability_authorizations"][0]["capability"] == "memory_recall_shared"
+    assert trace["capability_authorizations"][0]["allowed"] is True
+    assert trace["memory_lookups"][0]["operation"] == "shared_capability_recall"
+
+
 def test_route_memory_failure_does_not_crash(isolated_store):
     def broken_append(request):
         raise RuntimeError("memory append failed")

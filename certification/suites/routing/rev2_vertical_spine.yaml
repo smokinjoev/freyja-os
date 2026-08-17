@@ -42,3 +42,84 @@ cases:
       tool_called: home_assistant_read_state
       capability_denied: home_assistant_read_state
       response_contains: can't read household state
+
+  - name: joe-calendar-read
+    difficulty: smoke
+    prompt: "What is on my calendar today?"
+    route_request:
+      request_id: "cert-rev2-calendar-read-joe"
+      provider: auto
+      tools_required: true
+      certification_memory_principal:
+        client_type: imessage
+        client_subject: family-member:certjoe
+        conversation_id: imessage-conv:certjoe
+      certification_person:
+        person_id: joe
+        display_name: Joe
+        preferred_name: Joe
+    expects:
+      provider: deterministic
+      tool_called: calendar_today_schedule
+      capability_authorized: calendar_today_schedule
+      response_contains: calendar
+
+  - name: unknown-calendar-read-denied
+    difficulty: smoke
+    prompt: "What is on my calendar today?"
+    route_request:
+      request_id: "cert-rev2-calendar-read-unknown"
+      provider: auto
+      tools_required: true
+      certification_memory_principal:
+        client_type: signal
+        client_subject: family-member:unknown
+        conversation_id: signal-conv:unknown
+      certification_person:
+        person_id: unknown
+    expects:
+      provider: deterministic
+      tool_called: calendar_today_schedule
+      capability_denied: calendar_today_schedule
+      response_contains: can't read calendar state
+
+  - name: joe-memory-read-no-match
+    difficulty: smoke
+    prompt: "What do you remember about my preferences?"
+    route_request:
+      request_id: "cert-rev2-memory-read-joe"
+      provider: auto
+      tools_required: true
+      certification_memory_principal:
+        client_type: imessage
+        client_subject: family-member:certjoe
+        conversation_id: imessage-conv:certjoe
+      certification_person:
+        person_id: joe
+        display_name: Joe
+        preferred_name: Joe
+    expects:
+      provider: deterministic
+      tool_called: memory_recall_shared
+      capability_authorized: memory_recall_shared
+      memory_lookup: true
+      response_contains: matching memory
+
+  - name: unknown-memory-read-denied
+    difficulty: smoke
+    prompt: "What do you remember about my preferences?"
+    route_request:
+      request_id: "cert-rev2-memory-read-unknown"
+      provider: auto
+      tools_required: true
+      certification_memory_principal:
+        client_type: signal
+        client_subject: family-member:unknown
+        conversation_id: signal-conv:unknown
+      certification_person:
+        person_id: unknown
+    expects:
+      provider: deterministic
+      tool_called: memory_recall_shared
+      capability_denied: memory_recall_shared
+      response_contains: can't read memory
