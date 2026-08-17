@@ -1,0 +1,109 @@
+name: inference-layer-routing
+category: routing
+difficulty: standard
+description: Validates Atlas routing across Iris, Hera presence ingress, Odin heavy local reasoning, privacy-internal, and cloud-explicit layers.
+cases:
+  - {name: iris-routine-001, difficulty: smoke, prompt: "Say hello in one sentence.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-002, difficulty: smoke, prompt: "Summarize this reminder: take out trash.", route_request: {task_type: summarize}, expects: {provider: ollama}}
+  - {name: iris-routine-003, difficulty: smoke, prompt: "Classify this as urgent or not: buy milk.", route_request: {task_type: classify}, expects: {provider: ollama}}
+  - {name: iris-routine-004, difficulty: smoke, prompt: "Extract the date from: dinner tomorrow.", route_request: {task_type: extract}, expects: {provider: ollama}}
+  - {name: iris-routine-005, difficulty: smoke, prompt: "Rewrite this politely: send the file.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-006, difficulty: standard, prompt: "What is a concise grocery list title?", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-007, difficulty: standard, prompt: "Turn this note into a short checklist.", route_request: {task_type: summarize}, expects: {provider: ollama}}
+  - {name: iris-routine-008, difficulty: standard, prompt: "Is this message friendly or formal?", route_request: {task_type: classification}, expects: {provider: ollama}}
+  - {name: iris-routine-009, difficulty: standard, prompt: "Draft a quick thank-you text.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-010, difficulty: standard, prompt: "Name three dinner ideas.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-011, difficulty: standard, prompt: "Summarize a two-line household note.", route_request: {task_type: summary}, expects: {provider: ollama}}
+  - {name: iris-routine-012, difficulty: standard, prompt: "Extract action items from a short note.", route_request: {task_type: extraction}, expects: {provider: ollama}}
+  - {name: iris-routine-013, difficulty: standard, prompt: "Classify a request as calendar or reminder.", route_request: {task_type: classification}, expects: {provider: ollama}}
+  - {name: iris-routine-014, difficulty: standard, prompt: "Give a simple bedtime reminder wording.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-015, difficulty: standard, prompt: "Paraphrase: I will be there soon.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-016, difficulty: standard, prompt: "Make this warmer: meeting moved.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-017, difficulty: standard, prompt: "Identify whether this asks for a tool: check lights.", route_request: {task_type: classify}, expects: {provider: ollama}}
+  - {name: iris-routine-018, difficulty: standard, prompt: "Summarize a weather forecast sentence.", route_request: {task_type: summarize}, expects: {provider: ollama}}
+  - {name: iris-routine-019, difficulty: standard, prompt: "Generate a short label for errands.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-020, difficulty: standard, prompt: "Answer briefly: what is a checklist?", route_request: {task_type: chat}, expects: {provider: ollama}}
+
+  - {name: hera-presence-001, difficulty: smoke, prompt: "Kitchen display heard wake word; greet the room.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-002, difficulty: smoke, prompt: "Hera avatar needs a short listening acknowledgement.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-003, difficulty: smoke, prompt: "Kitchen presence node asks for a concise status phrase.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-004, difficulty: smoke, prompt: "Living room screen wants a simple response to hello.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-005, difficulty: smoke, prompt: "Hera should say she is checking with Atlas.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-006, difficulty: standard, prompt: "Wake word node asks for a short no-tool answer.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-007, difficulty: standard, prompt: "Kitchen avatar needs a one-line apology.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-008, difficulty: standard, prompt: "Presence display asks for a friendly idle message.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-009, difficulty: standard, prompt: "Hera asks Atlas to classify a simple household note.", route_request: {task_type: classification}, expects: {provider: ollama}}
+  - {name: hera-presence-010, difficulty: standard, prompt: "Kitchen microphone transcript needs cleanup.", route_request: {task_type: extraction}, expects: {provider: ollama}}
+  - {name: hera-presence-011, difficulty: standard, prompt: "Hera needs a short phrase while Odin warms.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-012, difficulty: standard, prompt: "Presence node asks if a simple request needs cloud.", route_request: {task_type: classify}, expects: {provider: ollama}}
+  - {name: hera-presence-013, difficulty: standard, prompt: "Kitchen screen asks for a simple timer wording.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-014, difficulty: standard, prompt: "Hera asks for a brief room-status caption.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-015, difficulty: standard, prompt: "Presence node wants a safe response to unclear speech.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-016, difficulty: standard, prompt: "Kitchen avatar asks for a neutral acknowledgement.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-017, difficulty: standard, prompt: "Hera display asks for a short family-friendly joke.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-018, difficulty: standard, prompt: "Presence transcript asks for punctuation cleanup.", route_request: {task_type: extraction}, expects: {provider: ollama}}
+  - {name: hera-presence-019, difficulty: standard, prompt: "Hera asks for a concise wake acknowledgement.", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: hera-presence-020, difficulty: standard, prompt: "Kitchen node asks for a simple route explanation.", route_request: {task_type: summarize}, expects: {provider: ollama}}
+
+  - {name: odin-heavy-001, difficulty: smoke, prompt: "Debug this stack trace and propose a patch.", route_request: {task_type: debug}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-002, difficulty: smoke, prompt: "Write code to fix a race condition.", route_request: {task_type: coding}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-003, difficulty: smoke, prompt: "Design a system for multi-node routing.", route_request: {task_type: architecture}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-004, difficulty: smoke, prompt: "Plan the implementation for a privacy layer.", route_request: {task_type: planning}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-005, difficulty: smoke, prompt: "Refactor this module while preserving behavior.", route_request: {task_type: coding}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-006, difficulty: standard, prompt: "Analyze a difficult production incident timeline.", route_request: {task_type: reasoning}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-007, difficulty: standard, prompt: "Choose the right tool strategy for a complex migration.", route_request: {task_type: tool_selection}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-008, difficulty: standard, prompt: "Compare three database schemas for a refactor.", route_request: {task_type: architecture}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-009, difficulty: standard, prompt: "Debug a flaky async test and propose fixes.", route_request: {task_type: debugging}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-010, difficulty: standard, prompt: "Write a patch plan for a failing CI pipeline.", route_request: {task_type: coding}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-011, difficulty: standard, prompt: "Reason through a multi-step calendar conflict algorithm.", route_request: {task_type: reasoning}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-012, difficulty: standard, prompt: "Design a capability broker authorization model.", route_request: {task_type: architecture}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-013, difficulty: standard, prompt: "Plan a safe rollout across Atlas Iris Hera and Odin.", route_request: {task_type: planning}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-014, difficulty: standard, prompt: "Debug a memory corruption report from logs.", route_request: {task_type: debug}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-015, difficulty: standard, prompt: "Write code for a new routing verifier.", route_request: {task_type: code}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-016, difficulty: standard, prompt: "Refactor a large class into smaller services.", route_request: {task_type: refactor}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-017, difficulty: standard, prompt: "Perform advanced math reasoning for schedule optimization.", route_request: {task_type: math}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-018, difficulty: standard, prompt: "Plan tool selection for email document and calendar workflows.", route_request: {task_type: tool-selection}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-019, difficulty: standard, prompt: "Diagnose architecture tradeoffs in a distributed assistant.", route_request: {task_type: architectural}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-020, difficulty: standard, prompt: "Debug this bug and propose a minimal patch.", route_request: {task_type: debug}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-021, difficulty: standard, prompt: "Write code to add model residency tracking.", route_request: {task_type: coding}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-022, difficulty: standard, prompt: "Design a system for private worker isolation.", route_request: {task_type: architecture}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-023, difficulty: standard, prompt: "Plan the implementation of Atlas policy gates.", route_request: {task_type: planning}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-024, difficulty: standard, prompt: "Debug a timeout in Ollama structured output.", route_request: {task_type: debugging}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-025, difficulty: standard, prompt: "Refactor routing tests for 100 prompts.", route_request: {task_type: coding}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-026, difficulty: standard, prompt: "Analyze a large context repository migration.", route_request: {task_type: large_context, context_size: 12000}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-027, difficulty: standard, prompt: "Reason about a difficult privacy threat model.", route_request: {task_type: complex}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-028, difficulty: standard, prompt: "Design a fallback policy for unreliable local models.", route_request: {task_type: advanced}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-029, difficulty: standard, prompt: "Write an implementation plan for Odin deployment.", route_request: {task_type: planning}, expects: {provider: local_reasoning}}
+  - {name: odin-heavy-030, difficulty: standard, prompt: "Debug a stack trace involving async routing middleware.", route_request: {task_type: debug}, expects: {provider: local_reasoning}}
+
+  - {name: privacy-internal-001, difficulty: smoke, prompt: "My SSN is 123-45-6789; summarize this safely.", route_request: {privacy: sensitive}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-002, difficulty: smoke, prompt: "Use my private family context to draft a short note.", route_request: {privacy: private}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-003, difficulty: smoke, prompt: "A prompt contains a password; classify it.", route_request: {privacy: sensitive, task_type: classify}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-004, difficulty: smoke, prompt: "Private calendar detail needs a short summary.", route_request: {privacy: private, task_type: summarize}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-005, difficulty: smoke, prompt: "Confidential note: extract one action item.", route_request: {privacy: sensitive, task_type: extraction}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-006, difficulty: standard, prompt: "Private address appears in a simple request.", route_request: {privacy: private}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-007, difficulty: standard, prompt: "Bank account note needs a short label.", route_request: {privacy: sensitive}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-008, difficulty: standard, prompt: "Medical appointment detail needs a reminder title.", route_request: {privacy: sensitive}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-009, difficulty: standard, prompt: "Private household preference needs classification.", route_request: {privacy: private, task_type: classification}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-010, difficulty: standard, prompt: "Secret token appears; say what routing class applies.", route_request: {privacy: sensitive}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-011, difficulty: standard, prompt: "Debug this private stack trace with an API key.", route_request: {privacy: sensitive, task_type: debug}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-012, difficulty: standard, prompt: "Write code using private internal architecture notes.", route_request: {privacy: private, task_type: coding}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-013, difficulty: standard, prompt: "Design a system using confidential family context.", route_request: {privacy: sensitive, task_type: architecture}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-014, difficulty: standard, prompt: "Plan implementation for private account migration.", route_request: {privacy: private, task_type: planning}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-015, difficulty: standard, prompt: "Analyze difficult medical scheduling constraints privately.", route_request: {privacy: sensitive, task_type: reasoning}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-016, difficulty: standard, prompt: "Refactor code that contains a private endpoint.", route_request: {privacy: sensitive, task_type: refactor}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-017, difficulty: standard, prompt: "Debug private logs from Atlas Director.", route_request: {privacy: private, task_type: debugging}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-018, difficulty: standard, prompt: "Plan tool selection for confidential documents.", route_request: {privacy: sensitive, task_type: tool_selection}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-019, difficulty: standard, prompt: "Do advanced reasoning over private memory.", route_request: {privacy: private, task_type: advanced}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-020, difficulty: standard, prompt: "Debug a secret-bearing integration failure.", route_request: {privacy: sensitive, task_type: debug}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+
+  - {name: cloud-explicit-001, difficulty: smoke, prompt: "For public trivia, use cloud if explicitly requested.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-002, difficulty: smoke, prompt: "Public benchmark asks for frontier comparison.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-003, difficulty: standard, prompt: "Public research summary with no private data.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-004, difficulty: standard, prompt: "Public poem generation explicitly cloud allowed.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-005, difficulty: standard, prompt: "Public brainstorming request explicitly cloud allowed.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-006, difficulty: standard, prompt: "Public explanation request explicitly cloud allowed.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-007, difficulty: standard, prompt: "Public long-form rewrite explicitly cloud allowed.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-008, difficulty: standard, prompt: "Public non-sensitive comparison explicitly cloud allowed.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-009, difficulty: standard, prompt: "Public generic coding advice explicitly cloud allowed.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}
+  - {name: cloud-explicit-010, difficulty: standard, prompt: "Public creative writing explicitly cloud allowed.", route_request: {provider: cloud, privacy: public}, expects: {provider: openrouter}}

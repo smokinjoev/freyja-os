@@ -139,6 +139,8 @@ CLOUD_TASK_TYPES = {
     "coding",
     "debug",
     "debugging",
+    "refactor",
+    "refactoring",
     "plan",
     "planning",
     "architecture",
@@ -232,6 +234,9 @@ def _cloud_score(request: RouteRequest) -> int:
 
 def _local_reasoning_score(request: RouteRequest) -> int:
     score = _cloud_score(request)
+    task = (request.task_type or "").lower()
+    if any(ct in task for ct in CLOUD_TASK_TYPES):
+        score += 2
     prompt = request.prompt.lower()
     if any(pattern in prompt for pattern in COMPLEX_PROMPT_PATTERNS):
         score += 2
@@ -554,9 +559,9 @@ class Router:
         )
 
     def _public_error(self, provider: str, fallback_attempts: list[dict[str, Any]]) -> str:
-        if any(a.get("provider") == "openrouter" for a in fallback_attempts) and any(
-            a.get("provider") == "ollama" for a in fallback_attempts
-        ):
+        has_cloud_attempt = any(a.get("provider") == "openrouter" for a in fallback_attempts)
+        has_local_attempt = any(a.get("provider") in {"ollama", "local_reasoning"} for a in fallback_attempts)
+        if has_cloud_attempt and has_local_attempt:
             return PUBLIC_ERROR_MESSAGES["none_available"]
         if provider in {"openrouter", "cloud"}:
             return PUBLIC_ERROR_MESSAGES["openrouter"]
