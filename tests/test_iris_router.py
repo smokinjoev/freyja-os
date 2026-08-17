@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from freyja.iris_router import IrisRouterClient
+from freyja.iris_router import IRIS_ROUTER_SYSTEM_PROMPT, IrisRouterClient
 
 
 class _Response:
@@ -28,6 +28,11 @@ async def test_healthy_requires_configured_model() -> None:
     with patch("freyja.iris_router.httpx.AsyncClient") as async_client:
         async_client.return_value.__aenter__.return_value = mock_http
         assert await client.healthy() is True
+
+
+def test_system_prompt_prefers_upward_routing_when_uncertain() -> None:
+    assert "When uncertain, route upward" in IRIS_ROUTER_SYSTEM_PROMPT
+    assert "avoid under-routing" in IRIS_ROUTER_SYSTEM_PROMPT
 
 
 async def test_warm_requests_indefinite_residency() -> None:

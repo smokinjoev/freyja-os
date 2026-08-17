@@ -43,6 +43,7 @@ sensitivity: public, routine, private, sensitive.
 preferred_target: deterministic, iris, local_heavy, isolated_worker, cloud.
 confidence must be a decimal from 0.0 to 1.0, for example 0.75.
 reason must be 3 to 8 words.
+When uncertain, route upward to the more capable tier; avoid under-routing.
 No markdown, prose, or extra keys. Director is final authority.
 """
 
