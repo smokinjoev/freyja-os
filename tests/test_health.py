@@ -75,17 +75,19 @@ def test_ollama_health_reachable() -> None:
 def test_local_reasoning_health_available(monkeypatch) -> None:
     from freyja.config import settings
 
+    monkeypatch.setattr(settings, "ollama_reasoning_base_url", "http://odin:11434")
     monkeypatch.setattr(settings, "ollama_reasoning_model", "gpt-oss:20b")
     with patch("freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock) as mock_healthy, patch(
-        "freyja.ollama_client.OllamaClient.tags", new_callable=AsyncMock
-    ) as mock_tags:
+        "freyja.ollama_client.OllamaClient.has_model", new_callable=AsyncMock
+    ) as mock_has_model:
         mock_healthy.return_value = True
-        mock_tags.return_value = {"models": [{"name": "gpt-oss:20b"}]}
+        mock_has_model.return_value = True
         response = client.get("/local-reasoning/health")
 
     assert response.status_code == 200
     data = response.json()
     assert data["local_reasoning_reachable"] is True
+    assert data["base_url"] == "http://odin:11434"
     assert data["model"] == "gpt-oss:20b"
     assert data["model_available"] is True
 
@@ -102,6 +104,26 @@ def test_local_reasoning_health_unavailable(monkeypatch) -> None:
     data = response.json()
     assert data["local_reasoning_reachable"] is False
     assert data["ollama_reachable"] is False
+
+
+def test_local_reasoning_warm(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "ollama_reasoning_base_url", "http://odin:11434")
+    monkeypatch.setattr(settings, "ollama_reasoning_model", "gpt-oss:20b")
+    with patch("freyja.ollama_client.OllamaClient.warm", new_callable=AsyncMock) as mock_warm:
+        mock_warm.return_value = True
+        response = client.post("/local-reasoning/warm")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data == {
+        "warmed": True,
+        "base_url": "http://odin:11434",
+        "model": "gpt-oss:20b",
+        "keep_alive": "-1",
+    }
+    mock_warm.assert_awaited_once_with("gpt-oss:20b")
 
 
 def test_ollama_models_lists_models() -> None:

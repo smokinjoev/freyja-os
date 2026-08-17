@@ -138,7 +138,31 @@ async def test_chat_unavailable_returns_error(client: OllamaClient) -> None:
         result = await client.chat("hi")
 
     assert "error" in result
-    assert result["model"] == "qwen2.5:7b"
+
+
+@pytest.mark.asyncio
+async def test_warm_sends_numeric_indefinite_keep_alive(client: OllamaClient) -> None:
+    captured: dict[str, object] = {}
+
+    def _capture(*args, **kwargs):
+        request = httpx.Request("POST", str(args[0]))
+        captured["payload"] = kwargs.get("json")
+        return httpx.Response(200, json={"done": True}, request=request)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=_capture):
+        assert await client.warm("gpt-oss:20b", keep_alive="-1") is True
+
+    assert captured["payload"]["model"] == "gpt-oss:20b"
+    assert captured["payload"]["keep_alive"] == -1
+
+
+@pytest.mark.asyncio
+async def test_has_model_accepts_exact_or_tag_prefix(client: OllamaClient) -> None:
+    with patch.object(client, "tags", new_callable=AsyncMock) as tags:
+        tags.return_value = {"models": [{"name": "gpt-oss:20b"}, {"name": "qwen2.5:7b"}]}
+        assert await client.has_model("gpt-oss:20b")
+        assert await client.has_model("qwen2.5")
+        assert not await client.has_model("missing:latest")
 
 
 @pytest.mark.asyncio

@@ -241,12 +241,17 @@ def _local_reasoning_score(request: RouteRequest) -> int:
 class Router:
     def __init__(self, registry: ToolRegistry | None = None) -> None:
         self.ollama_client: Any | None = None
+        self.reasoning_ollama_client: Any | None = None
         self.openrouter_client: Any | None = None
         self._registry = registry or get_registry()
 
     def register_clients(self, ollama_client: Any, openrouter_client: Any) -> None:
         self.ollama_client = ollama_client
+        self.reasoning_ollama_client = ollama_client
         self.openrouter_client = openrouter_client
+
+    def register_reasoning_client(self, reasoning_ollama_client: Any) -> None:
+        self.reasoning_ollama_client = reasoning_ollama_client
 
     def _prompt_for_provider(
         self,
@@ -349,6 +354,11 @@ class Router:
 
     def _reasoning_model(self, requested: str | None = None) -> str:
         return requested or settings.ollama_reasoning_model
+
+    def _ollama_for_provider(self, provider: str) -> Any | None:
+        if provider == "local_reasoning":
+            return self.reasoning_ollama_client or self.ollama_client
+        return self.ollama_client
 
     def _approved_model(self, requested: str | None) -> tuple[str, str]:
         approved = settings.approved_openrouter_models
@@ -576,7 +586,8 @@ class Router:
             )
 
         if decision.provider in {"ollama", "local_reasoning"}:
-            if self.ollama_client is None:
+            ollama_client = self._ollama_for_provider(decision.provider)
+            if ollama_client is None:
                 decision.reason += f"; {decision.provider} client unavailable"
                 decision.public_error_message = PUBLIC_ERROR_MESSAGES["ollama"]
                 return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
@@ -584,14 +595,14 @@ class Router:
                 return await self._execute_with_tools(
                     request,
                     decision,
-                    self.ollama_client,
+                    ollama_client,
                     self._registry,
                     memory_principal,
                     person_context,
                     evidence,
                     started,
                 )
-            response = await self.ollama_client.chat(
+            response = await ollama_client.chat(
                 prompt=self._prompt_for_provider(request, decision.provider, memory_principal, evidence),
                 model=decision.model or None,
                 output_tokens=settings.ollama_default_output_tokens if decision.provider == "local_reasoning" else None,

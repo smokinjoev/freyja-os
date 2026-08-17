@@ -50,8 +50,13 @@ async def require_connector_auth(request: Request, call_next):
     return await call_next(request)
 
 ollama = OllamaClient()
+reasoning_ollama = OllamaClient(
+    base_url=settings.ollama_reasoning_base_url or settings.ollama_base_url,
+    model=settings.ollama_reasoning_model,
+)
 openrouter = OpenRouterClient()
 router.register_clients(ollama, openrouter)
+router.register_reasoning_client(reasoning_ollama)
 
 app.include_router(memory_router)
 app.include_router(tools_router)
@@ -92,20 +97,25 @@ async def ollama_health() -> dict[str, bool | str]:
 
 @app.get("/local-reasoning/health")
 async def local_reasoning_health() -> dict[str, bool | str]:
-    healthy = await ollama.healthy()
-    model_available = False
-    if healthy:
-        tags = await ollama.tags()
-        if "error" not in tags:
-            model_available = settings.ollama_reasoning_model in {
-                model.get("name", "") for model in tags.get("models", [])
-            }
+    healthy = await reasoning_ollama.healthy()
+    model_available = await reasoning_ollama.has_model(settings.ollama_reasoning_model) if healthy else False
     return {
         "local_reasoning_reachable": healthy and model_available,
         "ollama_reachable": healthy,
-        "base_url": settings.ollama_base_url,
+        "base_url": settings.ollama_reasoning_base_url or settings.ollama_base_url,
         "model": settings.ollama_reasoning_model,
         "model_available": model_available,
+    }
+
+
+@app.post("/local-reasoning/warm")
+async def local_reasoning_warm() -> dict[str, bool | str]:
+    warmed = await reasoning_ollama.warm(settings.ollama_reasoning_model)
+    return {
+        "warmed": warmed,
+        "base_url": settings.ollama_reasoning_base_url or settings.ollama_base_url,
+        "model": settings.ollama_reasoning_model,
+        "keep_alive": "-1",
     }
 
 

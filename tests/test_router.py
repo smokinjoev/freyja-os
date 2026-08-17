@@ -219,6 +219,23 @@ async def test_sensitive_complex_request_routes_internal_heavy(router: Router, r
     router.openrouter_client.chat.assert_not_called()
 
 
+async def test_local_reasoning_uses_dedicated_reasoning_client(router: Router, reset_settings) -> None:
+    reasoning_client = AsyncMock()
+    reasoning_client.chat.return_value = {
+        "model": "gpt-oss:20b",
+        "message": {"content": "heavy"},
+    }
+    router.register_reasoning_client(reasoning_client)
+
+    req = RouteRequest(prompt="Debug this stack trace", task_type="debug")
+    result = await router.execute(req)
+
+    assert result.decision.provider == "local_reasoning"
+    assert result.response == "heavy"
+    reasoning_client.chat.assert_awaited_once()
+    router.ollama_client.chat.assert_not_called()
+
+
 async def test_runtime_evidence_records_connector_origin(router: Router) -> None:
     router.ollama_client.healthy.return_value = True
     router.ollama_client.chat.return_value = {

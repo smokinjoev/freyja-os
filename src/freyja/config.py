@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     freyja_connector_token: str = ""
 
     ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_reasoning_base_url: str = ""
     ollama_model: str = "qwen2.5:7b"
     ollama_chat_model: str = "qwen2.5:7b"
     ollama_classification_model: str = "qwen2.5:1.5b"

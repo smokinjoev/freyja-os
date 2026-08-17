@@ -8,8 +8,9 @@ authorize tools, mutate responses, or block requests.
 
 The existing Director routing path remains authoritative during the shadow
 period. `OLLAMA_BASE_URL` continues to identify the currently configured
-execution provider while `IRIS_OLLAMA_BASE_URL` points specifically to Iris's
-private Ollama endpoint.
+routine execution provider while `OLLAMA_REASONING_BASE_URL` identifies Odin's
+heavy local reasoning endpoint once available. `IRIS_OLLAMA_BASE_URL` points
+specifically to Iris's private Ollama endpoint.
 
 ## Private access
 
@@ -37,6 +38,11 @@ validation. Full JSON-schema generation was too slow for the 4 second shadow
 budget on the resident 7B model; compact JSON mode keeps the recommendation
 non-authoritative while preserving malformed-output rejection.
 
+Set `OLLAMA_REASONING_BASE_URL` to Odin's private Tailscale Ollama endpoint
+when the Linux heavy inference node is online. Leave it blank or equal to
+`OLLAMA_BASE_URL` until then. Atlas routes `local_reasoning` requests to this
+endpoint and keeps routine local chat on `OLLAMA_BASE_URL`.
+
 ## Start and verify
 
 ```bash
@@ -47,6 +53,8 @@ docker compose --env-file deploy/compose/director/.env \
 docker compose --env-file deploy/compose/director/.env \
   -f deploy/compose/director/compose.yaml up -d --build
 curl --fail http://<atlas-tailscale-host>:8000/health
+curl --fail http://<atlas-tailscale-host>:8000/local-reasoning/health
+curl --fail -X POST http://<atlas-tailscale-host>:8000/local-reasoning/warm
 curl --fail http://<atlas-tailscale-host>:8000/iris-router/health
 curl --fail -X POST http://<atlas-tailscale-host>:8000/iris-router/warm
 ```
