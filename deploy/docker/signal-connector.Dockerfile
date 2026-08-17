@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
+COPY certification ./certification
 COPY src ./src
 COPY connectors ./connectors
 COPY scripts/run-signal-connector.py ./scripts/run-signal-connector.py

@@ -6,6 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
+COPY certification ./certification
+COPY connectors ./connectors
 COPY src ./src
 COPY config ./config
 
