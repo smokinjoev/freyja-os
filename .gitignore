@@ -21,10 +21,13 @@ venv/
 # Runtime data
 logs/*
 data/*
+certification/reports/*.json
+certification/reports/*.md
 certification/reports/iris-shadow-*.json
 certification/reports/iris-shadow-*.md
 !logs/.gitkeep
 !data/.gitkeep
+!certification/reports/.gitkeep
 
 # macOS
 .DS_Store
