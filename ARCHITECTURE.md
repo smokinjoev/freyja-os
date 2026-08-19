@@ -554,6 +554,25 @@ extraction and calendar modification remain separate capabilities: confirmed
 events may become calendar candidates, but calendar writes require their own
 confidence and permission rules.
 
+Apple Calendar writes use the same Director tool path as every other
+consequential action:
+
+```text
+Family/Gmail/iMessage request
+      -> Atlas Director
+      -> Capability Broker approval check
+      -> calendar_create_event / calendar_modify_event / calendar_delete_event
+      -> AppleCalendarProvider on Iris
+      -> EventKit calendar store under Freyja's Apple identity
+```
+
+The live Apple provider is opt-in with `CALENDAR_DEFAULT_PROVIDER=apple` and
+`APPLE_CALENDAR_ENABLED=true`. Calendar aliases map canonical Freyja people
+such as `joe`, `beth`, and `family` onto Apple calendar names such as `Family`.
+Read operations may run for authorized household principals. Writes require a
+canonical household principal, Director authorization, and explicit approval;
+conversation-derived memory candidates do not bypass that approval boundary.
+
 ---
 
 ## 13. Communications and MacAgent

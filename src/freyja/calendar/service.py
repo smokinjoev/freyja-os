@@ -16,8 +16,14 @@ class CalendarService:
         providers: dict[str, CalendarProvider] | None = None,
         members: list[CalendarMember] | None = None,
         identity_service: IdentityService | None = None,
+        default_provider_name: str = "memory",
     ) -> None:
         self._providers = providers or {"memory": InMemoryCalendarProvider()}
+        if default_provider_name not in self._providers and len(self._providers) == 1:
+            default_provider_name = next(iter(self._providers))
+        if default_provider_name not in self._providers:
+            raise ValueError(f"Calendar provider '{default_provider_name}' is not configured")
+        self._default_provider_name = default_provider_name
         self._identity_service = identity_service or default_identity_service()
         self._members = {member.canonical_person_id: member for member in members or _default_family()}
 
@@ -100,12 +106,13 @@ class CalendarService:
         end: datetime,
         member_ids: list[str] | None = None,
         calendar_id: str | None = None,
-        provider_name: str = "memory",
+        provider_name: str | None = None,
         location: str | None = None,
         description: str | None = None,
     ) -> CalendarEvent:
         members = self._selected_members(member_ids)
         target_calendar = calendar_id or members[0].all_calendar_ids()[0]
+        provider_name = provider_name or self._default_provider_name
         provider = self._providers[provider_name]
         return await provider.create_event(
             CalendarEvent(
@@ -126,15 +133,17 @@ class CalendarService:
         *,
         event_id: str,
         updates: dict,
-        provider_name: str = "memory",
+        provider_name: str | None = None,
     ) -> CalendarEvent | None:
         updates = dict(updates)
         for key in ("start", "end"):
             if isinstance(updates.get(key), str):
                 updates[key] = parse_datetime(updates[key])
+        provider_name = provider_name or self._default_provider_name
         return await self._providers[provider_name].modify_event(event_id, updates)
 
-    async def delete_event(self, *, event_id: str, provider_name: str = "memory") -> bool:
+    async def delete_event(self, *, event_id: str, provider_name: str | None = None) -> bool:
+        provider_name = provider_name or self._default_provider_name
         return await self._providers[provider_name].delete_event(event_id)
 
     async def find_time(
@@ -187,7 +196,7 @@ class CalendarService:
         duration_minutes: int,
         member_ids: list[str] | None = None,
         memory_preferences: list[str] | None = None,
-        provider_name: str = "memory",
+        provider_name: str | None = None,
     ) -> dict:
         events = await self.list_events(start=search_start - timedelta(days=7), end=search_end + timedelta(days=7))
         current = next((event for event in events if event.event_id == event_id), None)

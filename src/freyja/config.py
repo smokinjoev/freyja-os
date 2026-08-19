@@ -92,6 +92,12 @@ class Settings(BaseSettings):
     tools_audit_log_enabled: bool = True
     repository_root: str = str(_repo_root())
 
+    calendar_default_provider: str = "memory"
+    apple_calendar_enabled: bool = False
+    apple_calendar_default_calendar_name: str = "iCloud::Family"
+    apple_calendar_calendar_aliases: str = "joe=iCloud::Family,beth=iCloud::Family,family=iCloud::Family"
+    apple_calendar_timeout_seconds: float = 10.0
+
     agent_smith_enabled: bool = False
     agent_smith_dry_run_enabled: bool = False
     agent_smith_read_only_enabled: bool = False

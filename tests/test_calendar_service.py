@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, time
 
 import pytest
@@ -10,6 +11,7 @@ from freyja.calendar import (
     CalendarMember,
     CalendarPreference,
     CalendarService,
+    AppleCalendarProvider,
     GoogleCalendarProvider,
     InMemoryCalendarProvider,
 )
@@ -130,3 +132,93 @@ async def test_google_provider_plugs_into_service_without_live_api(family: list[
 
     assert len(events) == 1
     assert events[0].provider == "google"
+
+
+@pytest.mark.asyncio
+async def test_apple_provider_lists_events_through_local_bridge() -> None:
+    calls: list[tuple[str, dict]] = []
+
+    async def runner(args: list[str], timeout: float) -> str:
+        calls.append((args[-2], json.loads(args[-1])))
+        return (
+            '{"ok":true,"events":[{'
+            '"event_id":"apple-1",'
+            '"calendar_id":"Family",'
+            '"title":"Dinner",'
+            '"start":"2026-08-03T22:00:00.000Z",'
+            '"end":"2026-08-03T23:00:00.000Z",'
+            '"location":"Home",'
+            '"description":null,'
+            '"attendee_ids":[],'
+            '"metadata":{"apple_calendar_id":"cal-1"}'
+            "}]}"
+        )
+
+    provider = AppleCalendarProvider(
+        default_calendar_name="iCloud::Family",
+        calendar_aliases={"joe": "iCloud::Family", "beth": "iCloud::Family"},
+        runner=runner,
+    )
+
+    events = await provider.list_events(calendar_ids=["joe", "beth"], start=_dt(17), end=_dt(20))
+
+    assert calls == [
+        (
+            "list",
+            {
+                "calendar_selectors": ["iCloud::Family"],
+                "start": _dt(17).isoformat(),
+                "end": _dt(20).isoformat(),
+            },
+        )
+    ]
+    assert len(events) == 1
+    assert events[0].event_id == "apple-1"
+    assert events[0].calendar_id == "Family"
+    assert events[0].provider == "apple"
+
+
+@pytest.mark.asyncio
+async def test_apple_provider_creates_events_on_mapped_family_calendar() -> None:
+    calls: list[tuple[str, dict]] = []
+
+    async def runner(args: list[str], timeout: float) -> str:
+        payload = json.loads(args[-1])
+        calls.append((args[-2], payload))
+        return (
+            '{"ok":true,"event":{'
+            '"event_id":"created-1",'
+            '"calendar_id":"Family",'
+            '"title":"Family dinner",'
+            '"start":"2026-08-03T22:00:00.000Z",'
+            '"end":"2026-08-03T23:00:00.000Z",'
+            '"location":null,'
+            '"description":"approved by Director",'
+            '"attendee_ids":["joe"],'
+            '"metadata":{}'
+            "}}"
+        )
+
+    provider = AppleCalendarProvider(
+        default_calendar_name="iCloud::Family",
+        calendar_aliases={"joe": "iCloud::Family"},
+        runner=runner,
+    )
+    event = CalendarEvent(
+        "pending",
+        "joe",
+        "Family dinner",
+        _dt(18),
+        _dt(19),
+        attendee_ids=("joe",),
+        description="approved by Director",
+    )
+
+    created = await provider.create_event(event)
+
+    assert calls[0][0] == "create"
+    assert calls[0][1]["calendar_selector"] == "iCloud::Family"
+    assert calls[0][1]["title"] == "Family dinner"
+    assert calls[0][1]["attendee_ids"] == ["joe"]
+    assert created.event_id == "created-1"
+    assert created.provider == "apple"

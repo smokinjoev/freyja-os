@@ -55,9 +55,13 @@ of becoming standalone apps. The first reference service is Family Calendar:
 - `CalendarService` owns schedule reasoning.
 - `CalendarProvider` adapters isolate calendar backends.
 - `GoogleCalendarProvider` and `AppleCalendarProvider` preserve provider
-  boundaries without requiring live accounts in tests.
+  boundaries without requiring live accounts in tests. On Iris, the Apple
+  provider can use EventKit through local Swift execution when
+  `CALENDAR_DEFAULT_PROVIDER=apple` and `APPLE_CALENDAR_ENABLED=true`.
 - Director tools expose schedules, free/busy, event search, CRUD operations,
   ranked time finding, and conflict-aware event movement.
+- Calendar writes require a household principal, Director authorization, and
+  explicit approval before execution.
 - Long-term preferences from memory can influence scheduling, but explicit user
   instructions remain higher priority.
 

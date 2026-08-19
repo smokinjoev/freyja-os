@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from freyja.calendar import CalendarService
+from freyja.calendar import AppleCalendarProvider, CalendarService, InMemoryCalendarProvider
 from freyja.calendar.service import parse_date, parse_datetime
+from freyja.config import settings
 from freyja.memory.models import MemoryPrincipal
 from freyja.memory.store import get_active_store
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLevel
@@ -17,13 +18,27 @@ _service: CalendarService | None = None
 def get_calendar_service() -> CalendarService:
     global _service
     if _service is None:
-        _service = CalendarService()
+        _service = build_calendar_service()
     return _service
 
 
 def set_calendar_service(service: CalendarService | None) -> None:
     global _service
     _service = service
+
+
+def build_calendar_service() -> CalendarService:
+    providers = {"memory": InMemoryCalendarProvider()}
+    default_provider = settings.calendar_default_provider.strip() or "memory"
+    if settings.apple_calendar_enabled and default_provider == "apple":
+        providers["apple"] = AppleCalendarProvider(
+            default_calendar_name=settings.apple_calendar_default_calendar_name,
+            calendar_aliases=_parse_aliases(settings.apple_calendar_calendar_aliases),
+            timeout_seconds=settings.apple_calendar_timeout_seconds,
+        )
+    if default_provider not in providers:
+        default_provider = "memory"
+    return CalendarService(providers=providers, default_provider_name=default_provider)
 
 
 async def _today(request: ToolExecutionRequest) -> dict:
@@ -75,7 +90,7 @@ async def _create_event(request: ToolExecutionRequest) -> dict:
         end=parse_datetime(args["end"]),
         member_ids=_member_ids(request),
         calendar_id=args.get("calendar_id"),
-        provider_name=args.get("provider", "memory"),
+        provider_name=args.get("provider"),
         location=args.get("location"),
         description=args.get("description"),
     )
@@ -87,7 +102,7 @@ async def _modify_event(request: ToolExecutionRequest) -> dict:
     event = await get_calendar_service().modify_event(
         event_id=args["event_id"],
         updates=args.get("updates", {}),
-        provider_name=args.get("provider", "memory"),
+        provider_name=args.get("provider"),
     )
     return {"event": event.to_dict() if event else None, "modified": event is not None}
 
@@ -96,7 +111,7 @@ async def _delete_event(request: ToolExecutionRequest) -> dict:
     args = request.arguments
     deleted = await get_calendar_service().delete_event(
         event_id=args["event_id"],
-        provider_name=args.get("provider", "memory"),
+        provider_name=args.get("provider"),
     )
     return {"deleted": deleted}
 
@@ -125,7 +140,7 @@ async def _move_if_conflict(request: ToolExecutionRequest) -> dict:
         duration_minutes=int(args["duration_minutes"]),
         member_ids=_member_ids(request),
         memory_preferences=_memory_preferences(request),
-        provider_name=args.get("provider", "memory"),
+        provider_name=args.get("provider"),
     )
 
 
@@ -308,3 +323,16 @@ def _now(request: ToolExecutionRequest) -> datetime:
     if isinstance(value, str):
         return parse_datetime(value)
     return datetime.now(UTC)
+
+
+def _parse_aliases(value: str) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for item in value.split(","):
+        if not item.strip() or "=" not in item:
+            continue
+        key, alias_value = item.split("=", 1)
+        key = key.strip()
+        alias_value = alias_value.strip()
+        if key and alias_value:
+            aliases[key] = alias_value
+    return aliases

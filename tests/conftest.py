@@ -5,6 +5,10 @@ from typing import Any
 
 import fastapi.testclient
 import httpx
+import pytest
+
+from freyja.config import settings
+from freyja.tools.calendar import set_calendar_service
 
 
 class ASGITestClient:
@@ -47,3 +51,12 @@ class ASGITestClient:
 
 
 fastapi.testclient.TestClient = ASGITestClient
+
+
+@pytest.fixture(autouse=True)
+def stable_calendar_test_settings(monkeypatch):
+    monkeypatch.setattr(settings, "calendar_default_provider", "memory")
+    monkeypatch.setattr(settings, "apple_calendar_enabled", False)
+    set_calendar_service(None)
+    yield
+    set_calendar_service(None)

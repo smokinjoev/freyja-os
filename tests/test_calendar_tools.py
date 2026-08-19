@@ -17,6 +17,7 @@ def _dt(hour: int) -> datetime:
 def _director_metadata(person_id: str = "joe") -> dict:
     return {
         "director_authorized": True,
+        "approval_granted": True,
         "memory_principal": {
             "client_type": "imessage",
             "client_subject": f"family-member:{person_id}",
@@ -151,6 +152,27 @@ async def test_calendar_write_requires_director_authorization(registry: ToolRegi
                 "end": "2026-08-03T19:00:00+00:00",
             },
             metadata={"person": {"person_id": "joe"}},
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "authorization_denied"
+
+
+@pytest.mark.asyncio
+async def test_calendar_write_requires_explicit_approval(registry: ToolRegistry, service: CalendarService) -> None:
+    metadata = _director_metadata()
+    metadata.pop("approval_granted")
+
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="calendar_create_event",
+            arguments={
+                "title": "Family dinner",
+                "start": "2026-08-03T18:00:00+00:00",
+                "end": "2026-08-03T19:00:00+00:00",
+            },
+            metadata=metadata,
         )
     )
 
