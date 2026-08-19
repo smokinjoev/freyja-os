@@ -537,6 +537,66 @@ async def test_reason_describes_decision_not_provider_exception(router: Router, 
     assert "sk-" not in reason
 
 
+async def test_tools_required_auto_falls_back_to_cloud_when_local_errors(
+    router: Router,
+    reset_settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _settings_with_allowlist(monkeypatch)
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+    router.ollama_client.chat.return_value = {"error": "All connection attempts failed"}
+    router.openrouter_client.chat.return_value = {
+        "model": "openai/gpt-4o-mini",
+        "response": "cloud answer",
+    }
+
+    req = RouteRequest(prompt="say hello", provider="auto", tools_required=True)
+    result = await router.execute(req)
+
+    assert result.decision.provider == "openrouter"
+    assert "fallback after ollama tool failure" in result.decision.reason
+    assert result.response == "cloud answer"
+    assert result.decision.limitation_notice == "Local provider failed; returned cloud response."
+    assert result.decision.fallback_attempts == [
+        {"provider": "ollama", "outcome": "All connection attempts failed"},
+        {"provider": "openrouter", "outcome": "attempting fallback"},
+    ]
+
+
+async def test_weather_without_location_returns_deterministic_prompt(
+    router: Router,
+) -> None:
+    req = RouteRequest(
+        prompt="What's the weather for Xmas this year?",
+        provider="auto",
+        tools_required=True,
+    )
+    result = await router.execute(req)
+
+    assert result.decision.provider == "deterministic"
+    assert result.decision.reason == "deterministic weather capability"
+    assert "Forecasts are only available up to 7 days out" in result.response
+    assert "Please include a city or location" in result.response
+    router.ollama_client.chat.assert_not_awaited()
+    router.openrouter_client.chat.assert_not_awaited()
+
+
+async def test_weather_with_location_bypasses_model(
+    router: Router,
+) -> None:
+    req = RouteRequest(
+        prompt="What's the weather for Xmas this year in Aiken, SC?",
+        provider="auto",
+        tools_required=True,
+    )
+    result = await router.execute(req)
+
+    assert result.decision.provider == "deterministic"
+    assert "Forecasts are only available up to 7 days out" in result.response
+    router.ollama_client.chat.assert_not_awaited()
+    router.openrouter_client.chat.assert_not_awaited()
+
+
 def test_approved_allowlist_empty(monkeypatch) -> None:
     monkeypatch.delenv("OPENROUTER_ALLOWLIST", raising=False)
     s = Settings(_env_file=None)
@@ -728,6 +788,97 @@ class TestToolLoop:
         assert result.response == "Yes, the downstairs lights are on."
         router.ollama_client.chat.assert_not_called()
         router.reasoning_ollama_client.chat.assert_not_called()
+        router.openrouter_client.chat.assert_not_called()
+
+    async def test_home_assistant_sensor_inventory_is_director_authorized_deterministic(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            settings,
+            "home_assistant_state_fixture",
+            '{"sensor.kitchen_temperature":"72","sensor.front_door_battery":"88","light.downstairs":"on"}',
+        )
+        router.ollama_client.chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"content": "model should not run"},
+        }
+        principal = MemoryPrincipal(
+            client_type="imessage",
+            client_subject="family-member:abc",
+            conversation_id="imessage-conv:test",
+        )
+
+        result = await router.execute(
+            RouteRequest(
+                request_id="req-home-sensors",
+                prompt="What sensors can you see in Home Assistant?",
+                provider="auto",
+                tools_required=True,
+                include_trace=True,
+            ),
+            memory_principal=principal,
+            person_context={"person_id": "joe", "display_name": "Joe", "preferred_name": "Joe"},
+        )
+
+        assert result.decision.request_id == "req-home-sensors"
+        assert result.decision.provider == "deterministic"
+        assert result.tool_results[0]["tool_name"] == "home_assistant_list_states"
+        assert result.tool_results[0]["success"] is True
+        assert result.tool_results[0]["output"]["count"] == 2
+        assert "kitchen_temperature" in result.response
+        assert result.runtime_evidence.capability_authorizations == [
+            {
+                "capability": "home_assistant_list_states",
+                "allowed": True,
+                "reason": "principal joe may read household state",
+                "required_permission": "household:home.read",
+            }
+        ]
+        router.ollama_client.chat.assert_not_called()
+        router.openrouter_client.chat.assert_not_called()
+
+    async def test_home_assistant_inventory_changes_route_reports_new_devices(
+        self,
+        router: Router,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
+    ) -> None:
+        monkeypatch.setattr(settings, "home_assistant_inventory_snapshot_path", str(tmp_path / "ha-inventory.json"))
+        monkeypatch.setattr(settings, "home_assistant_state_fixture", '{"light.downstairs":"on"}')
+        principal = MemoryPrincipal(client_type="imessage", client_subject="family-member:abc")
+        await router.execute(
+            RouteRequest(
+                prompt="Have any Home Assistant devices changed?",
+                provider="auto",
+                tools_required=True,
+            ),
+            memory_principal=principal,
+            person_context={"person_id": "joe"},
+        )
+
+        monkeypatch.setattr(
+            settings,
+            "home_assistant_state_fixture",
+            '{"light.downstairs":"on","sensor.front_door_battery":"88"}',
+        )
+        result = await router.execute(
+            RouteRequest(
+                request_id="req-ha-changes",
+                prompt="Have any new Home Assistant devices been added?",
+                provider="auto",
+                tools_required=True,
+            ),
+            memory_principal=principal,
+            person_context={"person_id": "joe"},
+        )
+
+        assert result.decision.provider == "deterministic"
+        assert result.tool_results[0]["tool_name"] == "home_assistant_inventory_changes"
+        assert result.tool_results[0]["output"]["added"][0]["entity_id"] == "sensor.front_door_battery"
+        assert "sensor.front_door_battery" in result.response
+        router.ollama_client.chat.assert_not_called()
         router.openrouter_client.chat.assert_not_called()
 
     async def test_home_assistant_read_slice_denies_unknown_principal(self, router: Router) -> None:

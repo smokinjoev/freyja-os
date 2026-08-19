@@ -105,6 +105,8 @@ def test_discovery(registry: ToolRegistry) -> None:
         "identity_resolution",
         "identity_relationships",
         "home_assistant_read_state",
+        "home_assistant_list_states",
+        "home_assistant_inventory_changes",
         "home_assistant_control_state",
         "memory_recall_shared",
     }
@@ -391,7 +393,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 24
+    assert len(tools) == 26
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
@@ -716,6 +718,91 @@ def test_home_assistant_read_allows_director_authorized_joe(registry: ToolRegist
     assert result.output["state"] == "on"
 
 
+def test_home_assistant_list_states_exposes_fixture_sensors_for_household_principal(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "home_assistant_state_fixture",
+        '{"sensor.kitchen_temperature":"72","light.downstairs":"on"}',
+    )
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_list_states",
+                arguments={"domain": "sensor"},
+                metadata={
+                    "director_authorized": True,
+                    "memory_principal": {
+                        "client_type": "imessage",
+                        "client_subject": "family-member:abc",
+                    },
+                    "person": {"person_id": "joe"},
+                },
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["location"] == "Atlanta"
+    assert result.output["count"] == 1
+    assert result.output["entities"][0]["entity_id"] == "sensor.kitchen_temperature"
+
+
+def test_home_assistant_inventory_changes_detects_added_and_removed_entities(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(settings, "home_assistant_inventory_snapshot_path", str(tmp_path / "ha-inventory.json"))
+    monkeypatch.setattr(
+        settings,
+        "home_assistant_state_fixture",
+        '{"sensor.kitchen_temperature":"72","light.downstairs":"on"}',
+    )
+    register_builtin_tools(registry)
+    metadata = {
+        "director_authorized": True,
+        "memory_principal": {
+            "client_type": "imessage",
+            "client_subject": "family-member:abc",
+        },
+        "person": {"person_id": "joe"},
+    }
+    baseline = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_inventory_changes",
+                arguments={"include_all": True},
+                metadata=metadata,
+            )
+        )
+    )
+    assert baseline.success is True
+    assert baseline.output["baseline_available"] is False
+    assert baseline.output["current_count"] == 2
+
+    monkeypatch.setattr(
+        settings,
+        "home_assistant_state_fixture",
+        '{"sensor.kitchen_temperature":"72","sensor.front_door_battery":"88"}',
+    )
+    changed = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_inventory_changes",
+                arguments={"include_all": True},
+                metadata=metadata,
+            )
+        )
+    )
+    assert changed.success is True
+    assert changed.output["baseline_available"] is True
+    assert [item["entity_id"] for item in changed.output["added"]] == ["sensor.front_door_battery"]
+    assert [item["entity_id"] for item in changed.output["removed"]] == ["light.downstairs"]
+
+
 def test_memory_recall_shared_requires_principal(registry: ToolRegistry) -> None:
     register_builtin_tools(registry)
     result = asyncio_run(
@@ -750,6 +837,30 @@ def test_home_assistant_control_requires_explicit_approval(registry: ToolRegistr
     )
     assert result.success is False
     assert result.error_code == "authorization_denied"
+
+
+def test_home_assistant_control_rejects_non_light_domains_with_approval(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_control_state",
+                arguments={"entity_id": "switch.garage", "state": "off"},
+                metadata={
+                    "director_authorized": True,
+                    "approval_granted": True,
+                    "memory_principal": {
+                        "client_type": "imessage",
+                        "client_subject": "family-member:abc",
+                    },
+                    "person": {"person_id": "joe"},
+                },
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["changed"] is False
+    assert "control is not enabled" in result.output["error"]
 
 
 # Helper to run async tool implementations in synchronous tests.

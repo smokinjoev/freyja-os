@@ -49,6 +49,18 @@ async def test_warm_requests_indefinite_residency() -> None:
     assert kwargs["json"]["keep_alive"] == -1
 
 
+async def test_model_resident_checks_ollama_ps() -> None:
+    client = IrisRouterClient(base_url="http://iris:11434", model="qwen2.5:7b")
+    mock_http = AsyncMock()
+    mock_http.get.return_value = _Response({"models": [{"name": "qwen2.5:7b"}]})
+
+    with patch("freyja.iris_router.httpx.AsyncClient") as async_client:
+        async_client.return_value.__aenter__.return_value = mock_http
+        assert await client.model_resident() is True
+
+    mock_http.get.assert_awaited_once_with("http://iris:11434/api/ps")
+
+
 async def test_recommend_parses_strict_route_json() -> None:
     client = IrisRouterClient(base_url="http://iris:11434", model="qwen2.5:7b")
     mock_http = AsyncMock()

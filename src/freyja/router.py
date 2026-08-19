@@ -12,6 +12,7 @@ from freyja.memory import store as memory_store
 from freyja.memory.models import AppendMessageRequest, CreateConversationRequest, MemoryPrincipal
 from freyja.tools.models import ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry, get_registry
+from freyja.tools.weather import classify_weather_request, weather_response_text
 
 logger = logging.getLogger(__name__)
 
@@ -610,6 +611,54 @@ class Router:
                 started,
             )
 
+        home_list = self._deterministic_home_list_request(request)
+        if home_list is not None:
+            privacy = _classify_privacy(request.prompt, request.privacy)
+            decision = RoutingDecision(
+                request_id=request.request_id,
+                provider="deterministic",
+                model="",
+                reason="deterministic Home Assistant state inventory capability",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+            evidence = RuntimeEvidence.from_decision(decision)
+            self._record_connector_origin(evidence, memory_principal)
+            self._record_principal(evidence, memory_principal, person_context)
+            return await self._execute_deterministic_home_list(
+                request,
+                decision,
+                home_list,
+                memory_principal,
+                person_context,
+                evidence,
+                started,
+            )
+
+        home_inventory_changes = self._deterministic_home_inventory_changes_request(request)
+        if home_inventory_changes is not None:
+            privacy = _classify_privacy(request.prompt, request.privacy)
+            decision = RoutingDecision(
+                request_id=request.request_id,
+                provider="deterministic",
+                model="",
+                reason="deterministic Home Assistant inventory change capability",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+            evidence = RuntimeEvidence.from_decision(decision)
+            self._record_connector_origin(evidence, memory_principal)
+            self._record_principal(evidence, memory_principal, person_context)
+            return await self._execute_deterministic_home_inventory_changes(
+                request,
+                decision,
+                home_inventory_changes,
+                memory_principal,
+                person_context,
+                evidence,
+                started,
+            )
+
         home_control = self._deterministic_home_control_request(request)
         if home_control is not None:
             privacy = _classify_privacy(request.prompt, request.privacy)
@@ -680,6 +729,28 @@ class Router:
                 person_context,
                 evidence,
                 started,
+            )
+
+        weather_request = self._deterministic_weather_request(request)
+        if weather_request is not None:
+            privacy = _classify_privacy(request.prompt, request.privacy)
+            decision = RoutingDecision(
+                request_id=request.request_id,
+                provider="deterministic",
+                model="",
+                reason="deterministic weather capability",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+            evidence = RuntimeEvidence.from_decision(decision)
+            self._record_connector_origin(evidence, memory_principal)
+            self._record_principal(evidence, memory_principal, person_context)
+            response = await self._weather_response(weather_request)
+            return self._routing_result(
+                decision=decision,
+                response=response,
+                evidence=evidence,
+                started=started,
             )
 
         decision = await self.decide(request, spent_this_month=spent_this_month)
@@ -838,6 +909,42 @@ class Router:
             if evidence is not None:
                 self._record_provider_response(evidence, response, decision.provider)
             if "error" in response:
+                decision.fallback_attempts.append({"provider": decision.provider, "outcome": response["error"]})
+                if (
+                    decision.provider in {"ollama", "local_reasoning"}
+                    and settings.cloud_enabled
+                    and request.provider != "local"
+                    and not _requires_internal_model(decision.privacy_classification)
+                    and self.openrouter_client is not None
+                    and decision.estimated_cost_usd <= settings.openrouter_per_request_limit
+                ):
+                    model, reason = self._approved_model(request.model)
+                    if model:
+                        decision.fallback_attempts.append({"provider": "openrouter", "outcome": "attempting fallback"})
+                        fallback_decision = RoutingDecision(
+                            request_id=decision.request_id,
+                            provider="openrouter",
+                            model=model,
+                            reason=f"fallback after {decision.provider} tool failure; {reason}",
+                            privacy_classification=decision.privacy_classification,
+                            fallback_attempts=self._sanitize_fallback_attempts(decision.fallback_attempts),
+                            estimated_cost_usd=decision.estimated_cost_usd,
+                            limitation_notice="Local provider failed; returned cloud response.",
+                        )
+                        self._log_decision(fallback_decision, request)
+                        return await self._execute_with_tools(
+                            request,
+                            fallback_decision,
+                            self.openrouter_client,
+                            registry,
+                            memory_principal,
+                            person_context,
+                            evidence,
+                            started,
+                        )
+                    decision.fallback_attempts.append(self._record_attempt("openrouter", "no approved model"))
+                decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
+                decision.public_error_message = self._public_error(decision.provider, decision.fallback_attempts)
                 return self._routing_result(
                     decision=decision,
                     response="",
@@ -1087,6 +1194,40 @@ class Router:
             return None
         return {"entity_id": "light.downstairs", "state": "off"}
 
+    def _deterministic_home_list_request(self, request: RouteRequest) -> dict[str, Any] | None:
+        if not request.tools_required:
+            return None
+        prompt = request.prompt.lower()
+        if any(marker in prompt for marker in ("added", "removed", "new device", "new devices", "changed")):
+            return None
+        if not any(marker in prompt for marker in ("sensor", "sensors", "entities", "devices", "home assistant")):
+            return None
+        if not any(marker in prompt for marker in ("see", "list", "show", "read", "status", "what")):
+            return None
+        if "light" in prompt and "sensor" not in prompt:
+            return {"domain": "light"}
+        if "binary sensor" in prompt or "binary_sensor" in prompt:
+            return {"domain": "binary_sensor"}
+        if "sensor" in prompt:
+            return {"domain": "sensor"}
+        return {}
+
+    def _deterministic_home_inventory_changes_request(self, request: RouteRequest) -> dict[str, Any] | None:
+        if not request.tools_required:
+            return None
+        prompt = request.prompt.lower()
+        if not any(marker in prompt for marker in ("device", "devices", "entities", "home assistant")):
+            return None
+        if not any(marker in prompt for marker in ("added", "removed", "new", "missing", "changed", "inventory")):
+            return None
+        if "light" in prompt and "sensor" not in prompt:
+            return {"domain": "light"}
+        if "binary sensor" in prompt or "binary_sensor" in prompt:
+            return {"domain": "binary_sensor"}
+        if "sensor" in prompt:
+            return {"domain": "sensor"}
+        return {}
+
     def _deterministic_calendar_read_request(self, request: RouteRequest) -> dict[str, Any] | None:
         if not request.tools_required:
             return None
@@ -1108,6 +1249,26 @@ class Router:
         if not any(marker in prompt for marker in ("what", "what's", "whats", "show", "list", "recall", "read")):
             return None
         return {"limit": 5}
+
+    def _deterministic_weather_request(self, request: RouteRequest) -> dict[str, Any] | None:
+        if not request.tools_required:
+            return None
+        if request.provider != "auto":
+            return None
+        prompt = request.prompt.lower()
+        if "weather" not in prompt and "forecast" not in prompt:
+            return None
+        return {"request": classify_weather_request(request.prompt)}
+
+    async def _weather_response(self, weather_request: dict[str, Any]) -> str:
+        parsed = weather_request["request"]
+        if parsed.error_message:
+            if not parsed.location.strip():
+                return f"{parsed.error_message} Please include a city or location."
+            return parsed.error_message
+        if not parsed.location.strip():
+            return "I need a city or location to check the weather."
+        return await weather_response_text(parsed)
 
     async def _execute_deterministic_home_read(
         self,
@@ -1192,6 +1353,208 @@ class Router:
             response = "No, the downstairs lights are off."
         else:
             response = "I couldn't determine whether the downstairs lights are on."
+        await self._record_memory(request, decision, response, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _execute_deterministic_home_list(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        arguments: dict[str, Any],
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence,
+        started: float,
+    ) -> RoutingResult:
+        tool_name = "home_assistant_list_states"
+        definition = self._registry.get_tool(tool_name)
+        if definition is None:
+            return self._routing_result(
+                decision=decision,
+                response="Home Assistant state inventory capability is not registered.",
+                evidence=evidence,
+                started=started,
+            )
+        execution_request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="atlas_director",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+                "director_authorized": True,
+            },
+        )
+        authorization = self._registry.authorize(definition, execution_request)
+        evidence.capability_authorizations.append(
+            {
+                "capability": tool_name,
+                "allowed": authorization.allowed,
+                "reason": authorization.reason,
+                "required_permission": authorization.required_permission,
+            }
+        )
+        if not authorization.allowed:
+            entry = self._tool_history_entry(
+                tool_name=tool_name,
+                success=False,
+                arguments=arguments,
+                output={},
+                error_code="authorization_denied",
+                public_error_message="Tool authorization denied.",
+            )
+            self._record_tool_evidence(evidence, entry)
+            return self._routing_result(
+                decision=decision,
+                response="I can't read household state for that principal.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        result = await self._registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name=tool_name,
+            success=result.success,
+            arguments=arguments,
+            output=result.output,
+            error_code=result.error_code,
+            public_error_message=result.public_error_message,
+            duration_ms=result.duration_ms,
+        )
+        self._record_tool_evidence(evidence, entry)
+        if not result.success:
+            return self._routing_result(
+                decision=decision,
+                response=result.public_error_message or "Home Assistant state inventory failed.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+        entities = result.output.get("entities") if isinstance(result.output.get("entities"), list) else []
+        domain = str(arguments.get("domain") or "entity").replace("_", " ")
+        if not entities:
+            response = f"I don't see any {domain} states in Home Assistant."
+        else:
+            samples = []
+            for entity in entities[:8]:
+                name = str(entity.get("friendly_name") or entity.get("entity_id") or "unknown")
+                state = str(entity.get("state") or "unknown")
+                unit = str(entity.get("unit_of_measurement") or "")
+                samples.append(f"{name}: {state}{unit}")
+            response = f"I can see {len(entities)} {domain} states: " + "; ".join(samples) + "."
+        await self._record_memory(request, decision, response, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _execute_deterministic_home_inventory_changes(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        arguments: dict[str, Any],
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence,
+        started: float,
+    ) -> RoutingResult:
+        tool_name = "home_assistant_inventory_changes"
+        definition = self._registry.get_tool(tool_name)
+        if definition is None:
+            return self._routing_result(
+                decision=decision,
+                response="Home Assistant inventory change capability is not registered.",
+                evidence=evidence,
+                started=started,
+            )
+        execution_request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="atlas_director",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+                "director_authorized": True,
+            },
+        )
+        authorization = self._registry.authorize(definition, execution_request)
+        evidence.capability_authorizations.append(
+            {
+                "capability": tool_name,
+                "allowed": authorization.allowed,
+                "reason": authorization.reason,
+                "required_permission": authorization.required_permission,
+            }
+        )
+        if not authorization.allowed:
+            entry = self._tool_history_entry(
+                tool_name=tool_name,
+                success=False,
+                arguments=arguments,
+                output={},
+                error_code="authorization_denied",
+                public_error_message="Tool authorization denied.",
+            )
+            self._record_tool_evidence(evidence, entry)
+            return self._routing_result(
+                decision=decision,
+                response="I can't read household inventory for that principal.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        result = await self._registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name=tool_name,
+            success=result.success,
+            arguments=arguments,
+            output=result.output,
+            error_code=result.error_code,
+            public_error_message=result.public_error_message,
+            duration_ms=result.duration_ms,
+        )
+        self._record_tool_evidence(evidence, entry)
+        if not result.success:
+            return self._routing_result(
+                decision=decision,
+                response=result.public_error_message or "Home Assistant inventory change check failed.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        added = result.output.get("added") if isinstance(result.output.get("added"), list) else []
+        removed = result.output.get("removed") if isinstance(result.output.get("removed"), list) else []
+        changed = result.output.get("changed") if isinstance(result.output.get("changed"), list) else []
+        if not result.output.get("baseline_available"):
+            response = f"I recorded the Home Assistant inventory baseline with {result.output.get('current_count', 0)} entities."
+        elif not added and not removed and not changed:
+            response = "I don't see any Home Assistant devices added, removed, or renamed since the last inventory snapshot."
+        else:
+            parts = []
+            if added:
+                parts.append("added: " + ", ".join(str(item.get("entity_id") or "unknown") for item in added[:8]))
+            if removed:
+                parts.append("removed: " + ", ".join(str(item.get("entity_id") or "unknown") for item in removed[:8]))
+            if changed:
+                parts.append(
+                    "changed: "
+                    + ", ".join(str(item.get("after", {}).get("entity_id") or "unknown") for item in changed[:8])
+                )
+            response = "Home Assistant inventory changes since the last snapshot: " + "; ".join(parts) + "."
         await self._record_memory(request, decision, response, evidence)
         return self._routing_result(
             decision=decision,

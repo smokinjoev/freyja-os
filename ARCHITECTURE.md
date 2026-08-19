@@ -138,13 +138,13 @@ Freyja must avoid hard dependencies on one model provider, model family, vector 
 ```text
                     Household / Users
                            |
-          +----------------+----------------+
-          |                |                |
-       Signal           iMessage         Voice/Avatar
-          |                |                |
-          |           Iris MacAgent       Hera Presence
-          |                |                |
-          +----------------+----------------+
+          +----------------+----------------+----------------+
+          |                |                |                |
+       Signal           Gmail           iMessage         Voice/Avatar
+          |                |                |                |
+          |                |           Iris MacAgent       Hera Presence
+          |                |                |                |
+          +----------------+----------------+----------------+
                            |
                     +------v------+
                     |    ATLAS    |
@@ -514,6 +514,12 @@ Target memory metadata includes:
 
 External content must not become authoritative household memory merely because a model summarized it.
 
+Passive authorized sources, such as the family iMessage group, may create
+memory candidates when source policy permits. These candidates should store
+structured facts and provenance, not raw conversation transcripts. Ordinary
+conversation, jokes, speculation, and transient chatter should remain
+unpromoted unless later confirmed or explicitly useful.
+
 Suggested progression:
 
 ```text
@@ -529,6 +535,24 @@ Memory scopes should support at minimum:
 - shared household scope
 - guest/session scope
 - system/configuration scope
+
+Structured memory candidates should include, where applicable:
+
+- people involved
+- event or fact type
+- date/time
+- location
+- source connector and thread
+- confidence
+- tentative/confirmed/cancelled status
+- expiration or relevance period
+- relationship to an existing memory
+
+New information should update or invalidate prior candidates when appropriate,
+for example a delayed flight arrival or a cancelled family plan. Memory
+extraction and calendar modification remain separate capabilities: confirmed
+events may become calendar candidates, but calendar writes require their own
+confidence and permission rules.
 
 ---
 
@@ -552,7 +576,7 @@ Signal logs and Director headers must not contain raw phone numbers.
 
 iMessage is now an active Apple-native integration path rather than a merely deferred concept.
 
-The preferred architecture is:
+Direct addressed iMessage conversations remain a conventional connector path:
 
 ```text
 iMessage
@@ -565,6 +589,52 @@ iMessage
 ```
 
 MacAgent is not an alternate Director.
+
+The authorized family iMessage group is also a passive context source. In its
+default observe state, Freyja reads permitted group messages, extracts bounded
+household logistics locally on Iris, and stores structured memory candidates
+without replying. Freyja enters normal conversational behavior only when
+explicitly addressed by an invocation such as `Freyja, ...` or `@Freyja ...`.
+
+Passive family extraction should prefer local processing and should identify
+useful logistics such as events, appointments, travel timing, locations,
+celebrations, gift ideas, and changes or cancellations. Raw family conversation
+should remain local unless a specific task requires cloud reasoning and policy
+permits escalation.
+
+Operating states:
+
+- `Observe` - read authorized family conversation, extract context, maintain
+  candidates/memories, and remain silent.
+- `Addressed` - when explicitly invoked, route through normal Director
+  behavior and reply to the group.
+- `Ambiguous / High Impact` - preserve tentative context or request
+  clarification; do not act automatically.
+
+### Gmail
+
+Gmail is a first-class communication connector for corporate/work environments
+where preferred messaging services may be blocked. It uses Freyja's existing
+Gmail identity and preserves Gmail threads as Freyja conversation threads.
+
+The preferred architecture is:
+
+```text
+Work Email
+  -> Freyja Gmail
+  -> Gmail connector
+  -> sender allowlist
+  -> HTML/external-content sanitization
+  -> Atlas Director
+  -> authorized execution/inference/memory
+  -> Gmail reply in the same thread
+```
+
+Gmail is not an approval channel for consequential actions. Normal questions,
+research, memory access, and status requests may route normally after sender
+authorization, but consequential actions require approval through a trusted
+non-Gmail channel. Attachments are untrusted input and should be passed only as
+metadata unless a separate safe attachment reader is explicitly invoked.
 
 ### Telegram
 
@@ -718,6 +788,10 @@ Add certification coverage for:
 - untrusted content cannot directly create authoritative long-term memory
 - MacAgent requests pass through Atlas policy before consequential action
 - provider cold/warm latency is measured separately
+- Gmail preserves sender allowlists, sanitized body text, attachment distrust,
+  and Gmail-thread conversation mapping
+- family iMessage observation remains silent unless explicitly invoked and only
+  writes structured memory candidates with provenance/confidence metadata
 
 ---
 
@@ -740,4 +814,12 @@ These rules should remain true even as hardware changes:
 
 ## 21. Definition of the Rev 2 Target State
 
-Rev 2 is operational when a household request can enter through Signal, iMessage/MacAgent, or a local presence node; be authenticated and normalized by the appropriate connector; reach Atlas Director; use the resident Iris 7B model for low-latency route classification when needed; execute directly, locally, on the heavy inference machine, or in an approved cloud model according to policy; invoke only authorized capabilities; and return a response with auditable route, latency, provider, and authorization metadata.
+Rev 2 is operational when a household request can enter through Signal, Gmail,
+iMessage/MacAgent, or a local presence node; be authenticated and normalized by
+the appropriate connector; reach Atlas Director; use the resident Iris 7B model
+for low-latency route classification when needed; execute directly, locally, on
+the heavy inference machine, or in an approved cloud model according to policy;
+invoke only authorized capabilities; and return a response with auditable route,
+latency, provider, and authorization metadata. Authorized passive family context
+streams may additionally create structured memory candidates without producing a
+reply unless Freyja is explicitly addressed.

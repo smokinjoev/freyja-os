@@ -30,6 +30,10 @@ class IMessageSettings(BaseSettings):
     imessage_poll_interval_seconds: float = 5.0
     imessage_poll_chat_limit: int = 10
     imessage_poll_history_limit: int = 3
+    imessage_family_observer_enabled: bool = False
+    imessage_family_chat_identifiers: str = ""
+    imessage_family_invocation_names: str = "freyja,@freyja"
+    imessage_family_memory_enabled: bool = True
     imessage_seen_state_path: str = str(
         Path.home() / "Library" / "Application Support" / "Freyja" / "imessage-seen.json"
     )
@@ -42,6 +46,18 @@ class IMessageSettings(BaseSettings):
     @property
     def allowed_sender_identities(self) -> dict[str, AuthorizedSender]:
         return parse_allowed_senders(self.imessage_allowed_senders, "imessage")
+
+    @property
+    def family_chat_identifier_set(self) -> set[str]:
+        return {value.strip() for value in self.imessage_family_chat_identifiers.split(",") if value.strip()}
+
+    @property
+    def family_invocation_names(self) -> tuple[str, ...]:
+        return tuple(
+            value.strip().lower()
+            for value in self.imessage_family_invocation_names.split(",")
+            if value.strip()
+        )
 
     @property
     def resolved_imsg_path(self) -> str:

@@ -25,6 +25,9 @@ class AuthorizedSender:
     def conversation_id(self) -> str:
         return stable_identity(f"{self.platform}-conv", self.address)
 
+    def conversation_id_for_thread(self, thread_id: str) -> str:
+        return stable_identity(f"{self.platform}-thread", f"{self.address}:{thread_id}")
+
     def safe_headers(self) -> dict[str, str]:
         person = self.person or (person_from_legacy_member(self.member_id) if self.member_id else None)
         headers = {

@@ -94,6 +94,20 @@ class IrisRouterClient:
         except Exception:
             return False
 
+    async def running_models(self) -> list[str]:
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.get(f"{self.base_url}/api/ps")
+                response.raise_for_status()
+                models = response.json().get("models", [])
+                return [str(item.get("name") or "") for item in models if isinstance(item, dict)]
+        except Exception:
+            return []
+
+    async def model_resident(self) -> bool:
+        names = set(await self.running_models())
+        return self.model in names or any(name.startswith(f"{self.model}:") for name in names)
+
     async def recommend(
         self,
         prompt: str,

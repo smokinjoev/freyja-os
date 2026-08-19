@@ -87,22 +87,27 @@ Rev 2 reorganizes Freyja-OS around four durable planes: Atlas for control and st
 ## Phase 8 — Identity and memory unification
 
 - Make Atlas authoritative for identity and durable memory.
-- Validate cross-platform mapping across Signal, iMessage, Apple context, and Hera voice sessions.
+- Validate cross-platform mapping across Signal, Gmail, iMessage, Apple context, and Hera voice sessions.
 - Preserve explicit-user-instruction priority over stored preferences.
 - Add memory provenance, review, deletion, and retention behavior.
+- Add passive-source memory candidates for authorized family iMessage context, including confidence, status, expiration, source thread, and update/invalidation metadata.
+- Keep passive memory extraction separate from calendar creation; confirmed events may become calendar candidates only under separate permission rules.
 - Eliminate accidental node-local memory authorities.
 
 **Exit:** One person and one durable memory model span every interface.
 
 ## Phase 9 — Messaging convergence
 
-- Keep Signal, Telegram, and iMessage as gateways into the same Director.
-- Finish production smoke tests for Signal and iMessage.
+- Keep Signal, Gmail, Telegram, and iMessage as gateways into the same Director.
+- Finish production smoke tests for Signal, Gmail, and iMessage.
 - Configure family aliases and permissions.
-- Standardize safe error handling and attachment normalization.
+- Standardize safe error handling, sender allowlists, thread preservation, and attachment normalization.
+- Enable Gmail as a work-environment fallback using Freyja's existing Gmail identity; preserve Gmail threads as Freyja conversation threads.
+- Enable the family iMessage group as a passive context source that remains silent unless explicitly addressed by `Freyja` or `@Freyja`.
+- Validate that Gmail cannot approve consequential actions and that family iMessage passive extraction stores structured candidates rather than raw conversation.
 - Add HomePod/Shortcut entry points where useful.
 
-**Exit:** Family members can reach the same Freyja safely from multiple interfaces.
+**Exit:** Family members can reach the same Freyja safely from multiple interfaces, and authorized passive streams can improve shared context without becoming unbounded chatbot channels.
 
 ## Phase 10 — Offline certification
 
@@ -114,6 +119,7 @@ Required behaviors:
 - Home Assistant actions work.
 - Local reasoning works.
 - Memory and identity work.
+- Gmail and family iMessage connector logic works for authorized local cases without cloud dependency.
 - Local coding works.
 - Local vision/document retrieval works.
 - Offline-capable Iris actions work.
@@ -152,4 +158,5 @@ Rev 2 is complete when:
 7. Identity remains consistent across voice and messaging interfaces.
 8. Tool execution is evidence-grounded and unavailable capabilities never produce invented state.
 9. Cloud use is optional, policy-controlled, observable, and cost-aware.
-10. Spare machines are not part of production unless they provide a unique required capability.
+10. Passive family context extraction is bounded by source permissions, confidence, provenance, and action-authorization policy.
+11. Spare machines are not part of production unless they provide a unique required capability.

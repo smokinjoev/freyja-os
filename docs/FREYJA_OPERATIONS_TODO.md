@@ -58,3 +58,16 @@
 - [ ] Verify `/health` and `/iris-router/health`.
 - [ ] Run Iris shadow smoke and standard gauntlets.
 - [ ] Record disagreement patterns, especially under-routing.
+
+## Communications Rollout
+
+- [ ] Configure `GMAIL_IDENTITY` with Freyja's existing Gmail address.
+- [ ] Configure `GMAIL_ALLOWED_SENDERS` with only approved work/corporate senders.
+- [ ] Smoke test an allowlisted Gmail message and confirm the reply stays in the same Gmail thread.
+- [ ] Smoke test Gmail HTML input and confirm scripts, styles, remote images, and tracking URLs are not forwarded to Director.
+- [ ] Confirm Gmail-originated consequential actions require approval through a trusted non-Gmail channel.
+- [ ] Configure `IMESSAGE_FAMILY_CHAT_IDENTIFIERS` for the authorized family group only.
+- [ ] Add Freyja's Apple identity to the family iMessage group from the `freyja` macOS account.
+- [ ] Smoke test passive family iMessage observation and confirm no group reply is generated.
+- [ ] Smoke test `Freyja, ...` and `@Freyja ...` invocations and confirm addressed messages route through Director.
+- [ ] Review extracted family memory candidates before treating them as authoritative or calendar-worthy.

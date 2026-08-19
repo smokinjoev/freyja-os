@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     iris_router_timeout_seconds: float = 4.0
     iris_router_keep_alive: str = "-1"
     iris_router_max_prompt_chars: int = 12000
+    iris_router_warm_enabled: bool = True
+    iris_router_warm_interval_seconds: int = 600
+    iris_router_min_available_memory_mb: int = 8192
 
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -116,7 +119,14 @@ class Settings(BaseSettings):
     telegram_state_dir: str = str(_default_state_dir() / "telegram")
 
     weather_tool_enabled: bool = False
+    home_assistant_base_url: str = ""
+    home_assistant_access_token: str = ""
+    home_assistant_location_name: str = "Atlanta"
+    home_assistant_allowed_control_domains: str = "light"
     home_assistant_state_fixture: str = '{"light.downstairs":"on"}'
+    home_assistant_inventory_snapshot_path: str = str(_default_state_dir() / "home-assistant-inventory.json")
+    home_assistant_inventory_poll_enabled: bool = True
+    home_assistant_inventory_poll_interval_seconds: int = 600
 
     @property
     def approved_openrouter_models(self) -> list[str]:

@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import ipaddress
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -12,7 +13,12 @@ from freyja.agents.approval_provider import PersistentApprovalProvider
 from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprovals
 from freyja.agents.runtime import SmithRuntime
 from freyja.config import settings
+from freyja.home_assistant_monitor import (
+    start_home_assistant_inventory_monitor,
+    stop_home_assistant_inventory_monitor,
+)
 from freyja.identity import person_context_from_headers
+from freyja.iris_monitor import start_iris_warm_monitor, stop_iris_warm_monitor
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
@@ -22,10 +28,23 @@ from freyja.tools.api import tools_router
 from freyja.tools.builtin import register_builtin_tools, register_smith_write_pilot_tools
 from freyja.tools.registry import get_registry
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_iris_warm_monitor()
+    start_home_assistant_inventory_monitor()
+    try:
+        yield
+    finally:
+        await stop_iris_warm_monitor()
+        await stop_home_assistant_inventory_monitor()
+
+
 app = FastAPI(
     title="Freyja Director",
     version="0.1.0",
     description="Core orchestration service for Freyja-OS.",
+    lifespan=lifespan,
 )
 
 

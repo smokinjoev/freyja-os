@@ -474,6 +474,23 @@ class TestClassificationIntegration:
         assert not req.is_valid
         assert "outside" in req.error_message.lower()
 
+    def test_classify_xmas_this_year_as_outside_range(self):
+        req = classify_weather_request("What is the weather for Xmas this year in Aiken?")
+        assert not req.is_valid
+        assert req.request_type == WeatherRequestType.FORECAST
+        assert req.target_date is not None
+        assert req.target_date.month == 12
+        assert req.target_date.day == 25
+        assert "christmas" in req.target_label.lower()
+        assert "Aiken" in req.location
+        assert "outside" in req.error_message.lower()
+
+    def test_xmas_without_location_does_not_become_location(self):
+        req = classify_weather_request("What is the weather for Xmas this year?")
+        assert not req.is_valid
+        assert req.location == ""
+        assert "outside" in req.error_message.lower()
+
     def test_tomorrow_never_invokes_current_mode(self):
         req = classify_weather_request("What is the weather tomorrow in Aiken?")
         assert req.request_type == WeatherRequestType.FORECAST
