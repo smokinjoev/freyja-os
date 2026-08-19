@@ -39,6 +39,8 @@ class IMessageGateway:
         self._director_url = settings.freyja_director_url.rstrip("/")
         self._director_token = settings.freyja_connector_token
         self._timeout = settings.imessage_request_timeout_seconds
+        self._provisional_reply_enabled = settings.imessage_provisional_reply_enabled
+        self._provisional_reply_text = settings.imessage_provisional_reply_text
         self._family_observer_enabled = settings.imessage_family_observer_enabled
         self._family_memory_enabled = settings.imessage_family_memory_enabled
         self._family_chat_identifiers = settings.family_chat_identifier_set
@@ -50,6 +52,14 @@ class IMessageGateway:
     @property
     def enabled(self) -> bool:
         return self._enabled
+
+    def provisional_reply_for(self, message: IMessage) -> IMessageReply | None:
+        """Return an early acknowledgement only for messages eligible to route."""
+        if not self._provisional_reply_enabled:
+            return None
+        if not self._can_send_provisional_reply(message):
+            return None
+        return IMessageReply(chat_id=message.chat_id, text=self._provisional_reply_text)
 
     async def _client(self) -> httpx.AsyncClient:
         if self._http_client is None or self._http_client.is_closed:
@@ -88,6 +98,23 @@ class IMessageGateway:
             return await self._handle_group(message, identity)
 
         return await self._forward(message, identity)
+
+    def _can_send_provisional_reply(self, message: IMessage) -> bool:
+        if not self._enabled or message.is_from_me:
+            return False
+        if self._identity_for_sender(message.sender) is None:
+            return False
+        if not message.text.strip() or len(message.text) > self._max_message_chars:
+            return False
+        if message.message_id in self._recent_message_ids:
+            return False
+        if not message.is_group:
+            return True
+        return (
+            self._family_observer_enabled
+            and message.chat_identifier in self._family_chat_identifiers
+            and self._is_explicitly_addressed(message.text)
+        )
 
     def _log_rejection(self, message: IMessage, reason: str) -> None:
         logger.info(

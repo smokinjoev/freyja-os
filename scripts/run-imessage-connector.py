@@ -128,9 +128,25 @@ def _runtime_ready(settings: IMessageSettings, gateway: IMessageGateway) -> bool
 async def _handle_message(
     gateway: IMessageGateway,
     transport: IMessageTransport,
+    settings: IMessageSettings,
     message,
 ) -> None:
-    reply = await gateway.handle(message)
+    reply_task = asyncio.create_task(gateway.handle(message))
+    provisional_reply = gateway.provisional_reply_for(message)
+    if provisional_reply is not None:
+        try:
+            reply = await asyncio.wait_for(
+                asyncio.shield(reply_task),
+                timeout=max(0.0, settings.imessage_provisional_reply_delay_seconds),
+            )
+        except asyncio.TimeoutError:
+            try:
+                await transport.send(provisional_reply)
+            except IMessageTransportError:
+                logger.exception("iMessage provisional reply send failed")
+            reply = await reply_task
+    else:
+        reply = await reply_task
     if reply is not None:
         try:
             await transport.send(reply)
@@ -167,7 +183,7 @@ async def _poll_recent_messages(
                 if message.message_id in seen_store.message_ids:
                     continue
                 seen_store.add(message.message_id)
-                await _handle_message(gateway, transport, message)
+                await _handle_message(gateway, transport, settings, message)
         except IMessageTransportError:
             logger.exception("iMessage polling cycle failed")
 
@@ -184,6 +200,7 @@ async def _run_watch_loop(
     shutdown_event: asyncio.Event,
     gateway: IMessageGateway,
     transport: IMessageTransport,
+    settings: IMessageSettings,
     seen_store: SeenMessageStore,
 ) -> None:
     try:
@@ -193,7 +210,7 @@ async def _run_watch_loop(
             if message.message_id in seen_store.message_ids:
                 continue
             seen_store.add(message.message_id)
-            await _handle_message(gateway, transport, message)
+            await _handle_message(gateway, transport, settings, message)
     except IMessageTransportError:
         logger.exception("iMessage watch failed; polling fallback remains active")
         await shutdown_event.wait()
@@ -246,6 +263,7 @@ async def main() -> int:
                 shutdown_event,
                 gateway,
                 transport,
+                connector_settings,
                 seen_store,
             )
         else:

@@ -49,6 +49,8 @@ async def enabled_gateway():
     gw._max_message_chars = 4000
     gw._director_url = "http://127.0.0.1:8000"
     gw._timeout = 5.0
+    gw._provisional_reply_enabled = False
+    gw._provisional_reply_text = "Working on it..."
     yield gw
     await gw.close()
 
@@ -113,6 +115,18 @@ async def test_unknown_sender_is_dropped(enabled_gateway):
     assert await enabled_gateway.handle(make_message(sender="+15559999999")) is None
 
 
+def test_provisional_reply_only_for_direct_routable_messages(enabled_gateway):
+    enabled_gateway._provisional_reply_enabled = True
+
+    result = enabled_gateway.provisional_reply_for(make_message())
+
+    assert result is not None
+    assert result.chat_id == 7
+    assert result.text == "Working on it..."
+    assert enabled_gateway.provisional_reply_for(make_message(sender="+15559999999")) is None
+    assert enabled_gateway.provisional_reply_for(make_message(is_from_me=True)) is None
+
+
 @pytest.mark.asyncio
 async def test_group_message_is_dropped(enabled_gateway):
     assert await enabled_gateway.handle(make_message(is_group=True)) is None
@@ -147,6 +161,20 @@ async def test_family_group_observer_stays_silent_and_records_candidate(enabled_
     assert memories[0].metadata["fact_type"] == "travel_arrival"
     assert memories[0].metadata["raw_text_persisted"] is False
     assert "Flight arrives" not in memories[0].content
+
+
+def test_provisional_reply_for_family_group_requires_explicit_address(enabled_gateway):
+    enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567", "imessage")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+    enabled_gateway._family_observer_enabled = True
+    enabled_gateway._family_chat_identifiers = {"family-chat"}
+    enabled_gateway._provisional_reply_enabled = True
+
+    passive = make_message(text="Dinner Friday", is_group=True).model_copy(update={"chat_identifier": "family-chat"})
+    addressed = make_message(text="@Freyja what is the plan?", is_group=True).model_copy(update={"chat_identifier": "family-chat"})
+
+    assert enabled_gateway.provisional_reply_for(passive) is None
+    assert enabled_gateway.provisional_reply_for(addressed) is not None
 
 
 @pytest.mark.asyncio

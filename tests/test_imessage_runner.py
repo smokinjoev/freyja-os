@@ -83,9 +83,10 @@ def test_handle_message_sends_gateway_reply():
     runner = _load_runner()
     gateway = _FakeGateway(IMessageReply(chat_id=4, text="reply"))
     transport = _FakeTransport()
+    settings = IMessageSettings(_env_file=None)
     message = _message()
 
-    asyncio.run(runner._handle_message(gateway, transport, message))
+    asyncio.run(runner._handle_message(gateway, transport, settings, message))
 
     assert gateway.messages == [message]
     assert transport.replies == [IMessageReply(chat_id=4, text="reply")]
@@ -97,10 +98,47 @@ def test_handle_message_skips_when_gateway_returns_none():
     runner = _load_runner()
     gateway = _FakeGateway(None)
     transport = _FakeTransport()
+    settings = IMessageSettings(_env_file=None)
 
-    asyncio.run(runner._handle_message(gateway, transport, _message()))
+    asyncio.run(runner._handle_message(gateway, transport, settings, _message()))
 
     assert transport.replies == []
+
+
+def test_handle_message_sends_provisional_reply_when_director_is_slow():
+    import asyncio
+
+    runner = _load_runner()
+    final = IMessageReply(chat_id=4, text="final")
+    provisional = IMessageReply(chat_id=4, text="Working on it...")
+    gateway = _FakeGateway(final, provisional_reply=provisional, delay_seconds=0.02)
+    transport = _FakeTransport()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_provisional_reply_delay_seconds=0.001,
+    )
+
+    asyncio.run(runner._handle_message(gateway, transport, settings, _message()))
+
+    assert transport.replies == [provisional, final]
+
+
+def test_handle_message_skips_provisional_reply_when_director_is_fast():
+    import asyncio
+
+    runner = _load_runner()
+    final = IMessageReply(chat_id=4, text="final")
+    provisional = IMessageReply(chat_id=4, text="Working on it...")
+    gateway = _FakeGateway(final, provisional_reply=provisional)
+    transport = _FakeTransport()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_provisional_reply_delay_seconds=1,
+    )
+
+    asyncio.run(runner._handle_message(gateway, transport, settings, _message()))
+
+    assert transport.replies == [final]
 
 
 def test_seed_seen_messages_reads_recent_message_ids(tmp_path):
@@ -178,6 +216,7 @@ def test_run_watch_loop_keeps_process_alive_when_watch_fails(tmp_path):
             shutdown_event,
             gateway,
             transport,
+            IMessageSettings(_env_file=None),
             seen_store,
         )
     )
@@ -186,12 +225,21 @@ def test_run_watch_loop_keeps_process_alive_when_watch_fails(tmp_path):
 
 
 class _FakeGateway:
-    def __init__(self, reply):
+    def __init__(self, reply, *, provisional_reply=None, delay_seconds=0):
         self.reply = reply
+        self.provisional_reply = provisional_reply
+        self.delay_seconds = delay_seconds
         self.messages = []
 
+    def provisional_reply_for(self, message):
+        return self.provisional_reply
+
     async def handle(self, message):
+        import asyncio
+
         self.messages.append(message)
+        if self.delay_seconds:
+            await asyncio.sleep(self.delay_seconds)
         return self.reply
 
 
