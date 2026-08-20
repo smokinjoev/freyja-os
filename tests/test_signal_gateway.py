@@ -79,6 +79,7 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     assert kwargs["json"]["prompt"].endswith("Hello Freyja")
     assert kwargs["json"]["provider"] == "auto"
     assert kwargs["json"]["privacy"] == "private"
+    assert kwargs["json"]["tools_required"] is True
     assert kwargs["json"]["conversation_id"].startswith("signal-conv:")
     headers = kwargs["headers"]
     assert headers["X-Freyja-Client-Type"] == "signal"
@@ -347,7 +348,10 @@ async def test_joe_alias_routes_to_cloyd_gibbler_private_agent(enabled_gateway):
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
     assert "Your name is Cloyd Gibbler" in payload["prompt"]
+    assert "Required response identity: Cloyd Gibbler" in payload["prompt"]
+    assert "Do not say you are Freyja" in payload["prompt"]
     assert payload["privacy"] == "private"
+    assert payload["tools_required"] is True
     assert headers["X-Freyja-Family-Member"] == "joe"
     assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
     assert headers["X-Freyja-Account-Owner"] == "person:joe"
@@ -370,7 +374,10 @@ async def test_beth_alias_routes_to_benedict_private_agent(enabled_gateway):
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
     assert "Your name is Benedict" in payload["prompt"]
+    assert "Required response identity: Benedict" in payload["prompt"]
+    assert "Do not say you are Freyja" in payload["prompt"]
     assert payload["privacy"] == "private"
+    assert payload["tools_required"] is True
     assert headers["X-Freyja-Client-Subject"] == "agent:benedict"
     assert headers["X-Freyja-Account-Owner"] == "person:beth"
     assert headers["X-Freyja-Agent-Id"] == "benedict"
@@ -391,6 +398,7 @@ async def test_family_alias_routes_to_freyja_household_agent(enabled_gateway):
     headers = mock_post.await_args.kwargs["headers"]
     assert "Your name is Freyja" in payload["prompt"]
     assert payload["privacy"] == "private"
+    assert payload["tools_required"] is True
     assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
     assert headers["X-Freyja-Account-Owner"] == "person:family"
     assert headers["X-Freyja-Agent-Id"] == "freyja"
