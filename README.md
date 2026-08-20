@@ -102,22 +102,21 @@ tools, routing, memory, vision, planning, and connector behavior. Use
 benchmark, compare, and output directory options. See
 [`certification/README.md`](certification/README.md) for suite details.
 
-## Rev 1 host roles
+## Current host roles
 
-Mars is the Freyja Director and control-plane host. Atlas runs always-on
-infrastructure services and the Signal connector. Hera currently provides the
-strong local `local_reasoning` model for complex coding, debugging, planning,
-architecture, and difficult tool-selection requests over Tailscale. Iris remains
-the fast local inference tier for low-latency local work. Hera is not a core
-always-on host, so Director routing must tolerate Hera being unavailable and use
-configured fallback paths instead of fabricating an answer. OpenRouter fallback
-requires a configured API key and approved model allowlist.
+Atlas is the Freyja Director and control-plane host. Atlas also runs always-on
+infrastructure services and the Signal connector. Iris owns Apple-native
+MacAgent capability, including native iMessage access, and keeps the fast local
+7B inference tier hot for low-latency local work. Optional heavy inference nodes
+sit behind Director policy; Director routing must tolerate those nodes being
+unavailable and use configured fallback paths instead of fabricating an answer.
+OpenRouter fallback requires a configured API key and approved model allowlist.
 
 The Signal connector deployment uses
 [`bbernhard/signal-cli-rest-api`](https://github.com/bbernhard/signal-cli-rest-api)
 in `native` mode on Atlas: a transport adapter polls its receive endpoint,
 normalizes supported messages, passes them to `SignalGateway`, forwards
-authorized requests to the Director on Mars, and sends the resulting responses
+authorized requests to the Atlas Director, and sends the resulting responses
 through the REST wrapper. Transport code does not make authorization or
 group-policy decisions. The gateway continues to enforce sender allowlists,
 reject groups, and suppress duplicates.

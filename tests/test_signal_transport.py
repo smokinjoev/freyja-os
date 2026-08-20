@@ -47,7 +47,8 @@ def test_parse_native_receive_payload():
 
     assert message.sender == SENDER
     assert message.text == "Hello Freyja"
-    assert message.message_id == f"{SENDER}:{TIMESTAMP_MS}"
+    assert message.message_id.endswith(f":{TIMESTAMP_MS}")
+    assert SENDER not in message.message_id
     assert message.timestamp is not None
     assert message.timestamp.tzinfo is not None
     assert message.group_id is None
@@ -67,7 +68,8 @@ def test_parse_json_rpc_wrapped_payload():
 
     assert message.sender == SENDER
     assert message.text == "Wrapped message"
-    assert message.message_id == f"{SENDER}:{TIMESTAMP_MS}"
+    assert message.message_id.endswith(f":{TIMESTAMP_MS}")
+    assert SENDER not in message.message_id
 
 
 @pytest.mark.parametrize(
@@ -184,8 +186,9 @@ async def test_receive_http_failure_raises_transport_error():
 
 
 @pytest.mark.asyncio
-async def test_send_http_failure_raises_transport_error():
+async def test_send_http_failure_raises_transport_error_without_logging_recipient(caplog):
     gateway = AsyncMock()
+    caplog.set_level("WARNING", logger="connectors.signal.transport")
 
     def handle_request(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"error": "send failed"}, request=request)
@@ -198,4 +201,6 @@ async def test_send_http_failure_raises_transport_error():
         await transport.send(response)
 
     assert str(exc_info.value) == "Signal send failed"
+    assert response.recipient not in caplog.text
+    assert "recipient_hash" in caplog.text
     await client.aclose()

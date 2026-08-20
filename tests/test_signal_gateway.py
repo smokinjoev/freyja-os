@@ -144,6 +144,31 @@ async def test_rejection_logs_hash_sender_not_phone_number(caplog):
 
 
 @pytest.mark.asyncio
+async def test_signal_director_trace_logs_agent_without_phone_number(enabled_gateway, caplog):
+    enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567", "signal")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+    caplog.set_level(logging.INFO, logger="connectors.signal.gateway")
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response(
+            {
+                "provider": "ollama",
+                "model": "qwen2.5:7b",
+                "response": "Hi Joe",
+                "request_id": "req-signal",
+            }
+        )
+        result = await enabled_gateway.handle(make_message("+15551234567", "Hello", "msg-trace"))
+
+    assert result.success is True
+    assert "signal_gateway_director_request" in caplog.text
+    assert "signal_gateway_director_response" in caplog.text
+    assert "cloyd-gibbler" in caplog.text
+    assert "req-signal" in caplog.text
+    assert "+15551234567" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_disabled_gateway_rejects_all():
     gw = SignalGateway()
     gw._enabled = False

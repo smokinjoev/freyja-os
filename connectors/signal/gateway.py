@@ -158,6 +158,21 @@ class SignalGateway:
             "conversation_id": principal.conversation_id,
         }
 
+        logger.info(
+            {
+                "event": "signal_gateway_director_request",
+                "sender_hash": self._safe_sender_hash(message.sender),
+                "message_id": message.message_id,
+                "client_subject": principal.client_subject,
+                "conversation_id": principal.conversation_id,
+                "account_owner": principal.account_owner,
+                "family_member": identity.member_id,
+                "person_id": agent_context.person_id,
+                "agent_id": agent_context.agent_id,
+                "text_length": len(message.text),
+            }
+        )
+
         try:
             client = await self._client()
             headers = identity.safe_headers()
@@ -181,6 +196,19 @@ class SignalGateway:
             if not text:
                 return self._safe_error_response(message)
 
+            logger.info(
+                {
+                    "event": "signal_gateway_director_response",
+                    "sender_hash": self._safe_sender_hash(message.sender),
+                    "message_id": message.message_id,
+                    "director_request_id": data.get("request_id"),
+                    "provider": data.get("provider"),
+                    "model": data.get("model"),
+                    "agent_id": agent_context.agent_id,
+                    "person_id": agent_context.person_id,
+                    "reply_length": len(text),
+                }
+            )
             return OutboundResponse(
                 recipient=message.sender,
                 text=text,

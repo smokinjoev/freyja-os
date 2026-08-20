@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -113,6 +114,38 @@ async def test_disabled_gateway_drops_message():
 @pytest.mark.asyncio
 async def test_unknown_sender_is_dropped(enabled_gateway):
     assert await enabled_gateway.handle(make_message(sender="+15559999999")) is None
+
+
+@pytest.mark.asyncio
+async def test_imessage_rejection_logs_hash_not_sender(enabled_gateway, caplog):
+    caplog.set_level(logging.INFO, logger="connectors.imessage.gateway")
+
+    assert await enabled_gateway.handle(make_message(sender="+15559999999")) is None
+
+    assert "+15559999999" not in caplog.text
+    assert "sender_hash" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_imessage_director_trace_logs_request_and_response(enabled_gateway, caplog):
+    caplog.set_level(logging.INFO, logger="connectors.imessage.gateway")
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response(
+            {
+                "provider": "ollama",
+                "model": "qwen2.5:7b",
+                "response": "Hello",
+                "request_id": "req-imessage",
+            }
+        )
+        result = await enabled_gateway.handle(make_message())
+
+    assert result is not None
+    assert "imessage_gateway_director_request" in caplog.text
+    assert "imessage_gateway_director_response" in caplog.text
+    assert "req-imessage" in caplog.text
+    assert "+15551234567" not in caplog.text
 
 
 def test_provisional_reply_only_for_direct_routable_messages(enabled_gateway):

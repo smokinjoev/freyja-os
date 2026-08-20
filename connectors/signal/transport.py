@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 from datetime import datetime, timezone
 from typing import Any, Protocol
 from urllib.parse import quote
@@ -101,7 +102,7 @@ class SignalRestTransport:
         return InboundMessage(
             sender=sender,
             text=text,
-            message_id=f"{sender}:{timestamp_ms}",
+            message_id=f"{_safe_identifier(sender)}:{timestamp_ms}",
             timestamp=timestamp,
             group_id=group_id,
         )
@@ -160,6 +161,15 @@ class SignalRestTransport:
             reply = await self._gateway.handle(message)
             await self.send(reply)
             replies.append(reply)
+            logger.info(
+                {
+                    "event": "signal_transport_reply_sent",
+                    "recipient_hash": _safe_identifier(reply.recipient),
+                    "message_id": reply.reply_to_message_id,
+                    "success": reply.success,
+                    "reply_length": len(reply.text),
+                }
+            )
 
         return replies
 
@@ -181,7 +191,7 @@ class SignalRestTransport:
             logger.warning(
                 {
                     "event": "signal_transport_send_failed",
-                    "recipient": response.recipient,
+                    "recipient_hash": _safe_identifier(response.recipient),
                     "error_type": type(exc).__name__,
                 }
             )
@@ -194,3 +204,7 @@ class SignalRestTransport:
             and not self._http_client.is_closed
         ):
             await self._http_client.aclose()
+
+
+def _safe_identifier(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]

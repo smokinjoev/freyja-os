@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 from collections import deque
 
 import httpx
@@ -121,7 +122,7 @@ class IMessageGateway:
             {
                 "event": "imessage_gateway_rejected",
                 "reason": reason,
-                "sender": message.sender,
+                "sender_hash": self._safe_sender_hash(message.sender),
                 "message_id": message.message_id,
                 "text_length": len(message.text),
             }
@@ -208,6 +209,21 @@ class IMessageGateway:
             "conversation_id": principal.conversation_id,
         }
 
+        logger.info(
+            {
+                "event": "imessage_gateway_director_request",
+                "sender_hash": self._safe_sender_hash(message.sender),
+                "message_id": message.message_id,
+                "client_subject": principal.client_subject,
+                "conversation_id": principal.conversation_id,
+                "account_owner": principal.account_owner,
+                "family_member": identity.member_id,
+                "person_id": identity.person.person_id if identity.person else None,
+                "is_group": message.is_group,
+                "text_length": len(message.text),
+            }
+        )
+
         try:
             client = await self._client()
             headers = identity.safe_headers()
@@ -229,7 +245,7 @@ class IMessageGateway:
             logger.warning(
                 {
                     "event": "imessage_gateway_director_timeout",
-                    "sender": message.sender,
+                    "sender_hash": self._safe_sender_hash(message.sender),
                     "message_id": message.message_id,
                 }
             )
@@ -238,7 +254,7 @@ class IMessageGateway:
             logger.warning(
                 {
                     "event": "imessage_gateway_director_error",
-                    "sender": message.sender,
+                    "sender_hash": self._safe_sender_hash(message.sender),
                     "message_id": message.message_id,
                     "status_code": exc.response.status_code,
                 }
@@ -248,7 +264,7 @@ class IMessageGateway:
             logger.exception(
                 {
                     "event": "imessage_gateway_unexpected_error",
-                    "sender": message.sender,
+                    "sender_hash": self._safe_sender_hash(message.sender),
                     "message_id": message.message_id,
                 }
             )
@@ -258,10 +274,25 @@ class IMessageGateway:
         if not text:
             return self._safe_error_response(message)
 
+        logger.info(
+            {
+                "event": "imessage_gateway_director_response",
+                "sender_hash": self._safe_sender_hash(message.sender),
+                "message_id": message.message_id,
+                "director_request_id": data.get("request_id"),
+                "provider": data.get("provider"),
+                "model": data.get("model"),
+                "reply_length": len(text),
+            }
+        )
         return IMessageReply(chat_id=message.chat_id, text=text)
 
     def _safe_error_response(self, message: IMessage) -> IMessageReply:
         return IMessageReply(chat_id=message.chat_id, text=_SAFE_ERROR_TEXT)
+
+    @staticmethod
+    def _safe_sender_hash(sender: str) -> str:
+        return hashlib.sha256(sender.encode("utf-8")).hexdigest()[:16]
 
     async def close(self) -> None:
         if self._http_client is not None and not self._http_client.is_closed:
