@@ -369,6 +369,34 @@ def _memory_enabled() -> bool:
     return is_memory_enabled()
 
 
+async def _get_current_commit_implementation(request: ToolExecutionRequest) -> dict:
+    repo_root = Path(__file__).resolve().parents[3]
+    try:
+        commit_proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        branch_proc = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        return {
+            "repository_root": str(repo_root),
+            "commit": commit_proc.stdout.strip(),
+            "branch": branch_proc.stdout.strip(),
+            "git_available": commit_proc.returncode == 0 and branch_proc.returncode == 0,
+        }
+    except Exception as exc:
+        return {"repository_root": str(repo_root), "error": str(exc)}
+
 async def _repository_diff_summary_implementation(request: ToolExecutionRequest) -> dict:
     repo_root = Path(__file__).resolve().parents[3]
     try:
@@ -671,6 +699,7 @@ async def _validate_diff_implementation(request: ToolExecutionRequest) -> dict:
 
 _SMITH_READ_ONLY_TOOL_NAMES = (
     "repository_diff_summary",
+    "get_current_commit",
     "run_test_suite",
     "compile_project",
     "validate_diff",
@@ -687,6 +716,28 @@ def register_smith_read_only_tools(registry: ToolRegistry) -> None:
     _assert_registration_consistent(registry, _SMITH_READ_ONLY_TOOL_NAMES)
     if _registration_is_complete(registry, _SMITH_READ_ONLY_TOOL_NAMES):
         return
+    registry.register(
+        ToolDefinition(
+            name="get_current_commit",
+            description="Return the current Git commit and branch for the Freyja-OS repository.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "repository_root": {"type": "string"},
+                    "commit": {"type": "string"},
+                    "branch": {"type": "string"},
+                    "git_available": {"type": "boolean"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=10,
+            tags=["smith", "git", "read-only"],
+        ),
+        _get_current_commit_implementation,
+    )
     registry.register(
         ToolDefinition(
             name="repository_diff_summary",

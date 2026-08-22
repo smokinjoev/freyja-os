@@ -8,6 +8,7 @@ def test_cloyd_has_local_coder_modules() -> None:
 
     for tool_name in (
         "repository_status",
+        "get_current_commit",
         "repository_diff_summary",
         "run_test_suite",
         "compile_project",
@@ -67,6 +68,17 @@ def test_generic_shell_is_not_a_coder_module() -> None:
 
     assert decision.allowed is False
     assert decision.reason == "tool is not a coder module"
+
+
+@pytest.mark.asyncio
+async def test_runtime_can_read_current_commit() -> None:
+    result = await CloydCoderRuntime().execute(
+        tool_name="get_current_commit",
+        request_id="cloyd-commit",
+    )
+
+    assert result.success is True
+    assert result.output.get("commit")
 
 
 @pytest.mark.asyncio
