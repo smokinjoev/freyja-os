@@ -3,6 +3,9 @@
 from freyja.tools.builtin import register_smith_read_only_tools, register_smith_write_pilot_tools
 from freyja.tools.iris_maintenance import register_smith_controlled_tools
 
+from .coder_access import CloydCoderRuntime, CoderAccessDecision, CoderAccessPolicy
+from .household import HouseholdAgent, HouseholdAgentRegistry, household_agents
+
 from .device_trust import DeviceCredentialKind, DeviceRegistry, TrustedDevice
 
 from .hierarchy import (
@@ -59,6 +62,11 @@ __all__ = [
     "AgentHierarchy",
     "AgentName",
     "AgentPolicy",
+    "CloydCoderRuntime",
+    "CoderAccessDecision",
+    "CoderAccessPolicy",
+    "HouseholdAgent",
+    "HouseholdAgentRegistry",
     "ApprovalCallback",
     "ApprovalRecord",
     "ApprovalRecordStatus",
@@ -95,5 +103,6 @@ __all__ = [
     "WritePilotRequest",
     "WritePilotResult",
     "WritePilotState",
+    "household_agents",
     "register_smith_tools",
 ]

@@ -25,7 +25,7 @@ from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
 from freyja.router import RouteRequest, router
 from freyja.tools.api import tools_router
-from freyja.tools.builtin import register_builtin_tools, register_smith_write_pilot_tools
+from freyja.tools.builtin import register_builtin_tools, register_smith_read_only_tools, register_smith_write_pilot_tools
 from freyja.tools.registry import get_registry
 
 
@@ -83,6 +83,7 @@ app.include_router(tools_router)
 
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
+register_smith_read_only_tools(get_registry())
 
 # Enable the three approved write-pilot tools only when Smith write-pilot
 # mode is enabled. They remain disabled by default so that a simple flag

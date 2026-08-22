@@ -45,11 +45,12 @@ Rev 2 reorganizes Freyja-OS around four durable planes: Atlas for control and st
 
 ## Phase 4 — Offline local coding
 
-- Build a bounded repository coding agent on the cognition node.
+- Build a bounded repository coding agent on the cognition node, exposed to Joe through Cloyd and backed by the primary local inference endpoint.
 - Permit repository inspection, edits, approved commands, tests, and diff generation.
 - Add workspace and command allowlists.
 - Add rollback and review checkpoints.
 - Certify that messaging cannot become unrestricted shell access.
+- Keep inspection, tests, compilation, and diff validation available locally when cloud/chat credits are unavailable; require explicit approval for edits, staging, commits, and other consequential repository changes.
 
 **Exit:** Freyja can perform meaningful coding work without cloud AI.
 
@@ -65,7 +66,7 @@ Rev 2 reorganizes Freyja-OS around four durable planes: Atlas for control and st
 
 ## Phase 6 — Hera Presence Node
 
-- Convert Hera into the kitchen reference Presence Node.
+- Convert Hera into the kitchen reference Presence Node, with Freyja as the shared household voice and avatar.
 - Implement wake word, VAD, microphone capture, STT, TTS, speakers, avatar display, interruption handling, and session transport.
 - Connect Hera to Atlas rather than embedding independent authority.
 - Add local timers and low-latency interaction handling.
@@ -95,6 +96,26 @@ Rev 2 reorganizes Freyja-OS around four durable planes: Atlas for control and st
 - Eliminate accidental node-local memory authorities.
 
 **Exit:** One person and one durable memory model span every interface.
+
+## Phase 8.5 — Household personal agents
+
+- Keep Freyja as the shared household intelligence, coordinator, and the personality presented through Hera and HomePods.
+- Establish durable personal-agent assignments:
+  - Joe -> Cloyd Gibbler (`cloyd-gibbler`), with bounded `code.inspect`, `code.edit`, `code.test`, `code.diff`, and `code.commit` capabilities
+  - Beth -> Benedict (`benedict`)
+  - Liam -> Agent 44 (`agent-44`)
+  - Jenna -> reserved personal-agent slot; name and personality TBD
+  - Infrastructure -> Agent Smith (`smith`)
+- Select the personal agent only after canonical sender/person resolution.
+- Give every personal agent a stable identity, personality prompt, owner, conversation continuity, personal memories, task state, and correction history.
+- Use the same registered inference capabilities for all agents; do not bind an agent identity to a specific model or host.
+- Make household-shared memory the normal collaboration layer. Allow ordinary family context to cross between agents while retaining an explicit private scope for information that must not be shared.
+- Let Jenna route through Freyja until her personal-agent identity is deliberately selected; never invent a temporary name in conversation.
+- Eliminate canned reset behavior: agents respond directly, avoid repeated introductions and “How may I help you?”, and use recent conversation plus relevant durable memory.
+- Add connector-independent agent metadata so Signal, iMessage, Gmail, Hera voice sessions, and HomePod/Shortcut sessions resolve the same agent.
+- Add certification for identity-to-agent routing, stable agent voice, restart continuity, shared-memory recall, correction retention, and private-scope enforcement.
+
+**Exit:** Joe reaches Cloyd, Beth reaches Benedict, Liam reaches Agent 44, Jenna reaches Freyja pending her selection, shared household interfaces present Freyja, and every agent maintains a stable relationship across channels and service restarts.
 
 ## Phase 9 — Messaging convergence
 
@@ -160,3 +181,5 @@ Rev 2 is complete when:
 9. Cloud use is optional, policy-controlled, observable, and cost-aware.
 10. Passive family context extraction is bounded by source permissions, confidence, provenance, and action-authorization policy.
 11. Spare machines are not part of production unless they provide a unique required capability.
+12. Canonical people resolve to durable personal agents consistently across messaging, Hera, and HomePod entry points.
+13. Personal agents retain distinct identity and continuity while collaborating through household-shared memory.

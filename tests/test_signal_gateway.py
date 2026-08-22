@@ -369,3 +369,53 @@ async def test_family_alias_routes_to_freyja_household_agent(enabled_gateway):
     assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
     assert headers["X-Freyja-Account-Owner"] == "person:family"
     assert headers["X-Freyja-Agent-Id"] == "freyja"
+
+
+@pytest.mark.asyncio
+async def test_cloyd_coding_request_uses_local_reasoning_and_tools(enabled_gateway):
+    enabled_gateway._allowed_identities = parse_allowed_senders(
+        "joe=+15551234567",
+        "signal",
+    )
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+    message = make_message(
+        "+15551234567",
+        "Cloyd, fix this test and run pytest",
+        "msg-cloyd-code",
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "I inspected the failure."})
+        result = await enabled_gateway.handle(message)
+
+    assert result.success is True
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["provider"] == "local_reasoning"
+    assert payload["task_type"] == "coding"
+    assert payload["tools_required"] is True
+    assert "CLOYD LOCAL CODER MODE" in payload["prompt"]
+    assert "inspect -> reason -> edit -> tests -> diff" in payload["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_non_cloyd_coding_words_do_not_grant_coder_mode(enabled_gateway):
+    enabled_gateway._allowed_identities = parse_allowed_senders(
+        "beth=+15557654321",
+        "signal",
+    )
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+    message = make_message(
+        "+15557654321",
+        "Can you run pytest?",
+        "msg-beth-code",
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "No coder access."})
+        result = await enabled_gateway.handle(message)
+
+    assert result.success is True
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["provider"] == "auto"
+    assert payload["tools_required"] is False
+    assert "CLOYD LOCAL CODER MODE" not in payload["prompt"]
