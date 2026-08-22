@@ -72,6 +72,7 @@ services:
       - ../../../.git:/repo/.git:ro
       - ../../../.venv:/repo/.venv:ro
       - ../../../README.md:/repo/README.md:ro
+      - ../../../ARCHITECTURE.md:/repo/ARCHITECTURE.md:ro
       - ../../../certification:/repo/certification:ro
       - ../../../config:/repo/config:ro
       - ../../../connectors:/repo/connectors:ro
