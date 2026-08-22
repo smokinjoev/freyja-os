@@ -30,6 +30,35 @@ CODER_WRITE_TOOLS = frozenset(
     }
 )
 
+_CODING_PHRASES = (
+    "write code",
+    "edit the code",
+    "change the code",
+    "fix the code",
+    "fix this test",
+    "fix the test",
+    "run pytest",
+    "run the tests",
+    "compile the project",
+    "inspect the repo",
+    "inspect the repository",
+    "repository status",
+    "review the diff",
+    "validate the diff",
+    "debug this",
+    "refactor",
+    "implement ",
+    "patch ",
+)
+
+
+def is_coding_request(text: str) -> bool:
+    """Conservative deterministic entry gate for Cloyd's local coding loop."""
+    normalized = " ".join(text.lower().split())
+    if any(phrase in normalized for phrase in _CODING_PHRASES):
+        return True
+    return normalized.startswith(("code:", "coder:", "cloyd, code", "cloyd code"))
+
 
 @dataclass(frozen=True)
 class CoderAccessDecision:
