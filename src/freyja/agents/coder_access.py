@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from freyja.tools.builtin import register_smith_read_only_tools, register_smith_write_pilot_tools
+from freyja.tools.iris_maintenance import register_smith_controlled_tools
 from freyja.tools.models import ToolExecutionRequest, ToolExecutionResult
 from freyja.tools.registry import ToolRegistry, get_registry
 
@@ -17,6 +18,9 @@ CODER_TOOL_CAPABILITIES: dict[str, str] = {
     "run_test_suite": "code.test",
     "compile_project": "code.test",
     "validate_diff": "code.diff",
+    "bounded_file_write": "code.edit",
+    "git_add": "code.commit",
+    "git_commit": "code.commit",
     "write_pilot_file_write": "code.edit",
     "write_pilot_git_add": "code.commit",
     "write_pilot_git_commit": "code.commit",
@@ -24,6 +28,9 @@ CODER_TOOL_CAPABILITIES: dict[str, str] = {
 
 CODER_WRITE_TOOLS = frozenset(
     {
+        "bounded_file_write",
+        "git_add",
+        "git_commit",
         "write_pilot_file_write",
         "write_pilot_git_add",
         "write_pilot_git_commit",
@@ -126,6 +133,7 @@ class CloydCoderRuntime:
         self._registry = registry or get_registry()
         register_smith_read_only_tools(self._registry)
         register_smith_write_pilot_tools(self._registry)
+        register_smith_controlled_tools(self._registry)
         self._policy = policy or CoderAccessPolicy()
 
     async def execute(
