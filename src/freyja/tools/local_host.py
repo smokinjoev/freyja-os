@@ -275,7 +275,7 @@ async def _director_health_implementation(request: ToolExecutionRequest) -> dict
 async def _repository_status_implementation(request: ToolExecutionRequest) -> dict[str, Any]:
     result = await _run_read_only_command(
         "git",
-        ["status", "--short", "--branch"],
+        ["-c", f"safe.directory={_REPO_ROOT}", "status", "--short", "--branch"],
         cwd=_REPO_ROOT,
     )
     if result["success"]:
