@@ -3,6 +3,8 @@ import logging
 import re
 import time
 import uuid
+from datetime import UTC, datetime
+from datetime import timedelta
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
@@ -96,6 +98,8 @@ SANITIZED_TERMS = {"api key", "authorization", "bearer", "sk-"}
 
 PUBLIC_ERROR_MESSAGES = {
     "ollama": "Local model provider is unavailable.",
+    "vulcan": "Vulcan local model provider is unavailable.",
+    "vulcan_coder": "Vulcan coder provider is unavailable.",
     "openrouter": "Cloud model provider is unavailable.",
     "none_available": "No approved provider is currently available.",
     "blocked": "The request was blocked by routing policy.",
@@ -134,20 +138,28 @@ ROUTINE_TASK_TYPES = {
     "routine",
 }
 
+LIGHTWEIGHT_LOCAL_TASK_TYPES = {
+    "classify",
+    "classification",
+    "extract",
+    "extraction",
+    "route",
+    "routing",
+}
+
 CLOUD_TASK_TYPES = {
     "code",
     "coding",
     "debug",
     "debugging",
-    "refactor",
-    "refactoring",
+    "code_review",
+    "code-review",
     "plan",
     "planning",
     "architecture",
     "architectural",
     "reason",
     "reasoning",
-    "analysis",
     "complex",
     "difficult",
     "large_context",
@@ -183,10 +195,6 @@ def _classify_privacy(prompt: str, explicit: str | None) -> str:
     if any(keyword in lowered_prompt for keyword in SENSITIVE_KEYWORDS):
         return "sensitive"
     return "routine"
-
-
-def _requires_internal_model(privacy: str) -> bool:
-    return privacy in {"private", "sensitive"}
 
 
 def _model_parameter_count_b(model: str) -> int | None:
@@ -235,29 +243,46 @@ def _cloud_score(request: RouteRequest) -> int:
 
 def _local_reasoning_score(request: RouteRequest) -> int:
     score = _cloud_score(request)
-    task = (request.task_type or "").lower()
-    if any(ct in task for ct in CLOUD_TASK_TYPES):
-        score += 2
     prompt = request.prompt.lower()
     if any(pattern in prompt for pattern in COMPLEX_PROMPT_PATTERNS):
         score += 2
+    if _is_coding_request(request):
+        score += 2
     return score
+
+
+def _is_coding_request(request: RouteRequest) -> bool:
+    task = (request.task_type or "").lower()
+    if any(term in task for term in ("code", "coding", "debug", "debugging", "patch", "refactor")):
+        return True
+    prompt = request.prompt.lower()
+    return any(pattern in prompt for pattern in ("write code", "fix the bug", "debug", "stack trace", "patch", "refactor"))
+
+
+def _is_lightweight_local_task(request: RouteRequest) -> bool:
+    task = (request.task_type or "").lower()
+    return any(term in task for term in LIGHTWEIGHT_LOCAL_TASK_TYPES)
 
 
 class Router:
     def __init__(self, registry: ToolRegistry | None = None) -> None:
         self.ollama_client: Any | None = None
-        self.reasoning_ollama_client: Any | None = None
+        self.vulcan_client: Any | None = None
+        self.vulcan_coder_client: Any | None = None
         self.openrouter_client: Any | None = None
         self._registry = registry or get_registry()
 
-    def register_clients(self, ollama_client: Any, openrouter_client: Any) -> None:
+    def register_clients(
+        self,
+        ollama_client: Any,
+        openrouter_client: Any,
+        vulcan_client: Any | None = None,
+        vulcan_coder_client: Any | None = None,
+    ) -> None:
         self.ollama_client = ollama_client
-        self.reasoning_ollama_client = ollama_client
         self.openrouter_client = openrouter_client
-
-    def register_reasoning_client(self, reasoning_ollama_client: Any) -> None:
-        self.reasoning_ollama_client = reasoning_ollama_client
+        self.vulcan_client = vulcan_client
+        self.vulcan_coder_client = vulcan_coder_client
 
     def _prompt_for_provider(
         self,
@@ -266,14 +291,55 @@ class Router:
         principal: MemoryPrincipal | None,
         evidence: RuntimeEvidence | None = None,
     ) -> str:
+        prompt = self._base_prompt(request)
         if principal is None:
-            return request.prompt
-        if provider not in {"ollama", "local_reasoning"} and not settings.memory_recall_include_in_cloud:
-            return request.prompt
+            return prompt
+        if provider not in {"ollama", "local_reasoning", "vulcan", "vulcan_coder"} and not settings.memory_recall_include_in_cloud:
+            return prompt
         memories = self._recall_shared_memories(principal, evidence)
         if not memories:
-            return request.prompt
-        return f"{self._format_recalled_memory(memories)}\n\nCurrent user request:\n{request.prompt}"
+            return prompt
+        return f"{self._format_recalled_memory(memories)}\n\n{prompt}"
+
+    def _runtime_context(self) -> str:
+        now = datetime.now(UTC)
+        upcoming = []
+        for offset in range(0, 7):
+            item = now + timedelta(days=offset)
+            upcoming.append(f"{item.strftime('%A')}: {item.date().isoformat()}")
+        return (
+            "Runtime context:\n"
+            f"- Current date: {now.date().isoformat()}\n"
+            f"- Current datetime UTC: {now.isoformat()}\n"
+            f"- Upcoming dates: {', '.join(upcoming)}\n"
+            "- Resolve relative dates such as today, tomorrow, and Saturday against these dates."
+        )
+
+    def _base_prompt(self, request: RouteRequest) -> str:
+        parts = [self._runtime_context()]
+        conversation_context = self._conversation_context(request)
+        if conversation_context:
+            parts.append(conversation_context)
+        parts.append(f"Current user request:\n{request.prompt}")
+        return "\n\n".join(parts)
+
+    def _conversation_context(self, request: RouteRequest) -> str:
+        if not request.conversation_id:
+            return ""
+        try:
+            messages = memory_store.get_active_store().get_messages(request.conversation_id, limit=8).messages
+        except Exception:
+            logger.exception("Conversation recall failed for %s", request.conversation_id)
+            return ""
+        if not messages:
+            return ""
+        lines = ["Recent conversation context:"]
+        for message in messages[-8:]:
+            role = message.role if message.role in {"user", "assistant"} else "message"
+            content = " ".join(message.content.split())
+            if content:
+                lines.append(f"- {role}: {content[:1000]}")
+        return "\n".join(lines) if len(lines) > 1 else ""
 
     def _recall_shared_memories(
         self,
@@ -344,6 +410,16 @@ class Router:
             return False
         return await self.openrouter_client.healthy()
 
+    async def _vulcan_healthy(self) -> bool:
+        if not settings.vulcan_enabled or self.vulcan_client is None:
+            return False
+        return await self.vulcan_client.healthy()
+
+    async def _vulcan_coder_healthy(self) -> bool:
+        if not settings.vulcan_coder_enabled or self.vulcan_coder_client is None:
+            return False
+        return await self.vulcan_coder_client.healthy()
+
     async def _ollama_has_model(self, model: str) -> bool:
         try:
             models = await self.ollama_client.list_local_models()
@@ -359,12 +435,19 @@ class Router:
         return settings.ollama_chat_model
 
     def _reasoning_model(self, requested: str | None = None) -> str:
+        if settings.vulcan_enabled:
+            return requested or settings.vulcan_model
         return requested or settings.ollama_reasoning_model
 
-    def _ollama_for_provider(self, provider: str) -> Any | None:
-        if provider == "local_reasoning":
-            return self.reasoning_ollama_client or self.ollama_client
-        return self.ollama_client
+    def _coder_model(self, requested: str | None = None) -> str:
+        return requested or settings.vulcan_coder_model
+
+    def _local_reasoning_provider(self, request: RouteRequest) -> str:
+        if _is_coding_request(request) and settings.vulcan_coder_enabled:
+            return "vulcan_coder"
+        if settings.vulcan_enabled:
+            return "vulcan"
+        return "local_reasoning"
 
     def _approved_model(self, requested: str | None) -> tuple[str, str]:
         approved = settings.approved_openrouter_models
@@ -392,10 +475,11 @@ class Router:
         self,
         request: RouteRequest,
         *,
-        privacy: str,
+        spent_this_month: float,
+        estimated_cost: float,
         fallback_attempts: list[dict[str, Any]],
-    ) -> RoutingDecision:
-        """Keep private and sensitive data on internal models; fail closed if unavailable."""
+    ) -> RoutingDecision | None:
+        """Try to keep sensitive data local; fall back to cloud only when local is unhealthy and cloud is allowed."""
         local_model = request.model or settings.ollama_model
         if not _meets_min_chat_capability(local_model):
             local_model = settings.ollama_chat_model
@@ -406,19 +490,75 @@ class Router:
                 provider="ollama",
                 model=local_model,
                 reason="sensitive/private request with healthy local model",
-                privacy_classification=privacy,
+                privacy_classification="sensitive",
                 fallback_attempts=fallback_attempts,
                 estimated_cost_usd=0.0,
             )
         fallback_attempts.append(self._record_attempt("ollama", "unhealthy"))
+
+        if not settings.cloud_enabled:
+            return RoutingDecision(
+                provider="ollama",
+                model=local_model,
+                reason="sensitive request defaults to local; cloud disabled",
+                privacy_classification="sensitive",
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=0.0,
+                limitation_notice="Cloud routing is currently disabled; falling back to local.",
+            )
+        if spent_this_month >= settings.openrouter_monthly_hard_limit:
+            return RoutingDecision(
+                provider="ollama",
+                model=local_model,
+                reason="sensitive request defaults to local; hard budget reached",
+                privacy_classification="sensitive",
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=estimated_cost,
+                limitation_notice="Monthly cloud budget exhausted; falling back to local.",
+            )
+        if estimated_cost > settings.openrouter_per_request_limit:
+            return RoutingDecision(
+                provider="ollama",
+                model=local_model,
+                reason="sensitive request defaults to local; per-request cost limit exceeded",
+                privacy_classification="sensitive",
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=estimated_cost,
+                limitation_notice="Request exceeds per-request cost limit; falling back to local.",
+            )
+
+        openrouter_healthy = await self._openrouter_healthy()
+        if not openrouter_healthy:
+            fallback_attempts.append(self._record_attempt("openrouter", "unhealthy"))
+            return RoutingDecision(
+                provider="ollama",
+                model=local_model,
+                reason="sensitive request defaults to local; openrouter unhealthy",
+                privacy_classification="sensitive",
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=estimated_cost,
+                limitation_notice="Cloud provider unhealthy; falling back to local.",
+            )
+
+        model, reason = self._approved_model(request.model)
+        if not model:
+            fallback_attempts.append(self._record_attempt("openrouter", "no approved model"))
+            return RoutingDecision(
+                provider="ollama",
+                model=local_model,
+                reason="sensitive request defaults to local; no approved cloud model",
+                privacy_classification="sensitive",
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=estimated_cost,
+                limitation_notice="No approved OpenRouter model; falling back to local.",
+            )
         return RoutingDecision(
-            provider="error",
-            model="",
-            reason="sensitive/private request requires internal model; local model unhealthy",
-            privacy_classification=privacy,
+            provider="openrouter",
+            model=model,
+            reason=f"sensitive request falls back to cloud; {reason}",
+            privacy_classification="sensitive",
             fallback_attempts=fallback_attempts,
-            estimated_cost_usd=0.0,
-            public_error_message="Internal model is unavailable for private data.",
+            estimated_cost_usd=estimated_cost,
         )
 
     async def decide(
@@ -432,7 +572,7 @@ class Router:
         notice: str | None = None
         reason_tail = ""
 
-        if request.provider not in {"local", "local_reasoning", "cloud", "auto"}:
+        if request.provider not in {"local", "local_reasoning", "vulcan", "vulcan_coder", "cloud", "auto"}:
             return RoutingDecision(
                 provider="error",
                 model="",
@@ -441,10 +581,29 @@ class Router:
                 estimated_cost_usd=0.0,
             )
 
-        if request.provider == "local_reasoning":
+        if request.provider == "vulcan":
             return RoutingDecision(
-                provider="local_reasoning",
-                model=self._reasoning_model(request.model),
+                provider="vulcan",
+                model=request.model or settings.vulcan_model,
+                reason="manual vulcan override",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+
+        if request.provider == "vulcan_coder":
+            return RoutingDecision(
+                provider="vulcan_coder",
+                model=self._coder_model(request.model),
+                reason="manual vulcan_coder override",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
+
+        if request.provider == "local_reasoning":
+            provider = self._local_reasoning_provider(request)
+            return RoutingDecision(
+                provider=provider,
+                model=self._coder_model(request.model) if provider == "vulcan_coder" else self._reasoning_model(request.model),
                 reason="manual local_reasoning override",
                 privacy_classification=privacy,
                 estimated_cost_usd=0.0,
@@ -465,25 +624,6 @@ class Router:
         estimated_cost = self._estimate_cost(request.prompt)
 
         if request.provider == "cloud":
-            if _requires_internal_model(privacy):
-                if _local_reasoning_score(request) > _routine_score(request):
-                    return RoutingDecision(
-                        provider="local_reasoning",
-                        model=self._reasoning_model(request.model),
-                        reason="manual cloud override rejected: privacy requires internal local_reasoning",
-                        privacy_classification=privacy,
-                        estimated_cost_usd=0.0,
-                    )
-                local_model = request.model or settings.ollama_model
-                if not _meets_min_chat_capability(local_model):
-                    local_model = settings.ollama_chat_model
-                return RoutingDecision(
-                    provider="ollama",
-                    model=local_model,
-                    reason="manual cloud override rejected: privacy requires internal model",
-                    privacy_classification=privacy,
-                    estimated_cost_usd=0.0,
-                )
             if not settings.cloud_enabled:
                 return RoutingDecision(
                     provider="ollama",
@@ -521,30 +661,44 @@ class Router:
             )
 
         # provider == "auto"
+        if privacy == "sensitive":
+            sensitive_decision = await self._route_sensitive(
+                request,
+                spent_this_month=spent_this_month,
+                estimated_cost=estimated_cost,
+                fallback_attempts=fallback_attempts,
+            )
+            if sensitive_decision is not None:
+                return sensitive_decision
+
         if _local_reasoning_score(request) > _routine_score(request):
+            provider = self._local_reasoning_provider(request)
             return RoutingDecision(
-                provider="local_reasoning",
-                model=self._reasoning_model(request.model),
-                reason=(
-                    "privacy requires internal local_reasoning"
-                    if _requires_internal_model(privacy)
-                    else "local_reasoning preferred for complex local task"
-                ),
+                provider=provider,
+                model=self._coder_model(request.model) if provider == "vulcan_coder" else self._reasoning_model(request.model),
+                reason="local_reasoning preferred for complex local task",
                 privacy_classification=privacy,
                 fallback_attempts=fallback_attempts,
                 estimated_cost_usd=0.0,
             )
 
-        if _requires_internal_model(privacy):
-            return await self._route_sensitive(
-                request,
-                privacy=privacy,
-                fallback_attempts=fallback_attempts,
-            )
-
         local_reason = "routine/sensitive request defaults to local"
         if reason_tail:
             local_reason += f"; {reason_tail}"
+        if (
+            settings.vulcan_enabled
+            and settings.vulcan_primary_chat_enabled
+            and not _is_lightweight_local_task(request)
+        ):
+            return RoutingDecision(
+                provider="vulcan",
+                model=self._reasoning_model(request.model),
+                reason="vulcan primary chat enabled for hot local responses",
+                privacy_classification=privacy,
+                fallback_attempts=fallback_attempts,
+                estimated_cost_usd=0.0,
+                limitation_notice=notice,
+            )
         local_model = request.model or settings.ollama_model
         if not _meets_min_chat_capability(local_model):
             fallback_attempts.append(self._record_attempt("ollama", f"{local_model} below min chat capability"))
@@ -560,10 +714,13 @@ class Router:
         )
 
     def _public_error(self, provider: str, fallback_attempts: list[dict[str, Any]]) -> str:
-        has_cloud_attempt = any(a.get("provider") == "openrouter" for a in fallback_attempts)
-        has_local_attempt = any(a.get("provider") in {"ollama", "local_reasoning"} for a in fallback_attempts)
-        if has_cloud_attempt and has_local_attempt:
+        local_providers = {"ollama", "local_reasoning", "vulcan", "vulcan_coder"}
+        if any(a.get("provider") == "openrouter" for a in fallback_attempts) and any(
+            a.get("provider") in local_providers for a in fallback_attempts
+        ):
             return PUBLIC_ERROR_MESSAGES["none_available"]
+        if provider in {"vulcan", "vulcan_coder"}:
+            return PUBLIC_ERROR_MESSAGES[provider]
         if provider in {"openrouter", "cloud"}:
             return PUBLIC_ERROR_MESSAGES["openrouter"]
         return PUBLIC_ERROR_MESSAGES["ollama"]
@@ -591,24 +748,24 @@ class Router:
                 started=started,
             )
 
-        if decision.provider in {"ollama", "local_reasoning"}:
-            ollama_client = self._ollama_for_provider(decision.provider)
-            if ollama_client is None:
+        if decision.provider in {"ollama", "local_reasoning", "vulcan", "vulcan_coder"}:
+            client = self._client_for_provider(decision.provider)
+            if client is None:
                 decision.reason += f"; {decision.provider} client unavailable"
-                decision.public_error_message = PUBLIC_ERROR_MESSAGES["ollama"]
+                decision.public_error_message = PUBLIC_ERROR_MESSAGES.get(decision.provider, PUBLIC_ERROR_MESSAGES["ollama"])
                 return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
             if request.tools_required:
                 return await self._execute_with_tools(
                     request,
                     decision,
-                    ollama_client,
+                    client,
                     self._registry,
                     memory_principal,
                     person_context,
                     evidence,
                     started,
                 )
-            response = await ollama_client.chat(
+            response = await client.chat(
                 prompt=self._prompt_for_provider(request, decision.provider, memory_principal, evidence),
                 model=decision.model or None,
                 output_tokens=settings.ollama_default_output_tokens if decision.provider == "local_reasoning" else None,
@@ -617,11 +774,7 @@ class Router:
             if "error" in response:
                 raw_error = response["error"]
                 decision.fallback_attempts.append({"provider": decision.provider, "outcome": raw_error})
-                if (
-                    settings.cloud_enabled
-                    and request.provider != "local"
-                    and not _requires_internal_model(decision.privacy_classification)
-                ):
+                if settings.cloud_enabled and request.provider != "local":
                     fallback_result = await self._try_openrouter_fallback(request, decision, memory_principal, evidence, started)
                     fallback_result.decision.fallback_attempts = self._sanitize_fallback_attempts(fallback_result.decision.fallback_attempts)
                     fallback_result.runtime_evidence.refresh_decision(fallback_result.decision)
@@ -630,7 +783,7 @@ class Router:
                 decision.public_error_message = self._public_error(decision.provider, decision.fallback_attempts)
                 return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
 
-            content = response.get("message", {}).get("content", "")
+            content = self._extract_response_text(response, decision.provider)
             decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
             await self._record_memory(request, decision, content, evidence)
             return self._routing_result(decision=decision, response=content, evidence=evidence, started=started)
@@ -701,6 +854,30 @@ class Router:
         max_iterations = min(max(1, settings.chat_max_tool_iterations), 50)
         max_output_chars = max(0, settings.chat_max_tool_output_chars)
 
+        homeassistant_policy_response = await self._maybe_handle_homeassistant_policy_request(
+            request,
+            decision,
+            registry,
+            memory_principal,
+            person_context,
+            evidence,
+            started,
+        )
+        if homeassistant_policy_response is not None:
+            return homeassistant_policy_response
+
+        homeassistant_inventory_response = await self._maybe_handle_homeassistant_inventory_request(
+            request,
+            decision,
+            registry,
+            memory_principal,
+            person_context,
+            evidence,
+            started,
+        )
+        if homeassistant_inventory_response is not None:
+            return homeassistant_inventory_response
+
         for iteration in range(max_iterations):
             prompt_parts = [
                 self._prompt_for_provider(request, decision.provider, memory_principal, evidence)
@@ -731,6 +908,7 @@ class Router:
             if evidence is not None:
                 self._record_provider_response(evidence, response, decision.provider)
             if "error" in response:
+                await self._record_memory(request, decision, "", evidence)
                 return self._routing_result(
                     decision=decision,
                     response="",
@@ -744,6 +922,7 @@ class Router:
             clean_content = self._strip_tool_markers(content)
 
             if tool_call is None:
+                await self._record_memory(request, decision, clean_content, evidence)
                 return self._routing_result(
                     decision=decision,
                     response=clean_content,
@@ -781,9 +960,11 @@ class Router:
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
                 self._record_tool_evidence(evidence, entry)
+                response_text = f"Unknown tool '{tool_name}'."
+                await self._record_memory(request, decision, response_text, evidence)
                 return self._routing_result(
                     decision=decision,
-                    response=f"Unknown tool '{tool_name}'.",
+                    response=response_text,
                     tool_results=list(tool_history),
                     evidence=evidence,
                     started=started,
@@ -801,9 +982,11 @@ class Router:
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
                 self._record_tool_evidence(evidence, entry)
+                response_text = f"Tool '{tool_name}' is currently disabled."
+                await self._record_memory(request, decision, response_text, evidence)
                 return self._routing_result(
                     decision=decision,
-                    response=f"Tool '{tool_name}' is currently disabled.",
+                    response=response_text,
                     tool_results=list(tool_history),
                     evidence=evidence,
                     started=started,
@@ -821,9 +1004,11 @@ class Router:
                 tool_history.append(entry)
                 self._log_tool_execution(entry)
                 self._record_tool_evidence(evidence, entry)
+                response_text = f"Invalid arguments for '{tool_name}': {'; '.join(validation_errors)}"
+                await self._record_memory(request, decision, response_text, evidence)
                 return self._routing_result(
                     decision=decision,
-                    response=f"Invalid arguments for '{tool_name}': {'; '.join(validation_errors)}",
+                    response=response_text,
                     tool_results=list(tool_history),
                     evidence=evidence,
                     started=started,
@@ -861,6 +1046,7 @@ class Router:
                     f" ({execution_result.error_code or 'unknown'}): "
                     f"{message}."
                 )
+                await self._record_memory(request, decision, failure_response, evidence)
                 return self._routing_result(
                     decision=decision,
                     response=failure_response,
@@ -869,12 +1055,222 @@ class Router:
                     started=started,
                 )
 
+        response_text = "Tool iteration limit reached without a final answer."
+        await self._record_memory(request, decision, response_text, evidence)
         return self._routing_result(
             decision=decision,
-            response="Tool iteration limit reached without a final answer.",
+            response=response_text,
             tool_results=list(tool_history),
             evidence=evidence,
             started=started,
+        )
+
+    async def _maybe_handle_homeassistant_policy_request(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        registry: ToolRegistry,
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence | None,
+        started: float | None,
+    ) -> RoutingResult | None:
+        if not self._is_homeassistant_policy_prompt(request.prompt):
+            return None
+        if registry.get_tool("homeassistant_home_summary") is None:
+            return None
+
+        execution_request = ToolExecutionRequest(
+            tool_name="homeassistant_home_summary",
+            arguments={},
+            request_id=decision.request_id,
+            actor="freyja_router",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+            },
+        )
+        execution_result = await registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name="homeassistant_home_summary",
+            success=execution_result.success,
+            arguments={},
+            output=execution_result.output,
+            error_code=execution_result.error_code,
+            public_error_message=execution_result.public_error_message,
+            duration_ms=execution_result.duration_ms,
+        )
+        self._log_tool_execution(entry)
+        self._record_tool_evidence(evidence, entry)
+
+        if not execution_result.success:
+            message = (execution_result.public_error_message or "no details").rstrip(".")
+            response_text = f"Tool 'homeassistant_home_summary' failed ({execution_result.error_code or 'unknown'}): {message}."
+        else:
+            response_text = self._homeassistant_policy_response(request.prompt, execution_result.output)
+
+        await self._record_memory(request, decision, response_text, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response_text,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _maybe_handle_homeassistant_inventory_request(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        registry: ToolRegistry,
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence | None,
+        started: float | None,
+    ) -> RoutingResult | None:
+        tool_name = self._homeassistant_inventory_tool_name(request.prompt, registry)
+        if tool_name is None:
+            return None
+
+        arguments = {"domain": "light"} if tool_name == "homeassistant_list_entities" else {}
+        execution_request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="freyja_router",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+            },
+        )
+        execution_result = await registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name=tool_name,
+            success=execution_result.success,
+            arguments=arguments,
+            output=execution_result.output,
+            error_code=execution_result.error_code,
+            public_error_message=execution_result.public_error_message,
+            duration_ms=execution_result.duration_ms,
+        )
+        self._log_tool_execution(entry)
+        self._record_tool_evidence(evidence, entry)
+
+        if not execution_result.success:
+            message = (execution_result.public_error_message or "no details").rstrip(".")
+            response_text = f"Tool '{tool_name}' failed ({execution_result.error_code or 'unknown'}): {message}."
+        elif tool_name == "homeassistant_list_entities":
+            response_text = self._homeassistant_light_status_response(execution_result.output)
+        else:
+            response_text = self._homeassistant_summary_status_response(execution_result.output)
+
+        await self._record_memory(request, decision, response_text, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=response_text,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    def _homeassistant_inventory_tool_name(self, prompt: str, registry: ToolRegistry) -> str | None:
+        lowered = prompt.lower()
+        home_terms = ("home assistant", "homeassistant", " at home", " my home", "the home", "our home", "house")
+        if not any(term in lowered for term in home_terms):
+            return None
+        light_terms = ("how many lights", "lights are on", "lights on", "which lights", "what lights", "light status")
+        if any(term in lowered for term in light_terms) and registry.get_tool("homeassistant_list_entities") is not None:
+            return "homeassistant_list_entities"
+        summary_terms = ("what can you see", "home status", "home summary", "device status", "devices")
+        if any(term in lowered for term in summary_terms) and registry.get_tool("homeassistant_home_summary") is not None:
+            return "homeassistant_home_summary"
+        return None
+
+    def _homeassistant_light_status_response(self, output: dict[str, Any]) -> str:
+        entities = output.get("entities") if isinstance(output.get("entities"), list) else []
+        on_lights = [
+            item
+            for item in entities
+            if isinstance(item, dict)
+            and str(item.get("state", "")).lower() == "on"
+            and str(item.get("access", "")) in {"read_only", "controlled"}
+        ]
+        unavailable_lights = [
+            item for item in entities if isinstance(item, dict) and str(item.get("state", "")).lower() == "unavailable"
+        ]
+        names = [str(item.get("name") or item.get("entity_id")) for item in on_lights[:8]]
+        response = f"Home Assistant reports {len(on_lights)} visible lights currently on."
+        if names:
+            response += f" On lights include: {', '.join(names)}."
+        if unavailable_lights:
+            response += f" {len(unavailable_lights)} light entities are unavailable, so the count may be incomplete."
+        return response
+
+    def _homeassistant_summary_status_response(self, summary: dict[str, Any]) -> str:
+        visible_count = int(summary.get("visible_count") or 0)
+        entity_total = int(summary.get("entity_total") or 0)
+        attention_count = int(summary.get("attention_count") or 0)
+        return (
+            f"Home Assistant is available. Freyja can see {visible_count} policy-visible entities "
+            f"out of {entity_total} total, with {attention_count} entities currently unknown or unavailable."
+        )
+
+    def _is_homeassistant_policy_prompt(self, prompt: str) -> bool:
+        lowered = prompt.lower()
+        homeassistant_terms = ("home assistant", "homeassistant", "ha ", "ha-", "ha:")
+        if not any(term in f"{lowered} " for term in homeassistant_terms):
+            return False
+        policy_terms = (
+            "allowed",
+            "allowlist",
+            "blocked",
+            "control",
+            "controllable",
+            "turn off",
+            "turn on",
+            "unlock",
+            "lock ",
+            "open the garage",
+            "garage",
+        )
+        return any(term in lowered for term in policy_terms)
+
+    def _homeassistant_policy_response(self, prompt: str, summary: dict[str, Any]) -> str:
+        controlled_count = int(summary.get("policy_controlled_count") or summary.get("controlled_count") or 0)
+        blocked_count = int(summary.get("blocked_control_count") or 0)
+        visible_count = int(summary.get("visible_count") or 0)
+        entity_total = int(summary.get("entity_total") or 0)
+        access_counts = summary.get("access_counts") if isinstance(summary.get("access_counts"), dict) else {}
+        high_risk_count = int(summary.get("high_risk_count") or access_counts.get("high_risk") or 0)
+        quarantined_count = int(summary.get("quarantined_count") or access_counts.get("quarantined") or 0)
+        lowered = prompt.lower()
+        risky_action = any(term in lowered for term in ("turn off every", "turn on every", "all light", "open the garage")) or any(
+            re.search(pattern, lowered)
+            for pattern in (
+                r"\bunlock\b",
+                r"\block\b",
+                r"\bgarage\b",
+                r"\bdoor\b",
+            )
+        )
+        base = (
+            f"Home Assistant is reachable through Freyja's read-only tool boundary. "
+            f"I can see {visible_count} policy-visible entities out of {entity_total} total. "
+            f"Freyja policy currently allows control for {controlled_count} entity "
+            f"and blocks {blocked_count} entities from control"
+        )
+        if high_risk_count or quarantined_count:
+            base += f" ({quarantined_count} quarantined, {high_risk_count} high-risk)"
+        base += "."
+        if risky_action:
+            return (
+                f"{base} I cannot perform broad Home Assistant actions such as changing every light, "
+                "unlocking doors, or opening the garage. Those actions are outside the current Freyja "
+                "control policy and the Director currently exposes Home Assistant as read-only."
+            )
+        return (
+            f"{base} For control-scope questions, this summary is the authority; narrow entity lists "
+            "do not mean the rest of the home is unblocked."
         )
 
     def _routing_result(
@@ -966,6 +1362,15 @@ class Router:
             completion_tokens = evidence.token_counts.get("completion_tokens")
             if prompt_tokens is not None and completion_tokens is not None:
                 evidence.token_counts["total_tokens"] = prompt_tokens + completion_tokens
+
+    def _client_for_provider(self, provider: str) -> Any | None:
+        if provider in {"ollama", "local_reasoning"}:
+            return self.ollama_client
+        if provider == "vulcan":
+            return self.vulcan_client
+        if provider == "vulcan_coder":
+            return self.vulcan_coder_client
+        return None
 
     def _sanitize_arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
         sanitized: dict[str, Any] = {}

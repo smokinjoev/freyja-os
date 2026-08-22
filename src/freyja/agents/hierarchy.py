@@ -13,13 +13,11 @@ from freyja.memory.principal import build_memory_principal
 
 class AgentName(StrEnum):
     FREYJA = "freyja"
-    CLOYD_GIBBLER = "cloyd-gibbler"
     BENEDICT = "benedict"
     MAINTENANCE = "maintenance"
 
 
 class PersonName(StrEnum):
-    FAMILY = "family"
     JOE = "joe"
     BETH = "beth"
 
@@ -77,19 +75,9 @@ class AgentHierarchy:
     """Route maintenance work without merging personal-agent privacy scopes."""
 
     _primary_agents = {
-        PersonName.FAMILY: AgentName.FREYJA,
-        PersonName.JOE: AgentName.CLOYD_GIBBLER,
+        PersonName.JOE: AgentName.FREYJA,
         PersonName.BETH: AgentName.BENEDICT,
     }
-
-    def family_agent(self) -> AgentName:
-        return self.primary_agent(PersonName.FAMILY)
-
-    def personal_owners(self) -> tuple[PersonName, ...]:
-        return tuple(person for person in self._primary_agents if person is not PersonName.FAMILY)
-
-    def primary_agents(self) -> frozenset[AgentName]:
-        return frozenset(self._primary_agents.values())
 
     def primary_agent(self, person: PersonName) -> AgentName:
         return self._primary_agents[person]
@@ -134,24 +122,6 @@ class AgentHierarchy:
                 account_owner=f"person:{owner.value}",
             ),
             escalation_target=escalation,
-        )
-
-    def family_issue_review_requests(
-        self,
-        *,
-        objective: str,
-        owners: tuple[PersonName, ...] | None = None,
-    ) -> tuple[MaintenanceRequest, ...]:
-        """Create inspect-only maintenance envelopes for household issue review."""
-        selected_owners = owners or (PersonName.FAMILY,)
-        return tuple(
-            self.maintenance_request(
-                requested_by=self.primary_agent(owner),
-                owner=owner,
-                objective=objective,
-                authority=MaintenanceAuthority.INSPECT,
-            )
-            for owner in selected_owners
         )
 
     def deliver_result(

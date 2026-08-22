@@ -105,7 +105,7 @@ class CalendarService:
         description: str | None = None,
     ) -> CalendarEvent:
         members = self._selected_members(member_ids)
-        target_calendar = calendar_id or members[0].all_calendar_ids()[0]
+        target_calendar = calendar_id or ("" if provider_name == "apple" else members[0].all_calendar_ids()[0])
         provider = self._providers[provider_name]
         return await provider.create_event(
             CalendarEvent(

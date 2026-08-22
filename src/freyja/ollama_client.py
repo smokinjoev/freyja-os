@@ -33,28 +33,6 @@ class OllamaClient:
         except Exception as exc:
             return {"error": str(exc)}
 
-    async def has_model(self, model: str) -> bool:
-        models = await self.list_local_models()
-        return model in models or any(name.startswith(f"{model}:") for name in models)
-
-    async def warm(self, model: str | None = None, keep_alive: str | int = -1) -> bool:
-        target_model = model or self.model
-        if not target_model:
-            return False
-        payload = {
-            "model": target_model,
-            "prompt": "",
-            "stream": False,
-            "keep_alive": self._keep_alive_value(keep_alive),
-        }
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(f"{self.base_url}/api/generate", json=payload)
-                response.raise_for_status()
-            return True
-        except Exception:
-            return False
-
     async def chat(
         self,
         prompt: str,
@@ -140,6 +118,7 @@ class OllamaClient:
             ],
             "stream": stream,
             "think": False,
+            "keep_alive": settings.ollama_keep_alive,
             "options": {
                 "temperature": 0.2,
                 "num_predict": output_tokens,
@@ -231,12 +210,3 @@ class OllamaClient:
         if "error" in tags:
             return []
         return [model.get("name", "") for model in tags.get("models", [])]
-
-    def _keep_alive_value(self, keep_alive: str | int) -> str | int:
-        if isinstance(keep_alive, int):
-            return keep_alive
-        value = keep_alive.strip()
-        try:
-            return int(value)
-        except ValueError:
-            return value

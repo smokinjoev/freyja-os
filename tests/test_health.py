@@ -26,6 +26,103 @@ def test_health_remains_public_when_connector_auth_is_enabled(monkeypatch) -> No
     assert response.status_code == 200
 
 
+def test_endpoints_inventory_lists_vulcan_and_lmstudio(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "vulcan_enabled", True)
+    monkeypatch.setattr(settings, "vulcan_coder_enabled", True)
+    monkeypatch.setattr(settings, "lmstudio_enabled", True)
+    monkeypatch.setattr(settings, "lmstudio_model", "manual-model")
+    monkeypatch.setattr(settings, "vision_base_url", "http://100.87.242.99:8091/v1")
+    monkeypatch.setattr(settings, "vision_model", "gemma-3-27b-it")
+    with patch("freyja.local_openai_client.LocalOpenAIClient.healthy", new_callable=AsyncMock) as mock_healthy:
+        mock_healthy.side_effect = [True, True, False, True]
+        response = client.get("/endpoints")
+
+    assert response.status_code == 200
+    endpoints = {item["id"]: item for item in response.json()["endpoints"]}
+    assert endpoints["vulcan-general"]["base_url"].endswith(":8088/v1")
+    assert endpoints["vulcan-general"]["reachable"] is True
+    assert endpoints["vulcan-coder"]["base_url"].endswith(":8090/v1")
+    assert endpoints["vulcan-coder"]["reachable"] is True
+    assert endpoints["lmstudio"]["base_url"].endswith(":1234/v1")
+    assert endpoints["lmstudio"]["role"] == "wake-on-query experiments"
+    assert endpoints["lmstudio"]["provider"] == "lmstudio-proxy"
+    assert endpoints["lmstudio"]["wake_url"] == ""
+    assert endpoints["lmstudio"]["model"] == "manual-model"
+    assert endpoints["lmstudio"]["reachable"] is False
+    assert endpoints["vision-docs"]["role"] == "vision/document inference"
+    assert endpoints["vision-docs"]["base_url"].endswith(":8091/v1")
+    assert endpoints["vision-docs"]["model"] == "gemma-3-27b-it"
+    assert endpoints["vision-docs"]["reachable"] is True
+    assert endpoints["audio"]["role"] == "speech and audio inference"
+
+
+def test_endpoints_html_renders_table() -> None:
+    with patch("freyja.local_openai_client.LocalOpenAIClient.healthy", new_callable=AsyncMock) as mock_healthy:
+        mock_healthy.side_effect = [True, True]
+        response = client.get("/endpoints.html")
+
+    assert response.status_code == 200
+    assert "Freyja Endpoints" in response.text
+    assert "Vulcan Coder" in response.text
+    assert "LM Studio" in response.text
+
+
+def test_vision_health_reports_unconfigured(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "vision_base_url", "")
+    response = client.get("/vision/health")
+
+    assert response.status_code == 200
+    assert response.json()["vision_configured"] is False
+    assert response.json()["vision_reachable"] is False
+
+
+def test_vision_extract_requires_configured_endpoint(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "vision_base_url", "")
+    response = client.post(
+        "/vision/extract",
+        json={"prompt": "read it", "image_url": "data:image/png;base64,abc"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "No local vision endpoint configured"
+
+
+def test_vision_extract_proxies_openai_compatible_vision(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "vision_base_url", "http://100.87.242.99:8091/v1")
+    with patch("freyja.main.vision.vision_chat", new_callable=AsyncMock) as mock_vision_chat:
+        mock_vision_chat.return_value = {
+            "status": "ok",
+            "model": "gemma-3-27b-it",
+            "response": '{"total":"42.19"}',
+            "latency_ms": 1200,
+        }
+        response = client.post(
+            "/vision/extract",
+            json={
+                "prompt": "extract total",
+                "image_url": "data:image/png;base64,abc",
+                "output_tokens": 128,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["response"] == '{"total":"42.19"}'
+    mock_vision_chat.assert_awaited_once_with(
+        prompt="extract total",
+        image_url="data:image/png;base64,abc",
+        model=None,
+        output_tokens=128,
+    )
+
+
 def test_protected_endpoint_requires_connector_token(monkeypatch) -> None:
     from freyja.config import settings
 
@@ -62,6 +159,8 @@ def test_protected_endpoint_accepts_connector_token(monkeypatch) -> None:
 
 
 def test_ollama_health_reachable() -> None:
+    from freyja.config import settings
+
     with patch("freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock) as mock_healthy:
         mock_healthy.return_value = True
         response = client.get("/ollama/health")
@@ -69,25 +168,23 @@ def test_ollama_health_reachable() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["ollama_reachable"] is True
-    assert data["base_url"] == "http://127.0.0.1:11434"
+    assert data["base_url"] == settings.ollama_base_url
 
 
 def test_local_reasoning_health_available(monkeypatch) -> None:
     from freyja.config import settings
 
-    monkeypatch.setattr(settings, "ollama_reasoning_base_url", "http://odin:11434")
     monkeypatch.setattr(settings, "ollama_reasoning_model", "gpt-oss:20b")
     with patch("freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock) as mock_healthy, patch(
-        "freyja.ollama_client.OllamaClient.has_model", new_callable=AsyncMock
-    ) as mock_has_model:
+        "freyja.ollama_client.OllamaClient.tags", new_callable=AsyncMock
+    ) as mock_tags:
         mock_healthy.return_value = True
-        mock_has_model.return_value = True
+        mock_tags.return_value = {"models": [{"name": "gpt-oss:20b"}]}
         response = client.get("/local-reasoning/health")
 
     assert response.status_code == 200
     data = response.json()
     assert data["local_reasoning_reachable"] is True
-    assert data["base_url"] == "http://odin:11434"
     assert data["model"] == "gpt-oss:20b"
     assert data["model_available"] is True
 
@@ -104,26 +201,6 @@ def test_local_reasoning_health_unavailable(monkeypatch) -> None:
     data = response.json()
     assert data["local_reasoning_reachable"] is False
     assert data["ollama_reachable"] is False
-
-
-def test_local_reasoning_warm(monkeypatch) -> None:
-    from freyja.config import settings
-
-    monkeypatch.setattr(settings, "ollama_reasoning_base_url", "http://odin:11434")
-    monkeypatch.setattr(settings, "ollama_reasoning_model", "gpt-oss:20b")
-    with patch("freyja.ollama_client.OllamaClient.warm", new_callable=AsyncMock) as mock_warm:
-        mock_warm.return_value = True
-        response = client.post("/local-reasoning/warm")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data == {
-        "warmed": True,
-        "base_url": "http://odin:11434",
-        "model": "gpt-oss:20b",
-        "keep_alive": "-1",
-    }
-    mock_warm.assert_awaited_once_with("gpt-oss:20b")
 
 
 def test_ollama_models_lists_models() -> None:

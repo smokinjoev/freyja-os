@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     freyja_connector_token: str = ""
 
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_reasoning_base_url: str = ""
     ollama_model: str = "qwen2.5:7b"
     ollama_chat_model: str = "qwen2.5:7b"
     ollama_classification_model: str = "qwen2.5:1.5b"
@@ -44,17 +43,26 @@ class Settings(BaseSettings):
     ollama_default_output_tokens: int = 512
     ollama_retry_output_tokens: int = 1024
     ollama_min_chat_parameters_b: int = 3
+    ollama_keep_alive: str = "30m"
 
-    # Rev 2: Iris is the always-hot routing/reflex node. These settings are
-    # intentionally separate from the legacy Ollama provider so Iris can be
-    # introduced in shadow mode without changing production routing behavior.
-    iris_router_enabled: bool = False
-    iris_router_shadow_enabled: bool = False
-    iris_ollama_base_url: str = "http://iris:11434"
-    iris_router_model: str = "qwen2.5:7b"
-    iris_router_timeout_seconds: float = 4.0
-    iris_router_keep_alive: str = "-1"
-    iris_router_max_prompt_chars: int = 12000
+    vulcan_enabled: bool = False
+    vulcan_base_url: str = "http://100.87.242.99:8088/v1"
+    vulcan_model: str = "Qwen3-30B-A3B"
+    vulcan_coder_enabled: bool = False
+    vulcan_coder_base_url: str = "http://100.87.242.99:8090/v1"
+    vulcan_coder_model: str = "Qwen3-Coder-30B-A3B-Instruct"
+    vulcan_default_output_tokens: int = 512
+    vulcan_primary_chat_enabled: bool = False
+    lmstudio_enabled: bool = False
+    lmstudio_base_url: str = "http://100.87.242.99:1234/v1"
+    lmstudio_wake_url: str = ""
+    lmstudio_model: str = ""
+    vision_provider: str = "cloud"
+    vision_base_url: str = ""
+    vision_model: str = "openai/gpt-4o-mini"
+    audio_provider: str = "local"
+    audio_base_url: str = ""
+    audio_model: str = ""
 
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -116,6 +124,18 @@ class Settings(BaseSettings):
     telegram_state_dir: str = str(_default_state_dir() / "telegram")
 
     weather_tool_enabled: bool = False
+
+    apple_calendar_bridge_url: str = ""
+    apple_calendar_bridge_token: str = ""
+    apple_calendar_bridge_timeout_seconds: float = 15.0
+    apple_reminders_bridge_url: str = ""
+    apple_reminders_bridge_token: str = ""
+    apple_reminders_bridge_timeout_seconds: float = 15.0
+
+    home_assistant_base_url: str = "http://127.0.0.1:8123"
+    home_assistant_token: str = ""
+    home_assistant_timeout_seconds: float = 10.0
+    home_assistant_entity_allowlist: str = ""
 
     @property
     def approved_openrouter_models(self) -> list[str]:

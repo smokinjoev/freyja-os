@@ -4,15 +4,15 @@ import ipaddress
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from freyja.agents import AgentHierarchy, PersonName
 from freyja.agents.approval_provider import PersistentApprovalProvider
 from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprovals
 from freyja.agents.runtime import SmithRuntime
 from freyja.config import settings
 from freyja.identity import person_context_from_headers
+from freyja.local_openai_client import LocalOpenAIClient
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
@@ -51,13 +51,12 @@ async def require_connector_auth(request: Request, call_next):
     return await call_next(request)
 
 ollama = OllamaClient()
-reasoning_ollama = OllamaClient(
-    base_url=settings.ollama_reasoning_base_url or settings.ollama_base_url,
-    model=settings.ollama_reasoning_model,
-)
 openrouter = OpenRouterClient()
-router.register_clients(ollama, openrouter)
-router.register_reasoning_client(reasoning_ollama)
+vulcan = LocalOpenAIClient(settings.vulcan_base_url, settings.vulcan_model)
+vulcan_coder = LocalOpenAIClient(settings.vulcan_coder_base_url, settings.vulcan_coder_model)
+lmstudio = LocalOpenAIClient(settings.lmstudio_base_url, settings.lmstudio_model or "lmstudio")
+vision = LocalOpenAIClient(settings.vision_base_url, settings.vision_model)
+router.register_clients(ollama, openrouter, vulcan, vulcan_coder)
 
 app.include_router(memory_router)
 app.include_router(tools_router)
@@ -87,6 +86,128 @@ async def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
+async def _endpoint_inventory() -> list[dict[str, Any]]:
+    vulcan_ok = await vulcan.healthy()
+    vulcan_coder_ok = await vulcan_coder.healthy()
+    lmstudio_ok = await lmstudio.healthy() if settings.lmstudio_enabled else False
+    vision_local = bool(settings.vision_base_url)
+    vision_ok = await vision.healthy() if vision_local else False
+    return [
+        {
+            "id": "vulcan-general",
+            "name": "Vulcan General",
+            "node": "Vulcan",
+            "role": "general reasoning",
+            "provider": "llama.cpp",
+            "base_url": settings.vulcan_base_url,
+            "model": settings.vulcan_model,
+            "enabled": settings.vulcan_enabled,
+            "reachable": vulcan_ok,
+            "recommended_for": ["complex chat", "planning", "local reasoning"],
+        },
+        {
+            "id": "vulcan-coder",
+            "name": "Vulcan Coder",
+            "node": "Vulcan",
+            "role": "coding",
+            "provider": "llama.cpp",
+            "base_url": settings.vulcan_coder_base_url,
+            "model": settings.vulcan_coder_model,
+            "enabled": settings.vulcan_coder_enabled,
+            "reachable": vulcan_coder_ok,
+            "recommended_for": ["coding", "debugging", "refactoring"],
+        },
+        {
+            "id": "lmstudio",
+            "name": "LM Studio",
+            "node": "Vulcan",
+            "role": "wake-on-query experiments",
+            "provider": "lmstudio-proxy",
+            "base_url": settings.lmstudio_base_url,
+            "wake_url": settings.lmstudio_wake_url,
+            "model": settings.lmstudio_model,
+            "enabled": settings.lmstudio_enabled,
+            "reachable": lmstudio_ok,
+            "recommended_for": ["iPad experiments", "model trials", "manual chat"],
+        },
+        {
+            "id": "vision-docs",
+            "name": "Vision Docs",
+            "node": "Vulcan",
+            "role": "vision/document inference",
+            "provider": settings.vision_provider,
+            "base_url": settings.vision_base_url,
+            "model": settings.vision_model,
+            "enabled": vision_local or settings.vision_provider == "cloud",
+            "reachable": vision_ok,
+            "recommended_for": ["OCR", "document understanding", "image-heavy PDFs"],
+        },
+        {
+            "id": "audio",
+            "name": "Audio",
+            "node": "Vulcan",
+            "role": "speech and audio inference",
+            "provider": settings.audio_provider,
+            "base_url": settings.audio_base_url,
+            "model": settings.audio_model,
+            "enabled": bool(settings.audio_base_url or settings.audio_model),
+            "reachable": False,
+            "recommended_for": ["transcription", "voice notes", "speech understanding"],
+        },
+    ]
+
+
+@app.get("/endpoints")
+async def endpoints() -> dict[str, Any]:
+    return {"endpoints": await _endpoint_inventory()}
+
+
+@app.get("/endpoints.html", response_class=HTMLResponse)
+async def endpoints_html() -> str:
+    endpoints_data = await _endpoint_inventory()
+    rows = "\n".join(
+        "<tr>"
+        f"<td>{item['name']}</td>"
+        f"<td>{item['role']}</td>"
+        f"<td>{item['provider']}</td>"
+        f"<td><code>{item['base_url']}</code></td>"
+        f"<td><code>{item.get('wake_url', '')}</code></td>"
+        f"<td><code>{item['model']}</code></td>"
+        f"<td>{'yes' if item['enabled'] else 'no'}</td>"
+        f"<td>{'ok' if item['reachable'] else 'pending'}</td>"
+        "</tr>"
+        for item in endpoints_data
+    )
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Freyja Endpoints</title>
+  <style>
+    body {{ font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem; color: #17202a; background: #f7f8fa; }}
+    main {{ max-width: 1180px; margin: 0 auto; }}
+    h1 {{ font-size: 1.8rem; margin: 0 0 1rem; }}
+    table {{ width: 100%; border-collapse: collapse; background: white; border: 1px solid #d8dde5; }}
+    th, td {{ text-align: left; padding: .75rem; border-bottom: 1px solid #e5e8ee; vertical-align: top; }}
+    th {{ font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: #526070; background: #eef1f5; }}
+    code {{ font-size: .86rem; overflow-wrap: anywhere; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Freyja Endpoints</h1>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Role</th><th>Provider</th><th>Base URL</th><th>Wake URL</th><th>Model</th><th>Enabled</th><th>Reachable</th></tr>
+      </thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </main>
+</body>
+</html>"""
+
+
 @app.get("/ollama/health")
 async def ollama_health() -> dict[str, bool | str]:
     healthy = await ollama.healthy()
@@ -98,25 +219,65 @@ async def ollama_health() -> dict[str, bool | str]:
 
 @app.get("/local-reasoning/health")
 async def local_reasoning_health() -> dict[str, bool | str]:
-    healthy = await reasoning_ollama.healthy()
-    model_available = await reasoning_ollama.has_model(settings.ollama_reasoning_model) if healthy else False
+    if settings.vulcan_enabled:
+        healthy = await vulcan.healthy()
+        return {
+            "local_reasoning_reachable": healthy,
+            "provider": "vulcan",
+            "base_url": settings.vulcan_base_url,
+            "model": settings.vulcan_model,
+            "model_available": healthy,
+        }
+
+    healthy = await ollama.healthy()
+    model_available = False
+    if healthy:
+        tags = await ollama.tags()
+        if "error" not in tags:
+            model_available = settings.ollama_reasoning_model in {
+                model.get("name", "") for model in tags.get("models", [])
+            }
     return {
         "local_reasoning_reachable": healthy and model_available,
         "ollama_reachable": healthy,
-        "base_url": settings.ollama_reasoning_base_url or settings.ollama_base_url,
+        "base_url": settings.ollama_base_url,
         "model": settings.ollama_reasoning_model,
         "model_available": model_available,
     }
 
 
-@app.post("/local-reasoning/warm")
-async def local_reasoning_warm() -> dict[str, bool | str]:
-    warmed = await reasoning_ollama.warm(settings.ollama_reasoning_model)
+@app.get("/vulcan/health")
+async def vulcan_health() -> dict[str, bool | str]:
+    healthy = await vulcan.healthy()
     return {
-        "warmed": warmed,
-        "base_url": settings.ollama_reasoning_base_url or settings.ollama_base_url,
-        "model": settings.ollama_reasoning_model,
-        "keep_alive": "-1",
+        "vulcan_enabled": settings.vulcan_enabled,
+        "vulcan_reachable": healthy,
+        "base_url": settings.vulcan_base_url,
+        "model": settings.vulcan_model,
+    }
+
+
+@app.get("/vulcan-coder/health")
+async def vulcan_coder_health() -> dict[str, bool | str]:
+    healthy = await vulcan_coder.healthy()
+    return {
+        "vulcan_coder_enabled": settings.vulcan_coder_enabled,
+        "vulcan_coder_reachable": healthy,
+        "base_url": settings.vulcan_coder_base_url,
+        "model": settings.vulcan_coder_model,
+    }
+
+
+@app.get("/vision/health")
+async def vision_health() -> dict[str, bool | str]:
+    configured = bool(settings.vision_base_url)
+    healthy = await vision.healthy() if configured else False
+    return {
+        "vision_provider": settings.vision_provider,
+        "vision_configured": configured,
+        "vision_reachable": healthy,
+        "base_url": settings.vision_base_url,
+        "model": settings.vision_model,
     }
 
 
@@ -135,6 +296,13 @@ class ChatRequest(BaseModel):
     model: str | None = None
 
 
+class VisionExtractRequest(BaseModel):
+    prompt: str
+    image_url: str
+    model: str | None = None
+    output_tokens: int | None = None
+
+
 @app.post("/chat")
 async def chat(request: ChatRequest) -> dict[str, str]:
     response = await ollama.chat(prompt=request.prompt, model=request.model)
@@ -146,6 +314,22 @@ async def chat(request: ChatRequest) -> dict[str, str]:
     content = message.get("content", "")
 
     return {"model": response.get("model", ""), "response": content}
+
+
+@app.post("/vision/extract")
+async def vision_extract(request: VisionExtractRequest) -> dict[str, Any]:
+    if not settings.vision_base_url:
+        raise HTTPException(status_code=503, detail="No local vision endpoint configured")
+
+    response = await vision.vision_chat(
+        prompt=request.prompt,
+        image_url=request.image_url,
+        model=request.model,
+        output_tokens=request.output_tokens,
+    )
+    if "error" in response:
+        raise HTTPException(status_code=503, detail=response["error"])
+    return response
 
 
 @app.get("/openrouter/health")
@@ -242,13 +426,6 @@ class SmithReadOnlyRequest(BaseModel):
     request_id: str | None = None
 
 
-class FamilyIssueReviewRequest(BaseModel):
-    objective: str = "diagnose Director health, repository status, routing configuration, and test readiness"
-    owners: list[str] | None = None
-    actor_prefix: str = "family_issue_review"
-    request_id: str | None = None
-
-
 class SmithWritePilotRequest(BaseModel):
     objective: str
     target_path: str
@@ -284,56 +461,6 @@ async def smith_read_only(request: SmithReadOnlyRequest) -> dict[str, Any]:
         request_id=request.request_id,
     )
     return summary.model_dump(mode="json")
-
-
-@app.post("/agents/family/issue-review")
-async def family_issue_review(request: FamilyIssueReviewRequest) -> dict[str, Any]:
-    if not settings.agent_smith_enabled or not settings.agent_smith_read_only_enabled:
-        raise HTTPException(
-            status_code=404 if not settings.agent_smith_enabled else 403,
-            detail="Agent Smith read-only mode is not enabled.",
-        )
-
-    hierarchy = AgentHierarchy()
-    try:
-        owners = tuple(PersonName(owner) for owner in request.owners) if request.owners else None
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Unknown family issue-review owner.") from exc
-
-    maintenance_requests = hierarchy.family_issue_review_requests(
-        objective=request.objective,
-        owners=owners,
-    )
-    reviews: list[dict[str, Any]] = []
-    for index, maintenance_request in enumerate(maintenance_requests, start=1):
-        runtime = SmithRuntime()
-        request_id = (
-            f"{request.request_id}:{maintenance_request.owner.value}"
-            if request.request_id
-            else maintenance_request.request_id
-        )
-        summary = await runtime.run_read_only(
-            maintenance_request.objective,
-            actor=f"{request.actor_prefix}:{maintenance_request.requested_by.value}",
-            request_id=request_id,
-        )
-        reviews.append(
-            {
-                "index": index,
-                "owner": maintenance_request.owner.value,
-                "agent": maintenance_request.requested_by.value,
-                "authority": maintenance_request.authority.value,
-                "escalation_target": maintenance_request.escalation_target.value,
-                "memory_principal": maintenance_request.memory_principal.model_dump(mode="json"),
-                "summary": summary.model_dump(mode="json"),
-            }
-        )
-
-    return {
-        "objective": request.objective,
-        "review_count": len(reviews),
-        "reviews": reviews,
-    }
 
 
 @app.post("/agents/smith/write-pilot")
