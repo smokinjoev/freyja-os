@@ -133,7 +133,8 @@ class CloydCoderRuntime:
         self._registry = registry or get_registry()
         register_smith_read_only_tools(self._registry)
         register_smith_write_pilot_tools(self._registry)
-        register_smith_controlled_tools(self._registry)
+        if self._registry.get_tool("bounded_file_write") is None:
+            register_smith_controlled_tools(self._registry)
         self._policy = policy or CoderAccessPolicy()
 
     async def execute(
