@@ -22,6 +22,9 @@ def test_cloyd_write_modules_require_explicit_approval() -> None:
     policy = CoderAccessPolicy()
 
     for tool_name in (
+        "bounded_file_write",
+        "git_add",
+        "git_commit",
         "write_pilot_file_write",
         "write_pilot_git_add",
         "write_pilot_git_commit",
