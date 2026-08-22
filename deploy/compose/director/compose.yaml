@@ -75,6 +75,10 @@ services:
       - ../../../certification:/repo/certification:ro
       - ../../../config:/repo/config:ro
       - ../../../connectors:/repo/connectors:ro
+      - ../../../deploy/compose/director/compose.yaml:/repo/deploy/compose/director/compose.yaml:ro
+      - ../../../deploy/compose/signal/compose.yaml:/repo/deploy/compose/signal/compose.yaml:ro
+      - ../../../deploy/docker:/repo/deploy/docker:ro
+      - ../../../docs:/repo/docs:ro
       - ../../../pyproject.toml:/repo/pyproject.toml:ro
       - ../../../scripts:/repo/scripts:ro
       - ../../../src:/repo/src:ro
