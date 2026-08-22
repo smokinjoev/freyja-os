@@ -423,7 +423,8 @@ async def _repository_diff_summary_implementation(request: ToolExecutionRequest)
 
 async def _run_test_suite_implementation(request: ToolExecutionRequest) -> dict:
     repo_root = _configured_repo_root()
-    python_path = "python"
+    venv_bin = os.path.join(repo_root, ".venv", "bin")
+    python_path = os.path.join(venv_bin, "python")
     try:
         proc = subprocess.run(
             [

@@ -6,6 +6,7 @@ from typing import Any
 
 from freyja.tools.builtin import register_smith_read_only_tools, register_smith_write_pilot_tools
 from freyja.tools.iris_maintenance import register_smith_controlled_tools
+from freyja.tools.local_host import register_local_host_tools
 from freyja.tools.models import ToolExecutionRequest, ToolExecutionResult
 from freyja.tools.registry import ToolRegistry, get_registry
 
@@ -132,6 +133,8 @@ class CloydCoderRuntime:
         policy: CoderAccessPolicy | None = None,
     ) -> None:
         self._registry = registry or get_registry()
+        if self._registry.get_tool("repository_status") is None:
+            register_local_host_tools(self._registry)
         register_smith_read_only_tools(self._registry)
         register_smith_write_pilot_tools(self._registry)
         if self._registry.get_tool("bounded_file_write") is None:
