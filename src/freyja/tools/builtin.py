@@ -424,11 +424,13 @@ async def _repository_diff_summary_implementation(request: ToolExecutionRequest)
 async def _run_test_suite_implementation(request: ToolExecutionRequest) -> dict:
     repo_root = _configured_repo_root()
     venv_bin = os.path.join(repo_root, ".venv", "bin")
-    pytest_path = os.path.join(venv_bin, "pytest")
+    python_path = os.path.join(venv_bin, "python")
     try:
         proc = subprocess.run(
             [
-                pytest_path,
+                python_path,
+                "-m",
+                "pytest",
                 "-q",
                 "--tb=short",
                 "-p",
