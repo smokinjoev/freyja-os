@@ -14,6 +14,7 @@ from .household import HouseholdAgentRegistry, household_agents
 
 CODER_TOOL_CAPABILITIES: dict[str, str] = {
     "repository_status": "code.inspect",
+    "get_current_commit": "code.inspect",
     "repository_diff_summary": "code.diff",
     "run_test_suite": "code.test",
     "compile_project": "code.test",
