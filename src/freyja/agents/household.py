@@ -12,7 +12,11 @@ class HouseholdAgent:
     owner: str
     person_id: str
     prompt_role: str
+    capabilities: frozenset[str] = frozenset()
     active: bool = True
+
+    def allows(self, capability: str) -> bool:
+        return capability in self.capabilities
 
 
 class HouseholdAgentRegistry:
@@ -72,6 +76,7 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         display_name="Cloyd Gibbler",
         owner="person:joe",
         person_id="joe",
+        capabilities=frozenset({"code.inspect", "code.edit", "code.test", "code.diff", "code.commit"}),
         prompt_role=(
             "Your name is Cloyd Gibbler. You are Joe's personal agent. Be concise, direct, "
             "technically fluent, comfortable with dry humor, and proactive about Joe's "
