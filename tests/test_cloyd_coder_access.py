@@ -1,6 +1,6 @@
 import pytest
 
-from freyja.agents.coder_access import CloydCoderRuntime, CoderAccessPolicy
+from freyja.agents.coder_access import CloydCoderRuntime, CoderAccessPolicy, is_coding_request
 
 
 def test_cloyd_has_local_coder_modules() -> None:
@@ -75,3 +75,11 @@ async def test_runtime_denies_unapproved_write_before_tool_lookup() -> None:
 
     assert result.success is False
     assert result.error_code == "approval_required"
+
+
+def test_coding_request_detection_is_conservative() -> None:
+    assert is_coding_request("Cloyd, fix this test") is True
+    assert is_coding_request("Run pytest and review the diff") is True
+    assert is_coding_request("code: implement the router") is True
+    assert is_coding_request("How was your day?") is False
+    assert is_coding_request("Write Beth a reminder") is False
