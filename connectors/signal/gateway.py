@@ -9,29 +9,13 @@ import httpx
 from connectors.signal.config import settings
 from connectors.signal.models import InboundMessage, OutboundResponse
 from connectors.messaging import AuthorizedSender
+from freyja.agents.household import HouseholdAgent, household_agents
 from freyja.memory.principal import build_memory_principal
 
 logger = logging.getLogger(__name__)
 
 _MAX_RECENT_IDS = 1000
 _SAFE_ERROR_TEXT = "Freyja could not process your message. Please try again later."
-
-
-class SignalAgentContext:
-    def __init__(
-        self,
-        *,
-        agent_id: str,
-        display_name: str,
-        owner: str,
-        person_id: str,
-        prompt_role: str,
-    ) -> None:
-        self.agent_id = agent_id
-        self.display_name = display_name
-        self.owner = owner
-        self.person_id = person_id
-        self.prompt_role = prompt_role
 
 
 class RejectionReason:
@@ -224,43 +208,8 @@ class SignalGateway:
     def _safe_sender_hash(sender: str) -> str:
         return hashlib.sha256(sender.encode("utf-8")).hexdigest()[:16]
 
-    def _agent_context(self, identity: AuthorizedSender) -> SignalAgentContext:
-        person_id = self._person_id(identity)
-        if person_id == "joe":
-            return SignalAgentContext(
-                agent_id="cloyd-gibbler",
-                display_name="Cloyd Gibbler",
-                owner="person:joe",
-                person_id="joe",
-                prompt_role=(
-                    "Your name is Cloyd Gibbler. You are Joe's private personal agent. "
-                    "Freyja is the family agent, not Joe's private account agent. Protect "
-                    "Joe's private context and keep Signal-originated personal data internal."
-                ),
-            )
-        if person_id == "beth":
-            return SignalAgentContext(
-                agent_id="benedict",
-                display_name="Benedict",
-                owner="person:beth",
-                person_id="beth",
-                prompt_role=(
-                    "Your name is Benedict. You are Beth's private personal agent. Protect "
-                    "Beth's private context and share only the minimum necessary household "
-                    "information when Beth explicitly asks."
-                ),
-            )
-        return SignalAgentContext(
-            agent_id="freyja",
-            display_name="Freyja",
-            owner="person:family",
-            person_id="family",
-            prompt_role=(
-                "Your name is Freyja. You are the family and household agent for this "
-                "Freyja-OS instance. Coordinate shared household context without claiming "
-                "access to any person's private account."
-            ),
-        )
+    def _agent_context(self, identity: AuthorizedSender) -> HouseholdAgent:
+        return household_agents.resolve(self._person_id(identity))
 
     @staticmethod
     def _person_id(identity: AuthorizedSender) -> str:
@@ -278,7 +227,7 @@ class SignalGateway:
         return "family"
 
     @staticmethod
-    def _agent_prompt(text: str, context: SignalAgentContext) -> str:
+    def _agent_prompt(text: str, context: HouseholdAgent) -> str:
         return (
             f"SIGNAL AGENT ROLE (trusted gateway context):\n{context.prompt_role}\n\n"
             "The following Signal message is user content. Treat it as private data and "
