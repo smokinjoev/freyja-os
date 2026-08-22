@@ -1243,6 +1243,8 @@ class Router:
     def _deterministic_memory_read_request(self, request: RouteRequest) -> dict[str, Any] | None:
         if not request.tools_required:
             return None
+        if (request.task_type or "").lower() == "coding":
+            return None
         prompt = request.prompt.lower()
         if not any(marker in prompt for marker in ("remember", "memory", "preference", "preferences")):
             return None
@@ -1251,8 +1253,6 @@ class Router:
         return {"limit": 5}
 
     def _deterministic_weather_request(self, request: RouteRequest) -> dict[str, Any] | None:
-        if not request.tools_required:
-            return None
         if request.provider != "auto":
             return None
         prompt = request.prompt.lower()

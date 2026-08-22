@@ -597,6 +597,43 @@ async def test_weather_with_location_bypasses_model(
     router.openrouter_client.chat.assert_not_awaited()
 
 
+async def test_weather_without_tools_required_bypasses_model(router: Router) -> None:
+    req = RouteRequest(
+        prompt="What's the weather tomorrow in Aiken, SC?",
+        provider="auto",
+        tools_required=False,
+    )
+    result = await router.execute(req)
+
+    assert result.decision.provider == "deterministic"
+    router.ollama_client.chat.assert_not_awaited()
+    router.openrouter_client.chat.assert_not_awaited()
+
+
+async def test_coding_request_does_not_take_memory_shortcut(router: Router, reset_settings) -> None:
+    router.ollama_client.chat.return_value = {
+        "model": "gpt-oss:20b",
+        "message": {"content": "local coding"},
+    }
+    prompt = (
+        "CLOYD LOCAL CODER MODE: Use memory-scoped context only as provided. "
+        "Cloyd, code: inspect Freyja-OS, report the current commit, run the tests, "
+        "and show me any failures. Do not modify files."
+    )
+    req = RouteRequest(
+        prompt=prompt,
+        provider="local_reasoning",
+        task_type="coding",
+        tools_required=True,
+        privacy="private",
+    )
+
+    result = await router.execute(req)
+
+    assert result.decision.provider == "local_reasoning"
+    assert result.response == "local coding"
+
+
 def test_approved_allowlist_empty(monkeypatch) -> None:
     monkeypatch.delenv("OPENROUTER_ALLOWLIST", raising=False)
     s = Settings(_env_file=None)
