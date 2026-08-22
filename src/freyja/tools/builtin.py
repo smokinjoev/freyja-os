@@ -442,7 +442,12 @@ async def _run_test_suite_implementation(request: ToolExecutionRequest) -> dict:
             text=True,
             check=False,
             timeout=110,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            env={
+                **os.environ,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "AGENT_SMITH_AUDIT_LOG_PATH": "/tmp/agent-smith-audit.jsonl",
+                "AGENT_SMITH_APPROVAL_DB_PATH": "/tmp/smith-approvals.sqlite3",
+            },
         )
         return {
             "returncode": proc.returncode,

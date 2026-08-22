@@ -76,6 +76,7 @@ services:
       - ../../../config:/repo/config:ro
       - ../../../connectors:/repo/connectors:ro
       - ../../../pyproject.toml:/repo/pyproject.toml:ro
+      - ../../../scripts:/repo/scripts:ro
       - ../../../src:/repo/src:ro
       - ../../../tests:/repo/tests:ro
     read_only: true
