@@ -45,11 +45,12 @@ Rev 2 reorganizes Freyja-OS around four durable planes: Atlas for control and st
 
 ## Phase 4 — Offline local coding
 
-- Build a bounded repository coding agent on the cognition node.
+- Build a bounded repository coding agent on the cognition node, exposed to Joe through Cloyd and backed by the primary local inference endpoint.
 - Permit repository inspection, edits, approved commands, tests, and diff generation.
 - Add workspace and command allowlists.
 - Add rollback and review checkpoints.
 - Certify that messaging cannot become unrestricted shell access.
+- Keep inspection, tests, compilation, and diff validation available locally when cloud/chat credits are unavailable; require explicit approval for edits, staging, commits, and other consequential repository changes.
 
 **Exit:** Freyja can perform meaningful coding work without cloud AI.
 
@@ -100,7 +101,7 @@ Rev 2 reorganizes Freyja-OS around four durable planes: Atlas for control and st
 
 - Keep Freyja as the shared household intelligence, coordinator, and the personality presented through Hera and HomePods.
 - Establish durable personal-agent assignments:
-  - Joe -> Cloyd Gibbler (`cloyd-gibbler`)
+  - Joe -> Cloyd Gibbler (`cloyd-gibbler`), with bounded `code.inspect`, `code.edit`, `code.test`, `code.diff`, and `code.commit` capabilities
   - Beth -> Benedict (`benedict`)
   - Liam -> Agent 44 (`agent-44`)
   - Jenna -> reserved personal-agent slot; name and personality TBD
