@@ -855,6 +855,26 @@ class Router:
         await self._record_memory(request, decision, "", evidence)
         return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
 
+    @staticmethod
+    def _normalize_tool_name(tool_name: str, request: RouteRequest) -> str:
+        if (request.task_type or "").lower() != "coding":
+            return tool_name
+        aliases = {
+            "current_commit": "get_current_commit",
+            "get_commit": "get_current_commit",
+            "get_current_git_commit": "get_current_commit",
+            "inspect_freyja_os": "repository_status",
+            "inspect_freyja-os": "repository_status",
+            "inspect_repository": "repository_status",
+            "repository_inspect": "repository_status",
+            "repo_status": "repository_status",
+            "git_status": "repository_status",
+            "run_tests": "run_test_suite",
+            "run_pytest": "run_test_suite",
+            "pytest": "run_test_suite",
+        }
+        return aliases.get(tool_name, tool_name)
+
     async def _execute_with_tools(
         self,
         request: RouteRequest,
@@ -979,6 +999,7 @@ class Router:
             if not isinstance(arguments, dict):
                 arguments = {}
 
+            tool_name = self._normalize_tool_name(tool_name, request)
             arguments, normalization_errors = registry.normalize_arguments(tool_name, arguments)
             validation_errors = normalization_errors or registry.validate_arguments(tool_name, arguments)
             definition = registry.get_tool(tool_name)
