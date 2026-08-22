@@ -9,6 +9,7 @@ import httpx
 from connectors.signal.config import settings
 from connectors.signal.models import InboundMessage, OutboundResponse
 from connectors.messaging import AuthorizedSender
+from freyja.agents.coder_access import is_coding_request
 from freyja.agents.household import HouseholdAgent, household_agents
 from freyja.memory.principal import build_memory_principal
 
@@ -134,9 +135,25 @@ class SignalGateway:
         except ValueError:
             return self._safe_error_response(message)
 
+        coding_request = (
+            agent_context.agent_id == "cloyd-gibbler"
+            and is_coding_request(message.text)
+        )
+        prompt = self._agent_prompt(message.text, agent_context)
+        if coding_request:
+            prompt = (
+                "CLOYD LOCAL CODER MODE (trusted gateway context):\n"
+                "Use the registered bounded coder modules and the local coding/reasoning "
+                "provider. Follow inspect -> reason -> edit -> tests -> diff. Read-only "
+                "inspection and validation may proceed. Repository changes require the "
+                "separate explicit approval gate; never request or invent generic shell access.\n\n"
+                + prompt
+            )
         payload = {
-            "prompt": self._agent_prompt(message.text, agent_context),
-            "provider": "auto",
+            "prompt": prompt,
+            "provider": "local_reasoning" if coding_request else "auto",
+            "task_type": "coding" if coding_request else None,
+            "tools_required": coding_request,
             "privacy": "private",
             "conversation_id": principal.conversation_id,
         }
