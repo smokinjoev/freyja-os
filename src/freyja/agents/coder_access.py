@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import uuid
 from typing import Any
 
 from freyja.tools.models import ToolExecutionRequest, ToolExecutionResult
@@ -103,6 +104,7 @@ class CloydCoderRuntime:
         request_id: str | None = None,
         approval_granted: bool = False,
     ) -> ToolExecutionResult:
+        effective_request_id = request_id or str(uuid.uuid4())
         decision = self._policy.authorize(
             agent_id="cloyd-gibbler",
             tool_name=tool_name,
@@ -114,7 +116,7 @@ class CloydCoderRuntime:
                 tool_name=tool_name,
                 error_code="approval_required" if decision.approval_required else "authorization_denied",
                 public_error_message=decision.reason,
-                request_id=request_id,
+                request_id=effective_request_id,
             )
 
         definition = self._registry.get_tool(tool_name)
@@ -124,13 +126,13 @@ class CloydCoderRuntime:
                 tool_name=tool_name,
                 error_code="tool_not_found",
                 public_error_message="Coder module is not registered.",
-                request_id=request_id,
+                request_id=effective_request_id,
             )
 
         request = ToolExecutionRequest(
             tool_name=tool_name,
             arguments=arguments or {},
-            request_id=request_id,
+            request_id=effective_request_id,
             actor="cloyd-gibbler",
             metadata={
                 "agent_id": "cloyd-gibbler",
@@ -148,6 +150,6 @@ class CloydCoderRuntime:
                 tool_name=tool_name,
                 error_code="authorization_denied",
                 public_error_message="Coder module authorization denied.",
-                request_id=request_id,
+                request_id=effective_request_id,
             )
         return await self._registry.execute(request)
