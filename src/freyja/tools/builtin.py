@@ -378,7 +378,7 @@ async def _get_current_commit_implementation(request: ToolExecutionRequest) -> d
     repo_root = _configured_repo_root()
     try:
         commit_proc = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+            ["git", "-c", f"safe.directory={repo_root}", "rev-parse", "HEAD"],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -386,7 +386,7 @@ async def _get_current_commit_implementation(request: ToolExecutionRequest) -> d
             timeout=10,
         )
         branch_proc = subprocess.run(
-            ["git", "branch", "--show-current"],
+            ["git", "-c", f"safe.directory={repo_root}", "branch", "--show-current"],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -406,7 +406,7 @@ async def _repository_diff_summary_implementation(request: ToolExecutionRequest)
     repo_root = _configured_repo_root()
     try:
         proc = subprocess.run(
-            ["git", "diff", "--stat"],
+            ["git", "-c", f"safe.directory={repo_root}", "diff", "--stat"],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -423,8 +423,7 @@ async def _repository_diff_summary_implementation(request: ToolExecutionRequest)
 
 async def _run_test_suite_implementation(request: ToolExecutionRequest) -> dict:
     repo_root = _configured_repo_root()
-    venv_bin = os.path.join(repo_root, ".venv", "bin")
-    python_path = os.path.join(venv_bin, "python")
+    python_path = "python"
     try:
         proc = subprocess.run(
             [
@@ -604,7 +603,7 @@ async def _write_pilot_git_commit_implementation(request: ToolExecutionRequest) 
         commit_hash = None
         if proc.returncode == 0:
             hash_proc = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
+                ["git", "-c", f"safe.directory={repo_root}", "rev-parse", "HEAD"],
                 cwd=root,
                 capture_output=True,
                 text=True,
@@ -647,14 +646,14 @@ async def _validate_diff_implementation(request: ToolExecutionRequest) -> dict:
     ]
     try:
         status_proc = subprocess.run(
-            ["git", "status", "--short"],
+            ["git", "-c", f"safe.directory={repo_root}", "status", "--short"],
             cwd=repo_root,
             capture_output=True,
             text=True,
             check=False,
         )
         diff_proc = subprocess.run(
-            ["git", "diff", "--name-status", "--", ":!*.secret", ":!*.env"],
+            ["git", "-c", f"safe.directory={repo_root}", "diff", "--name-status", "--", ":!*.secret", ":!*.env"],
             cwd=repo_root,
             capture_output=True,
             text=True,

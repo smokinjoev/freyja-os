@@ -15,7 +15,7 @@ COPY connectors ./connectors
 COPY src ./src
 COPY config ./config
 
-RUN python -m pip install --no-cache-dir .
+RUN python -m pip install --no-cache-dir . pytest
 
 USER 65532:65532
 
