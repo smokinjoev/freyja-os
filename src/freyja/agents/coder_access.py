@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import uuid
 from typing import Any
 
+from freyja.tools.builtin import register_smith_read_only_tools, register_smith_write_pilot_tools
 from freyja.tools.models import ToolExecutionRequest, ToolExecutionResult
 from freyja.tools.registry import ToolRegistry, get_registry
 
@@ -94,6 +95,8 @@ class CloydCoderRuntime:
         policy: CoderAccessPolicy | None = None,
     ) -> None:
         self._registry = registry or get_registry()
+        register_smith_read_only_tools(self._registry)
+        register_smith_write_pilot_tools(self._registry)
         self._policy = policy or CoderAccessPolicy()
 
     async def execute(
