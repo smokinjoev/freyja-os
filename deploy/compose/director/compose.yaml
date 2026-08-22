@@ -64,13 +64,24 @@ services:
       TOOLS_DEFAULT_TIMEOUT_SECONDS: ${TOOLS_DEFAULT_TIMEOUT_SECONDS:-30}
       TOOLS_AUDIT_LOG_ENABLED: ${TOOLS_AUDIT_LOG_ENABLED:-true}
       WEATHER_TOOL_ENABLED: ${WEATHER_TOOL_ENABLED:-false}
+      REPOSITORY_ROOT: /repo
     ports:
       - "${FREYJA_DIRECTOR_BIND_IP:-127.0.0.1}:${FREYJA_DIRECTOR_HOST_PORT:-8000}:8000"
     volumes:
       - ../../../data:/app/data
+      - ../../../.git:/repo/.git:ro
+      - ../../../.venv:/repo/.venv:ro
+      - ../../../README.md:/repo/README.md:ro
+      - ../../../certification:/repo/certification:ro
+      - ../../../config:/repo/config:ro
+      - ../../../connectors:/repo/connectors:ro
+      - ../../../pyproject.toml:/repo/pyproject.toml:ro
+      - ../../../src:/repo/src:ro
+      - ../../../tests:/repo/tests:ro
     read_only: true
     tmpfs:
       - /tmp
+      - /repo/.pytest_cache
     security_opt:
       - no-new-privileges:true
     healthcheck:

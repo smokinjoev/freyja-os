@@ -1,6 +1,9 @@
+import subprocess
+
 import pytest
 
 from freyja.agents.coder_access import CloydCoderRuntime, CoderAccessPolicy, is_coding_request
+from freyja.config import settings
 
 
 def test_cloyd_has_local_coder_modules() -> None:
@@ -79,6 +82,29 @@ async def test_runtime_can_read_current_commit() -> None:
 
     assert result.success is True
     assert result.output.get("commit")
+
+
+@pytest.mark.asyncio
+async def test_current_commit_uses_configured_repository_root(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    (repo / "README.md").write_text("test\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    monkeypatch.setattr(settings, "repository_root", str(repo))
+
+    result = await CloydCoderRuntime().execute(
+        tool_name="get_current_commit",
+        request_id="cloyd-configured-root",
+    )
+
+    assert result.success is True
+    assert result.output["git_available"] is True
+    assert result.output["repository_root"] == str(repo.resolve())
+    assert result.output["commit"]
 
 
 @pytest.mark.asyncio
