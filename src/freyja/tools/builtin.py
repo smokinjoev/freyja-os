@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 from freyja.memory.store import get_active_store
+from freyja.config import settings
 from freyja.memory.models import MemoryPrincipal
 from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
@@ -369,8 +370,12 @@ def _memory_enabled() -> bool:
     return is_memory_enabled()
 
 
+def _configured_repo_root() -> Path:
+    return Path(settings.repository_root).expanduser().resolve()
+
+
 async def _get_current_commit_implementation(request: ToolExecutionRequest) -> dict:
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = _configured_repo_root()
     try:
         commit_proc = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -398,7 +403,7 @@ async def _get_current_commit_implementation(request: ToolExecutionRequest) -> d
         return {"repository_root": str(repo_root), "error": str(exc)}
 
 async def _repository_diff_summary_implementation(request: ToolExecutionRequest) -> dict:
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = _configured_repo_root()
     try:
         proc = subprocess.run(
             ["git", "diff", "--stat"],
@@ -417,17 +422,25 @@ async def _repository_diff_summary_implementation(request: ToolExecutionRequest)
 
 
 async def _run_test_suite_implementation(request: ToolExecutionRequest) -> dict:
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = _configured_repo_root()
     venv_bin = os.path.join(repo_root, ".venv", "bin")
     pytest_path = os.path.join(venv_bin, "pytest")
     try:
         proc = subprocess.run(
-            [pytest_path, "-q", "--tb=short", "--ignore=tests/test_agent_smith.py"],
+            [
+                pytest_path,
+                "-q",
+                "--tb=short",
+                "-p",
+                "no:cacheprovider",
+                "--ignore=tests/test_agent_smith.py",
+            ],
             cwd=repo_root,
             capture_output=True,
             text=True,
             check=False,
             timeout=110,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         )
         return {
             "returncode": proc.returncode,
@@ -440,7 +453,7 @@ async def _run_test_suite_implementation(request: ToolExecutionRequest) -> dict:
 
 
 async def _compile_project_implementation(request: ToolExecutionRequest) -> dict:
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = _configured_repo_root()
     try:
         proc = subprocess.run(
             ["python", "-m", "compileall", str(repo_root / "src")],
@@ -617,7 +630,7 @@ async def _validate_diff_implementation(request: ToolExecutionRequest) -> dict:
     * a sanitized diff stat with secret paths redacted,
     * an overall ``safe_to_proceed`` boolean.
     """
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = _configured_repo_root()
     secret_patterns = [
         r"\.env",
         r"(^|/)secrets?(/|$)",

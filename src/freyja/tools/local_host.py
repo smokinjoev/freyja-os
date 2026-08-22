@@ -37,7 +37,7 @@ _ALLOWED_EXECUTABLES: dict[str, str | None] = {
 }
 
 #: Repository root for git_status and disk_usage.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = Path(settings.repository_root).expanduser().resolve()
 
 #: Maximum bytes captured per stream before truncation.
 _MAX_CAPTURE_BYTES = 128 * 1024

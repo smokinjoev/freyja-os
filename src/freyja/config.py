@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     tools_enabled: bool = True
     tools_default_timeout_seconds: int = 30
     tools_audit_log_enabled: bool = True
+    repository_root: str = str(_repo_root())
 
     agent_smith_enabled: bool = False
     agent_smith_dry_run_enabled: bool = False
