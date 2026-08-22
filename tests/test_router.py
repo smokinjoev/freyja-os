@@ -1177,6 +1177,32 @@ class TestToolLoop:
         assert result.tool_results[0]["error_code"] == "validation_error"
         assert "Invalid arguments" in result.response
 
+    async def test_coding_tool_aliases_are_normalized(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
+        monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+        monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+        router.ollama_client.healthy.return_value = True
+        calls: list[int] = []
+
+        async def _respond(prompt: str, **kwargs: Any) -> dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 1:
+                return {"model": "qwen2.5:7b", "message": {"content": self._tool_call("inspect_freyja_os")}}
+            return {"model": "qwen2.5:7b", "message": {"content": "inspected"}}
+
+        router.ollama_client.chat.side_effect = _respond
+        req = RouteRequest(
+            prompt="Cloyd, code: inspect Freyja-OS",
+            provider="local",
+            task_type="coding",
+            tools_required=True,
+        )
+        result = await router.execute(req)
+
+        assert result.response == "inspected"
+        assert result.tool_results[0]["tool_name"] == "repository_status"
+        assert result.runtime_evidence.tool_calls[0].name == "repository_status"
+
+
     async def test_unknown_tool_rejected(self, router: Router, monkeypatch: pytest.MonkeyPatch, registry: ToolRegistry) -> None:
         monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
         monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
