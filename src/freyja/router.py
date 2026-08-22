@@ -856,15 +856,6 @@ class Router:
         return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
 
     @staticmethod
-    def _coding_prompt_requests_tests(request: RouteRequest) -> bool:
-        if settings.freyja_env != "production":
-            return False
-        if (request.task_type or "").lower() != "coding":
-            return False
-        prompt = request.prompt.lower()
-        return any(phrase in prompt for phrase in ("run the tests", "run tests", "pytest", "test suite"))
-
-    @staticmethod
     def _normalize_tool_name(tool_name: str, request: RouteRequest) -> str:
         if (request.task_type or "").lower() != "coding":
             return tool_name
@@ -990,49 +981,6 @@ class Router:
             clean_content = self._strip_tool_markers(content)
 
             if tool_call is None:
-                if self._coding_prompt_requests_tests(request) and not any(
-                    entry.get("tool_name") == "run_test_suite" for entry in tool_history
-                ):
-                    definition = registry.get_tool("run_test_suite")
-                    if definition is not None and definition.enabled:
-                        execution_request = ToolExecutionRequest(
-                            tool_name="run_test_suite",
-                            arguments={},
-                            request_id=decision.request_id,
-                            actor="atlas_director",
-                            metadata={
-                                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
-                                "person": dict(person_context) if person_context else None,
-                                "director_authorized": True,
-                                "deterministic_completion": True,
-                            },
-                        )
-                        authorization = registry.authorize(definition, execution_request)
-                        if evidence is not None:
-                            evidence.capability_authorizations.append(
-                                {
-                                    "capability": "run_test_suite",
-                                    "allowed": authorization.allowed,
-                                    "reason": authorization.reason,
-                                    "required_permission": authorization.required_permission,
-                                }
-                            )
-                        if authorization.allowed:
-                            execution_result = await registry.execute(execution_request)
-                            entry = self._tool_history_entry(
-                                tool_name="run_test_suite",
-                                success=execution_result.success,
-                                arguments={},
-                                output=execution_result.output,
-                                error_code=execution_result.error_code,
-                                public_error_message=execution_result.public_error_message,
-                                duration_ms=execution_result.duration_ms,
-                            )
-                            tool_history.append(entry)
-                            self._log_tool_execution(entry)
-                            self._record_tool_evidence(evidence, entry)
-                            prompt_parts.append(f"\nTool result for run_test_suite:\n{self._serialize_tool_output(entry[output], max_output_chars)}\n")
-                            continue
                 return self._routing_result(
                     decision=decision,
                     response=clean_content,
