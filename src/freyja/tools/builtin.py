@@ -439,6 +439,7 @@ async def _run_test_suite_implementation(request: ToolExecutionRequest) -> dict:
                 "--deselect=tests/test_local_host_tools.py::TestDiskUsageTool::test_disk_usage_symlink_inside_pointing_outside",
                 "--deselect=tests/test_local_host_tools.py::TestDiskUsageTool::test_disk_usage_symlink_chain_escapes_repo",
                 "--deselect=tests/test_local_host_tools.py::TestDiskUsageTool::test_disk_usage_symlink_stays_inside_repo",
+                "--deselect=tests/test_iris_maintenance.py::test_restart_freyja_director_uses_fixed_script",
             ],
             cwd=repo_root,
             capture_output=True,

@@ -77,8 +77,10 @@ services:
       - ../../../connectors:/repo/connectors:ro
       - ../../../deploy/compose/director/compose.yaml:/repo/deploy/compose/director/compose.yaml:ro
       - ../../../deploy/compose/director/.env.example:/repo/deploy/compose/director/.env.example:ro
+      - ../../../deploy/compose/director/README.md:/repo/deploy/compose/director/README.md:ro
       - ../../../deploy/compose/signal/compose.yaml:/repo/deploy/compose/signal/compose.yaml:ro
       - ../../../deploy/compose/signal/.env.example:/repo/deploy/compose/signal/.env.example:ro
+      - ../../../deploy/compose/signal/README.md:/repo/deploy/compose/signal/README.md:ro
       - ../../../deploy/docker:/repo/deploy/docker:ro
       - ../../../docs:/repo/docs:ro
       - ../../../pyproject.toml:/repo/pyproject.toml:ro
