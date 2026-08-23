@@ -45,6 +45,25 @@ class Settings(BaseSettings):
     ollama_retry_output_tokens: int = 1024
     ollama_min_chat_parameters_b: int = 3
 
+    vulcan_enabled: bool = False
+    vulcan_base_url: str = ""
+    vulcan_model: str = "Qwen3-30B-A3B"
+    vulcan_coder_enabled: bool = False
+    vulcan_coder_base_url: str = ""
+    vulcan_coder_model: str = "Qwen3-Coder-30B-A3B-Instruct"
+    vulcan_default_output_tokens: int = 512
+    vulcan_primary_chat_enabled: bool = False
+    lmstudio_enabled: bool = False
+    lmstudio_base_url: str = ""
+    lmstudio_wake_url: str = ""
+    lmstudio_model: str = ""
+    vision_provider: str = "cloud"
+    vision_base_url: str = ""
+    vision_model: str = "openai/gpt-4o-mini"
+    audio_provider: str = "local"
+    audio_base_url: str = ""
+    audio_model: str = ""
+
     # Rev 2: Iris is the always-hot routing/reflex node. These settings are
     # intentionally separate from the legacy Ollama provider so Iris can be
     # introduced in shadow mode without changing production routing behavior.

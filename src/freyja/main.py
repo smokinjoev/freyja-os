@@ -1,8 +1,11 @@
 import hashlib
 import hmac
 import ipaddress
+import time
 from contextlib import asynccontextmanager
 from typing import Any
+
+import httpx
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -105,6 +108,191 @@ async def root() -> dict[str, str]:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "healthy"}
+
+
+
+async def _openai_health(base_url: str) -> bool:
+    if not base_url:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{base_url.rstrip('/')}/models")
+            return response.status_code == 200
+    except Exception:
+        return False
+
+
+async def _local_chat_completion(
+    *,
+    base_url: str,
+    model: str,
+    prompt: str,
+    image_url: str | None = None,
+    output_tokens: int | None = None,
+) -> dict[str, Any]:
+    if image_url:
+        messages: list[dict[str, Any]] = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            }
+        ]
+    else:
+        messages = [{"role": "user", "content": prompt}]
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.1,
+        "max_tokens": output_tokens or settings.vulcan_default_output_tokens,
+    }
+    started = time.monotonic()
+    async with httpx.AsyncClient(timeout=240.0) as client:
+        response = await client.post(f"{base_url.rstrip('/')}/chat/completions", json=payload)
+        response.raise_for_status()
+        data = response.json()
+    choice = (data.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    return {
+        "status": "ok",
+        "model": data.get("model", model),
+        "response": message.get("content", ""),
+        "usage": data.get("usage", {}),
+        "latency_ms": int((time.monotonic() - started) * 1000),
+        "finish_reason": choice.get("finish_reason", ""),
+    }
+
+
+@app.get("/endpoints")
+async def endpoints() -> dict[str, Any]:
+    vulcan_reachable = await _openai_health(settings.vulcan_base_url) if settings.vulcan_enabled else False
+    coder_reachable = await _openai_health(settings.vulcan_coder_base_url) if settings.vulcan_coder_enabled else False
+    lmstudio_reachable = await _openai_health(settings.lmstudio_base_url) if settings.lmstudio_enabled else False
+    vision_reachable = await _openai_health(settings.vision_base_url) if settings.vision_provider == "local" else False
+    return {
+        "endpoints": [
+            {
+                "id": "vulcan-general",
+                "name": "Vulcan General",
+                "node": "Vulcan",
+                "role": "general reasoning",
+                "provider": "llama.cpp",
+                "base_url": settings.vulcan_base_url,
+                "model": settings.vulcan_model,
+                "enabled": settings.vulcan_enabled,
+                "reachable": vulcan_reachable,
+                "recommended_for": ["complex chat", "planning", "local reasoning"],
+            },
+            {
+                "id": "vulcan-coder",
+                "name": "Vulcan Coder",
+                "node": "Vulcan",
+                "role": "coding",
+                "provider": "llama.cpp",
+                "base_url": settings.vulcan_coder_base_url,
+                "model": settings.vulcan_coder_model,
+                "enabled": settings.vulcan_coder_enabled,
+                "reachable": coder_reachable,
+                "recommended_for": ["coding", "debugging", "refactoring"],
+            },
+            {
+                "id": "lmstudio",
+                "name": "LM Studio",
+                "node": "Vulcan",
+                "role": "wake-on-query experiments",
+                "provider": "lmstudio-proxy",
+                "base_url": settings.lmstudio_base_url,
+                "wake_url": settings.lmstudio_wake_url,
+                "model": settings.lmstudio_model,
+                "enabled": settings.lmstudio_enabled,
+                "reachable": lmstudio_reachable,
+                "recommended_for": ["iPad experiments", "model trials", "manual chat"],
+            },
+            {
+                "id": "vision-docs",
+                "name": "Vision Docs",
+                "node": "Vulcan",
+                "role": "vision/document inference",
+                "provider": settings.vision_provider,
+                "base_url": settings.vision_base_url,
+                "model": settings.vision_model,
+                "enabled": settings.vision_provider == "local" and bool(settings.vision_base_url),
+                "reachable": vision_reachable,
+                "recommended_for": ["OCR", "document understanding", "image-heavy PDFs"],
+            },
+            {
+                "id": "audio",
+                "name": "Audio",
+                "node": "Vulcan",
+                "role": "speech and audio inference",
+                "provider": settings.audio_provider,
+                "base_url": settings.audio_base_url,
+                "model": settings.audio_model,
+                "enabled": bool(settings.audio_base_url),
+                "reachable": False,
+                "recommended_for": ["transcription", "voice notes", "speech understanding"],
+            },
+        ]
+    }
+
+
+@app.get("/vulcan/health")
+async def vulcan_health() -> dict[str, bool | str]:
+    return {
+        "vulcan_enabled": settings.vulcan_enabled,
+        "vulcan_reachable": await _openai_health(settings.vulcan_base_url) if settings.vulcan_enabled else False,
+        "base_url": settings.vulcan_base_url,
+        "model": settings.vulcan_model,
+    }
+
+
+@app.get("/vulcan-coder/health")
+async def vulcan_coder_health() -> dict[str, bool | str]:
+    return {
+        "vulcan_coder_enabled": settings.vulcan_coder_enabled,
+        "vulcan_coder_reachable": await _openai_health(settings.vulcan_coder_base_url) if settings.vulcan_coder_enabled else False,
+        "base_url": settings.vulcan_coder_base_url,
+        "model": settings.vulcan_coder_model,
+    }
+
+
+@app.get("/vision/health")
+async def vision_health() -> dict[str, bool | str]:
+    reachable = await _openai_health(settings.vision_base_url) if settings.vision_provider == "local" else False
+    return {
+        "vision_provider": settings.vision_provider,
+        "vision_configured": settings.vision_provider == "local" and bool(settings.vision_base_url),
+        "vision_reachable": reachable,
+        "base_url": settings.vision_base_url,
+        "model": settings.vision_model,
+    }
+
+
+class VisionExtractRequest(BaseModel):
+    prompt: str
+    image_url: str
+    model: str | None = None
+    output_tokens: int | None = None
+
+
+@app.post("/vision/extract")
+async def vision_extract(request: VisionExtractRequest) -> dict[str, Any]:
+    if settings.vision_provider != "local" or not settings.vision_base_url:
+        raise HTTPException(status_code=503, detail="Local vision provider is not configured.")
+    try:
+        return await _local_chat_completion(
+            base_url=settings.vision_base_url,
+            model=request.model or settings.vision_model,
+            prompt=request.prompt,
+            image_url=request.image_url,
+            output_tokens=request.output_tokens,
+        )
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=503, detail=f"Vision provider HTTP {exc.response.status_code}: {exc.response.text[:500]}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/ollama/health")
