@@ -69,8 +69,9 @@ Current status:
 
 - Standard lane restore works and was re-verified after an exclusive-mode stop/start test.
 - Exclusive-mode successfully started the existing Qwen3-Coder-30B lane by itself on `8090`; the first validation wrapper hung on a PowerShell web health probe, so the script now treats the TCP listener as the readiness gate and leaves HTTP verification to the caller.
-- The Qwen3-Coder-Next wrapper is staged at `C:\Freyja\inference\start-vulcan-coder-next-exclusive-8090.ps1`; it points at shard 1 once all shards are present.
-- Qwen3-Coder-Next Q4_K_M is downloading with a resumable `curl.exe` Scheduled Task named `Freyja Download Qwen3 Coder Next Q4KM`; the active log is `C:\Freyja\inference\logs\download-qwen3-coder-next-q4km-cmd.log`.
+- The Qwen3-Coder-Next wrapper is staged at `C:\Freyja\inference\start-vulcan-coder-next-exclusive-8090.ps1`; it points at shard 1 and currently uses an `8192` context for safer first-load testing.
+- Qwen3-Coder-Next Q4_K_M downloaded successfully with a resumable `curl.exe` Scheduled Task named `Freyja Download Qwen3 Coder Next Q4KM`; all four shards are present under `C:\Freyja\inference\models\qwen3-coder-next-q4km\Qwen3-Coder-Next-Q4_K_M`.
+- Qwen3-Coder-Next has not been promoted. Initial Windows exclusive trials did not complete a healthy readiness plus chat-completion cycle. The standard Freyja lanes restored cleanly after each attempt, so the active safe local coder remains Qwen3-Coder-30B on `8090`.
 
 Candidate model:
 
@@ -79,9 +80,9 @@ Candidate model:
 
 Test gate for Windows coder-exclusive mode:
 
-1. Finish Qwen3-Coder-Next Q4_K_M download.
-2. Stop standard lanes with `C:\Freyja\inference\start-vulcan-coder-next-exclusive-8090.cmd`, which invokes PowerShell with execution-policy bypass.
-3. Start only `8090` with Qwen3-Coder-Next shard 1 as the model path.
+1. Keep the standard Qwen3-Coder-30B lane as the active safe coder.
+2. For further Qwen3-Coder-Next experiments, stop standard lanes with `C:\Freyja\inference\start-vulcan-coder-next-exclusive-8090.cmd`, which invokes PowerShell with execution-policy bypass.
+3. Start only `8090` with Qwen3-Coder-Next shard 1 as the model path and `8192` context first.
 4. Verify `GET http://100.87.242.99:8090/health`.
 5. Verify `GET http://100.87.242.99:8090/v1/models`.
 6. Run a small coding completion.
@@ -104,7 +105,7 @@ Fail criteria:
 
 ## Current operational decision
 
-Keep Vulcan on the standard multi-lane Windows stack for normal Freyja use until Qwen3-Coder-Next finishes downloading and passes the exclusive-mode test. Treat Windows coder-exclusive mode as a proving ground, not the final always-on architecture. If Qwen3-Coder-Next is materially better, prioritize the Linux dual-boot/service-native path so the dedicated coder runs under `systemd` instead of an interactive Windows session.
+Keep Vulcan on the standard multi-lane Windows stack for normal Freyja use. Qwen3-Coder-Next is downloaded but remains experimental because it has not passed the safe exclusive-mode readiness and chat test. Treat Windows coder-exclusive mode as a proving ground, not the final always-on architecture. Prioritize the Linux dual-boot/service-native path for the durable dedicated coder so the model runs under `systemd` instead of an interactive Windows session.
 
 ## Recommendation
 
