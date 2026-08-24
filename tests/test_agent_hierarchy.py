@@ -52,6 +52,39 @@ def test_authenticated_people_message_only_their_primary_agent() -> None:
     assert joe.memory_principal.scope_key != beth.memory_principal.scope_key
 
 
+def test_agent_profiles_are_reusable_connector_identity_contracts() -> None:
+    hierarchy = AgentHierarchy()
+
+    joe = hierarchy.profile_for_member_id("joe")
+    beth = hierarchy.profile_for_member_id("beth")
+    family = hierarchy.profile_for_member_id("family")
+
+    assert joe is not None
+    assert joe.agent_id is AgentName.CLOYD_GIBBLER
+    assert joe.client_subject == "agent:cloyd-gibbler"
+    assert joe.account_owner == "person:joe"
+    assert "Your name is Cloyd Gibbler" in joe.prompt_role
+    assert beth is not None
+    assert beth.agent_id is AgentName.BENEDICT
+    assert beth.account_owner == "person:beth"
+    assert family is not None
+    assert family.agent_id is AgentName.FREYJA
+    assert family.account_owner == "person:family"
+    assert hierarchy.profile_for_member_id("unknown") is None
+
+
+def test_agent_prompt_names_required_response_identity() -> None:
+    hierarchy = AgentHierarchy()
+    profile = hierarchy.profile_for_person(PersonName.JOE)
+
+    prompt = hierarchy.agent_prompt(platform="Signal", text="Hello", profile=profile)
+
+    assert "SIGNAL AGENT ROLE" in prompt
+    assert "Required response identity: Cloyd Gibbler" in prompt
+    assert "private Signal context" in prompt
+    assert prompt.endswith("Hello")
+
+
 def test_agent_cannot_delegate_for_another_agents_person() -> None:
     hierarchy = AgentHierarchy()
 

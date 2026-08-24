@@ -46,6 +46,7 @@ async def enabled_gateway():
     gw._enabled = True
     gw._identity = "freyja@example.com"
     gw._allowed_senders = {"worker@example.com"}
+    gw._allowed_identities = {}
     gw._max_message_chars = 12000
     gw._director_url = "http://127.0.0.1:8000"
     gw._timeout = 5.0

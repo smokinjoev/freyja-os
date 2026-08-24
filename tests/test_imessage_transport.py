@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import UTC, datetime, timezone
+import sqlite3
 from unittest.mock import patch
 
 import asyncio
@@ -20,6 +21,7 @@ def settings() -> IMessageSettings:
         _env_file=None,
         imessage_imsg_path="/opt/homebrew/bin/imsg",
         imessage_database_path="/Users/freyja/Library/Messages/chat.db",
+        imessage_poll_database_enabled=False,
     )
 
 
@@ -165,6 +167,69 @@ async def test_recent_messages_reads_recent_chat_history(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_recent_messages_reads_messages_database(tmp_path):
+    database_path = tmp_path / "chat.db"
+    connection = sqlite3.connect(database_path)
+    connection.executescript(
+        """
+        CREATE TABLE message (
+            ROWID INTEGER PRIMARY KEY,
+            guid TEXT,
+            text TEXT,
+            handle_id INTEGER,
+            date INTEGER,
+            is_from_me INTEGER,
+            is_system_message INTEGER DEFAULT 0
+        );
+        CREATE TABLE chat (
+            ROWID INTEGER PRIMARY KEY,
+            chat_identifier TEXT,
+            style INTEGER
+        );
+        CREATE TABLE handle (
+            ROWID INTEGER PRIMARY KEY,
+            id TEXT
+        );
+        CREATE TABLE chat_message_join (
+            chat_id INTEGER,
+            message_id INTEGER
+        );
+        """
+    )
+    connection.execute("INSERT INTO handle VALUES (1, '+15551234567')")
+    connection.execute("INSERT INTO chat VALUES (4, '+15551234567', 45)")
+    connection.execute(
+        "INSERT INTO message VALUES (1, 'msg-1', 'first', 1, ?, 0, 0)",
+        (1_000_000_000,),
+    )
+    connection.execute(
+        "INSERT INTO message VALUES (2, 'msg-2', 'second', 1, ?, 0, 0)",
+        (2_000_000_000,),
+    )
+    connection.execute("INSERT INTO chat_message_join VALUES (4, 1)")
+    connection.execute("INSERT INTO chat_message_join VALUES (4, 2)")
+    connection.commit()
+    connection.close()
+
+    transport = IMessageTransport(
+        IMessageSettings(
+            _env_file=None,
+            imessage_database_path=str(database_path),
+            imessage_poll_database_enabled=True,
+            imessage_poll_chat_limit=1,
+            imessage_poll_history_limit=2,
+        )
+    )
+
+    messages = await transport.recent_messages()
+
+    assert [message.message_id for message in messages] == ["msg-1", "msg-2"]
+    assert messages[0].sender == "+15551234567"
+    assert messages[0].timestamp == datetime(2001, 1, 1, 0, 0, 1, tzinfo=UTC)
+    assert messages[0].is_group is False
+
+
+@pytest.mark.asyncio
 async def test_send_times_out_when_imsg_does_not_exit(monkeypatch):
     transport = IMessageTransport(
         IMessageSettings(
@@ -181,6 +246,28 @@ async def test_send_times_out_when_imsg_does_not_exit(monkeypatch):
 
     with pytest.raises(IMessageTransportError, match="imsg send timed out"):
         await transport.send(IMessageReply(chat_id=4, text="hello"))
+
+    assert process.killed is True
+
+
+@pytest.mark.asyncio
+async def test_recent_messages_times_out_stuck_imsg_command(monkeypatch):
+    transport = IMessageTransport(
+        IMessageSettings(
+            _env_file=None,
+            imessage_command_timeout_seconds=0.01,
+            imessage_poll_database_enabled=False,
+        )
+    )
+    process = _HangingProcess()
+
+    async def _fake_subprocess(*args, **kwargs):
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_subprocess)
+
+    with pytest.raises(IMessageTransportError, match="imsg command timed out"):
+        await transport.recent_messages()
 
     assert process.killed is True
 

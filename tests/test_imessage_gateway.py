@@ -81,6 +81,36 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
 
 
 @pytest.mark.asyncio
+async def test_auto_tool_mode_keeps_plain_chat_fast(enabled_gateway):
+    enabled_gateway._model = "qwen2.5:7b"
+    enabled_gateway._tools_required_mode = "auto"
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Hello"})
+        result = await enabled_gateway.handle(make_message(text="Hello there"))
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["model"] == "qwen2.5:7b"
+    assert payload["tools_required"] is False
+
+
+@pytest.mark.asyncio
+async def test_auto_tool_mode_preserves_tool_like_requests(enabled_gateway):
+    enabled_gateway._model = "qwen2.5:7b"
+    enabled_gateway._tools_required_mode = "auto"
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Checking"})
+        result = await enabled_gateway.handle(make_message(text="What is on my calendar today?"))
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["model"] == "qwen2.5:7b"
+    assert payload["tools_required"] is True
+
+
+@pytest.mark.asyncio
 async def test_director_token_is_sent_as_bearer_header(enabled_gateway):
     enabled_gateway._director_token = "test-token"
 
@@ -204,7 +234,10 @@ def test_provisional_reply_for_family_group_requires_explicit_address(enabled_ga
     enabled_gateway._provisional_reply_enabled = True
 
     passive = make_message(text="Dinner Friday", is_group=True).model_copy(update={"chat_identifier": "family-chat"})
-    addressed = make_message(text="@Freyja what is the plan?", is_group=True).model_copy(update={"chat_identifier": "family-chat"})
+    addressed = make_message(
+        text="@Freyja what is the plan?",
+        is_group=True,
+    ).model_copy(update={"chat_identifier": "family-chat"})
 
     assert enabled_gateway.provisional_reply_for(passive) is None
     assert enabled_gateway.provisional_reply_for(addressed) is not None
@@ -302,6 +335,47 @@ async def test_family_group_addressed_message_routes_to_director(enabled_gateway
 
 
 @pytest.mark.asyncio
+async def test_joe_alias_routes_direct_imessage_to_cloyd_private_agent(enabled_gateway):
+    enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567", "imessage")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Hi Joe"})
+        result = await enabled_gateway.handle(make_message(sender="+15551234567", text="Hello"))
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    headers = mock_post.await_args.kwargs["headers"]
+    assert "Your name is Cloyd Gibbler" in payload["prompt"]
+    assert "Required response identity: Cloyd Gibbler" in payload["prompt"]
+    assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
+    assert headers["X-Freyja-Account-Owner"] == "person:joe"
+    assert headers["X-Freyja-Agent-Id"] == "cloyd-gibbler"
+    assert headers["X-Freyja-Person-Id"] == "joe"
+    assert "+15551234567" not in str(headers)
+
+
+@pytest.mark.asyncio
+async def test_beth_alias_routes_direct_imessage_to_benedict_private_agent(enabled_gateway):
+    enabled_gateway._allowed_identities = parse_allowed_senders("beth=beth@example.com", "imessage")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Hi Beth"})
+        result = await enabled_gateway.handle(make_message(sender="beth@example.com", text="Hello"))
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    headers = mock_post.await_args.kwargs["headers"]
+    assert "Your name is Benedict" in payload["prompt"]
+    assert "Required response identity: Benedict" in payload["prompt"]
+    assert headers["X-Freyja-Client-Subject"] == "agent:benedict"
+    assert headers["X-Freyja-Account-Owner"] == "person:beth"
+    assert headers["X-Freyja-Agent-Id"] == "benedict"
+    assert headers["X-Freyja-Person-Id"] == "beth"
+
+
+@pytest.mark.asyncio
 async def test_self_message_is_dropped(enabled_gateway):
     assert await enabled_gateway.handle(make_message(is_from_me=True)) is None
 
@@ -356,7 +430,25 @@ async def test_director_error_returns_safe_error(enabled_gateway):
 
 
 @pytest.mark.asyncio
-async def test_family_member_alias_uses_shared_memory_subject(enabled_gateway):
+async def test_raw_allowlisted_sender_keeps_platform_memory_subject(enabled_gateway):
+    enabled_gateway._allowed_identities = {}
+    enabled_gateway._allowed_senders = {"+15551234567"}
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Hi"})
+        result = await enabled_gateway.handle(make_message(sender="+15551234567"))
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    headers = mock_post.await_args.kwargs["headers"]
+    assert payload["prompt"] == "Hello Freyja"
+    assert headers["X-Freyja-Client-Subject"].startswith("imessage:")
+    assert "X-Freyja-Account-Owner" not in headers
+    assert "X-Freyja-Agent-Id" not in headers
+
+
+@pytest.mark.asyncio
+async def test_family_member_alias_uses_agent_memory_subject(enabled_gateway):
     enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567,beth=beth@example.com", "imessage")
     enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
 
@@ -367,5 +459,6 @@ async def test_family_member_alias_uses_shared_memory_subject(enabled_gateway):
     assert result is not None
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Family-Member"] == "joe"
-    assert headers["X-Freyja-Client-Subject"].startswith("family-member:")
+    assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
+    assert headers["X-Freyja-Account-Owner"] == "person:joe"
     assert "+15551234567" not in str(headers)

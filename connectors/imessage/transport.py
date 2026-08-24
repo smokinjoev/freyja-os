@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from connectors.imessage.config import IMessageSettings
 from connectors.imessage.models import IMessage, IMessageReply
@@ -144,6 +147,12 @@ class IMessageTransport:
             )
 
     async def recent_messages(self) -> list[IMessage]:
+        if self._settings.imessage_poll_database_enabled:
+            try:
+                return await asyncio.to_thread(self._recent_messages_from_database)
+            except (OSError, sqlite3.Error, UnsupportedIMessageEvent) as exc:
+                raise IMessageTransportError("Unable to read iMessage database") from exc
+
         chats = await self._run_json_lines(
             self.chats_command(limit=self._settings.imessage_poll_chat_limit)
         )
@@ -167,7 +176,76 @@ class IMessageTransport:
         messages.sort(key=lambda message: message.timestamp)
         return messages
 
+    def _recent_messages_from_database(self) -> list[IMessage]:
+        database_path = Path(self._settings.imessage_database_path).expanduser()
+        if not database_path.exists():
+            raise OSError(f"Messages database does not exist: {database_path}")
+
+        limit = max(
+            1,
+            self._settings.imessage_poll_chat_limit
+            * self._settings.imessage_poll_history_limit,
+        )
+        database_uri = f"file:{quote(str(database_path))}?mode=ro"
+        connection = sqlite3.connect(
+            database_uri,
+            timeout=max(0.1, self._settings.imessage_command_timeout_seconds),
+            uri=True,
+        )
+        try:
+            rows = connection.execute(
+                """
+                SELECT
+                    m.guid,
+                    m.text,
+                    COALESCE(NULLIF(h.id, ''), NULLIF(c.chat_identifier, ''), 'unknown'),
+                    c.ROWID,
+                    c.chat_identifier,
+                    m.date,
+                    COALESCE(c.style, 0),
+                    COALESCE(m.is_from_me, 0)
+                FROM message m
+                JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+                JOIN chat c ON c.ROWID = cmj.chat_id
+                LEFT JOIN handle h ON h.ROWID = m.handle_id
+                WHERE m.guid IS NOT NULL
+                  AND m.text IS NOT NULL
+                  AND m.text != ''
+                  AND COALESCE(m.is_system_message, 0) = 0
+                ORDER BY m.date DESC, m.ROWID DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        finally:
+            connection.close()
+
+        messages = [
+            IMessage(
+                sender=str(row[2]),
+                text=str(row[1]),
+                message_id=str(row[0]),
+                chat_id=int(row[3]),
+                chat_identifier=str(row[4] or row[2]),
+                timestamp=self._parse_apple_timestamp(row[5]),
+                is_group=int(row[6] or 0) != 45,
+                is_from_me=bool(row[7]),
+            )
+            for row in rows
+        ]
+        messages.sort(key=lambda message: message.timestamp)
+        return messages
+
+    @staticmethod
+    def _parse_apple_timestamp(value: Any) -> datetime:
+        if not isinstance(value, int | float):
+            return datetime.now(tz=UTC)
+
+        seconds = value / 1_000_000_000 if abs(value) >= 1_000_000_000 else value
+        return datetime(2001, 1, 1, tzinfo=UTC) + timedelta(seconds=seconds)
+
     async def _run_json_lines(self, command: list[str]) -> list[Any]:
+        process: asyncio.subprocess.Process | None = None
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
@@ -176,9 +254,12 @@ class IMessageTransport:
             )
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=self._settings.imessage_request_timeout_seconds,
+                timeout=self._settings.imessage_command_timeout_seconds,
             )
         except asyncio.TimeoutError as exc:
+            if process is not None:
+                process.kill()
+                await process.wait()
             raise IMessageTransportError("imsg command timed out") from exc
         except OSError as exc:
             raise IMessageTransportError("Unable to start imsg command") from exc

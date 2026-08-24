@@ -641,13 +641,19 @@ The preferred architecture is:
 ```text
 Work Email
   -> Freyja Gmail
-  -> Gmail connector
+  -> Gmail IMAP/SMTP transport
+  -> Gmail gateway
   -> sender allowlist
   -> HTML/external-content sanitization
   -> Atlas Director
   -> authorized execution/inference/memory
   -> Gmail reply in the same thread
 ```
+
+The Gmail transport owns mailbox polling, unread-message acknowledgement, and
+SMTP delivery with `In-Reply-To` / `References` headers. The Gmail gateway owns
+authorization, sanitization, Director routing, conversation-thread mapping, and
+safe error responses.
 
 Gmail is not an approval channel for consequential actions. Normal questions,
 research, memory access, and status requests may route normally after sender

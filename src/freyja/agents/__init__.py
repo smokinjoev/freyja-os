@@ -11,12 +11,19 @@ from .device_trust import DeviceCredentialKind, DeviceRegistry, TrustedDevice
 from .hierarchy import (
     AgentHierarchy,
     AgentName,
+    AgentProfile,
     EscalationTarget,
     MaintenanceAuthority,
     MaintenanceRequest,
     MaintenanceResult,
     PersonalAgentMessage,
     PersonName,
+)
+from .legacy_memory import (
+    LegacyMemoryBlock,
+    LegacyMemoryImportResult,
+    import_legacy_memory_file,
+    parse_legacy_memory_markdown,
 )
 
 from .models import (
@@ -47,6 +54,7 @@ from .personal_data import (
     PersonalDataResource,
     PersonalDataScope,
 )
+from .process import AgentMemorySnapshot, AgentProcess, agent_cli, create_agent_process
 from .runtime import SmithRuntime
 from .smith import PolicyViolationError, SmithOrchestrator, ToolInvocationError
 
@@ -60,8 +68,11 @@ def register_smith_tools(registry) -> None:
 
 __all__ = [
     "AgentHierarchy",
+    "AgentMemorySnapshot",
     "AgentName",
+    "AgentProfile",
     "AgentPolicy",
+    "AgentProcess",
     "CloydCoderRuntime",
     "CoderAccessDecision",
     "CoderAccessPolicy",
@@ -79,6 +90,8 @@ __all__ = [
     "MaintenanceAuthority",
     "MaintenanceRequest",
     "MaintenanceResult",
+    "LegacyMemoryBlock",
+    "LegacyMemoryImportResult",
     "ObjectiveClass",
     "PolicyCheckResult",
     "PolicyDecision",
@@ -105,4 +118,8 @@ __all__ = [
     "WritePilotState",
     "household_agents",
     "register_smith_tools",
+    "agent_cli",
+    "create_agent_process",
+    "import_legacy_memory_file",
+    "parse_legacy_memory_markdown",
 ]

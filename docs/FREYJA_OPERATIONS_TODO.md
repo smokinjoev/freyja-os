@@ -63,6 +63,10 @@
 
 - [ ] Configure `GMAIL_IDENTITY` with Freyja's existing Gmail address.
 - [ ] Configure `GMAIL_ALLOWED_SENDERS` with only approved work/corporate senders.
+- [ ] Configure Gmail IMAP/SMTP transport credentials for Freyja's Gmail mailbox.
+- [ ] Install and load `com.freyja-os.gmail-connector` with `scripts/install-gmail-connector.sh`.
+- [ ] Confirm LaunchAgent state with `scripts/status-gmail-connector.sh`.
+- [ ] Confirm `logs/gmail-connector.log` reports `Gmail connector started`.
 - [ ] Smoke test an allowlisted Gmail message and confirm the reply stays in the same Gmail thread.
 - [ ] Smoke test Gmail HTML input and confirm scripts, styles, remote images, and tracking URLs are not forwarded to Director.
 - [ ] Confirm Gmail-originated consequential actions require approval through a trusted non-Gmail channel.

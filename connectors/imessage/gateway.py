@@ -10,12 +10,32 @@ from connectors.imessage.config import settings
 from connectors.imessage.family_observer import FamilyIMessageObserver
 from connectors.imessage.models import IMessage, IMessageReply
 from connectors.messaging import AuthorizedSender
+from freyja.agents import AgentHierarchy, AgentProfile
 from freyja.memory.principal import build_memory_principal, stable_identity
 
 logger = logging.getLogger(__name__)
 
 _MAX_RECENT_IDS = 1000
 _SAFE_ERROR_TEXT = "Freyja could not process your message. Please try again later."
+_TOOL_REQUEST_TERMS = (
+    "calendar",
+    "schedule",
+    "appointment",
+    "remind",
+    "reminder",
+    "weather",
+    "temperature",
+    "forecast",
+    "lights",
+    "light",
+    "home assistant",
+    "house",
+    "memory",
+    "remember",
+    "what do you know",
+    "status",
+    "health",
+)
 
 
 class RejectionReason:
@@ -37,6 +57,8 @@ class IMessageGateway:
         self._allowed_senders = settings.allowed_sender_set
         self._allowed_identities = settings.allowed_sender_identities
         self._max_message_chars = settings.imessage_max_message_chars
+        self._model = settings.imessage_model.strip()
+        self._tools_required_mode = settings.imessage_tools_required_mode.strip().lower()
         self._director_url = settings.freyja_director_url.rstrip("/")
         self._director_token = settings.freyja_connector_token
         self._timeout = settings.imessage_request_timeout_seconds
@@ -47,6 +69,7 @@ class IMessageGateway:
         self._family_chat_identifiers = settings.family_chat_identifier_set
         self._family_invocation_names = settings.family_invocation_names
         self._family_observer = FamilyIMessageObserver()
+        self._hierarchy = AgentHierarchy()
         self._recent_message_ids: deque[str] = deque(maxlen=_MAX_RECENT_IDS)
         self._http_client: httpx.AsyncClient | None = None
 
@@ -192,20 +215,22 @@ class IMessageGateway:
         account_owner: str | None = None,
         prompt: str | None = None,
     ) -> IMessageReply | None:
+        agent_profile = self._agent_profile(identity)
         try:
             principal = build_memory_principal(
                 client_type="imessage",
-                client_subject=identity.subject,
-                account_owner=account_owner,
+                client_subject=agent_profile.client_subject if agent_profile else identity.subject,
+                account_owner=account_owner or (agent_profile.account_owner if agent_profile else None),
                 conversation_id=conversation_id or identity.conversation_id,
             )
         except ValueError:
             return self._safe_error_response(message)
 
         payload = {
-            "prompt": prompt or message.text,
+            "prompt": prompt or self._prompt_for_message(message, agent_profile),
             "provider": "auto",
-            "tools_required": True,
+            "model": self._model or None,
+            "tools_required": self._tools_required_for(message.text),
             "conversation_id": principal.conversation_id,
         }
 
@@ -218,7 +243,8 @@ class IMessageGateway:
                 "conversation_id": principal.conversation_id,
                 "account_owner": principal.account_owner,
                 "family_member": identity.member_id,
-                "person_id": identity.person.person_id if identity.person else None,
+                "person_id": self._person_id_for_log(identity, agent_profile),
+                "agent_id": agent_profile.agent_id.value if agent_profile else None,
                 "is_group": message.is_group,
                 "text_length": len(message.text),
             }
@@ -232,6 +258,10 @@ class IMessageGateway:
             headers["X-Freyja-Conversation-Id"] = principal.conversation_id or ""
             if principal.account_owner:
                 headers["X-Freyja-Account-Owner"] = principal.account_owner
+            if agent_profile:
+                headers["X-Freyja-Agent-Id"] = agent_profile.agent_id.value
+                headers["X-Freyja-Agent-Display-Name"] = agent_profile.display_name
+                headers["X-Freyja-Person-Id"] = agent_profile.owner.value
             if self._director_token:
                 headers["Authorization"] = f"Bearer {self._director_token}"
             response = await client.post(
@@ -282,10 +312,47 @@ class IMessageGateway:
                 "director_request_id": data.get("request_id"),
                 "provider": data.get("provider"),
                 "model": data.get("model"),
+                "agent_id": agent_profile.agent_id.value if agent_profile else None,
+                "person_id": agent_profile.owner.value if agent_profile else None,
                 "reply_length": len(text),
             }
         )
         return IMessageReply(chat_id=message.chat_id, text=text)
+
+    def _agent_profile(self, identity: AuthorizedSender) -> AgentProfile | None:
+        if identity.person:
+            return self._hierarchy.profile_for_member_id(identity.person.person_id)
+        if identity.member_id:
+            return self._hierarchy.profile_for_member_id(identity.member_id)
+        return None
+
+    @staticmethod
+    def _person_id_for_log(
+        identity: AuthorizedSender,
+        profile: AgentProfile | None,
+    ) -> str | None:
+        if profile:
+            return profile.owner.value
+        if identity.person:
+            return identity.person.person_id
+        return None
+
+    def _prompt_for_message(self, message: IMessage, profile: AgentProfile | None) -> str:
+        if profile is None:
+            return message.text
+        return self._hierarchy.agent_prompt(
+            platform="iMessage",
+            text=message.text,
+            profile=profile,
+        )
+
+    def _tools_required_for(self, text: str) -> bool:
+        if self._tools_required_mode == "never":
+            return False
+        if self._tools_required_mode != "auto":
+            return True
+        lowered = text.lower()
+        return any(term in lowered for term in _TOOL_REQUEST_TERMS)
 
     def _safe_error_response(self, message: IMessage) -> IMessageReply:
         return IMessageReply(chat_id=message.chat_id, text=_SAFE_ERROR_TEXT)

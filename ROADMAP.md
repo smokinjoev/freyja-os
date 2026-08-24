@@ -123,7 +123,7 @@ Rev 2 reorganizes Freyja-OS around four durable planes: Atlas for control and st
 - Finish production smoke tests for Signal, Gmail, and iMessage.
 - Configure family aliases and permissions.
 - Standardize safe error handling, sender allowlists, thread preservation, and attachment normalization.
-- Enable Gmail as a work-environment fallback using Freyja's existing Gmail identity; preserve Gmail threads as Freyja conversation threads.
+- Enable Gmail as a work-environment fallback using Freyja's existing Gmail identity; run a mailbox transport, preserve Gmail threads as Freyja conversation threads, and keep gateway authorization separate from IMAP/SMTP delivery.
 - Enable the family iMessage group as a passive context source that remains silent unless explicitly addressed by `Freyja` or `@Freyja`.
 - Validate that Gmail cannot approve consequential actions and that family iMessage passive extraction stores structured candidates rather than raw conversation.
 - Add HomePod/Shortcut entry points where useful.

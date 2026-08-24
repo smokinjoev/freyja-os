@@ -22,14 +22,18 @@ class IMessageSettings(BaseSettings):
     )
     imessage_allowed_senders: str = ""
     imessage_max_message_chars: int = 4000
+    imessage_model: str = ""
+    imessage_tools_required_mode: str = "always"
     freyja_director_url: str = "http://127.0.0.1:8000"
     freyja_connector_token: str = ""
     imessage_request_timeout_seconds: float = 120.0
+    imessage_command_timeout_seconds: float = 10.0
     imessage_send_timeout_seconds: float = 30.0
     imessage_provisional_reply_enabled: bool = False
     imessage_provisional_reply_delay_seconds: float = 2.0
     imessage_provisional_reply_text: str = "Working on it..."
     imessage_watch_enabled: bool = True
+    imessage_poll_database_enabled: bool = True
     imessage_poll_interval_seconds: float = 5.0
     imessage_poll_chat_limit: int = 10
     imessage_poll_history_limit: int = 3
