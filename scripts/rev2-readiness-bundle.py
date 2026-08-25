@@ -91,6 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--memory-report", type=Path)
     parser.add_argument("--memory-db", type=Path)
     parser.add_argument("--vulcan-report", type=Path)
+    parser.add_argument("--signal-readiness-report", type=Path)
     parser.add_argument(
         "--require-vulcan-report",
         action="store_true",
@@ -233,6 +234,8 @@ def build_commands(args: argparse.Namespace) -> list[list[str]]:
         readiness.append("--require-signal-smoke-report")
     if args.vulcan_report is not None:
         readiness.extend(["--vulcan-report", str(args.vulcan_report)])
+    if args.signal_readiness_report is not None:
+        readiness.extend(["--signal-readiness-report", str(args.signal_readiness_report)])
     if args.require_vulcan_report:
         readiness.append("--require-vulcan-report")
     for connector_report in args.connector_report:

@@ -43,6 +43,8 @@ def test_bundle_builds_strict_readiness_command_with_all_artifacts(tmp_path: Pat
             str(tmp_path / "approval.json"),
             "--vulcan-report",
             str(tmp_path / "vulcan.json"),
+            "--signal-readiness-report",
+            str(tmp_path / "signal-readiness.json"),
             "--smoke-report",
             str(tmp_path / "smoke.json"),
             "--signal-smoke-report",
@@ -72,6 +74,7 @@ def test_bundle_builds_strict_readiness_command_with_all_artifacts(tmp_path: Pat
     assert "--memory-report" in command
     assert "--approval-report" in command
     assert "--vulcan-report" in command
+    assert "--signal-readiness-report" in command
     assert "--smoke-report" in command
     assert "--signal-smoke-report" in command
     assert "--require-smoke-report" in command

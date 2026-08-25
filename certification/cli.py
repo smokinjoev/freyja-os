@@ -148,6 +148,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Vulcan operator readiness JSON report to include in rev2-readiness evidence.",
     )
     parser.add_argument(
+        "--signal-readiness-report",
+        type=Path,
+        default=None,
+        help="Signal operator readiness JSON report to include in rev2-readiness evidence.",
+    )
+    parser.add_argument(
         "--smoke-report",
         type=Path,
         default=None,
@@ -279,6 +285,7 @@ def _rev2_readiness(args: argparse.Namespace) -> int:
             memory_report=args.memory_report,
             approval_report=args.approval_report,
             vulcan_report=args.vulcan_report,
+            signal_readiness_report=args.signal_readiness_report,
             smoke_report=args.smoke_report,
             signal_smoke_report=args.signal_smoke_report,
             latency_winner_target=args.latency_winner_target,

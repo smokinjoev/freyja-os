@@ -86,6 +86,7 @@ def test_preflight_status_renders_json_for_automation(tmp_path: Path) -> None:
         "passed": False,
         "remaining": ["Run scripts/rev2-readiness-bundle.py --imessage-live-smoke --yes after approval."],
         "report_path": str(report),
+        "signal_readiness_report": None,
         "signal_smoke_report": None,
         "smoke_report": None,
         "status": "ready-for-final-smoke",
@@ -359,6 +360,49 @@ def test_preflight_status_reports_connector_readiness_details(tmp_path: Path) ->
     assert summary.remaining == (
         "Resolve connector-production-report for signal: enabled=false, allowed sender allowlist empty.",
     )
+
+
+def test_preflight_status_reports_signal_readiness_missing_items(tmp_path: Path) -> None:
+    report = tmp_path / "signal-readiness-rev2-readiness.json"
+    report.write_text(
+        json.dumps(
+            {
+                "passed": False,
+                "director_url": "http://127.0.0.1:8000",
+                "signal_readiness_report": "certification/reports/signal-readiness-latest.json",
+                "latency_winner_target": "director:health",
+                "checks": [
+                    {
+                        "name": "signal-readiness-report",
+                        "passed": False,
+                        "status": "Signal readiness report does not support cutover",
+                        "details": {
+                            "account_registered": False,
+                            "allowed_recipient_count": 0,
+                            "signal_enabled": False,
+                            "signal_rest_ok": True,
+                            "missing": [
+                                "Set SIGNAL_ALLOWED_SENDERS to at least one reviewed E.164 sender.",
+                                "Register or link SIGNAL_ACCOUNT_NUMBER in signal-cli-rest-api.",
+                            ],
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = preflight.summarize_report(report)
+    rendered = preflight.render_summary(summary)
+
+    assert summary.status == "not-ready"
+    assert summary.signal_readiness_report == "certification/reports/signal-readiness-latest.json"
+    assert summary.remaining == (
+        "Resolve signal-readiness-report: Set SIGNAL_ALLOWED_SENDERS to at least one reviewed E.164 sender.",
+        "Resolve signal-readiness-report: Register or link SIGNAL_ACCOUNT_NUMBER in signal-cli-rest-api.",
+    )
+    assert "Signal readiness report: certification/reports/signal-readiness-latest.json" in rendered
 
 
 def test_preflight_status_reports_not_ready_for_other_failures(tmp_path: Path) -> None:

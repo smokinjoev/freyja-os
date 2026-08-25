@@ -899,6 +899,129 @@ def test_rev2_readiness_probe_requires_signal_smoke_report(
     assert signal_smoke.status == "missing required --signal-smoke-report"
 
 
+def test_rev2_readiness_probe_checks_signal_readiness_report(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    readiness_path = tmp_path / "signal-readiness.json"
+    readiness_path.write_text(
+        json.dumps(
+            {
+                "report_type": "signal-readiness",
+                "status": "ready",
+                "ready_for_live_smoke": True,
+                "checks": {
+                    "account_number_configured": True,
+                    "account_registered": True,
+                    "allowed_recipient_count": 1,
+                    "signal_enabled": True,
+                    "signal_rest_health": {"ok": True},
+                },
+                "missing": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "/providers/health": {
+                    "providers": [
+                        {"provider_id": "legacy_ollama", "ready": True},
+                        {"provider_id": "iris_router", "ready": True},
+                        {"provider_id": "openrouter_frontier", "ready": True},
+                    ]
+                },
+                "/iris-router/health": {"enabled": True, "available": True},
+                "/macagent/health": {
+                    "enabled": True,
+                    "reachable": True,
+                    "authenticated": True,
+                    "capabilities": list(REQUIRED_REV2_CAPABILITIES),
+                },
+            }[request.url.path],
+        )
+    )
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        "certification.rev2_readiness.httpx.Client",
+        lambda **kwargs: real_client(transport=transport, **kwargs),
+    )
+
+    report = run_readiness_probe("http://atlas.test:8000", signal_readiness_report=readiness_path)
+    signal_readiness = next(check for check in report.checks if check.name == "signal-readiness-report")
+
+    assert report.passed is True
+    assert report.signal_readiness_report == str(readiness_path)
+    assert signal_readiness.details["account_registered"] is True
+
+
+def test_rev2_readiness_signal_readiness_report_fails_with_redacted_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    readiness_path = tmp_path / "signal-readiness.json"
+    readiness_path.write_text(
+        json.dumps(
+            {
+                "report_type": "signal-readiness",
+                "status": "blocked",
+                "ready_for_live_smoke": False,
+                "checks": {
+                    "account_number_configured": True,
+                    "account_registered": False,
+                    "allowed_recipient_count": 0,
+                    "signal_enabled": False,
+                    "signal_rest_health": {"ok": True},
+                },
+                "missing": [
+                    "Set SIGNAL_ALLOWED_SENDERS to at least one reviewed E.164 sender.",
+                    "Register or link SIGNAL_ACCOUNT_NUMBER in signal-cli-rest-api.",
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "/providers/health": {
+                    "providers": [
+                        {"provider_id": "legacy_ollama", "ready": True},
+                        {"provider_id": "iris_router", "ready": True},
+                        {"provider_id": "openrouter_frontier", "ready": True},
+                    ]
+                },
+                "/iris-router/health": {"enabled": True, "available": True},
+                "/macagent/health": {
+                    "enabled": True,
+                    "reachable": True,
+                    "authenticated": True,
+                    "capabilities": list(REQUIRED_REV2_CAPABILITIES),
+                },
+            }[request.url.path],
+        )
+    )
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        "certification.rev2_readiness.httpx.Client",
+        lambda **kwargs: real_client(transport=transport, **kwargs),
+    )
+
+    report = run_readiness_probe("http://atlas.test:8000", signal_readiness_report=readiness_path)
+    signal_readiness = next(check for check in report.checks if check.name == "signal-readiness-report")
+
+    assert report.passed is False
+    assert signal_readiness.passed is False
+    assert signal_readiness.details["account_registered"] is False
+    assert signal_readiness.details["missing"] == [
+        "Set SIGNAL_ALLOWED_SENDERS to at least one reviewed E.164 sender.",
+        "Register or link SIGNAL_ACCOUNT_NUMBER in signal-cli-rest-api.",
+    ]
+
+
 def test_rev2_readiness_probe_checks_vulcan_report(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
