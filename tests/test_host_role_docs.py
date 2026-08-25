@@ -230,6 +230,21 @@ def test_operations_deployment_tracks_current_signal_gate() -> None:
     assert "Signal account/service is" not in docs
 
 
+def test_signal_recovery_and_certification_docs_use_env_file() -> None:
+    docs = "\n".join(
+        [
+            _read("docs/operations/recovery.md"),
+            _read("docs/testing/end-to-end-certification.md"),
+        ]
+    )
+
+    assert "--env-file deploy/compose/signal/.env readiness --check-registered" in docs
+    assert "--env-file deploy/compose/signal/.env allowlist" in docs
+    assert "https://signalcaptchas.org/registration/generate.html" in docs
+    assert "signalcaptcha://..." in docs
+    assert "connector-local fallback response" in docs
+
+
 def test_rev2_status_documents_preflight_handoff_commands() -> None:
     docs = _read("docs/REV2_STATUS.md")
 

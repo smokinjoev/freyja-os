@@ -28,7 +28,7 @@ Before live certification, capture:
 
 ```bash
 scripts/vulcan-operator.py readiness --output logs/vulcan-readiness.json
-scripts/signal-operator.py readiness --check-registered --output logs/signal-readiness.json
+scripts/signal-operator.py --env-file deploy/compose/signal/.env readiness --check-registered --output logs/signal-readiness.json
 freyja-certify rev2-readiness \
   --vulcan-report logs/vulcan-readiness.json \
   --signal-readiness-report logs/signal-readiness.json
@@ -37,4 +37,6 @@ freyja-certify rev2-readiness \
 `vulcan-readiness.json` must show `ready_for_certification: true` before
 vision/profile certification can pass. `signal-readiness.json` must show
 `ready_for_live_smoke: true` and `account_registered: true` before Signal live
-certification can pass.
+certification can pass. Signal certification must use the configured account in
+`deploy/compose/signal/.env`; do not replace a failed registration check with a
+connector-local fallback response.

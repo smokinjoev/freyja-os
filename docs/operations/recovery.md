@@ -17,11 +17,14 @@ Do not diagnose routing from response wording. Use trace evidence.
 Use the operator CLI before debugging connector behavior:
 
 ```bash
-scripts/signal-operator.py readiness --check-registered
-scripts/signal-operator.py allowlist
+scripts/signal-operator.py --env-file deploy/compose/signal/.env readiness --check-registered
+scripts/signal-operator.py --env-file deploy/compose/signal/.env allowlist
 ```
 
 If the account is missing from the REST wrapper, either complete
-`register`/`verify` for a dedicated Signal number or run `link-device` and scan
-the generated device link from the existing Signal mobile account. Do not work
-around a missing Signal account by adding a connector-local responder.
+`register`/`verify` for the configured dedicated Signal number or run
+`link-device` and scan the generated device link from the existing Signal
+mobile account. When Signal reports a captcha requirement, generate the token at
+`https://signalcaptchas.org/registration/generate.html` and pass the returned
+`signalcaptcha://...` value only to the approved `register --yes` command. Do
+not work around a missing Signal account by adding a connector-local responder.
