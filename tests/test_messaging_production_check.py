@@ -7,10 +7,20 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "messaging-production-check.py"
+CONFIGURE_SCRIPT_PATH = REPO_ROOT / "scripts" / "configure-imessage-family-agents.py"
 
 
 def _load_script():
     spec = importlib.util.spec_from_file_location("messaging_production_check", SCRIPT_PATH)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_configure_script():
+    spec = importlib.util.spec_from_file_location("configure_imessage_family_agents", CONFIGURE_SCRIPT_PATH)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -152,6 +162,39 @@ def test_imessage_family_agent_mapping_accepts_four_labeled_senders(monkeypatch,
     assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jenna"
     assert "+15550000001" not in str(status)
     assert "+15550000004" not in str(status)
+
+
+def test_configure_imessage_family_agents_rewrites_sender_env(monkeypatch, tmp_path):
+    module = _load_configure_script()
+    env_file = tmp_path / ".env"
+    env_file.write_text("IMESSAGE_ENABLED=true\nIMESSAGE_ALLOWED_SENDERS=old\nOTHER=value\n", encoding="utf-8")
+    calls = []
+
+    def fake_run(command, text, check=False):
+        calls.append(command)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    result = module.main(
+        [
+            "--env-file",
+            str(env_file),
+            "joe=+1",
+            "beth=+2",
+            "liam=+3",
+            "jenna=+4",
+        ]
+    )
+
+    assert result == 0
+    assert "IMESSAGE_ALLOWED_SENDERS=joe=+1,beth=+2,liam=+3,jenna=+4" in env_file.read_text(encoding="utf-8")
+    assert "OTHER=value" in env_file.read_text(encoding="utf-8")
+    assert "--require-imessage-family-agents" in calls[0]
 
 
 def test_signal_status_redacts_sender_values(monkeypatch):
