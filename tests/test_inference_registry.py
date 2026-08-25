@@ -38,6 +38,15 @@ def test_provider_registry_translates_legacy_ollama_settings() -> None:
     assert coding.tier == 3
     assert "coding" in coding.capabilities
 
+    vision = registry.get("local_vision")
+    assert vision is not None
+    assert vision.kind == "ollama"
+    assert vision.base_url == "http://atlas:11434"
+    assert vision.model == "moondream"
+    assert vision.locality == InferenceLocality.IRIS
+    assert vision.tier == 2
+    assert "vision" in vision.capabilities
+
 
 def test_iris_router_profile_is_disabled_until_enabled() -> None:
     disabled = provider_registry_from_settings(Settings(iris_router_enabled=False))
@@ -85,6 +94,7 @@ def test_enabled_profiles_are_priority_ordered() -> None:
     provider_ids = [profile.provider_id for profile in registry.enabled()]
 
     assert provider_ids.index("iris_router") < provider_ids.index("legacy_ollama")
+    assert provider_ids.index("local_vision") < provider_ids.index("legacy_ollama")
     assert provider_ids.index("heavy_local") < provider_ids.index("openrouter_frontier")
 
 

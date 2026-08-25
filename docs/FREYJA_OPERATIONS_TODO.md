@@ -96,3 +96,47 @@ completion audit names them as final deployment evidence.
 - [ ] Smoke test passive family iMessage observation and confirm no group reply is generated.
 - [ ] Smoke test `Freyja, ...` and `@Freyja ...` invocations and confirm addressed messages route through Director.
 - [ ] Review extracted family memory candidates before treating them as authoritative or calendar-worthy.
+
+## Messaging BLOCKED_BY_USER Items
+
+- BLOCKED_BY_USER - Signal - Atlas - live validation requires external Signal
+  account/service setup. Code and mocked gateway/transport tests are complete
+  for allowlisting, identity mapping, duplicate suppression, attachment
+  metadata, image payload forwarding, missing-payload honesty, Director routing,
+  retries/timeouts, and sanitized logs. Joe must start or repair
+  `signal-cli-rest-api`, configure the linked `SIGNAL_ACCOUNT_NUMBER`, set a
+  reviewed `SIGNAL_ALLOWED_SENDERS` allowlist, and set `SIGNAL_ENABLED=true`
+  outside Git. Afterward run
+  `scripts/run-signal-connector.py --once` and
+  `scripts/messaging-production-check.py --connector signal`.
+- BLOCKED_BY_USER - Gmail - Atlas - live validation requires Freyja Gmail
+  account authorization/credentials outside Git. Code and mocked
+  gateway/transport tests are complete for sender allowlisting, Gmail thread
+  preservation, HTML sanitization, image attachment forwarding,
+  metadata-only PDF/image honesty, safe failure replies, loop prevention, and
+  sanitized logs. Joe must configure `GMAIL_IDENTITY`,
+  `GMAIL_ALLOWED_SENDERS`, `GMAIL_IMAP_USERNAME`, `GMAIL_IMAP_PASSWORD`,
+  `GMAIL_SMTP_USERNAME`, and `GMAIL_SMTP_PASSWORD` outside Git, then install or
+  restart the connector with `scripts/install-gmail-connector.sh`. Afterward run
+  `scripts/status-gmail-connector.sh` and send one allowlisted test email, then
+  run `python3 -m pytest tests/test_gmail_gateway.py tests/test_gmail_transport.py tests/test_gmail_launchagent.py`.
+- BLOCKED_BY_USER - iMessage - Iris - live validation can require macOS
+  Messages/iCloud account state, Full Disk Access, Automation approval, and an
+  approved outbound smoke. Code and mocked tests are complete for direct
+  routing, self-message loop prevention, group passive observation, explicit
+  group invocation, attachment metadata, missing-payload honesty, duplicate
+  suppression, and MacAgent capability boundaries. Joe must verify the `freyja`
+  macOS account is signed into Messages, grant required privacy prompts, set
+  `IMESSAGE_FAMILY_CHAT_IDENTIFIERS`, and approve the final outbound smoke.
+  Afterward run `scripts/rev2-readiness-bundle.py --imessage-live-smoke --yes`.
+- BLOCKED_BY_USER - HomePod/Siri Shortcuts - Iris/Apple device - final live
+  validation requires creating or approving a Shortcut on an Apple device.
+  Server-side Director plumbing is complete at protected
+  `POST /shortcuts/message`, reusing private Director routing and returning
+  voice-friendly `spoken` text. Joe must create a Shortcut that accepts dictated
+  text, POSTs JSON `{"prompt":"<dictated text>","conversation_id":"homepod"}`
+  to the Atlas Director `/shortcuts/message` endpoint with
+  `Authorization: Bearer <FREYJA_CONNECTOR_TOKEN>`, then speaks the `spoken`
+  field from the JSON response. Afterward run
+  `python3 -m pytest tests/test_health.py tests/test_voice_assistant_suite.py`
+  and perform one HomePod spoken smoke request.

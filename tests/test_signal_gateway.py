@@ -138,6 +138,32 @@ async def test_photo_only_signal_message_forwards_image(enabled_gateway):
 
 
 @pytest.mark.asyncio
+async def test_signal_missing_image_payload_is_not_sent_as_inspected_image(enabled_gateway):
+    message = InboundMessage(
+        sender="+15551234567",
+        text="What is in this?",
+        message_id="signal-missing-photo",
+        attachments=[
+            SignalAttachment(
+                filename="photo.png",
+                mime_type="image/png",
+                size_bytes=1234,
+            )
+        ],
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "I cannot inspect the image."})
+        result = await enabled_gateway.handle(message)
+
+    assert result.success is True
+    payload = mock_post.await_args.kwargs["json"]
+    assert "images" not in payload
+    assert "image payload unavailable" in payload["prompt"]
+    assert "Do not describe their contents" in payload["prompt"]
+
+
+@pytest.mark.asyncio
 async def test_signal_identity_mapping_happens_after_allowlist_validation(enabled_gateway):
     message = make_message("+19998887777", "Hello Freyja", "msg-unauthorized")
 

@@ -1,7 +1,7 @@
 # Rev 2 Status
 
 **Date:** 2026-08-25  
-**Status:** local production candidate; Signal onboarding still external
+**Status:** local implementation candidate; completion audit still active; live account/device onboarding still external
 
 This document is the current evidence trail for `docs/REV2_IMPLEMENTATION_PLAN.md`.
 The requirement-by-requirement matrix is `docs/REV2_COMPLETION_AUDIT.md`.
@@ -110,6 +110,7 @@ the current state of that scope.
   `certification/reports/20260825T040632.268989Z0000-rev2-readiness.json`,
   passed every non-smoke check and failed only `imessage-live-smoke-report`
   because the local `imsg` send did not complete.
+  Historical note: at this point the local Messages/`imsg` send transport must be corrected before a final live-smoke claim.
 - Rev 2 preflight summary:
   `freyja-rev2-preflight-status` is the preferred operator command and reports
   the latest readiness artifact as `ready-for-final-smoke` with exit code `2`,
@@ -152,6 +153,18 @@ the current state of that scope.
   but live Signal smoke is blocked by external service/account setup:
   `SIGNAL_ENABLED=false`, no configured account number, no allowed sender, and
   `signal-cli-rest-api` unreachable at the configured REST URL.
+- Messaging attachment hardening: Signal, iMessage, and Gmail now share a
+  normalized message/attachment abstraction for text, thread/group metadata,
+  attachment metadata, local references, and payload availability. Image
+  requests route to the configured local `local_vision` profile instead of
+  cloud by default. Missing image/PDF payloads are explicitly marked unavailable
+  in Director prompts and are not sent as inspected images. Focused gateway,
+  router, provider-health, MacAgent, and voice tests passed:
+  `221 passed, 1 warning`.
+- Shortcut/HomePod ingress candidate: Director exposes protected
+  `POST /shortcuts/message` for Siri Shortcuts/HomePod flows. It reuses normal
+  private `RouteRequest` dispatch, preserves `shortcut-conv:<id>` continuity,
+  supports tool execution, and returns concise `response`/`spoken` text.
 
 ## Still Not Claimed Complete
 
@@ -162,6 +175,11 @@ the current state of that scope.
   `signal-cli-rest-api`, configure the linked `SIGNAL_ACCOUNT_NUMBER`, set at
   least one reviewed `SIGNAL_ALLOWED_SENDERS` value, and enable
   `SIGNAL_ENABLED=true` only after that allowlist is reviewed.
+- Gmail live smoke remains external until Joe configures Freyja Gmail IMAP/SMTP
+  credentials and the reviewed sender allowlist outside Git.
+- HomePod live smoke remains external until Joe creates or approves the Siri
+  Shortcut on an Apple device and supplies the configured Director connector
+  token to that Shortcut.
 - Stage 3 default routing should only be enabled after certification reports and
   latency measurements prove an improvement in the target deployment.
 - Heavy-local cutover depends on stable endpoint, model, and health checks for

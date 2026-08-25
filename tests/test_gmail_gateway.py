@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -127,6 +128,57 @@ async def test_image_only_gmail_message_forwards_image(enabled_gateway):
 
 
 @pytest.mark.asyncio
+async def test_gmail_missing_image_payload_is_not_sent_as_inspected_image(enabled_gateway):
+    message = make_message(
+        text="What is in this?",
+        attachments=[
+            GmailAttachment(
+                filename="photo.jpg",
+                mime_type="image/jpeg",
+                size_bytes=1234,
+                attachment_id="gmail-photo-id",
+            )
+        ],
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "I cannot inspect it."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["images"] == []
+    assert "image payload unavailable" in payload["prompt"]
+    assert "Do not describe their contents" in payload["prompt"]
+    assert "gmail-photo-id" not in payload["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_gmail_missing_pdf_payload_gets_document_honesty_note(enabled_gateway):
+    message = make_message(
+        attachments=[
+            GmailAttachment(
+                filename="brief.pdf",
+                mime_type="application/pdf",
+                size_bytes=9876,
+                attachment_id="gmail-pdf-id",
+            )
+        ],
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "I need the PDF bytes."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["images"] == []
+    assert "document payload unavailable" in payload["prompt"]
+    assert "Do not describe their contents" in payload["prompt"]
+    assert "gmail-pdf-id" not in payload["prompt"]
+
+
+@pytest.mark.asyncio
 async def test_attachments_are_metadata_only(enabled_gateway):
     message = make_message(
         attachments=[
@@ -149,6 +201,30 @@ async def test_attachments_are_metadata_only(enabled_gateway):
     assert "application/pdf" in prompt
     assert "untrusted input" in prompt
     assert "att-secret" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_gmail_director_errors_log_sender_hash_not_address(enabled_gateway, caplog):
+    caplog.set_level(logging.WARNING, logger="connectors.gmail.gateway")
+
+    error_response = httpx.Response(503, json={}, request=_make_request())
+    error_response.raise_for_status = lambda: (_ for _ in ()).throw(
+        httpx.HTTPStatusError(
+            "Service Unavailable",
+            request=_make_request(),
+            response=error_response,
+        )
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = error_response
+        result = await enabled_gateway.handle(make_message())
+
+    assert result is not None
+    assert result.success is False
+    assert "gmail_gateway_director_error" in caplog.text
+    assert "worker@example.com" not in caplog.text
+    assert "sender_hash" in caplog.text
 
 
 @pytest.mark.asyncio

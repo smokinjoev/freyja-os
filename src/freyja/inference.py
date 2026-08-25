@@ -162,6 +162,18 @@ def provider_registry_from_settings(config: Settings = settings) -> ProviderRegi
     )
     registry.register(
         InferenceProviderProfile(
+            provider_id="local_vision",
+            kind="ollama",
+            base_url=legacy_base_url,
+            model=config.ollama_vision_model,
+            capabilities={"chat", "vision", "image_understanding"},
+            locality=InferenceLocality.IRIS,
+            tier=2,
+            priority=18,
+        )
+    )
+    registry.register(
+        InferenceProviderProfile(
             provider_id="openrouter_frontier",
             kind="openrouter",
             base_url=config.openrouter_base_url.rstrip("/"),
@@ -183,6 +195,8 @@ def legacy_provider_profile_id(provider: str) -> str | None:
         return "legacy_ollama"
     if provider == "local_reasoning":
         return "heavy_local"
+    if provider == "local_vision":
+        return "local_vision"
     if provider == "openrouter":
         return "openrouter_frontier"
     if provider == "deterministic":

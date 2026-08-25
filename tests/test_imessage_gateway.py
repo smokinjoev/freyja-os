@@ -116,6 +116,30 @@ async def test_photo_only_message_is_forwarded_in_same_conversation(enabled_gate
 
 
 @pytest.mark.asyncio
+async def test_imessage_missing_image_payload_is_not_sent_as_inspected_image(enabled_gateway):
+    message = make_message(text="What is this?", message_id="photo-missing").model_copy(
+        update={
+            "attachments": [
+                IMessageAttachment(
+                    filename="photo.jpg",
+                    mime_type="image/jpeg",
+                )
+            ]
+        }
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "I cannot inspect that image."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert "images" not in payload
+    assert "image payload unavailable" in payload["prompt"]
+    assert "Do not describe their contents" in payload["prompt"]
+
+
+@pytest.mark.asyncio
 async def test_auto_tool_mode_keeps_plain_chat_fast(enabled_gateway):
     enabled_gateway._tools_required_mode = "auto"
 

@@ -57,6 +57,7 @@ def reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "local_max_prompt_chars": 8000,
         "openrouter_allowlist": "",
         "ollama_model": "qwen2.5:1.5b",
+        "ollama_vision_model": "moondream",
         "ollama_reasoning_model": "gpt-oss:20b",
         "openrouter_model": "openai/gpt-4o-mini",
         "iris_router_enabled": False,
@@ -200,11 +201,11 @@ async def test_person_agent_context_is_added_by_director_for_imessage(
     assert prompt.endswith("Current user request:\nWhat is the plan?")
 
 
-async def test_image_request_routes_to_openrouter_with_images(router: Router, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_image_request_routes_to_local_vision_with_images(router: Router, monkeypatch: pytest.MonkeyPatch) -> None:
     _settings_with_allowlist(monkeypatch)
-    router.openrouter_client.chat.return_value = {
-        "model": "openai/gpt-4o-mini",
-        "response": "The image shows a red square.",
+    router.ollama_client.chat.return_value = {
+        "model": "moondream",
+        "message": {"content": "The image shows a red square."},
     }
 
     req = RouteRequest(
@@ -214,11 +215,12 @@ async def test_image_request_routes_to_openrouter_with_images(router: Router, mo
     )
     result = await router.execute(req)
 
-    assert result.decision.provider == "openrouter"
+    assert result.decision.provider == "local_vision"
     assert "image request" in result.decision.reason
     assert result.response == "The image shows a red square."
-    router.openrouter_client.chat.assert_awaited_once()
-    assert router.openrouter_client.chat.await_args.kwargs["images"] == req.images
+    router.openrouter_client.chat.assert_not_called()
+    router.ollama_client.chat.assert_awaited_once()
+    assert router.ollama_client.chat.await_args.kwargs["images"] == req.images
 
 
 async def test_provider_latency_records_warm_and_cold_start_buckets(
@@ -1208,6 +1210,33 @@ async def test_auto_local_chat_avoids_sub_3b_without_cloud_fallback(router: Rout
     assert result.decision.model == "qwen2.5:7b"
     assert result.response == ""
     router.openrouter_client.chat.assert_not_called()
+
+
+async def test_auto_image_request_routes_to_local_vision_without_cloud(router: Router, reset_settings) -> None:
+    router.ollama_client.chat.return_value = {
+        "model": "moondream",
+        "message": {"content": "red"},
+    }
+    router.openrouter_client.chat.return_value = {
+        "model": "openai/gpt-4o-mini",
+        "response": "cloud red",
+    }
+
+    req = RouteRequest(
+        prompt="What color is this image?",
+        provider="auto",
+        images=[ImageInput(mime_type="image/png", data_base64="ZmFrZQ==")],
+    )
+    result = await router.execute(req)
+
+    assert result.decision.provider == "local_vision"
+    assert result.decision.model == "moondream"
+    assert result.response == "red"
+    router.openrouter_client.chat.assert_not_called()
+    _, kwargs = router.ollama_client.chat.call_args
+    assert kwargs["images"] == req.images
+    assert result.runtime_evidence.provider_profile_id == "local_vision"
+    assert result.runtime_evidence.provider_locality == "iris"
 
 
 class TestToolLoop:

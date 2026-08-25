@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 
 from freyja.agents.household import HouseholdAgent, household_agents
 from freyja.identity import IdentityService, Person, person_from_legacy_member, person_memory_subject
+from freyja.media import AttachmentInput, ImageInput, images_from_attachments
 from freyja.memory.principal import stable_identity
 
 
@@ -43,6 +45,105 @@ class AuthorizedSender:
             headers["X-Freyja-Person-Display-Name"] = person.display_name
             headers["X-Freyja-Person-Preferred-Name"] = person.preferred_name or person.display_name
         return headers
+
+
+@dataclass(frozen=True)
+class NormalizedAttachment:
+    filename: str | None = None
+    mime_type: str | None = None
+    path: str | None = None
+    data_base64: str | None = None
+    size_bytes: int | None = None
+    local_ref: str | None = None
+
+    @property
+    def has_payload(self) -> bool:
+        return bool(self.data_base64 or self.path)
+
+    @property
+    def is_image(self) -> bool:
+        mime = (self.mime_type or "").lower()
+        name = (self.filename or self.path or self.local_ref or "").lower()
+        return mime.startswith("image/") or name.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"))
+
+    @property
+    def is_pdf(self) -> bool:
+        mime = (self.mime_type or "").lower()
+        name = (self.filename or self.path or self.local_ref or "").lower()
+        return mime == "application/pdf" or name.endswith(".pdf")
+
+    @property
+    def display_name(self) -> str:
+        return self.filename or self.local_ref or self.path or "unnamed"
+
+    def metadata_line(self, index: int) -> str:
+        parts = [f"{self.mime_type or 'attachment'}: {self.display_name}"]
+        if self.size_bytes is not None:
+            parts.append(f"{self.size_bytes} bytes")
+        if self.is_image and not self.has_payload:
+            parts.append("image payload unavailable")
+        if self.is_pdf and not self.has_payload:
+            parts.append("document payload unavailable")
+        return f"{index}. " + ", ".join(parts)
+
+    def to_attachment_input(self) -> AttachmentInput:
+        return AttachmentInput(
+            filename=self.filename,
+            mime_type=self.mime_type,
+            path=self.path,
+            data_base64=self.data_base64,
+            size_bytes=self.size_bytes,
+        )
+
+
+@dataclass(frozen=True)
+class NormalizedMessage:
+    transport: str
+    sender: str
+    conversation_id: str
+    message_id: str
+    text: str = ""
+    timestamp: datetime | None = None
+    thread_id: str | None = None
+    group_id: str | None = None
+    reply_to_message_id: str | None = None
+    attachments: list[NormalizedAttachment] = field(default_factory=list)
+    authorized: bool = False
+    is_from_self: bool = False
+
+    @property
+    def has_text(self) -> bool:
+        return bool(self.text.strip())
+
+    @property
+    def images(self) -> list[ImageInput]:
+        return images_from_attachments([attachment.to_attachment_input() for attachment in self.attachments])
+
+    @property
+    def missing_payload_attachments(self) -> list[NormalizedAttachment]:
+        return [
+            attachment
+            for attachment in self.attachments
+            if (attachment.is_image or attachment.is_pdf) and not attachment.has_payload
+        ]
+
+    def prompt_text(self, *, empty_caption: str, metadata_label: str) -> str:
+        if not self.attachments:
+            return self.text
+
+        attachment_summary = "\n".join(
+            attachment.metadata_line(index)
+            for index, attachment in enumerate(self.attachments, start=1)
+        )
+        honesty_note = ""
+        if self.missing_payload_attachments:
+            honesty_note = (
+                "\nPayload honesty constraint: one or more image/document payloads are unavailable. "
+                "Do not describe their contents unless bytes were actually provided to the vision/document path."
+            )
+        if self.has_text:
+            return f"{self.text}\n\n{metadata_label}:\n{attachment_summary}{honesty_note}"
+        return f"{empty_caption}\n\n{metadata_label}:\n{attachment_summary}{honesty_note}"
 
 
 def parse_allowed_senders(

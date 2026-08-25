@@ -195,6 +195,7 @@ SANITIZED_TERMS = {"api key", "authorization", "bearer", "sk-"}
 
 PUBLIC_ERROR_MESSAGES = {
     "ollama": "Local model provider is unavailable.",
+    "local_vision": "Local vision provider is unavailable.",
     "openrouter": "Cloud model provider is unavailable.",
     "none_available": "No approved provider is currently available.",
     "blocked": "The request was blocked by routing policy.",
@@ -586,6 +587,9 @@ class Router:
     def _reasoning_model(self, requested: str | None = None) -> str:
         return requested or self._profile_model("heavy_local", fallback=settings.ollama_reasoning_model)
 
+    def _vision_model(self, requested: str | None = None) -> str:
+        return requested or self._profile_model("local_vision", fallback=settings.ollama_vision_model)
+
     def _coding_model(self) -> str:
         return self._profile_model("qwen_coding", fallback=settings.ollama_coding_model)
 
@@ -801,6 +805,14 @@ class Router:
             )
 
         if request.provider == "local":
+            if _has_images(request):
+                return RoutingDecision(
+                    provider="local_vision",
+                    model=self._vision_model(request.model),
+                    reason="manual local image request routed to local vision provider",
+                    privacy_classification=privacy,
+                    estimated_cost_usd=0.0,
+                )
             requested = self._local_chat_model(request.model)
             return RoutingDecision(
                 provider="ollama",
@@ -833,6 +845,15 @@ class Router:
                     estimated_cost_usd=0.0,
                 )
             if not settings.cloud_enabled:
+                if _has_images(request):
+                    return RoutingDecision(
+                        provider="local_vision",
+                        model=self._vision_model(request.model),
+                        reason="manual cloud override rejected: cloud disabled; image request routed to local vision provider",
+                        privacy_classification=privacy,
+                        estimated_cost_usd=0.0,
+                        limitation_notice="Cloud routing is currently disabled; using local vision.",
+                    )
                 return RoutingDecision(
                     provider="ollama",
                     model=self._local_chat_model(request.model),
@@ -842,6 +863,15 @@ class Router:
                     limitation_notice="Cloud routing is currently disabled; falling back to local.",
                 )
             if spent_this_month >= settings.openrouter_monthly_hard_limit:
+                if _has_images(request):
+                    return RoutingDecision(
+                        provider="local_vision",
+                        model=self._vision_model(request.model),
+                        reason="manual cloud override rejected: hard budget reached; image request routed to local vision provider",
+                        privacy_classification=privacy,
+                        estimated_cost_usd=estimated_cost,
+                        limitation_notice="Monthly cloud budget exhausted; using local vision.",
+                    )
                 return RoutingDecision(
                     provider="ollama",
                     model=self._local_chat_model(request.model),
@@ -851,6 +881,15 @@ class Router:
                     limitation_notice="Monthly cloud budget exhausted; falling back to local.",
                 )
             if estimated_cost > settings.openrouter_per_request_limit:
+                if _has_images(request):
+                    return RoutingDecision(
+                        provider="local_vision",
+                        model=self._vision_model(request.model),
+                        reason="manual cloud override rejected: per-request cost limit exceeded; image request routed to local vision provider",
+                        privacy_classification=privacy,
+                        estimated_cost_usd=estimated_cost,
+                        limitation_notice="Request exceeds per-request cost limit; using local vision.",
+                    )
                 return RoutingDecision(
                     provider="ollama",
                     model=self._local_chat_model(request.model),
@@ -869,16 +908,14 @@ class Router:
             )
 
         # provider == "auto"
-        if _has_images(request) and not _requires_internal_model(privacy) and settings.cloud_enabled:
-            model, reason = self._approved_model(request.model)
-            if model and spent_this_month < settings.openrouter_monthly_hard_limit and estimated_cost <= settings.openrouter_per_request_limit:
-                return RoutingDecision(
-                    provider="openrouter",
-                    model=model,
-                    reason=f"image request routed to vision-capable cloud provider; {reason}",
-                    privacy_classification=privacy,
-                    estimated_cost_usd=estimated_cost,
-                )
+        if _has_images(request):
+            return RoutingDecision(
+                provider="local_vision",
+                model=self._vision_model(request.model),
+                reason="image request routed to local vision provider",
+                privacy_classification=privacy,
+                estimated_cost_usd=0.0,
+            )
 
         classification = await self._iris_recommendation(request)
         privacy = self._classifier_privacy(privacy, classification)
@@ -953,7 +990,7 @@ class Router:
 
     def _public_error(self, provider: str, fallback_attempts: list[dict[str, Any]]) -> str:
         has_cloud_attempt = any(a.get("provider") == "openrouter" for a in fallback_attempts)
-        has_local_attempt = any(a.get("provider") in {"ollama", "local_reasoning"} for a in fallback_attempts)
+        has_local_attempt = any(a.get("provider") in {"ollama", "local_reasoning", "local_vision"} for a in fallback_attempts)
         if has_cloud_attempt and has_local_attempt:
             return PUBLIC_ERROR_MESSAGES["none_available"]
         if provider in {"openrouter", "cloud"}:
@@ -1150,11 +1187,11 @@ class Router:
                 started=started,
             )
 
-        if decision.provider in {"ollama", "local_reasoning"}:
+        if decision.provider in {"ollama", "local_reasoning", "local_vision"}:
             ollama_client = self._ollama_for_provider(decision.provider)
             if ollama_client is None:
                 decision.reason += f"; {decision.provider} client unavailable"
-                decision.public_error_message = PUBLIC_ERROR_MESSAGES["ollama"]
+                decision.public_error_message = PUBLIC_ERROR_MESSAGES.get(decision.provider, PUBLIC_ERROR_MESSAGES["ollama"])
                 return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
             if request.tools_required:
                 return await self._execute_with_tools(
@@ -2376,12 +2413,12 @@ class Router:
         return any(term in lowered for term in ("bearer ", "sk-", "token=", "api_key="))
 
     def _extract_response_text(self, response: dict[str, Any], provider: str) -> str:
-        if provider in {"ollama", "local_reasoning"}:
+        if provider in {"ollama", "local_reasoning", "local_vision"}:
             return response.get("message", {}).get("content", "")
         return response.get("response", "")
 
     def _extract_tool_call(self, response: dict[str, Any], content: str, provider: str) -> dict[str, Any] | None:
-        if provider in {"ollama", "local_reasoning"}:
+        if provider in {"ollama", "local_reasoning", "local_vision"}:
             calls = response.get("message", {}).get("tool_calls") or []
             if calls:
                 function = calls[0].get("function", {})

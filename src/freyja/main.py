@@ -138,7 +138,7 @@ async def local_reasoning_health() -> dict[str, bool | str]:
 async def _readiness_for_profile(profile: InferenceProviderProfile) -> ProviderReadiness:
     if not profile.enabled:
         return ProviderReadiness(detail="provider disabled")
-    if profile.provider_id == "legacy_ollama":
+    if profile.provider_id in {"legacy_ollama", "local_vision"}:
         healthy = await ollama.healthy()
         model_available = await ollama.has_model(profile.model) if healthy and profile.model else healthy
         return ProviderReadiness(
@@ -259,6 +259,14 @@ class ChatRequest(BaseModel):
     model: str | None = None
 
 
+class ShortcutMessageRequest(BaseModel):
+    prompt: str
+    conversation_id: str = "homepod"
+    sender: str = "shortcut"
+    tools_required: bool = True
+    request_id: str | None = None
+
+
 @app.post("/chat")
 async def chat(request: ChatRequest) -> dict[str, str]:
     response = await ollama.chat(prompt=request.prompt, model=request.model)
@@ -354,6 +362,49 @@ async def route(request: RouteRequest, raw_request: Request) -> dict:
     if request.include_trace:
         response_payload["trace"] = result.runtime_evidence.model_dump(mode="json")
     return response_payload
+
+
+@app.post("/shortcuts/message")
+async def shortcut_message(request: ShortcutMessageRequest) -> dict[str, Any]:
+    """Protected voice/Shortcut ingress that reuses normal Director routing."""
+    prompt = request.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Shortcut prompt is required.")
+
+    route_payload: dict[str, Any] = {
+        "prompt": prompt,
+        "provider": "auto",
+        "tools_required": request.tools_required,
+        "privacy": "private",
+        "conversation_id": f"shortcut-conv:{request.conversation_id.strip() or 'homepod'}",
+    }
+    if request.request_id:
+        route_payload["request_id"] = request.request_id
+    route_request = RouteRequest(**route_payload)
+    result = await router.execute(route_request)
+    if result.decision.provider == "error":
+        raise HTTPException(status_code=400, detail=result.decision.reason)
+    if not result.response:
+        raise HTTPException(
+            status_code=503,
+            detail=result.decision.public_error_message or "No approved provider is currently available.",
+        )
+    response = _voice_friendly_response(result.response)
+    return {
+        "response": response,
+        "spoken": response,
+        "conversation_id": route_request.conversation_id,
+        "request_id": result.decision.request_id,
+        "provider": result.decision.provider,
+        "model": result.decision.model,
+    }
+
+
+def _voice_friendly_response(text: str, *, limit: int = 700) -> str:
+    cleaned = " ".join(text.split())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "..."
 
 
 class SmithDryRunRequest(BaseModel):

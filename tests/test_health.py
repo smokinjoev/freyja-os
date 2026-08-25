@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from freyja.main import app
-from freyja.router import router
+from freyja.router import RoutingDecision, RoutingResult, router
 from freyja.tools.models import ToolExecutionResult
 
 
@@ -59,6 +59,51 @@ def test_protected_endpoint_accepts_connector_token(monkeypatch) -> None:
         )
     assert response.status_code == 200
     assert response.json() == {"models": ["tinyllama:latest"]}
+
+
+def test_shortcut_message_requires_connector_token(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.post("/shortcuts/message", json={"prompt": "What is next?"})
+
+    assert response.status_code == 401
+
+
+def test_shortcut_message_routes_private_voice_request(monkeypatch) -> None:
+    from freyja.config import settings
+    from freyja import main as director_main
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    decision = RoutingDecision(
+        request_id="shortcut-req",
+        provider="ollama",
+        model="qwen2.5:7b",
+        reason="auto default",
+        privacy_classification="private",
+    )
+    with patch.object(director_main.router, "execute", new_callable=AsyncMock) as mock_execute:
+        mock_execute.return_value = RoutingResult(
+            decision=decision,
+            response="  Dinner is at 6.\nI will keep it brief.  ",
+        )
+        response = client.post(
+            "/shortcuts/message",
+            headers={"Authorization": "Bearer test-connector-token"},
+            json={"prompt": "What is next?", "conversation_id": "kitchen", "request_id": "shortcut-req"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["response"] == "Dinner is at 6. I will keep it brief."
+    assert data["spoken"] == data["response"]
+    assert data["conversation_id"] == "shortcut-conv:kitchen"
+    route_request = mock_execute.await_args.args[0]
+    assert route_request.prompt == "What is next?"
+    assert route_request.provider == "auto"
+    assert route_request.privacy == "private"
+    assert route_request.tools_required is True
+    assert route_request.conversation_id == "shortcut-conv:kitchen"
 
 
 def test_ollama_health_reachable(monkeypatch) -> None:
@@ -142,17 +187,20 @@ def test_providers_health_reports_enabled_profiles(monkeypatch) -> None:
     ) as mock_has_model, patch(
         "freyja.openrouter_client.OpenRouterClient.healthy", new_callable=AsyncMock
     ) as mock_openrouter_healthy:
-        mock_healthy.side_effect = [True, True, True]
-        mock_has_model.side_effect = [True, True, False]
+        mock_healthy.side_effect = [True, True, True, True]
+        mock_has_model.side_effect = [True, True, True, False]
         mock_openrouter_healthy.return_value = False
         response = client.get("/providers/health")
 
     assert response.status_code == 200
     providers = {entry["provider_id"]: entry for entry in response.json()["providers"]}
-    assert set(providers) == {"legacy_ollama", "heavy_local", "qwen_coding", "openrouter_frontier"}
+    assert set(providers) == {"legacy_ollama", "local_vision", "heavy_local", "qwen_coding", "openrouter_frontier"}
     assert providers["legacy_ollama"]["locality"] == "iris"
     assert providers["legacy_ollama"]["tier"] == 1
     assert providers["legacy_ollama"]["ready"] is True
+    assert providers["local_vision"]["locality"] == "iris"
+    assert providers["local_vision"]["tier"] == 2
+    assert providers["local_vision"]["ready"] is True
     assert providers["heavy_local"]["locality"] == "local_heavy"
     assert providers["heavy_local"]["tier"] == 3
     assert providers["heavy_local"]["ready"] is True
@@ -179,8 +227,8 @@ def test_providers_health_reports_iris_router_residency(monkeypatch) -> None:
     ) as mock_has_model:
         mock_healthy.return_value = True
         mock_resident.return_value = True
-        mock_ollama_healthy.side_effect = [True, True]
-        mock_has_model.side_effect = [True, True]
+        mock_ollama_healthy.return_value = True
+        mock_has_model.return_value = True
         response = client.get("/providers/health")
 
     assert response.status_code == 200

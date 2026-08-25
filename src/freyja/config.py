@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_model: str = "openai/gpt-4o-mini"
+    ollama_vision_model: str = "moondream"
 
     cloud_enabled: bool = True
     openrouter_monthly_soft_limit: float = 20.0

@@ -9,10 +9,9 @@ import httpx
 
 from connectors.signal.config import settings
 from connectors.signal.models import InboundMessage, OutboundResponse
-from connectors.messaging import AuthorizedSender, household_agent_for_sender
+from connectors.messaging import AuthorizedSender, NormalizedAttachment, NormalizedMessage, household_agent_for_sender
 from freyja.agents.coder_access import is_coding_request
 from freyja.agents.household import HouseholdAgent
-from freyja.media import AttachmentInput, images_from_attachments
 from freyja.memory.principal import build_memory_principal
 
 logger = logging.getLogger(__name__)
@@ -281,33 +280,38 @@ class SignalGateway:
 
     @staticmethod
     def _images_for_message(message: InboundMessage):
-        attachments = [
-            AttachmentInput(
-                filename=attachment.filename,
-                mime_type=attachment.mime_type,
-                path=attachment.path,
-                data_base64=attachment.data_base64,
-                size_bytes=attachment.size_bytes,
-            )
-            for attachment in message.attachments
-        ]
-        return images_from_attachments(attachments)
+        return SignalGateway._normalized_message(message).images
 
     @staticmethod
     def _message_text(message: InboundMessage) -> str:
-        if not message.attachments:
-            return message.text
-        lines = []
-        for index, attachment in enumerate(message.attachments, start=1):
-            label = attachment.mime_type or "attachment"
-            name = attachment.filename or "unnamed"
-            lines.append(f"{index}. {label}: {name}")
-        if message.has_text:
-            return f"{message.text}\n\nTrusted Signal metadata: attachment(s):\n" + "\n".join(lines)
-        return (
-            "The sender sent photo or attachment content in this same Signal conversation. "
-            "No readable caption text was included.\n\nTrusted Signal metadata: attachment(s):\n"
-            + "\n".join(lines)
+        return SignalGateway._normalized_message(message).prompt_text(
+            empty_caption=(
+                "The sender sent photo or attachment content in this same Signal conversation. "
+                "No readable caption text was included."
+            ),
+            metadata_label="Trusted Signal metadata: attachment(s)",
+        )
+
+    @staticmethod
+    def _normalized_message(message: InboundMessage) -> NormalizedMessage:
+        return NormalizedMessage(
+            transport="signal",
+            sender=message.sender,
+            conversation_id=message.group_id or message.sender,
+            message_id=message.message_id,
+            text=message.text,
+            timestamp=message.timestamp,
+            group_id=message.group_id,
+            attachments=[
+                NormalizedAttachment(
+                    filename=attachment.filename,
+                    mime_type=attachment.mime_type,
+                    path=attachment.path,
+                    data_base64=attachment.data_base64,
+                    size_bytes=attachment.size_bytes,
+                )
+                for attachment in message.attachments
+            ],
         )
 
     async def close(self) -> None:

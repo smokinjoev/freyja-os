@@ -9,9 +9,8 @@ import httpx
 from connectors.imessage.config import settings
 from connectors.imessage.family_observer import FamilyIMessageObserver
 from connectors.imessage.models import IMessage, IMessageReply
-from connectors.messaging import AuthorizedSender, household_agent_for_sender
+from connectors.messaging import AuthorizedSender, NormalizedAttachment, NormalizedMessage, household_agent_for_sender
 from freyja.agents.household import household_agents
-from freyja.media import AttachmentInput, images_from_attachments
 from freyja.memory.principal import build_memory_principal, stable_identity
 
 logger = logging.getLogger(__name__)
@@ -338,39 +337,39 @@ class IMessageGateway:
 
     @staticmethod
     def _images_for_message(message: IMessage):
-        attachments = [
-            AttachmentInput(
-                filename=attachment.filename,
-                mime_type=attachment.mime_type,
-                path=attachment.path,
-            )
-            for attachment in message.attachments
-        ]
-        return images_from_attachments(attachments)
+        return IMessageGateway._normalized_message(message).images
 
     @staticmethod
     def _message_text_for_limits_and_tools(message: IMessage) -> str:
-        text = message.text.strip()
-        if not message.attachments:
-            return message.text
+        return IMessageGateway._normalized_message(message).prompt_text(
+            empty_caption=(
+                "The sender sent photo or attachment content in this same iMessage thread. "
+                "No readable caption text was included."
+            ),
+            metadata_label="Trusted iMessage metadata: attachment(s)",
+        )
 
-        attachment_lines = []
-        for index, attachment in enumerate(message.attachments, start=1):
-            label = attachment.mime_type or "attachment"
-            name = attachment.filename or "unnamed"
-            attachment_lines.append(f"{index}. {label}: {name}")
-        attachment_summary = "\n".join(attachment_lines)
-        if text:
-            return (
-                f"{text}\n\n"
-                "Trusted iMessage metadata: the sender included attachment(s):\n"
-                f"{attachment_summary}"
-            )
-        return (
-            "The sender sent photo or attachment content in this same iMessage thread. "
-            "No readable caption text was included.\n\n"
-            "Trusted iMessage metadata: attachment(s):\n"
-            f"{attachment_summary}"
+    @staticmethod
+    def _normalized_message(message: IMessage) -> NormalizedMessage:
+        return NormalizedMessage(
+            transport="imessage",
+            sender=message.sender,
+            conversation_id=message.chat_identifier,
+            message_id=message.message_id,
+            text=message.text,
+            timestamp=message.timestamp,
+            thread_id=str(message.chat_id),
+            group_id=message.chat_identifier if message.is_group else None,
+            attachments=[
+                NormalizedAttachment(
+                    filename=attachment.filename,
+                    mime_type=attachment.mime_type,
+                    path=attachment.path,
+                    local_ref=attachment.path,
+                )
+                for attachment in message.attachments
+            ],
+            is_from_self=message.is_from_me,
         )
 
     def _tools_required_for(self, text: str) -> bool:
