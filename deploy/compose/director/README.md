@@ -1,19 +1,26 @@
-# Freyja Director on Atlas — Rev 2 Routing
+# Freyja Director on Atlas
 
 This Compose project runs the Freyja Director/control plane on Atlas. Signal
-remains a separate Atlas service under `deploy/compose/signal`. Iris is the
-always-hot Apple/MacAgent and fast-routing node; its resident 7B model observes
-Director traffic in shadow mode by default. After shadow reports are reviewed,
-active advisory mode can let Iris influence provider selection, but only after
-confidence and Director policy checks pass. Iris never authorizes tools, mutates
-responses, or grants permissions.
+remains a separate Atlas service under `deploy/compose/signal`. Vulcan is the
+inference layer. Iris is the Apple bridge and MacAgent host; its optional
+resident router can observe Director traffic in shadow mode, but it is not a
+conversational brain and must not authorize tools, mutate responses, or grant
+permissions.
 
-The existing Director routing path remains authoritative during the shadow
-period. `OLLAMA_BASE_URL` continues to identify the currently configured
-routine execution provider while provider profiles expose named Rev 2 targets.
-`OLLAMA_REASONING_BASE_URL` identifies Vulcan's heavy local reasoning endpoint
-once available. `IRIS_OLLAMA_BASE_URL` points specifically to Iris's private
-Ollama endpoint.
+Atlas should be configured with Vulcan's stable private endpoint and logical
+model profiles:
+
+```text
+VULCAN_BASE_URL=http://<vulcan-tailscale-host>:11434
+MODEL_FAST=<fast-profile-model>
+MODEL_REASON=<reason-profile-model>
+MODEL_CODE=<code-profile-model>
+MODEL_VISION=<vision-profile-model>
+```
+
+The `OLLAMA_*` variables remain compatibility defaults for existing `/route`
+callers and current provider IDs. New deployment work should treat model
+selection as profile configuration, not connector architecture.
 
 ## Private access
 
@@ -47,10 +54,10 @@ bounded while preserving malformed-output rejection. If active advisory mode is
 enabled, low-confidence, malformed, unavailable, or policy-disallowed
 recommendations fall back to deterministic Director routing.
 
-Set `OLLAMA_REASONING_BASE_URL` to Vulcan's private Tailscale Ollama endpoint
-when the Linux heavy inference node is online. Leave it blank or equal to
-`OLLAMA_BASE_URL` until then. Atlas routes `local_reasoning` requests to this
-endpoint and keeps routine local chat on `OLLAMA_BASE_URL`.
+Set `VULCAN_BASE_URL` to Vulcan's private Tailscale Ollama endpoint when the
+inference node is online. Atlas maps the logical `fast`, `reason`, `code`, and
+`vision` profiles to the configured physical models. `OLLAMA_REASONING_BASE_URL`
+should match `VULCAN_BASE_URL` until all compatibility provider IDs are retired.
 
 Set `MACAGENT_BASE_URL` to Iris's private MacAgent endpoint only after the
 MacAgent service is installed on Iris. `MACAGENT_TOKEN` must be a strong shared

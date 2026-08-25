@@ -85,6 +85,7 @@ class RuntimeEvidence(BaseModel):
     person: dict[str, str] | None = None
     provider_selected: str | None = None
     provider_profile_id: str | None = None
+    model_profile: str | None = None
     provider_locality: str | None = None
     selected_tier: int | None = None
     provider_readiness: dict[str, Any] | None = None
@@ -150,6 +151,7 @@ class RuntimeEvidence(BaseModel):
         observed_readiness = self.provider_readiness
         profile_id = legacy_provider_profile_id(provider)
         self.provider_profile_id = profile_id
+        self.model_profile = None
         self.provider_locality = None
         self.selected_tier = None
         self.provider_readiness = None
@@ -170,6 +172,7 @@ class RuntimeEvidence(BaseModel):
         registry = provider_registry_from_settings()
         profile = registry.get(profile_id)
         if profile is not None:
+            self.model_profile = profile.logical_profile
             self.provider_locality = profile.locality.value
             self.selected_tier = profile.tier
             self.provider_readiness = observed_readiness or {
@@ -585,13 +588,13 @@ class Router:
         return self._profile_model("legacy_ollama", fallback=settings.ollama_chat_model)
 
     def _reasoning_model(self, requested: str | None = None) -> str:
-        return requested or self._profile_model("heavy_local", fallback=settings.ollama_reasoning_model)
+        return requested or self._profile_model("heavy_local", fallback=settings.model_reason or settings.ollama_reasoning_model)
 
     def _vision_model(self, requested: str | None = None) -> str:
-        return requested or self._profile_model("local_vision", fallback=settings.ollama_vision_model)
+        return requested or self._profile_model("local_vision", fallback=settings.model_vision or settings.ollama_vision_model)
 
     def _coding_model(self) -> str:
-        return self._profile_model("qwen_coding", fallback=settings.ollama_coding_model)
+        return self._profile_model("qwen_coding", fallback=settings.model_code or settings.ollama_coding_model)
 
     def _provider_profile(self, profile_id: str) -> InferenceProviderProfile | None:
         return provider_registry_from_settings().get(profile_id)

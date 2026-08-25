@@ -229,22 +229,26 @@ class IMessageGateway:
         except ValueError:
             return self._safe_error_response(message)
 
-        images = [
-            image.model_dump(mode="json", exclude_none=True)
-            for image in self._images_for_message(message)
-        ]
-        payload = {
-            "prompt": prompt or self._prompt_for_message(message),
-            "provider": "auto",
-            "tools_required": self._tools_required_for(self._message_text_for_limits_and_tools(message)),
-            "conversation_id": principal.conversation_id,
-        }
-        if images:
-            payload["images"] = images
+        normalized = self._normalized_message(message)
+        canonical = normalized.to_canonical_request(
+            authorized_sender=identity,
+            resolved_user_id=agent_context.person_id,
+            resolved_agent_id=agent_context.agent_id,
+            permissions=["director:route"],
+            channel_metadata={
+                "account_owner": principal.account_owner,
+                "is_group": message.is_group,
+                "tools_required": self._tools_required_for(self._message_text_for_limits_and_tools(message)),
+            },
+        )
+        payload = canonical.model_dump(mode="json")
+        payload["conversation_id"] = principal.conversation_id
+        payload["text"] = prompt or self._prompt_for_message(message)
 
         logger.info(
             {
                 "event": "imessage_gateway_director_request",
+                "trace_id": canonical.trace_id,
                 "sender_hash": self._safe_sender_hash(message.sender),
                 "message_id": message.message_id,
                 "client_subject": principal.client_subject,
@@ -268,10 +272,11 @@ class IMessageGateway:
             headers["X-Freyja-Agent-Id"] = agent_context.agent_id
             headers["X-Freyja-Agent-Display-Name"] = agent_context.display_name
             headers["X-Freyja-Person-Id"] = agent_context.person_id
+            headers["X-Freyja-Trace-Id"] = canonical.trace_id
             if self._director_token:
                 headers["Authorization"] = f"Bearer {self._director_token}"
             response = await client.post(
-                f"{self._director_url}/route",
+                f"{self._director_url}/canonical/route",
                 json=payload,
                 headers=headers,
             )
@@ -306,7 +311,7 @@ class IMessageGateway:
             )
             return None
 
-        text = data.get("response", "")
+        text = data.get("text") or data.get("response", "")
         if not text:
             logger.warning(
                 {
@@ -320,11 +325,12 @@ class IMessageGateway:
         logger.info(
             {
                 "event": "imessage_gateway_director_response",
+                "trace_id": canonical.trace_id,
                 "sender_hash": self._safe_sender_hash(message.sender),
                 "message_id": message.message_id,
-                "director_request_id": data.get("request_id"),
-                "provider": data.get("provider"),
-                "model": data.get("model"),
+                "director_request_id": data.get("trace_id") or data.get("request_id"),
+                "provider": (data.get("channel_metadata") or {}).get("provider") or data.get("provider"),
+                "model": (data.get("channel_metadata") or {}).get("model") or data.get("model"),
                 "agent_id": agent_context.agent_id,
                 "person_id": agent_context.person_id,
                 "reply_length": len(text),

@@ -69,16 +69,19 @@ async def test_approved_sender_is_forwarded_with_gmail_thread(enabled_gateway):
     assert result.to == "worker@example.com"
     assert result.subject == "Re: Status"
     assert result.text == "Hello from Director"
+    assert mock_post.await_args.args[0].endswith("/canonical/route")
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is True
-    assert payload["privacy"] == "private"
+    assert payload["channel"] == "gmail"
+    assert payload["permissions"] == ["director:route"]
+    assert payload["channel_metadata"]["tools_required"] is True
+    assert payload["channel_metadata"]["privacy"] == "private"
     assert payload["conversation_id"].startswith("gmail-thread:")
-    assert "Hello Freyja" in payload["prompt"]
+    assert "Hello Freyja" in payload["text"]
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Client-Type"] == "gmail"
     assert headers["X-Freyja-Conversation-Id"] == payload["conversation_id"]
     assert headers["X-Freyja-Gmail-Identity"] == "freyja@example.com"
+    assert headers["X-Freyja-Trace-Id"] == payload["trace_id"]
 
 
 @pytest.mark.asyncio
@@ -94,7 +97,7 @@ async def test_html_is_sanitized_before_director(enabled_gateway):
         result = await enabled_gateway.handle(message)
 
     assert result is not None
-    prompt = mock_post.await_args.kwargs["json"]["prompt"]
+    prompt = mock_post.await_args.kwargs["json"]["text"]
     assert "Hello" in prompt
     assert "there" in prompt
     assert "<script" not in prompt
@@ -122,10 +125,10 @@ async def test_image_only_gmail_message_forwards_image(enabled_gateway):
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
-    assert "[No readable body text was provided.]" in payload["prompt"]
-    assert payload["images"] == [
-        {"mime_type": "image/jpeg", "data_base64": "ZmFrZQ==", "filename": "photo.jpg"}
-    ]
+    assert "[No readable body text was provided.]" in payload["text"]
+    assert payload["attachments"][0]["media_type"] == "image/jpeg"
+    assert payload["attachments"][0]["data_base64"] == "ZmFrZQ=="
+    assert payload["attachments"][0]["filename"] == "photo.jpg"
 
 
 @pytest.mark.asyncio
@@ -148,10 +151,10 @@ async def test_gmail_missing_image_payload_is_not_sent_as_inspected_image(enable
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["images"] == []
-    assert "image payload unavailable" in payload["prompt"]
-    assert "Do not describe their contents" in payload["prompt"]
-    assert "gmail-photo-id" not in payload["prompt"]
+    assert payload["attachments"][0]["data_base64"] is None
+    assert "image payload unavailable" in payload["text"]
+    assert "Do not describe their contents" in payload["text"]
+    assert "gmail-photo-id" not in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -173,10 +176,10 @@ async def test_gmail_missing_pdf_payload_gets_document_honesty_note(enabled_gate
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["images"] == []
-    assert "document payload unavailable" in payload["prompt"]
-    assert "Do not describe their contents" in payload["prompt"]
-    assert "gmail-pdf-id" not in payload["prompt"]
+    assert payload["attachments"][0]["data_base64"] is None
+    assert "document payload unavailable" in payload["text"]
+    assert "Do not describe their contents" in payload["text"]
+    assert "gmail-pdf-id" not in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -198,8 +201,8 @@ async def test_gmail_pdf_payload_adds_extracted_document_text(enabled_gateway):
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
-    assert "Extracted PDF/document text" in payload["prompt"]
-    assert "Family dinner Friday" in payload["prompt"]
+    assert "Extracted PDF/document text" in payload["text"]
+    assert "Family dinner Friday" in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -220,7 +223,7 @@ async def test_attachments_are_metadata_only(enabled_gateway):
         result = await enabled_gateway.handle(message)
 
     assert result is not None
-    prompt = mock_post.await_args.kwargs["json"]["prompt"]
+    prompt = mock_post.await_args.kwargs["json"]["text"]
     assert "invoice.pdf" in prompt
     assert "application/pdf" in prompt
     assert "untrusted input" in prompt

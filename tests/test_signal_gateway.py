@@ -91,11 +91,13 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     assert result.reply_to_message_id == "msg-001"
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert kwargs["json"]["prompt"] == "Hello Freyja"
-    assert kwargs["json"]["provider"] == "auto"
-    assert kwargs["json"]["privacy"] == "private"
-    assert kwargs["json"]["tools_required"] is False
+    assert mock_post.await_args.args[0].endswith("/canonical/route")
+    assert kwargs["json"]["text"] == "Hello Freyja"
+    assert kwargs["json"]["channel_metadata"]["provider"] == "auto"
+    assert kwargs["json"]["channel_metadata"]["privacy"] == "private"
+    assert kwargs["json"]["channel_metadata"]["tools_required"] is False
     assert kwargs["json"]["conversation_id"].startswith("signal-conv:")
+    assert kwargs["json"]["trace_id"]
     assert "images" not in kwargs["json"]
     headers = kwargs["headers"]
     assert headers["X-Freyja-Client-Type"] == "signal"
@@ -103,6 +105,7 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     assert headers["X-Freyja-Account-Owner"] == "person:family"
     assert headers["X-Freyja-Agent-Id"] == "freyja"
     assert headers["X-Freyja-Conversation-Id"] == kwargs["json"]["conversation_id"]
+    assert headers["X-Freyja-Trace-Id"] == kwargs["json"]["trace_id"]
     assert "+15551234567" not in str(headers)
 
 
@@ -119,7 +122,7 @@ async def test_director_token_is_sent_as_bearer_header(enabled_gateway):
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["Authorization"] == "Bearer test-connector-token"
     assert headers["X-Freyja-Client-Type"] == "signal"
-    assert mock_post.await_args.kwargs["json"]["privacy"] == "private"
+    assert mock_post.await_args.kwargs["json"]["channel_metadata"]["privacy"] == "private"
 
 
 @pytest.mark.asyncio
@@ -132,10 +135,10 @@ async def test_photo_only_signal_message_forwards_image(enabled_gateway):
 
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
-    assert "photo or attachment content" in payload["prompt"]
-    assert payload["images"] == [
-        {"mime_type": "image/png", "data_base64": "ZmFrZQ==", "filename": "photo.png"}
-    ]
+    assert "photo or attachment content" in payload["text"]
+    assert payload["attachments"][0]["media_type"] == "image/png"
+    assert payload["attachments"][0]["data_base64"] == "ZmFrZQ=="
+    assert payload["attachments"][0]["filename"] == "photo.png"
 
 
 @pytest.mark.asyncio
@@ -159,9 +162,9 @@ async def test_signal_missing_image_payload_is_not_sent_as_inspected_image(enabl
 
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
-    assert "images" not in payload
-    assert "image payload unavailable" in payload["prompt"]
-    assert "Do not describe their contents" in payload["prompt"]
+    assert payload["attachments"][0]["data_base64"] is None
+    assert "image payload unavailable" in payload["text"]
+    assert "Do not describe their contents" in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -185,8 +188,8 @@ async def test_signal_pdf_payload_adds_extracted_document_text(enabled_gateway):
 
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
-    assert "Extracted PDF/document text" in payload["prompt"]
-    assert "Family dinner Friday" in payload["prompt"]
+    assert "Extracted PDF/document text" in payload["text"]
+    assert "Family dinner Friday" in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -381,7 +384,7 @@ async def test_provider_defaults_to_auto(enabled_gateway):
         await enabled_gateway.handle(message)
 
     _, kwargs = mock_post.call_args
-    assert kwargs["json"]["provider"] == "auto"
+    assert kwargs["json"]["channel_metadata"]["provider"] == "auto"
 
 
 @pytest.mark.asyncio
@@ -422,9 +425,9 @@ async def test_joe_alias_routes_to_cloyd_gibbler_private_agent(enabled_gateway):
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["prompt"] == "Hello from Joe"
-    assert payload["privacy"] == "private"
-    assert payload["tools_required"] is False
+    assert payload["text"] == "Hello from Joe"
+    assert payload["channel_metadata"]["privacy"] == "private"
+    assert payload["channel_metadata"]["tools_required"] is False
     assert headers["X-Freyja-Family-Member"] == "joe"
     assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
     assert headers["X-Freyja-Account-Owner"] == "person:joe"
@@ -446,9 +449,9 @@ async def test_beth_alias_routes_to_benedict_private_agent(enabled_gateway):
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["prompt"] == "Hello from Beth"
-    assert payload["privacy"] == "private"
-    assert payload["tools_required"] is False
+    assert payload["text"] == "Hello from Beth"
+    assert payload["channel_metadata"]["privacy"] == "private"
+    assert payload["channel_metadata"]["tools_required"] is False
     assert headers["X-Freyja-Client-Subject"] == "agent:benedict"
     assert headers["X-Freyja-Account-Owner"] == "person:beth"
     assert headers["X-Freyja-Agent-Id"] == "benedict"
@@ -470,10 +473,10 @@ async def test_benedict_signal_path_matches_cloyd_simple_chat_path(enabled_gatew
     beth = await route("+15557654321", "What is the plan?", "msg-beth-simple")
 
     for kwargs in (joe, beth):
-        assert kwargs["json"]["prompt"] == "What is the plan?"
-        assert kwargs["json"]["provider"] == "auto"
-        assert kwargs["json"]["task_type"] is None
-        assert kwargs["json"]["tools_required"] is False
+        assert kwargs["json"]["text"] == "What is the plan?"
+        assert kwargs["json"]["channel_metadata"]["provider"] == "auto"
+        assert kwargs["json"]["channel_metadata"].get("task_type") is None
+        assert kwargs["json"]["channel_metadata"]["tools_required"] is False
 
     assert joe["headers"]["X-Freyja-Agent-Id"] == "cloyd-gibbler"
     assert joe["headers"]["X-Freyja-Account-Owner"] == "person:joe"
@@ -494,9 +497,9 @@ async def test_family_alias_routes_to_freyja_household_agent(enabled_gateway):
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["prompt"] == "House status please"
-    assert payload["privacy"] == "private"
-    assert payload["tools_required"] is False
+    assert payload["text"] == "House status please"
+    assert payload["channel_metadata"]["privacy"] == "private"
+    assert payload["channel_metadata"]["tools_required"] is False
     assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
     assert headers["X-Freyja-Account-Owner"] == "person:family"
     assert headers["X-Freyja-Agent-Id"] == "freyja"
@@ -521,11 +524,11 @@ async def test_cloyd_coding_request_uses_local_reasoning_and_tools(enabled_gatew
 
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["provider"] == "local_reasoning"
-    assert payload["task_type"] == "coding"
-    assert payload["tools_required"] is True
-    assert "SIGNAL CODING REQUEST CONTEXT" in payload["prompt"]
-    assert "Director owns final routing and agent identity." in payload["prompt"]
+    assert payload["channel_metadata"]["provider"] == "local_reasoning"
+    assert payload["channel_metadata"]["task_type"] == "coding"
+    assert payload["channel_metadata"]["tools_required"] is True
+    assert "SIGNAL CODING REQUEST CONTEXT" in payload["text"]
+    assert "Director owns final routing and agent identity." in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -547,6 +550,6 @@ async def test_non_cloyd_coding_words_do_not_grant_coder_mode(enabled_gateway):
 
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is False
-    assert "CLOYD LOCAL CODER MODE" not in payload["prompt"]
+    assert payload["channel_metadata"]["provider"] == "auto"
+    assert payload["channel_metadata"]["tools_required"] is False
+    assert "CLOYD LOCAL CODER MODE" not in payload["text"]

@@ -12,6 +12,8 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable
 from unittest.mock import patch
@@ -290,12 +292,36 @@ def _synthetic_route_smoke(
     if settings.freyja_connector_token:
         headers["Authorization"] = f"Bearer {settings.freyja_connector_token}"
     response = post_json(
-        f"{settings.freyja_director_url.rstrip('/')}/route",
+        f"{settings.freyja_director_url.rstrip('/')}/canonical/route",
         payload={
-            "request_id": f"{interface}-synthetic-route-smoke",
-            "prompt": "Freyja 2.0 synthetic route smoke. Reply with a short acknowledgement.",
-            "provider": "auto",
-            "include_trace": True,
+            "trace_id": f"{interface}-synthetic-route-smoke",
+            "message_id": f"{interface}-synthetic-message-{uuid.uuid4()}",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "channel": interface,
+            "conversation_id": conversation_id,
+            "sender": {
+                "channel_id": identity.client_subject,
+                "display_name": identity.person_display_name,
+                "address": identity.client_subject,
+                "metadata": {"synthetic": True},
+            },
+            "resolved_user_id": identity.person_id,
+            "resolved_agent_id": identity.agent_id,
+            "text": "Freyja 2.0 synthetic canonical route smoke. Reply with a short acknowledgement.",
+            "attachments": [],
+            "reply_context": {},
+            "channel_metadata": {
+                "provider": "auto",
+                "include_trace": True,
+                "task_type": "reasoning",
+                "privacy": "private",
+                "synthetic_client_subject": identity.client_subject,
+                "synthetic_account_owner": identity.account_owner,
+                "synthetic_person_display_name": identity.person_display_name,
+                "synthetic_person_preferred_name": identity.person_preferred_name,
+                "synthetic_agent_display_name": identity.agent_display_name,
+            },
+            "permissions": ["director:route"],
         },
         timeout=timeout,
         headers=headers,
@@ -303,12 +329,13 @@ def _synthetic_route_smoke(
     if response.get("ok") is not True:
         return {key: value for key, value in response.items() if key != "payload"}
     payload = response.get("payload") if isinstance(response.get("payload"), dict) else {}
-    trace = payload.get("trace") if isinstance(payload.get("trace"), dict) else {}
+    metadata = payload.get("channel_metadata") if isinstance(payload.get("channel_metadata"), dict) else {}
+    trace = metadata.get("trace") if isinstance(metadata.get("trace"), dict) else {}
     person = trace.get("person") if isinstance(trace.get("person"), dict) else {}
     principal = trace.get("principal") if isinstance(trace.get("principal"), dict) else {}
     checks = {
-        "response_present": bool(str(payload.get("response") or "").strip()),
-        "provider_matches": payload.get("provider") == identity.expected_provider,
+        "response_present": bool(str(payload.get("text") or "").strip()),
+        "provider_matches": metadata.get("provider") == identity.expected_provider,
         "interface_matches": trace.get("interface") == interface,
         "person_matches": person.get("person_id") == identity.person_id,
         "principal_matches": principal.get("client_subject") == identity.client_subject,
@@ -317,9 +344,9 @@ def _synthetic_route_smoke(
         "ok": all(checks.values()),
         "status_code": response.get("status_code"),
         "checks": checks,
-        "provider": payload.get("provider"),
-        "model": payload.get("model"),
-        "privacy_classification": payload.get("privacy_classification"),
+        "provider": metadata.get("provider"),
+        "model": metadata.get("model"),
+        "privacy_classification": metadata.get("privacy_classification"),
         "expected_provider": identity.expected_provider,
         "expected_person_id": identity.person_id,
         "expected_client_subject": identity.client_subject,
@@ -403,7 +430,7 @@ def _imessage_inprocess_route_smoke(
         timeout: float = 5.0,
         headers: dict[str, str] | None = None,
     ) -> dict[str, object]:
-        response = client.post("/route", json=payload, headers=headers or {})
+        response = client.post("/canonical/route", json=payload, headers=headers or {})
         parsed = response.json() if response.content else {}
         return {
             "ok": 200 <= response.status_code < 300,
@@ -439,25 +466,31 @@ def _providers_health(url: str, *, timeout: float, headers: dict[str, str]) -> d
         return {key: value for key, value in response.items() if key != "payload"}
     payload = response.get("payload") if isinstance(response.get("payload"), dict) else {}
     providers = payload.get("providers") if isinstance(payload.get("providers"), list) else []
-    by_id = {
-        str(provider.get("provider_id")): provider
-        for provider in providers
-        if isinstance(provider, dict) and provider.get("provider_id")
-    }
-    # Qwen coding is optional; require the production-critical local profiles only.
-    required = ("legacy_ollama", "heavy_local")
+    required = ("fast", "reason", "code", "vision")
     readiness = {
-        provider_id: bool(by_id.get(provider_id, {}).get("ready"))
-        for provider_id in required
+        profile: any(
+            provider.get("logical_profile") == profile and provider.get("ready") is True
+            for provider in providers
+            if isinstance(provider, dict)
+        )
+        for profile in required
     }
-    missing = [provider_id for provider_id in required if provider_id not in by_id]
-    unavailable = [provider_id for provider_id, ready in readiness.items() if not ready]
+    missing = [
+        profile
+        for profile in required
+        if not any(
+            provider.get("logical_profile") == profile
+            for provider in providers
+            if isinstance(provider, dict)
+        )
+    ]
+    unavailable = [profile for profile, ready in readiness.items() if not ready]
     return {
         "ok": not missing and not unavailable,
         "status_code": response.get("status_code"),
-        "required_provider_readiness": readiness,
-        "missing_required_providers": missing,
-        "unavailable_required_providers": unavailable,
+        "required_model_profile_readiness": readiness,
+        "missing_required_model_profiles": missing,
+        "unavailable_required_model_profiles": unavailable,
     }
 
 
@@ -756,12 +789,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--check-imessage-route-smoke",
         action="store_true",
-        help="Call Director /route with synthetic iMessage headers and require local_reasoning trace evidence.",
+        help="Call Director /canonical/route with synthetic iMessage headers and require trace evidence.",
     )
     parser.add_argument(
         "--check-inprocess-route-smoke",
         action="store_true",
-        help="Exercise Director /route in-process with synthetic iMessage and terminal headers; does not prove live transport.",
+        help="Exercise Director /canonical/route in-process with synthetic iMessage and terminal envelopes; does not prove live transport.",
     )
     parser.add_argument("--route-smoke-person-id", default="joe", help="Person ID used by --check-imessage-route-smoke.")
     parser.add_argument("--route-smoke-person-display-name", default="Joe", help="Person display name used by --check-imessage-route-smoke.")

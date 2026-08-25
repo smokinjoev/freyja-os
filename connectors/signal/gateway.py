@@ -143,24 +143,28 @@ class SignalGateway:
             return self._safe_error_response(message)
 
         route_mode = self._route_mode(message, agent_context)
-        images = [
-            image.model_dump(mode="json", exclude_none=True)
-            for image in self._images_for_message(message)
-        ]
-        payload = {
-            "prompt": route_mode.prompt,
-            "provider": route_mode.provider,
-            "task_type": route_mode.task_type,
-            "tools_required": route_mode.tools_required,
-            "privacy": "private",
-            "conversation_id": principal.conversation_id,
-        }
-        if images:
-            payload["images"] = images
+        normalized = self._normalized_message(message)
+        canonical = normalized.to_canonical_request(
+            authorized_sender=identity,
+            resolved_user_id=agent_context.person_id,
+            resolved_agent_id=agent_context.agent_id,
+            permissions=["director:route"],
+            channel_metadata={
+                "account_owner": principal.account_owner,
+                "privacy": "private",
+                "task_type": route_mode.task_type,
+                "tools_required": route_mode.tools_required,
+                "provider": route_mode.provider,
+            },
+        )
+        payload = canonical.model_dump(mode="json")
+        payload["conversation_id"] = principal.conversation_id
+        payload["text"] = route_mode.prompt
 
         logger.info(
             {
                 "event": "signal_gateway_director_request",
+                "trace_id": canonical.trace_id,
                 "sender_hash": self._safe_sender_hash(message.sender),
                 "message_id": message.message_id,
                 "client_subject": principal.client_subject,
@@ -183,17 +187,18 @@ class SignalGateway:
             headers["X-Freyja-Agent-Id"] = agent_context.agent_id
             headers["X-Freyja-Agent-Display-Name"] = agent_context.display_name
             headers["X-Freyja-Person-Id"] = agent_context.person_id
+            headers["X-Freyja-Trace-Id"] = canonical.trace_id
             if self._director_token:
                 headers["Authorization"] = f"Bearer {self._director_token}"
             response = await client.post(
-                f"{self._director_url}/route",
+                f"{self._director_url}/canonical/route",
                 json=payload,
                 headers=headers,
             )
             response.raise_for_status()
             data = response.json()
 
-            text = data.get("response", "")
+            text = data.get("text") or data.get("response", "")
             if not text:
                 logger.warning({
                     "event": "signal_gateway_empty_director_response",
@@ -205,11 +210,12 @@ class SignalGateway:
             logger.info(
                 {
                     "event": "signal_gateway_director_response",
+                    "trace_id": canonical.trace_id,
                     "sender_hash": self._safe_sender_hash(message.sender),
                     "message_id": message.message_id,
-                    "director_request_id": data.get("request_id"),
-                    "provider": data.get("provider"),
-                    "model": data.get("model"),
+                    "director_request_id": data.get("trace_id") or data.get("request_id"),
+                    "provider": (data.get("channel_metadata") or {}).get("provider") or data.get("provider"),
+                    "model": (data.get("channel_metadata") or {}).get("model") or data.get("model"),
                     "agent_id": agent_context.agent_id,
                     "person_id": agent_context.person_id,
                     "reply_length": len(text),

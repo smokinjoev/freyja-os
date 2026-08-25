@@ -71,13 +71,14 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     assert result.text == "Hello from Mars"
     mock_post.assert_awaited_once()
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["prompt"] == "Hello Freyja"
-    assert "IMESSAGE AGENT ROLE" not in payload["prompt"]
-    assert "Required response identity" not in payload["prompt"]
-    assert "+15551234567" not in payload["prompt"]
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is True
+    assert mock_post.await_args.args[0].endswith("/canonical/route")
+    assert payload["text"] == "Hello Freyja"
+    assert "IMESSAGE AGENT ROLE" not in payload["text"]
+    assert "Required response identity" not in payload["text"]
+    assert "+15551234567" not in payload["text"]
+    assert payload["channel_metadata"]["tools_required"] is True
     assert payload["conversation_id"].startswith("imessage-conv:")
+    assert payload["trace_id"]
     assert "images" not in payload
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Client-Type"] == "imessage"
@@ -86,6 +87,7 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     assert headers["X-Freyja-Agent-Id"] == "freyja"
     assert headers["X-Freyja-Person-Id"] == "family"
     assert headers["X-Freyja-Conversation-Id"] == payload["conversation_id"]
+    assert headers["X-Freyja-Trace-Id"] == payload["trace_id"]
     assert "+15551234567" not in str(headers)
 
 
@@ -110,8 +112,8 @@ async def test_photo_only_message_is_forwarded_in_same_conversation(enabled_gate
     assert result is not None
     assert result.text == "I got the photo."
     payload = mock_post.await_args.kwargs["json"]
-    assert "photo or attachment content" in payload["prompt"]
-    assert "image/jpeg: photo.jpg" in payload["prompt"]
+    assert "photo or attachment content" in payload["text"]
+    assert "image/jpeg: photo.jpg" in payload["text"]
     assert payload["conversation_id"].startswith("imessage-conv:")
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Conversation-Id"] == payload["conversation_id"]
@@ -136,9 +138,9 @@ async def test_imessage_missing_image_payload_is_not_sent_as_inspected_image(ena
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
-    assert "images" not in payload
-    assert "image payload unavailable" in payload["prompt"]
-    assert "Do not describe their contents" in payload["prompt"]
+    assert payload["attachments"][0]["data_base64"] is None
+    assert "image payload unavailable" in payload["text"]
+    assert "Do not describe their contents" in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -163,8 +165,8 @@ async def test_imessage_pdf_payload_adds_extracted_document_text(enabled_gateway
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
-    assert "Extracted PDF/document text" in payload["prompt"]
-    assert "Family dinner Friday" in payload["prompt"]
+    assert "Extracted PDF/document text" in payload["text"]
+    assert "Family dinner Friday" in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -178,7 +180,7 @@ async def test_auto_tool_mode_keeps_plain_chat_fast(enabled_gateway):
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     assert "model" not in payload
-    assert payload["tools_required"] is False
+    assert payload["channel_metadata"]["tools_required"] is False
 
 
 @pytest.mark.asyncio
@@ -192,8 +194,8 @@ async def test_auto_tool_mode_does_not_force_weather_into_tools(enabled_gateway)
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     assert "model" not in payload
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is False
+    assert payload["channel_metadata"].get("provider") is None
+    assert payload["channel_metadata"]["tools_required"] is False
 
 
 @pytest.mark.asyncio
@@ -207,7 +209,7 @@ async def test_auto_tool_mode_preserves_tool_like_requests(enabled_gateway):
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     assert "model" not in payload
-    assert payload["tools_required"] is True
+    assert payload["channel_metadata"]["tools_required"] is True
 
 
 @pytest.mark.asyncio
@@ -428,7 +430,7 @@ async def test_family_group_addressed_message_routes_to_director(enabled_gateway
     assert result.text == "The plan is set."
     payload = mock_post.await_args.kwargs["json"]
     assert payload["conversation_id"].startswith("imessage-family-conv:")
-    assert "explicitly addressed" in payload["prompt"]
+    assert "explicitly addressed" in payload["text"]
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Conversation-Id"] == payload["conversation_id"]
     assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
@@ -448,7 +450,7 @@ async def test_joe_alias_routes_direct_imessage_to_cloyd_private_agent(enabled_g
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["prompt"] == "Hello"
+    assert payload["text"] == "Hello"
     assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
     assert headers["X-Freyja-Account-Owner"] == "person:joe"
     assert headers["X-Freyja-Agent-Id"] == "cloyd-gibbler"
@@ -468,7 +470,7 @@ async def test_beth_alias_routes_direct_imessage_to_benedict_private_agent(enabl
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["prompt"] == "Hello"
+    assert payload["text"] == "Hello"
     assert headers["X-Freyja-Client-Subject"] == "agent:benedict"
     assert headers["X-Freyja-Account-Owner"] == "person:beth"
     assert headers["X-Freyja-Agent-Id"] == "benedict"
@@ -554,7 +556,7 @@ async def test_raw_allowlisted_sender_routes_to_family_freyja_agent(enabled_gate
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["prompt"] == "Hello Freyja"
+    assert payload["text"] == "Hello Freyja"
     assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
     assert headers["X-Freyja-Account-Owner"] == "person:family"
     assert headers["X-Freyja-Agent-Id"] == "freyja"

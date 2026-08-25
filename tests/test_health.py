@@ -196,15 +196,18 @@ def test_providers_health_reports_enabled_profiles(monkeypatch) -> None:
     providers = {entry["provider_id"]: entry for entry in response.json()["providers"]}
     assert set(providers) == {"legacy_ollama", "local_vision", "heavy_local", "qwen_coding", "openrouter_frontier"}
     assert providers["legacy_ollama"]["locality"] == "iris"
+    assert providers["legacy_ollama"]["logical_profile"] == "fast"
     assert providers["legacy_ollama"]["tier"] == 1
     assert providers["legacy_ollama"]["ready"] is True
     assert providers["local_vision"]["locality"] == "iris"
     assert providers["local_vision"]["tier"] == 2
     assert providers["local_vision"]["ready"] is True
     assert providers["heavy_local"]["locality"] == "local_heavy"
+    assert providers["heavy_local"]["logical_profile"] == "reason"
     assert providers["heavy_local"]["tier"] == 3
     assert providers["heavy_local"]["ready"] is True
     assert providers["qwen_coding"]["locality"] == "local_heavy"
+    assert providers["qwen_coding"]["logical_profile"] == "code"
     assert providers["qwen_coding"]["tier"] == 3
     assert providers["qwen_coding"]["ready"] is False
     assert providers["openrouter_frontier"]["locality"] == "cloud"
@@ -378,6 +381,7 @@ def test_route_trace_includes_provider_profile_metadata(monkeypatch) -> None:
     trace = response.json()["trace"]
     assert trace["provider_selected"] == "ollama"
     assert trace["provider_profile_id"] == "legacy_ollama"
+    assert trace["model_profile"] == "fast"
     assert trace["provider_locality"] == "iris"
     assert trace["selected_tier"] == 1
     assert trace["provider_readiness"] == {
@@ -389,6 +393,108 @@ def test_route_trace_includes_provider_profile_metadata(monkeypatch) -> None:
         "observed_latency_ms": None,
         "detail": "provider response ok",
     }
+
+
+def test_canonical_route_preserves_trace_and_returns_canonical_response(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+    payload = {
+        "trace_id": "trace-canonical-1",
+        "message_id": "message-canonical-1",
+        "channel": "signal",
+        "conversation_id": "conversation-canonical-1",
+        "sender": {"channel_id": "sender-1", "address": "+15550000000"},
+        "resolved_user_id": "joe",
+        "resolved_agent_id": "cloyd-gibbler",
+        "text": "Say hello",
+        "permissions": ["private"],
+    }
+    with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat:
+        mock_chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"role": "assistant", "content": "Canonical hello"},
+        }
+        response = client.post("/canonical/route", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["trace_id"] == "trace-canonical-1"
+    assert data["request_message_id"] == "message-canonical-1"
+    assert data["channel"] == "signal"
+    assert data["conversation_id"] == "conversation-canonical-1"
+    assert data["resolved_user_id"] == "joe"
+    assert data["resolved_agent_id"] == "cloyd-gibbler"
+    assert data["text"] == "Canonical hello"
+    trace = data["channel_metadata"]["trace"]
+    assert trace["request_id"] == "trace-canonical-1"
+    assert trace["model_profile"] == "reason"
+    assert data["tool_results"] == []
+
+
+def test_canonical_route_with_tools_required_returns_sanitized_tool_results() -> None:
+    first_response = {
+        "model": "qwen2.5:1.5b",
+        "message": {
+            "role": "assistant",
+            "content": 'I will check the weather.\n<freyja_tool_call>{"tool_name":"get_weather","arguments":{"location":"Oslo","request_type":"current"}}</freyja_tool_call>',
+        },
+    }
+    second_response = {
+        "model": "qwen2.5:1.5b",
+        "message": {"role": "assistant", "content": "It is sunny in Oslo."},
+    }
+    tool_result = ToolExecutionResult(
+        success=True,
+        tool_name="get_weather",
+        output={
+            "hostname": "vulcan",
+            "status": "ok",
+            "status_code": 200,
+            "iso_timestamp": "2024-01-01T00:00:00",
+            "stdout": "raw internal stdout must not leak",
+            "stderr": "raw internal stderr must not leak",
+        },
+        duration_ms=120,
+        request_id="trace-canonical-tools",
+    )
+    payload = {
+        "trace_id": "trace-canonical-tools",
+        "message_id": "message-canonical-tools",
+        "channel": "signal",
+        "conversation_id": "conversation-canonical-tools",
+        "sender": {"channel_id": "sender-1", "address": "+15550000000"},
+        "resolved_user_id": "joe",
+        "resolved_agent_id": "cloyd-gibbler",
+        "text": "weather in Oslo",
+        "channel_metadata": {"provider": "local", "tools_required": True},
+        "permissions": ["private"],
+    }
+
+    with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat, patch.object(
+        router._registry, "execute", new_callable=AsyncMock
+    ) as mock_execute:
+        mock_chat.side_effect = [first_response, second_response]
+        mock_execute.return_value = tool_result
+        response = client.post("/canonical/route", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["text"] == "It is sunny in Oslo."
+    assert data["tool_results"] == [
+        {
+            "tool_name": "get_weather",
+            "success": True,
+            "hostname": "vulcan",
+            "status": "ok",
+            "status_code": 200,
+            "iso_timestamp": "2024-01-01T00:00:00",
+            "duration_ms": 120,
+        }
+    ]
+    raw_response = str(data)
+    assert "stdout" not in raw_response
+    assert "stderr" not in raw_response
 
 
 def test_route_cloud_uses_openrouter() -> None:

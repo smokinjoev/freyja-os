@@ -9,12 +9,15 @@ import logging
 import os
 import re
 import time
+import uuid
 from collections import deque
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
+from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalSender
 from freyja.config import settings as freyja_settings
 from freyja.media import ImageInput
 from freyja.tools.weather import is_time_sensitive_query
@@ -437,28 +440,50 @@ class TelegramGateway:
         message: TelegramMessage,
         tools_required: bool = False,
     ) -> TelegramOutboundMessage:
-        payload = {
-            "prompt": self._agent_prompt(text),
-            "provider": "auto",
-            "tools_required": tools_required,
-        }
         images = await self._images_for_message(message)
-        if images:
-            payload["images"] = [image.model_dump(mode="json", exclude_none=True) for image in images]
+        channel_metadata: dict[str, Any] = {
+            "provider": "auto",
+            "privacy": "private",
+            "tools_required": tools_required,
+            "chat_type": message.chat.type,
+        }
         if self._settings.telegram_model.strip():
-            payload["model"] = self._settings.telegram_model.strip()
+            channel_metadata["model"] = self._settings.telegram_model.strip()
         headers, conversation_id = self._director_identity(message.chat.id)
-        payload["conversation_id"] = conversation_id
+        canonical = CanonicalRequest(
+            trace_id=str(uuid.uuid4()),
+            message_id=str(message.message_id),
+            timestamp=datetime.fromtimestamp(message.date, tz=UTC),
+            channel="telegram",
+            conversation_id=conversation_id,
+            sender=CanonicalSender(channel_id=str(message.from_user.id if message.from_user else message.chat.id)),
+            resolved_user_id=self._person_name,
+            resolved_agent_id=self._agent_name,
+            text=self._agent_prompt(text),
+            attachments=[
+                CanonicalAttachment(
+                    media_type=image.mime_type,
+                    filename=image.filename,
+                    data_base64=image.data_base64,
+                    source=image.path,
+                )
+                for image in images
+            ],
+            channel_metadata=channel_metadata,
+            permissions=["director:route"],
+        )
+        payload = canonical.model_dump(mode="json")
         try:
             client = await self._client()
+            headers["x-freyja-trace-id"] = canonical.trace_id
             response = await client.post(
-                f"{self._director_url}/route",
+                f"{self._director_url}/canonical/route",
                 json=payload,
                 headers=headers,
             )
             response.raise_for_status()
             data = response.json()
-            reply = data.get("response", "")
+            reply = data.get("text") or data.get("response", "")
             if not reply:
                 return self._reply(message, self._safe_error_text, success=False)
             return self._reply(message, self._sanitize_reply_for_telegram(reply))

@@ -40,6 +40,7 @@ class InferenceProviderProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider_id: str = Field(min_length=1)
+    logical_profile: Literal["fast", "reason", "code", "vision", "classifier", "frontier"] | None = None
     kind: Literal["deterministic", "ollama", "openrouter"]
     base_url: str = ""
     model: str = ""
@@ -70,6 +71,9 @@ class ProviderRegistry(BaseModel):
 
     def by_locality(self, locality: InferenceLocality) -> list[InferenceProviderProfile]:
         return [profile for profile in self.enabled() if profile.locality == locality]
+
+    def by_logical_profile(self, logical_profile: str) -> list[InferenceProviderProfile]:
+        return [profile for profile in self.enabled() if profile.logical_profile == logical_profile]
 
     def mark_success(self, provider_id: str, latency_ms: int | None = None) -> None:
         profile = self.profiles[provider_id]
@@ -109,14 +113,20 @@ def _configured_profiles(config: Settings) -> list[InferenceProviderProfile]:
 def provider_registry_from_settings(config: Settings = settings) -> ProviderRegistry:
     registry = ProviderRegistry()
     legacy_base_url = config.ollama_base_url.rstrip("/")
-    reasoning_base_url = (config.ollama_reasoning_base_url or config.ollama_base_url).rstrip("/")
+    vulcan_base_url = config.vulcan_base_url.rstrip("/")
+    reasoning_base_url = (config.ollama_reasoning_base_url or config.vulcan_base_url or config.ollama_base_url).rstrip("/")
+    fast_model = config.model_fast or config.ollama_chat_model or config.ollama_model
+    reason_model = config.model_reason or config.ollama_reasoning_model
+    code_model = config.model_code or config.ollama_coding_model
+    vision_model = config.model_vision or config.ollama_vision_model
 
     registry.register(
         InferenceProviderProfile(
             provider_id="legacy_ollama",
+            logical_profile="fast",
             kind="ollama",
             base_url=legacy_base_url,
-            model=config.ollama_chat_model or config.ollama_model,
+            model=fast_model,
             capabilities={"chat", "classification", "summarization"},
             locality=InferenceLocality.IRIS,
             tier=1,
@@ -126,6 +136,7 @@ def provider_registry_from_settings(config: Settings = settings) -> ProviderRegi
     registry.register(
         InferenceProviderProfile(
             provider_id="iris_router",
+            logical_profile="classifier",
             kind="ollama",
             base_url=config.iris_ollama_base_url.rstrip("/"),
             model=config.iris_router_model,
@@ -139,9 +150,10 @@ def provider_registry_from_settings(config: Settings = settings) -> ProviderRegi
     registry.register(
         InferenceProviderProfile(
             provider_id="heavy_local",
+            logical_profile="reason",
             kind="ollama",
-            base_url=reasoning_base_url,
-            model=config.ollama_reasoning_model,
+            base_url=vulcan_base_url or reasoning_base_url,
+            model=reason_model,
             capabilities={"chat", "reasoning", "coding", "planning"},
             locality=InferenceLocality.LOCAL_HEAVY,
             tier=3,
@@ -151,9 +163,10 @@ def provider_registry_from_settings(config: Settings = settings) -> ProviderRegi
     registry.register(
         InferenceProviderProfile(
             provider_id="qwen_coding",
+            logical_profile="code",
             kind="ollama",
-            base_url=reasoning_base_url,
-            model=config.ollama_coding_model,
+            base_url=vulcan_base_url or reasoning_base_url,
+            model=code_model,
             capabilities={"chat", "coding", "debugging", "refactoring"},
             locality=InferenceLocality.LOCAL_HEAVY,
             tier=3,
@@ -163,11 +176,12 @@ def provider_registry_from_settings(config: Settings = settings) -> ProviderRegi
     registry.register(
         InferenceProviderProfile(
             provider_id="local_vision",
+            logical_profile="vision",
             kind="ollama",
-            base_url=legacy_base_url,
-            model=config.ollama_vision_model,
+            base_url=vulcan_base_url or legacy_base_url,
+            model=vision_model,
             capabilities={"chat", "vision", "image_understanding"},
-            locality=InferenceLocality.IRIS,
+            locality=InferenceLocality.LOCAL_HEAVY if config.vulcan_base_url else InferenceLocality.IRIS,
             tier=2,
             priority=18,
         )
@@ -175,6 +189,7 @@ def provider_registry_from_settings(config: Settings = settings) -> ProviderRegi
     registry.register(
         InferenceProviderProfile(
             provider_id="openrouter_frontier",
+            logical_profile="frontier",
             kind="openrouter",
             base_url=config.openrouter_base_url.rstrip("/"),
             model=config.openrouter_model,

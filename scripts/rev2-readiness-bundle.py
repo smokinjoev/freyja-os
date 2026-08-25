@@ -87,6 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--latency-winner-target", required=True)
     parser.add_argument("--required-provider-profile", action="append", default=None)
+    parser.add_argument("--required-model-profile", action="append", default=None)
     parser.add_argument("--memory-report", type=Path)
     parser.add_argument("--memory-db", type=Path)
     parser.add_argument(
@@ -228,6 +229,8 @@ def build_commands(args: argparse.Namespace) -> list[list[str]]:
         readiness.extend(["--connector-report", str(connector_report)])
     for profile_id in args.required_provider_profile or ():
         readiness.extend(["--required-provider-profile", profile_id])
+    for profile_id in args.required_model_profile or ():
+        readiness.extend(["--required-model-profile", profile_id])
     commands.append(readiness)
     return commands
 

@@ -350,6 +350,45 @@ def test_rev2_readiness_probe_treats_heavy_local_as_optional_by_default(monkeypa
     assert provider.details["optional_not_ready"] == ["heavy_local"]
 
 
+def test_rev2_readiness_probe_can_require_logical_model_profiles(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "/providers/health": {
+                    "providers": [
+                        {"provider_id": "legacy_ollama", "logical_profile": "fast", "ready": True},
+                        {"provider_id": "heavy_local", "logical_profile": "reason", "ready": True},
+                    ]
+                },
+                "/iris-router/health": {"enabled": True, "available": True},
+                "/macagent/health": {
+                    "enabled": True,
+                    "reachable": True,
+                    "authenticated": True,
+                    "capabilities": list(REQUIRED_REV2_CAPABILITIES),
+                    "authorization_granted_by_macagent": False,
+                },
+            }[request.url.path],
+        )
+    )
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        "certification.rev2_readiness.httpx.Client",
+        lambda **kwargs: real_client(transport=transport, **kwargs),
+    )
+
+    report = run_readiness_probe(
+        "http://atlas.test:8000",
+        required_provider_profiles=("legacy_ollama", "heavy_local"),
+        required_model_profiles=("fast", "reason", "code"),
+    )
+    provider = next(check for check in report.checks if check.name == "provider-health")
+
+    assert report.passed is False
+    assert provider.details["missing_model_profiles"] == ["code"]
+
+
 def test_rev2_readiness_probe_checks_latency_benchmark(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     benchmark_path = tmp_path / "benchmark.json"
     benchmark_path.write_text(

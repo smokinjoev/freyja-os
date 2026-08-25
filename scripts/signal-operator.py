@@ -50,6 +50,37 @@ def _smoke_report(result: dict[str, object], *, dry_run: bool) -> dict[str, obje
     return report
 
 
+def _operator_report(report_type: str, result: dict[str, object], *, dry_run: bool) -> dict[str, object]:
+    report = {
+        "schema_version": "1.0",
+        "report_type": report_type,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "dry_run": dry_run,
+    }
+    report.update(result)
+    return report
+
+
+def _account_number(settings: SignalSettings, number: str | None) -> str:
+    return (number or settings.signal_account_number).strip()
+
+
+def _account_plan(settings: SignalSettings, number: str) -> dict[str, object]:
+    return {
+        "account_number_configured": bool(number),
+        "account_number_hash": _safe_hash(number) if number else None,
+        "rest_api_url": settings.signal_rest_api_url,
+    }
+
+
+def _render_report(report: dict[str, object], output: Path | None = None) -> None:
+    rendered = json.dumps(report, indent=2, sort_keys=True)
+    print(rendered)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered + "\n", encoding="utf-8")
+
+
 def _send_payload(settings: SignalSettings, recipient: str, text: str) -> dict[str, object]:
     return {
         "message": text,
@@ -86,6 +117,155 @@ async def _rest_about(settings: SignalSettings) -> dict[str, object]:
         response.raise_for_status()
         payload = response.json()
     return payload if isinstance(payload, dict) else {}
+
+
+async def _request_registration(
+    settings: SignalSettings,
+    *,
+    number: str | None,
+    use_voice: bool,
+    captcha: str | None,
+    dry_run: bool,
+) -> dict[str, object]:
+    account = _account_number(settings, number)
+    plan = {
+        **_account_plan(settings, account),
+        "use_voice": use_voice,
+        "captcha_supplied": bool(captcha),
+    }
+
+    if not account:
+        return _operator_report(
+            "signal-register",
+            {"status": "failed", "plan": plan, "error": "Signal account number is not configured"},
+            dry_run=dry_run,
+        )
+    if dry_run:
+        return _operator_report("signal-register", {"status": "dry-run", "plan": plan}, dry_run=True)
+
+    payload: dict[str, object] = {}
+    if use_voice:
+        payload["use_voice"] = True
+    if captcha:
+        payload["captcha"] = captcha
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.signal_transport_timeout_seconds) as client:
+            response = await client.post(
+                f"{settings.signal_rest_api_url.rstrip('/')}/v1/register/{account}",
+                json=payload,
+            )
+            response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001 - operator report should preserve failure class
+        return _operator_report(
+            "signal-register",
+            {"status": "failed", "plan": plan, "error": type(exc).__name__},
+            dry_run=False,
+        )
+    return _operator_report(
+        "signal-register",
+        {"status": "requested", "plan": plan, "http_status": response.status_code},
+        dry_run=False,
+    )
+
+
+async def _verify_registration(
+    settings: SignalSettings,
+    *,
+    number: str | None,
+    code: str,
+    pin: str | None,
+    dry_run: bool,
+) -> dict[str, object]:
+    account = _account_number(settings, number)
+    plan = {
+        **_account_plan(settings, account),
+        "verification_code_supplied": bool(code),
+        "pin_supplied": bool(pin),
+    }
+
+    if not account:
+        return _operator_report(
+            "signal-verify",
+            {"status": "failed", "plan": plan, "error": "Signal account number is not configured"},
+            dry_run=dry_run,
+        )
+    if not code.strip():
+        return _operator_report(
+            "signal-verify",
+            {"status": "failed", "plan": plan, "error": "Verification code is required"},
+            dry_run=dry_run,
+        )
+    if dry_run:
+        return _operator_report("signal-verify", {"status": "dry-run", "plan": plan}, dry_run=True)
+
+    payload: dict[str, object] = {}
+    if pin:
+        payload["pin"] = pin
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.signal_transport_timeout_seconds) as client:
+            response = await client.post(
+                f"{settings.signal_rest_api_url.rstrip('/')}/v1/register/{account}/verify/{code.strip()}",
+                json=payload,
+            )
+            response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001 - operator report should preserve failure class
+        return _operator_report(
+            "signal-verify",
+            {"status": "failed", "plan": plan, "error": type(exc).__name__},
+            dry_run=False,
+        )
+    return _operator_report(
+        "signal-verify",
+        {"status": "verified", "plan": plan, "http_status": response.status_code},
+        dry_run=False,
+    )
+
+
+async def _link_device(
+    settings: SignalSettings,
+    *,
+    device_name: str,
+    link_output: Path | None,
+    dry_run: bool,
+) -> dict[str, object]:
+    plan = {
+        "device_name": device_name,
+        "rest_api_url": settings.signal_rest_api_url,
+        "link_output_configured": link_output is not None,
+    }
+    if dry_run:
+        return _operator_report("signal-link-device", {"status": "dry-run", "plan": plan}, dry_run=True)
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.signal_transport_timeout_seconds) as client:
+            response = await client.get(
+                f"{settings.signal_rest_api_url.rstrip('/')}/v1/qrcodelink/raw",
+                params={"device_name": device_name},
+            )
+            response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001 - operator report should preserve failure class
+        return _operator_report(
+            "signal-link-device",
+            {"status": "failed", "plan": plan, "error": type(exc).__name__},
+            dry_run=False,
+        )
+
+    if link_output:
+        link_output.parent.mkdir(parents=True, exist_ok=True)
+        link_output.write_text(response.text.strip() + "\n", encoding="utf-8")
+        link_output.chmod(0o600)
+    return _operator_report(
+        "signal-link-device",
+        {
+            "status": "requested",
+            "plan": plan,
+            "http_status": response.status_code,
+            "link_uri_written": link_output is not None,
+        },
+        dry_run=False,
+    )
 
 
 async def _readiness(settings: SignalSettings, *, check_registered: bool) -> dict[str, object]:
@@ -290,6 +470,87 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional JSON report path for readiness evidence.",
     )
+
+    register = subparsers.add_parser(
+        "register",
+        help="Request Signal SMS or voice registration for a configured account number.",
+    )
+    register.add_argument(
+        "--number",
+        help="E.164 account number to register. Defaults to SIGNAL_ACCOUNT_NUMBER.",
+    )
+    register.add_argument(
+        "--voice",
+        action="store_true",
+        help="Request a voice verification call instead of SMS.",
+    )
+    register.add_argument(
+        "--captcha",
+        help="Optional Signal captcha token when Signal requires one.",
+    )
+    register.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually request registration. Without this flag, the command is a dry-run.",
+    )
+    register.add_argument(
+        "--output",
+        type=Path,
+        help="Optional JSON report path for registration evidence.",
+    )
+
+    verify = subparsers.add_parser(
+        "verify",
+        help="Verify a Signal registration code for a configured account number.",
+    )
+    verify.add_argument(
+        "--number",
+        help="E.164 account number to verify. Defaults to SIGNAL_ACCOUNT_NUMBER.",
+    )
+    verify.add_argument(
+        "--code",
+        required=True,
+        help="Verification code received by SMS or voice.",
+    )
+    verify.add_argument(
+        "--pin",
+        help="Optional Signal registration lock PIN.",
+    )
+    verify.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually verify registration. Without this flag, the command is a dry-run.",
+    )
+    verify.add_argument(
+        "--output",
+        type=Path,
+        help="Optional JSON report path for verification evidence.",
+    )
+
+    link = subparsers.add_parser(
+        "link-device",
+        help="Request a Signal device-link URI from signal-cli-rest-api.",
+    )
+    link.add_argument(
+        "--device-name",
+        default="freyja-atlas",
+        help="Device name to show in Signal after linking.",
+    )
+    link.add_argument(
+        "--link-output",
+        type=Path,
+        help="Optional path for the sensitive link URI. File is written mode 0600.",
+    )
+    link.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually request the link URI. Without this flag, the command is a dry-run.",
+    )
+    link.add_argument(
+        "--output",
+        type=Path,
+        help="Optional JSON report path for link evidence.",
+    )
     return parser
 
 
@@ -315,11 +576,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "readiness":
         result = asyncio.run(_readiness(settings, check_registered=args.check_registered))
-        rendered = json.dumps(result, indent=2, sort_keys=True)
-        print(rendered)
-        if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(rendered + "\n", encoding="utf-8")
+        _render_report(result, args.output)
         return 0 if result["ready_for_live_smoke"] is True else 1
 
     if args.command == "live-smoke":
@@ -333,12 +590,46 @@ def main(argv: list[str] | None = None) -> int:
                 check_registered=args.check_registered,
             )
         )
-        rendered = json.dumps(result, indent=2, sort_keys=True)
-        print(rendered)
-        if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(rendered + "\n", encoding="utf-8")
+        _render_report(result, args.output)
         return 0 if result["status"] in {"dry-run", "sent"} else 1
+
+    if args.command == "register":
+        result = asyncio.run(
+            _request_registration(
+                settings,
+                number=args.number,
+                use_voice=args.voice,
+                captcha=args.captcha,
+                dry_run=not args.yes,
+            )
+        )
+        _render_report(result, args.output)
+        return 0 if result["status"] in {"dry-run", "requested"} else 1
+
+    if args.command == "verify":
+        result = asyncio.run(
+            _verify_registration(
+                settings,
+                number=args.number,
+                code=args.code,
+                pin=args.pin,
+                dry_run=not args.yes,
+            )
+        )
+        _render_report(result, args.output)
+        return 0 if result["status"] in {"dry-run", "verified"} else 1
+
+    if args.command == "link-device":
+        result = asyncio.run(
+            _link_device(
+                settings,
+                device_name=args.device_name,
+                link_output=args.link_output,
+                dry_run=not args.yes,
+            )
+        )
+        _render_report(result, args.output)
+        return 0 if result["status"] in {"dry-run", "requested"} else 1
 
     parser.error("unknown command")
     return 2

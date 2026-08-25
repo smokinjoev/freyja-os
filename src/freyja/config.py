@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     openrouter_allowlist: str = Field(default="", alias="OPENROUTER_ALLOWLIST")
     inference_provider_profiles_json: str = Field(default="", alias="FREYJA_INFERENCE_PROVIDER_PROFILES")
 
+    # Current Freyja/Vulcan architecture: application code should depend on
+    # logical model profiles, not physical model names. The legacy Ollama names
+    # below remain as compatibility defaults for existing deployments.
+    vulcan_base_url: str = Field(default="", alias="VULCAN_BASE_URL")
+    model_fast: str = Field(default="", alias="MODEL_FAST")
+    model_reason: str = Field(default="", alias="MODEL_REASON")
+    model_code: str = Field(default="", alias="MODEL_CODE")
+    model_vision: str = Field(default="", alias="MODEL_VISION")
+
     memory_enabled: bool = True
     memory_database_path: str = str(_repo_root() / "data" / "freyja.db")
     memory_max_messages_per_conversation: int = 1000

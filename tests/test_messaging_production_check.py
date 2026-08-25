@@ -479,14 +479,16 @@ def test_imessage_route_smoke_posts_trusted_headers_and_checks_trace(monkeypatch
             "ok": True,
             "status_code": 200,
             "payload": {
-                "provider": "local_reasoning",
-                "model": "gpt-oss-freyja:20b-analysis-prefill",
-                "response": "ack",
-                "privacy_classification": "routine",
-                "trace": {
-                    "interface": interface,
-                    "person": {"person_id": "joe"},
-                    "principal": {"client_subject": "agent:cloyd-gibbler"},
+                "text": "ack",
+                "channel_metadata": {
+                    "provider": "local_reasoning",
+                    "model": "gpt-oss-freyja:20b-analysis-prefill",
+                    "privacy_classification": "routine",
+                    "trace": {
+                        "interface": interface,
+                        "person": {"person_id": "joe"},
+                        "principal": {"client_subject": "agent:cloyd-gibbler"},
+                    },
                 },
             },
         }
@@ -498,8 +500,11 @@ def test_imessage_route_smoke_posts_trusted_headers_and_checks_trace(monkeypatch
     assert len(captured) == 2
     assert {call["headers"]["X-Freyja-Client-Type"] for call in captured} == {"imessage", "terminal"}
     for call in captured:
-        assert call["url"] == "http://director/route"
-        assert call["payload"]["include_trace"] is True
+        assert call["url"] == "http://director/canonical/route"
+        assert call["payload"]["channel_metadata"]["include_trace"] is True
+        assert call["payload"]["channel"] in {"imessage", "terminal"}
+        assert call["payload"]["resolved_user_id"] == "joe"
+        assert call["payload"]["resolved_agent_id"] == "cloyd-gibbler"
         assert call["headers"]["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
         assert call["headers"]["Authorization"] == "Bearer secret"
     assert status["imessage"]["checks"] == {
@@ -536,13 +541,15 @@ def test_imessage_route_smoke_supports_custom_identity(monkeypatch):
             "ok": True,
             "status_code": 200,
             "payload": {
-                "provider": "local_reasoning",
-                "model": "gpt-oss-freyja:20b-analysis-prefill",
-                "response": "ack",
-                "trace": {
-                    "interface": interface,
-                    "person": {"person_id": "beth"},
-                    "principal": {"client_subject": "agent:benedict"},
+                "text": "ack",
+                "channel_metadata": {
+                    "provider": "local_reasoning",
+                    "model": "gpt-oss-freyja:20b-analysis-prefill",
+                    "trace": {
+                        "interface": interface,
+                        "person": {"person_id": "beth"},
+                        "principal": {"client_subject": "agent:benedict"},
+                    },
                 },
             },
         }
@@ -558,7 +565,7 @@ def test_imessage_route_smoke_supports_custom_identity(monkeypatch):
     assert status["imessage"]["expected_client_subject"] == "agent:benedict"
 
 
-def test_director_rev2_health_requires_heavy_local_ready(monkeypatch):
+def test_director_rev2_health_requires_logical_model_profiles_ready(monkeypatch):
     module = _load_script()
 
     def fake_http_json(url, timeout=5.0, headers=None):
@@ -567,9 +574,9 @@ def test_director_rev2_health_requires_heavy_local_ready(monkeypatch):
             "status_code": 200,
             "payload": {
                 "providers": [
-                    {"provider_id": "legacy_ollama", "ready": True},
-                    {"provider_id": "heavy_local", "ready": False},
-                    {"provider_id": "qwen_coding", "ready": True},
+                    {"provider_id": "legacy_ollama", "logical_profile": "fast", "ready": True},
+                    {"provider_id": "heavy_local", "logical_profile": "reason", "ready": False},
+                    {"provider_id": "qwen_coding", "logical_profile": "code", "ready": True},
                 ]
             },
         }
@@ -581,11 +588,12 @@ def test_director_rev2_health_requires_heavy_local_ready(monkeypatch):
 
     assert status["ok"] is False
     providers = status["checks"]["/providers/health"]
-    assert providers["required_provider_readiness"]["heavy_local"] is False
-    assert providers["unavailable_required_providers"] == ["heavy_local"]
+    assert providers["required_model_profile_readiness"]["reason"] is False
+    assert providers["missing_required_model_profiles"] == ["vision"]
+    assert providers["unavailable_required_model_profiles"] == ["reason", "vision"]
 
 
-def test_director_rev2_health_accepts_required_provider_profiles(monkeypatch):
+def test_director_rev2_health_accepts_required_logical_model_profiles(monkeypatch):
     module = _load_script()
 
     def fake_http_json(url, timeout=5.0, headers=None):
@@ -594,9 +602,10 @@ def test_director_rev2_health_accepts_required_provider_profiles(monkeypatch):
             "status_code": 200,
             "payload": {
                 "providers": [
-                    {"provider_id": "legacy_ollama", "ready": True},
-                    {"provider_id": "heavy_local", "ready": True},
-                    {"provider_id": "qwen_coding", "ready": True},
+                    {"provider_id": "legacy_ollama", "logical_profile": "fast", "ready": True},
+                    {"provider_id": "heavy_local", "logical_profile": "reason", "ready": True},
+                    {"provider_id": "qwen_coding", "logical_profile": "code", "ready": True},
+                    {"provider_id": "local_vision", "logical_profile": "vision", "ready": True},
                 ]
             },
         }
@@ -607,7 +616,7 @@ def test_director_rev2_health_accepts_required_provider_profiles(monkeypatch):
     status = module._director_rev2_health("http://director", "secret", timeout=5.0)
 
     assert status["ok"] is True
-    assert status["checks"]["/providers/health"]["unavailable_required_providers"] == []
+    assert status["checks"]["/providers/health"]["unavailable_required_model_profiles"] == []
 
 
 def test_main_returns_nonzero_when_selected_connector_not_ready(monkeypatch, capsys):

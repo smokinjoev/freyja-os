@@ -28,6 +28,12 @@ DEFAULT_REQUIRED_PROVIDER_PROFILES = (
     "iris_router",
     "openrouter_frontier",
 )
+DEFAULT_REQUIRED_MODEL_PROFILES = (
+    "fast",
+    "reason",
+    "code",
+    "vision",
+)
 
 
 @dataclass(frozen=True)
@@ -117,6 +123,7 @@ def run_readiness_probe(
     require_signal_smoke_report: bool = False,
     require_latency_winner_target: bool = False,
     required_provider_profiles: tuple[str, ...] = DEFAULT_REQUIRED_PROVIDER_PROFILES,
+    required_model_profiles: tuple[str, ...] = (),
     timeout: float = 5.0,
 ) -> Rev2ReadinessReport:
     if not required_provider_profiles:
@@ -125,7 +132,13 @@ def run_readiness_probe(
     checks: list[ReadinessCheck] = []
 
     with httpx.Client(base_url=base_url, timeout=timeout, headers=_auth_headers()) as client:
-        checks.append(_probe_providers(client, required_provider_profiles=required_provider_profiles))
+        checks.append(
+            _probe_providers(
+                client,
+                required_provider_profiles=required_provider_profiles,
+                required_model_profiles=required_model_profiles,
+            )
+        )
         checks.append(_probe_iris(client))
         checks.append(_probe_macagent(client))
 
@@ -254,6 +267,7 @@ def _probe_providers(
     client: httpx.Client,
     *,
     required_provider_profiles: tuple[str, ...] = DEFAULT_REQUIRED_PROVIDER_PROFILES,
+    required_model_profiles: tuple[str, ...] = (),
 ) -> ReadinessCheck:
     started = time.perf_counter()
     try:
@@ -269,8 +283,15 @@ def _probe_providers(
     if not isinstance(profiles, list):
         return ReadinessCheck("provider-health", False, "missing providers list", {"payload": payload}, latency_ms)
     profile_ids = {str(profile.get("provider_id") or profile.get("profile_id")) for profile in profiles if isinstance(profile, dict)}
+    model_profiles = {
+        str(profile.get("logical_profile"))
+        for profile in profiles
+        if isinstance(profile, dict) and profile.get("logical_profile")
+    }
     expected = set(required_provider_profiles)
+    expected_model_profiles = set(required_model_profiles)
     missing = sorted(expected - profile_ids)
+    missing_model_profiles = sorted(expected_model_profiles - model_profiles)
     not_ready = sorted(
         str(profile.get("provider_id") or profile.get("profile_id"))
         for profile in profiles
@@ -292,12 +313,19 @@ def _probe_providers(
     }
     return ReadinessCheck(
         "provider-health",
-        not missing and not not_ready,
-        "required provider profiles ready" if not missing and not not_ready else "required provider profiles not ready",
+        not missing and not missing_model_profiles and not not_ready,
+        (
+            "required provider and model profiles ready"
+            if not missing and not missing_model_profiles and not not_ready
+            else "required provider or model profiles not ready"
+        ),
         {
             "required_profile_ids": sorted(expected),
+            "required_model_profiles": sorted(expected_model_profiles),
             "profile_ids": sorted(profile_ids),
+            "model_profiles": sorted(model_profiles),
             "missing": missing,
+            "missing_model_profiles": missing_model_profiles,
             "not_ready": not_ready,
             "optional_not_ready": optional_not_ready,
             "readiness": ready,

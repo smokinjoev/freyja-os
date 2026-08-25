@@ -16,9 +16,16 @@ def test_director_passes_local_reasoning_ollama_settings() -> None:
     compose = _load_director_compose()
     environment = compose["services"]["director"]["environment"]
 
+    assert environment["VULCAN_BASE_URL"] == "${VULCAN_BASE_URL:-${OLLAMA_REASONING_BASE_URL:-${OLLAMA_BASE_URL}}}"
+    assert environment["MODEL_FAST"] == "${MODEL_FAST:-${OLLAMA_CHAT_MODEL:-qwen2.5:7b}}"
+    assert environment["MODEL_REASON"] == "${MODEL_REASON:-${OLLAMA_REASONING_MODEL:-gpt-oss:20b}}"
+    assert environment["MODEL_CODE"] == "${MODEL_CODE:-${OLLAMA_CODING_MODEL:-qwen2.5-coder:14b-q3}}"
+    assert environment["MODEL_VISION"] == "${MODEL_VISION:-${OLLAMA_VISION_MODEL:-moondream}}"
     assert environment["OLLAMA_BASE_URL"] == "${OLLAMA_BASE_URL}"
     assert environment["OLLAMA_REASONING_BASE_URL"] == "${OLLAMA_REASONING_BASE_URL:-${OLLAMA_BASE_URL}}"
     assert environment["OLLAMA_REASONING_MODEL"] == "${OLLAMA_REASONING_MODEL:-gpt-oss:20b}"
+    assert environment["OLLAMA_CODING_MODEL"] == "${OLLAMA_CODING_MODEL:-qwen2.5-coder:14b-q3}"
+    assert environment["OLLAMA_VISION_MODEL"] == "${OLLAMA_VISION_MODEL:-moondream}"
     assert environment["OLLAMA_DEFAULT_OUTPUT_TOKENS"] == "${OLLAMA_DEFAULT_OUTPUT_TOKENS:-512}"
     assert environment["OLLAMA_MIN_OUTPUT_TOKENS"] == "${OLLAMA_MIN_OUTPUT_TOKENS:-160}"
     assert environment["OLLAMA_RETRY_OUTPUT_TOKENS"] == "${OLLAMA_RETRY_OUTPUT_TOKENS:-1024}"

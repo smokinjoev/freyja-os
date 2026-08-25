@@ -31,7 +31,12 @@ from certification.benchmark import (
 from certification.latency_probe import build_latency_probe_report
 from certification.reporter import DEFAULT_REPORT_DIR, write_reports
 from certification.memory_audit import audit_memory_provenance, write_memory_audit_report
-from certification.rev2_readiness import DEFAULT_REQUIRED_PROVIDER_PROFILES, run_readiness_probe, write_readiness_report
+from certification.rev2_readiness import (
+    DEFAULT_REQUIRED_MODEL_PROFILES,
+    DEFAULT_REQUIRED_PROVIDER_PROFILES,
+    run_readiness_probe,
+    write_readiness_report,
+)
 from certification.runner import OpenRouterCertificationProvider, OllamaCertificationProvider, list_suite_names, load_suite, run_suite_sync
 
 
@@ -184,6 +189,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--required-model-profile",
+        action="append",
+        default=None,
+        help=(
+            "Logical model profile required by rev2-readiness, such as fast, reason, code, or vision. "
+            "Repeat for multiple profiles."
+        ),
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=5.0,
@@ -265,6 +279,7 @@ def _rev2_readiness(args: argparse.Namespace) -> int:
             require_signal_smoke_report=args.require_signal_smoke_report,
             require_latency_winner_target=True,
             required_provider_profiles=tuple(args.required_provider_profile or DEFAULT_REQUIRED_PROVIDER_PROFILES),
+            required_model_profiles=tuple(args.required_model_profile or DEFAULT_REQUIRED_MODEL_PROFILES),
             timeout=args.timeout,
         )
         report = write_readiness_report(report, output_dir=args.output_dir)

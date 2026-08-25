@@ -246,3 +246,191 @@ def test_readiness_command_writes_report_and_uses_exit_code(tmp_path, monkeypatc
     text = output.read_text(encoding="utf-8")
     assert '"report_type": "signal-readiness"' in text
     assert '"ready_for_live_smoke": false' in text
+
+
+def test_register_defaults_to_dry_run_and_redacts_number_and_captcha() -> None:
+    import asyncio
+
+    operator = _load_operator()
+    settings = SignalSettings(
+        _env_file=None,
+        signal_account_number="+15550000009",
+        signal_rest_api_url="http://signal-api:8080",
+    )
+
+    result = asyncio.run(
+        operator._request_registration(
+            settings,
+            number=None,
+            use_voice=True,
+            captcha="captcha-token",
+            dry_run=True,
+        )
+    )
+
+    assert result["report_type"] == "signal-register"
+    assert result["status"] == "dry-run"
+    assert result["dry_run"] is True
+    assert result["plan"]["account_number_hash"] == operator._safe_hash("+15550000009")
+    assert result["plan"]["use_voice"] is True
+    assert result["plan"]["captcha_supplied"] is True
+    assert "+15550000009" not in str(result)
+    assert "captcha-token" not in str(result)
+
+
+def test_register_posts_only_with_yes_semantics(monkeypatch) -> None:
+    import asyncio
+
+    operator = _load_operator()
+    settings = SignalSettings(
+        _env_file=None,
+        signal_account_number="+15550000009",
+        signal_rest_api_url="http://signal-api:8080",
+    )
+    calls = []
+
+    class FakeResponse:
+        status_code = 201
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, *, json):
+            calls.append({"url": url, "json": json})
+            return FakeResponse()
+
+    monkeypatch.setattr(operator.httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        operator._request_registration(
+            settings,
+            number=None,
+            use_voice=False,
+            captcha=None,
+            dry_run=False,
+        )
+    )
+
+    assert result["status"] == "requested"
+    assert calls == [{"url": "http://signal-api:8080/v1/register/+15550000009", "json": {}}]
+    assert "+15550000009" not in str(result)
+
+
+def test_verify_registration_posts_code_without_reporting_secrets(monkeypatch) -> None:
+    import asyncio
+
+    operator = _load_operator()
+    settings = SignalSettings(
+        _env_file=None,
+        signal_account_number="+15550000009",
+        signal_rest_api_url="http://signal-api:8080",
+    )
+    calls = []
+
+    class FakeResponse:
+        status_code = 204
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, *, json):
+            calls.append({"url": url, "json": json})
+            return FakeResponse()
+
+    monkeypatch.setattr(operator.httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        operator._verify_registration(
+            settings,
+            number=None,
+            code="123-456",
+            pin="9876",
+            dry_run=False,
+        )
+    )
+
+    assert result["report_type"] == "signal-verify"
+    assert result["status"] == "verified"
+    assert calls == [
+        {
+            "url": "http://signal-api:8080/v1/register/+15550000009/verify/123-456",
+            "json": {"pin": "9876"},
+        }
+    ]
+    assert "+15550000009" not in str(result)
+    assert "123-456" not in str(result)
+    assert "9876" not in str(result)
+
+
+def test_link_device_writes_sensitive_uri_outside_report(tmp_path, monkeypatch) -> None:
+    import asyncio
+
+    operator = _load_operator()
+    settings = SignalSettings(_env_file=None, signal_rest_api_url="http://signal-api:8080")
+    link_output = tmp_path / "signal-link.txt"
+    calls = []
+
+    class FakeResponse:
+        status_code = 200
+        text = "sgnl://linkdevice?uuid=secret"
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, *, params):
+            calls.append({"url": url, "params": params})
+            return FakeResponse()
+
+    monkeypatch.setattr(operator.httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        operator._link_device(
+            settings,
+            device_name="freyja-atlas",
+            link_output=link_output,
+            dry_run=False,
+        )
+    )
+
+    assert result["report_type"] == "signal-link-device"
+    assert result["status"] == "requested"
+    assert result["link_uri_written"] is True
+    assert calls == [
+        {
+            "url": "http://signal-api:8080/v1/qrcodelink/raw",
+            "params": {"device_name": "freyja-atlas"},
+        }
+    ]
+    assert link_output.read_text(encoding="utf-8").strip() == "sgnl://linkdevice?uuid=secret"
+    assert oct(link_output.stat().st_mode & 0o777) == "0o600"
+    assert "sgnl://linkdevice" not in str(result)

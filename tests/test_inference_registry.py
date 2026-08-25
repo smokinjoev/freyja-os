@@ -11,12 +11,18 @@ def test_provider_registry_translates_legacy_ollama_settings() -> None:
         ollama_reasoning_model="gpt-oss:20b",
         ollama_coding_model="qwen2.5-coder:14b-q3",
         cloud_enabled=True,
+        vulcan_base_url="",
+        model_fast="",
+        model_reason="",
+        model_code="",
+        model_vision="",
     )
 
     registry = provider_registry_from_settings(config)
 
     legacy = registry.get("legacy_ollama")
     assert legacy is not None
+    assert legacy.logical_profile == "fast"
     assert legacy.kind == "ollama"
     assert legacy.base_url == "http://atlas:11434"
     assert legacy.model == "qwen2.5:7b"
@@ -25,6 +31,7 @@ def test_provider_registry_translates_legacy_ollama_settings() -> None:
 
     heavy = registry.get("heavy_local")
     assert heavy is not None
+    assert heavy.logical_profile == "reason"
     assert heavy.base_url == "http://odin:11434"
     assert heavy.model == "gpt-oss:20b"
     assert heavy.locality == InferenceLocality.LOCAL_HEAVY
@@ -32,6 +39,7 @@ def test_provider_registry_translates_legacy_ollama_settings() -> None:
 
     coding = registry.get("qwen_coding")
     assert coding is not None
+    assert coding.logical_profile == "code"
     assert coding.base_url == "http://odin:11434"
     assert coding.model == "qwen2.5-coder:14b-q3"
     assert coding.locality == InferenceLocality.LOCAL_HEAVY
@@ -40,12 +48,35 @@ def test_provider_registry_translates_legacy_ollama_settings() -> None:
 
     vision = registry.get("local_vision")
     assert vision is not None
+    assert vision.logical_profile == "vision"
     assert vision.kind == "ollama"
     assert vision.base_url == "http://atlas:11434"
     assert vision.model == "moondream"
     assert vision.locality == InferenceLocality.IRIS
     assert vision.tier == 2
     assert "vision" in vision.capabilities
+
+
+def test_vulcan_logical_profiles_override_legacy_model_names() -> None:
+    config = Settings(
+        vulcan_base_url="http://vulcan:11434/",
+        model_fast="llama-fast",
+        model_reason="llama-reason",
+        model_code="qwen-code",
+        model_vision="llava-vision",
+    )
+
+    registry = provider_registry_from_settings(config)
+
+    assert registry.get("legacy_ollama").model == "llama-fast"
+    assert registry.get("heavy_local").base_url == "http://vulcan:11434"
+    assert registry.get("heavy_local").model == "llama-reason"
+    assert registry.get("qwen_coding").base_url == "http://vulcan:11434"
+    assert registry.get("qwen_coding").model == "qwen-code"
+    assert registry.get("local_vision").base_url == "http://vulcan:11434"
+    assert registry.get("local_vision").model == "llava-vision"
+    assert registry.get("local_vision").locality == InferenceLocality.LOCAL_HEAVY
+    assert [p.provider_id for p in registry.by_logical_profile("reason")] == ["heavy_local"]
 
 
 def test_iris_router_profile_is_disabled_until_enabled() -> None:

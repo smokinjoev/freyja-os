@@ -125,12 +125,14 @@ async def test_authorized_user_accepted(gateway):
     assert result.chat_id == 123456
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert "Your name is Freyja" in kwargs["json"]["prompt"]
-    assert kwargs["json"]["prompt"].endswith("Hello Freyja")
-    assert kwargs["json"]["provider"] == "auto"
-    assert kwargs["json"]["tools_required"] is False
+    assert mock_post.await_args.args[0].endswith("/canonical/route")
+    assert "Your name is Freyja" in kwargs["json"]["text"]
+    assert kwargs["json"]["text"].endswith("Hello Freyja")
+    assert kwargs["json"]["channel_metadata"]["provider"] == "auto"
+    assert kwargs["json"]["channel_metadata"]["tools_required"] is False
     assert kwargs["json"]["conversation_id"].startswith("telegram:freyja:")
     assert "123456" not in kwargs["json"]["conversation_id"]
+    assert kwargs["headers"]["x-freyja-trace-id"] == kwargs["json"]["trace_id"]
     assert kwargs["headers"]["x-freyja-client-subject"] == "agent:freyja"
     assert kwargs["headers"]["x-freyja-account-owner"] == "person:joe"
 
@@ -206,10 +208,10 @@ async def test_ordinary_text_routes_to_freyja(gateway):
     assert "(agent: Freyja, provider:" not in result.text
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert "Your name is Freyja" in kwargs["json"]["prompt"]
-    assert kwargs["json"]["prompt"].endswith("What is 2+2?")
-    assert kwargs["json"]["provider"] == "auto"
-    assert kwargs["json"]["tools_required"] is False
+    assert "Your name is Freyja" in kwargs["json"]["text"]
+    assert kwargs["json"]["text"].endswith("What is 2+2?")
+    assert kwargs["json"]["channel_metadata"]["provider"] == "auto"
+    assert kwargs["json"]["channel_metadata"]["tools_required"] is False
     assert kwargs["json"]["conversation_id"].startswith("telegram:freyja:")
 
 
@@ -235,14 +237,10 @@ async def test_photo_message_downloads_and_forwards_image(gateway):
     assert result is not None
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["prompt"].endswith("Please identify the photo or image I sent.")
-    assert payload["images"] == [
-        {
-            "mime_type": "image/jpeg",
-            "data_base64": "ZmFrZQ==",
-            "filename": "telegram-photo-large.jpg",
-        }
-    ]
+    assert payload["text"].endswith("Please identify the photo or image I sent.")
+    assert payload["attachments"][0]["media_type"] == "image/jpeg"
+    assert payload["attachments"][0]["data_base64"] == "ZmFrZQ=="
+    assert payload["attachments"][0]["filename"] == "telegram-photo-large.jpg"
 
 
 @pytest.mark.asyncio
@@ -265,12 +263,12 @@ async def test_benedict_routes_with_isolated_identity_and_model(tmp_path):
     assert result is not None
     assert result.text == "Hello Beth."
     _, kwargs = mock_post.call_args
-    assert kwargs["json"]["model"] == "benedict-qwen2.5:7b"
-    assert "Your name is Benedict" in kwargs["json"]["prompt"]
-    assert "Beth's persistent personal agent" in kwargs["json"]["prompt"]
-    assert "Iris is infrastructure" in kwargs["json"]["prompt"]
-    assert "Never address the person as Iris" in kwargs["json"]["prompt"]
-    assert kwargs["json"]["prompt"].endswith("Hello Benedict")
+    assert kwargs["json"]["channel_metadata"]["model"] == "benedict-qwen2.5:7b"
+    assert "Your name is Benedict" in kwargs["json"]["text"]
+    assert "Beth's persistent personal agent" in kwargs["json"]["text"]
+    assert "Iris is infrastructure" in kwargs["json"]["text"]
+    assert "Never address the person as Iris" in kwargs["json"]["text"]
+    assert kwargs["json"]["text"].endswith("Hello Benedict")
     assert kwargs["json"]["conversation_id"].startswith("telegram:benedict:")
     assert "654321" not in kwargs["json"]["conversation_id"]
     assert kwargs["headers"]["x-freyja-client-subject"] == "agent:benedict"
@@ -479,8 +477,8 @@ async def test_weather_query_forwards_to_agent_when_unconfigured(gateway, monkey
     assert result is not None
     assert result.text == "Model handled weather context."
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is False
+    assert payload["channel_metadata"]["provider"] == "auto"
+    assert payload["channel_metadata"]["tools_required"] is False
 
 
 @pytest.mark.asyncio
@@ -495,8 +493,8 @@ async def test_weather_now_forwards_to_agent_even_when_tool_enabled(gateway, mon
     assert result is not None
     assert result.text == "Model handled current weather."
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is False
+    assert payload["channel_metadata"]["provider"] == "auto"
+    assert payload["channel_metadata"]["tools_required"] is False
 
 
 @pytest.mark.asyncio
@@ -511,8 +509,8 @@ async def test_weather_tomorrow_forwards_to_agent_even_when_tool_enabled(gateway
     assert result is not None
     assert result.text == "Model handled forecast."
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is False
+    assert payload["channel_metadata"]["provider"] == "auto"
+    assert payload["channel_metadata"]["tools_required"] is False
 
 
 @pytest.mark.asyncio
@@ -527,8 +525,8 @@ async def test_weather_unsupported_future_date_forwards_to_agent(gateway, monkey
     assert result is not None
     assert result.text == "Model handled weather limits."
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is False
+    assert payload["channel_metadata"]["provider"] == "auto"
+    assert payload["channel_metadata"]["tools_required"] is False
 
 
 @pytest.mark.asyncio
@@ -543,8 +541,8 @@ async def test_weather_query_forwards_to_agent_when_enabled(gateway, monkeypatch
     assert result is not None
     assert result.text == "Model handled weather."
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["provider"] == "auto"
-    assert payload["tools_required"] is False
+    assert payload["channel_metadata"]["provider"] == "auto"
+    assert payload["channel_metadata"]["tools_required"] is False
 
 
 @pytest.mark.asyncio
@@ -785,7 +783,7 @@ class TestTelegramToolLoop:
         assert "<freyja_tool_call>" not in result.text
         mock_post.assert_awaited_once()
         _, kwargs = mock_post.call_args
-        assert kwargs["json"]["tools_required"] is True
+        assert kwargs["json"]["channel_metadata"]["tools_required"] is True
 
     @pytest.mark.asyncio
     async def test_telegram_tool_use_disabled(self, tool_gateway, monkeypatch):
@@ -806,7 +804,7 @@ class TestTelegramToolLoop:
         assert result.text == "I cannot use tools right now."
         mock_post.assert_awaited_once()
         _, kwargs = mock_post.call_args
-        assert kwargs["json"]["tools_required"] is False
+        assert kwargs["json"]["channel_metadata"]["tools_required"] is False
 
     @pytest.mark.asyncio
     async def test_telegram_normal_no_tool_conversation(self, tool_gateway):
@@ -826,7 +824,7 @@ class TestTelegramToolLoop:
         assert result.text == "You're welcome!"
         mock_post.assert_awaited_once()
         _, kwargs = mock_post.call_args
-        assert kwargs["json"]["tools_required"] is False
+        assert kwargs["json"]["channel_metadata"]["tools_required"] is False
 
     @pytest.mark.asyncio
     async def test_telegram_failed_tool_response_not_exposed(self, tool_gateway):
@@ -953,7 +951,7 @@ class TestTelegramToolLoop:
         assert result.text == "You're welcome!"
         mock_post.assert_awaited_once()
         _, kwargs = mock_post.call_args
-        assert kwargs["json"]["tools_required"] is False
+        assert kwargs["json"]["channel_metadata"]["tools_required"] is False
 
     @pytest.mark.asyncio
     async def test_telegram_timeout_through_gateway(self, tool_gateway):

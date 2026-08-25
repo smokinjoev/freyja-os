@@ -13,6 +13,7 @@ from freyja.agents.approval_provider import PersistentApprovalProvider
 from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprovals
 from freyja.agents.runtime import SmithRuntime
 from freyja.config import settings
+from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -22,6 +23,7 @@ from freyja.inference import InferenceProviderProfile, ProviderReadiness, provid
 from freyja.iris_router import IrisRouterClient
 from freyja.iris_monitor import start_iris_warm_monitor, stop_iris_warm_monitor
 from freyja.macagent import MacAgentClient
+from freyja.media import AttachmentInput, images_from_attachments
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
@@ -183,6 +185,7 @@ async def providers_health() -> dict[str, Any]:
         providers.append(
             {
                 "provider_id": profile.provider_id,
+                "logical_profile": profile.logical_profile,
                 "kind": profile.kind,
                 "base_url": profile.base_url,
                 "model": profile.model,
@@ -331,6 +334,24 @@ def _sanitize_tool_results(tool_results: list[dict[str, Any]]) -> list[dict[str,
     return sanitized
 
 
+def _images_from_canonical_attachments(attachments: list[CanonicalAttachment]) -> list[Any]:
+    attachment_inputs: list[AttachmentInput] = []
+    for attachment in attachments:
+        path = None
+        if attachment.source and not attachment.source.startswith(("http://", "https://")):
+            path = attachment.source
+        attachment_inputs.append(
+            AttachmentInput(
+                filename=attachment.filename,
+                mime_type=attachment.media_type,
+                path=path,
+                data_base64=attachment.data_base64,
+                size_bytes=attachment.size,
+            )
+        )
+    return images_from_attachments(attachment_inputs)
+
+
 @app.post("/route")
 async def route(request: RouteRequest, raw_request: Request) -> dict:
     try:
@@ -362,6 +383,53 @@ async def route(request: RouteRequest, raw_request: Request) -> dict:
     if request.include_trace:
         response_payload["trace"] = result.runtime_evidence.model_dump(mode="json")
     return response_payload
+
+
+@app.post("/canonical/route")
+async def canonical_route(request: CanonicalRequest, raw_request: Request) -> dict[str, Any]:
+    try:
+        memory_principal = principal_from_headers(raw_request.headers)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Invalid memory principal.") from None
+    person_context = person_context_from_headers(raw_request.headers)
+    route_request = RouteRequest(
+        request_id=request.trace_id,
+        prompt=request.text,
+        provider=str(request.channel_metadata.get("provider") or "auto"),
+        model=str(request.channel_metadata.get("model")) if request.channel_metadata.get("model") else None,
+        task_type=str(request.channel_metadata.get("task_type")) if request.channel_metadata.get("task_type") else None,
+        privacy=str(request.channel_metadata.get("privacy")) if request.channel_metadata.get("privacy") else None,
+        tools_required=bool(request.channel_metadata.get("tools_required")),
+        conversation_id=request.conversation_id,
+        include_trace=True,
+        images=_images_from_canonical_attachments(request.attachments),
+    )
+    result = await router.execute(route_request, memory_principal=memory_principal, person_context=person_context)
+    if result.decision.provider == "error":
+        raise HTTPException(status_code=400, detail=result.decision.reason)
+    if not result.response:
+        raise HTTPException(
+            status_code=503,
+            detail=result.decision.public_error_message or "No approved provider is currently available.",
+        )
+    response = CanonicalResponse(
+        trace_id=request.trace_id,
+        request_message_id=request.message_id,
+        channel=request.channel,
+        conversation_id=request.conversation_id,
+        resolved_user_id=request.resolved_user_id,
+        resolved_agent_id=request.resolved_agent_id,
+        text=result.response,
+        tool_results=_sanitize_tool_results(result.tool_results) if route_request.tools_required else [],
+        status="ok",
+        channel_metadata={
+            "provider": result.decision.provider,
+            "model": result.decision.model,
+            "reason": result.decision.reason,
+            "trace": result.runtime_evidence.model_dump(mode="json"),
+        },
+    )
+    return response.model_dump(mode="json")
 
 
 @app.post("/shortcuts/message")

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from freyja.agents.household import HouseholdAgent, household_agents
+from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalSender
 from freyja.identity import IdentityService, Person, person_from_legacy_member, person_memory_subject
 from freyja.media import AttachmentInput, DocumentText, ImageInput, images_from_attachments, pdf_texts_from_attachments
 from freyja.memory.principal import stable_identity
@@ -95,6 +96,25 @@ class NormalizedAttachment:
             size_bytes=self.size_bytes,
         )
 
+    def to_canonical_attachment(self) -> CanonicalAttachment:
+        return CanonicalAttachment(
+            media_type=self.mime_type,
+            filename=self.filename,
+            size=self.size_bytes,
+            source=self.path or self.local_ref,
+            reference=self.local_ref,
+            data_base64=self.data_base64,
+            metadata={
+                key: value
+                for key, value in {
+                    "has_payload": self.has_payload,
+                    "path": self.path,
+                    "local_ref": self.local_ref,
+                }.items()
+                if value is not None
+            },
+        )
+
 
 @dataclass(frozen=True)
 class NormalizedMessage:
@@ -163,6 +183,40 @@ class NormalizedMessage:
             else:
                 lines.append(f"{document.filename}: {document.error or 'document text unavailable'}")
         return "\n".join(lines)
+
+    def to_canonical_request(
+        self,
+        *,
+        authorized_sender: AuthorizedSender | None = None,
+        resolved_user_id: str | None = None,
+        resolved_agent_id: str | None = None,
+        permissions: list[str] | None = None,
+        channel_metadata: dict[str, object] | None = None,
+    ) -> CanonicalRequest:
+        user_id = resolved_user_id
+        if user_id is None and authorized_sender is not None:
+            user_id = authorized_sender.person.person_id if authorized_sender.person else authorized_sender.member_id
+        metadata = {
+            "thread_id": self.thread_id,
+            "group_id": self.group_id,
+            "authorized": self.authorized,
+            "is_from_self": self.is_from_self,
+            **(channel_metadata or {}),
+        }
+        return CanonicalRequest(
+            message_id=self.message_id,
+            timestamp=self.timestamp or datetime.now().astimezone(),
+            channel=self.transport,
+            conversation_id=self.conversation_id,
+            sender=CanonicalSender(channel_id=self.sender, address=self.sender),
+            resolved_user_id=user_id,
+            resolved_agent_id=resolved_agent_id,
+            text=self.text,
+            attachments=[attachment.to_canonical_attachment() for attachment in self.attachments],
+            reply_context={"reply_to_message_id": self.reply_to_message_id} if self.reply_to_message_id else {},
+            channel_metadata={key: value for key, value in metadata.items() if value is not None},
+            permissions=permissions or [],
+        )
 
 
 def parse_allowed_senders(

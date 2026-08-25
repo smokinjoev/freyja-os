@@ -100,18 +100,21 @@ class GmailGateway:
         except ValueError:
             return self._safe_error_response(message)
 
-        payload = {
-            "prompt": self._director_prompt(message, body),
-            "provider": "auto",
-            "tools_required": True,
-            "privacy": "private",
-            "conversation_id": principal.conversation_id,
-            "images": [
-                image.model_dump(mode="json", exclude_none=True)
-                for image in self._images_for_message(message)
-            ],
-        }
-
+        normalized = self._normalized_message(message)
+        canonical = normalized.to_canonical_request(
+            authorized_sender=identity,
+            permissions=["director:route"],
+            channel_metadata={
+                "privacy": "private",
+                "tools_required": True,
+                "gmail_identity": self._identity,
+                "thread_id": message.thread_id,
+                "subject": message.subject,
+            },
+        )
+        canonical_payload = canonical.model_dump(mode="json")
+        canonical_payload["conversation_id"] = principal.conversation_id
+        canonical_payload["text"] = self._director_prompt(message, body)
         try:
             client = await self._client()
             headers = identity.safe_headers()
@@ -120,11 +123,12 @@ class GmailGateway:
             headers["X-Freyja-Account-Owner"] = principal.account_owner or ""
             headers["X-Freyja-Conversation-Id"] = principal.conversation_id or ""
             headers["X-Freyja-Gmail-Identity"] = self._identity
+            headers["X-Freyja-Trace-Id"] = canonical.trace_id
             if self._director_token:
                 headers["Authorization"] = f"Bearer {self._director_token}"
             response = await client.post(
-                f"{self._director_url}/route",
-                json=payload,
+                f"{self._director_url}/canonical/route",
+                json=canonical_payload,
                 headers=headers,
             )
             response.raise_for_status()
@@ -161,7 +165,7 @@ class GmailGateway:
             )
             return self._safe_error_response(message)
 
-        text = data.get("response", "")
+        text = data.get("text") or data.get("response", "")
         if not text:
             return self._safe_error_response(message)
 
