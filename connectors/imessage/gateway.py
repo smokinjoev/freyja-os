@@ -52,6 +52,7 @@ class RejectionReason:
     UNKNOWN_SENDER = "unknown_sender"
     GROUP_MESSAGE = "group_message"
     UNKNOWN_FAMILY_GROUP = "unknown_family_group"
+    DIRECT_MESSAGE_NOT_ADDRESSED = "direct_message_not_addressed"
     SELF_MESSAGE = "self_message"
     EMPTY_MESSAGE = "empty_message"
     OVERSIZED_MESSAGE = "oversized_message"
@@ -72,6 +73,7 @@ class IMessageGateway:
         self._timeout = settings.imessage_request_timeout_seconds
         self._provisional_reply_enabled = settings.imessage_provisional_reply_enabled
         self._provisional_reply_text = settings.imessage_provisional_reply_text
+        self._direct_requires_addressed = settings.imessage_direct_requires_addressed
         self._family_observer_enabled = settings.imessage_family_observer_enabled
         self._family_memory_enabled = settings.imessage_family_memory_enabled
         self._family_chat_identifiers = settings.family_chat_identifier_set
@@ -129,6 +131,10 @@ class IMessageGateway:
         if message.is_group:
             return await self._handle_group(message, identity)
 
+        if not self._is_direct_message_routable(prompt_text):
+            self._log_rejection(message, RejectionReason.DIRECT_MESSAGE_NOT_ADDRESSED)
+            return None
+
         return await self._forward(message, identity)
 
     def _can_send_provisional_reply(self, message: IMessage) -> bool:
@@ -142,12 +148,13 @@ class IMessageGateway:
             return False
         if message.message_id in self._recent_message_ids:
             return False
+        prompt_text = self._message_text_for_limits_and_tools(message)
         if not message.is_group:
-            return True
+            return self._is_direct_message_routable(prompt_text)
         return (
             self._family_observer_enabled
             and message.chat_identifier in self._family_chat_identifiers
-            and self._is_explicitly_addressed(self._message_text_for_limits_and_tools(message))
+            and self._is_explicitly_addressed(prompt_text)
         )
 
     def _log_rejection(self, message: IMessage, reason: str) -> None:
@@ -205,6 +212,11 @@ class IMessageGateway:
             if stripped.startswith(f"{name},") or stripped.startswith(f"{name}:") or stripped.startswith(f"{name} "):
                 return True
         return False
+
+    def _is_direct_message_routable(self, text: str) -> bool:
+        if not self._direct_requires_addressed:
+            return True
+        return self._is_explicitly_addressed(text)
 
     @staticmethod
     def _family_group_prompt(text: str, chat_identifier: str) -> str:

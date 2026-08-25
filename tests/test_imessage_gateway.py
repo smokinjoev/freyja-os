@@ -25,7 +25,7 @@ def _ok_response(data: dict) -> httpx.Response:
 
 def make_message(
     sender: str = "+15551234567",
-    text: str = "Hello Freyja",
+    text: str = "Freyja, hello",
     message_id: str = "imsg-001",
     *,
     is_group: bool = False,
@@ -72,7 +72,7 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     mock_post.assert_awaited_once()
     payload = mock_post.await_args.kwargs["json"]
     assert mock_post.await_args.args[0].endswith("/canonical/route")
-    assert payload["text"] == "Hello Freyja"
+    assert payload["text"] == "Freyja, hello"
     assert "IMESSAGE AGENT ROLE" not in payload["text"]
     assert "Required response identity" not in payload["text"]
     assert "+15551234567" not in payload["text"]
@@ -93,6 +93,7 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
 
 @pytest.mark.asyncio
 async def test_photo_only_message_is_forwarded_in_same_conversation(enabled_gateway):
+    enabled_gateway._direct_requires_addressed = False
     message = make_message(text="", message_id="photo-001").model_copy(
         update={
             "attachments": [
@@ -121,7 +122,7 @@ async def test_photo_only_message_is_forwarded_in_same_conversation(enabled_gate
 
 @pytest.mark.asyncio
 async def test_imessage_missing_image_payload_is_not_sent_as_inspected_image(enabled_gateway):
-    message = make_message(text="What is this?", message_id="photo-missing").model_copy(
+    message = make_message(text="Freyja, what is this?", message_id="photo-missing").model_copy(
         update={
             "attachments": [
                 IMessageAttachment(
@@ -147,7 +148,7 @@ async def test_imessage_missing_image_payload_is_not_sent_as_inspected_image(ena
 async def test_imessage_pdf_payload_adds_extracted_document_text(enabled_gateway, tmp_path):
     pdf_path = tmp_path / "plan.pdf"
     pdf_path.write_bytes(base64.b64decode(SIMPLE_PDF_BASE64))
-    message = make_message(text="What does this say?", message_id="imsg-pdf").model_copy(
+    message = make_message(text="Freyja, what does this say?", message_id="imsg-pdf").model_copy(
         update={
             "attachments": [
                 IMessageAttachment(
@@ -175,7 +176,7 @@ async def test_auto_tool_mode_keeps_plain_chat_fast(enabled_gateway):
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = _ok_response({"response": "Hello"})
-        result = await enabled_gateway.handle(make_message(text="Hello there"))
+        result = await enabled_gateway.handle(make_message(text="Freyja, hello there"))
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
@@ -189,7 +190,7 @@ async def test_auto_tool_mode_does_not_force_weather_into_tools(enabled_gateway)
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = _ok_response({"response": "Checking weather context"})
-        result = await enabled_gateway.handle(make_message(text="What's the weather tomorrow in Aiken?"))
+        result = await enabled_gateway.handle(make_message(text="Freyja, what's the weather tomorrow in Aiken?"))
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
@@ -204,7 +205,7 @@ async def test_auto_tool_mode_preserves_tool_like_requests(enabled_gateway):
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = _ok_response({"response": "Checking"})
-        result = await enabled_gateway.handle(make_message(text="What is on my calendar today?"))
+        result = await enabled_gateway.handle(make_message(text="Freyja, what is on my calendar today?"))
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
@@ -290,6 +291,7 @@ def test_provisional_reply_only_for_direct_routable_messages(enabled_gateway):
     assert result.text == "Working on it..."
     assert enabled_gateway.provisional_reply_for(make_message(sender="+15559999999")) is None
     assert enabled_gateway.provisional_reply_for(make_message(is_from_me=True)) is None
+    assert enabled_gateway.provisional_reply_for(make_message(text="Dinner Friday")) is None
 
 
 @pytest.mark.asyncio
@@ -445,17 +447,38 @@ async def test_joe_alias_routes_direct_imessage_to_cloyd_private_agent(enabled_g
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = _ok_response({"response": "Hi Joe"})
-        result = await enabled_gateway.handle(make_message(sender="+15551234567", text="Hello"))
+        result = await enabled_gateway.handle(make_message(sender="+15551234567", text="Freyja, hello"))
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["text"] == "Hello"
+    assert payload["text"] == "Freyja, hello"
     assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
     assert headers["X-Freyja-Account-Owner"] == "person:joe"
     assert headers["X-Freyja-Agent-Id"] == "cloyd-gibbler"
     assert headers["X-Freyja-Person-Id"] == "joe"
     assert "+15551234567" not in str(headers)
+
+
+@pytest.mark.asyncio
+async def test_direct_imessage_requires_explicit_address_by_default(enabled_gateway):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        result = await enabled_gateway.handle(make_message(text="Can you pick up milk?"))
+
+    assert result is None
+    mock_post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_direct_imessage_can_be_configured_for_legacy_auto_reply(enabled_gateway):
+    enabled_gateway._direct_requires_addressed = False
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Legacy direct reply"})
+        result = await enabled_gateway.handle(make_message(text="Can you pick up milk?"))
+
+    assert result is not None
+    assert result.text == "Legacy direct reply"
 
 
 @pytest.mark.asyncio
@@ -465,12 +488,12 @@ async def test_beth_alias_routes_direct_imessage_to_benedict_private_agent(enabl
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = _ok_response({"response": "Hi Beth"})
-        result = await enabled_gateway.handle(make_message(sender="beth@example.com", text="Hello"))
+        result = await enabled_gateway.handle(make_message(sender="beth@example.com", text="Freyja, hello"))
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["text"] == "Hello"
+    assert payload["text"] == "Freyja, hello"
     assert headers["X-Freyja-Client-Subject"] == "agent:benedict"
     assert headers["X-Freyja-Account-Owner"] == "person:beth"
     assert headers["X-Freyja-Agent-Id"] == "benedict"
@@ -489,7 +512,7 @@ async def test_empty_message_is_dropped(enabled_gateway):
 
 @pytest.mark.asyncio
 async def test_oversized_message_returns_safe_error(enabled_gateway):
-    message = make_message(text="x" * 4001)
+    message = make_message(text="Freyja, " + ("x" * 4001))
 
     result = await enabled_gateway.handle(message)
 
@@ -556,7 +579,7 @@ async def test_raw_allowlisted_sender_routes_to_family_freyja_agent(enabled_gate
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert payload["text"] == "Hello Freyja"
+    assert payload["text"] == "Freyja, hello"
     assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
     assert headers["X-Freyja-Account-Owner"] == "person:family"
     assert headers["X-Freyja-Agent-Id"] == "freyja"
@@ -569,7 +592,7 @@ async def test_family_member_alias_uses_agent_memory_subject(enabled_gateway):
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = _ok_response({"response": "Hi Joe"})
-        result = await enabled_gateway.handle(make_message(sender="+15551234567"))
+        result = await enabled_gateway.handle(make_message(sender="+15551234567", text="Freyja, hello"))
 
     assert result is not None
     headers = mock_post.await_args.kwargs["headers"]

@@ -31,6 +31,7 @@ class IMessageSettings(BaseSettings):
     imessage_provisional_reply_enabled: bool = False
     imessage_provisional_reply_delay_seconds: float = 2.0
     imessage_provisional_reply_text: str = "Working on it..."
+    imessage_direct_requires_addressed: bool = True
     imessage_watch_enabled: bool = True
     imessage_poll_database_enabled: bool = True
     imessage_poll_interval_seconds: float = 5.0
