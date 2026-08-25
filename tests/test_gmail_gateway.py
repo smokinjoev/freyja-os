@@ -9,6 +9,7 @@ import pytest
 from connectors.gmail.gateway import GmailGateway
 from connectors.gmail.models import GmailAttachment, GmailMessage
 from connectors.messaging import parse_allowed_senders
+from tests.test_media import SIMPLE_PDF_BASE64
 
 
 def _make_request() -> httpx.Request:
@@ -176,6 +177,29 @@ async def test_gmail_missing_pdf_payload_gets_document_honesty_note(enabled_gate
     assert "document payload unavailable" in payload["prompt"]
     assert "Do not describe their contents" in payload["prompt"]
     assert "gmail-pdf-id" not in payload["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_gmail_pdf_payload_adds_extracted_document_text(enabled_gateway):
+    message = make_message(
+        text="What does this say?",
+        attachments=[
+            GmailAttachment(
+                filename="plan.pdf",
+                mime_type="application/pdf",
+                data_base64=SIMPLE_PDF_BASE64,
+            )
+        ],
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "It mentions dinner Friday."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert "Extracted PDF/document text" in payload["prompt"]
+    assert "Family dinner Friday" in payload["prompt"]
 
 
 @pytest.mark.asyncio

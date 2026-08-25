@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 from pydantic import BaseModel, Field, model_validator
@@ -54,6 +56,12 @@ class AttachmentInput(BaseModel):
         name = (self.filename or self.path or "").lower()
         return name.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"))
 
+    @property
+    def is_pdf(self) -> bool:
+        mime = (self.mime_type or "").lower()
+        name = (self.filename or self.path or "").lower()
+        return mime == "application/pdf" or name.endswith(".pdf")
+
     def to_image_input(self) -> ImageInput | None:
         if not self.is_image:
             return None
@@ -67,6 +75,19 @@ class AttachmentInput(BaseModel):
         )
 
 
+@dataclass(frozen=True)
+class DocumentText:
+    filename: str
+    mime_type: str
+    text: str = ""
+    page_count: int = 0
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return bool(self.text.strip()) and self.error is None
+
+
 def images_from_attachments(attachments: list[AttachmentInput]) -> list[ImageInput]:
     images: list[ImageInput] = []
     for attachment in attachments:
@@ -74,6 +95,66 @@ def images_from_attachments(attachments: list[AttachmentInput]) -> list[ImageInp
         if image is not None:
             images.append(image)
     return images
+
+
+def pdf_texts_from_attachments(
+    attachments: list[AttachmentInput],
+    *,
+    max_chars_per_document: int = 8000,
+    max_pages: int = 8,
+) -> list[DocumentText]:
+    documents: list[DocumentText] = []
+    for attachment in attachments:
+        if not attachment.is_pdf:
+            continue
+        name = attachment.filename or (Path(attachment.path).name if attachment.path else "document.pdf")
+        mime_type = attachment.mime_type or "application/pdf"
+        if not (attachment.data_base64 or attachment.path):
+            documents.append(DocumentText(filename=name, mime_type=mime_type, error="document payload unavailable"))
+            continue
+        try:
+            payload = _attachment_bytes(attachment)
+            documents.append(_extract_pdf_text(payload, filename=name, mime_type=mime_type, max_chars=max_chars_per_document, max_pages=max_pages))
+        except Exception:
+            documents.append(DocumentText(filename=name, mime_type=mime_type, error="pdf text extraction failed"))
+    return documents
+
+
+def _attachment_bytes(attachment: AttachmentInput) -> bytes:
+    if attachment.data_base64:
+        return base64.b64decode(attachment.data_base64)
+    path = Path(str(attachment.path)).expanduser()
+    return path.read_bytes()
+
+
+def _extract_pdf_text(
+    payload: bytes,
+    *,
+    filename: str,
+    mime_type: str,
+    max_chars: int,
+    max_pages: int,
+) -> DocumentText:
+    from pypdf import PdfReader
+
+    reader = PdfReader(BytesIO(payload))
+    parts: list[str] = []
+    for index, page in enumerate(reader.pages[:max_pages], start=1):
+        page_text = (page.extract_text() or "").strip()
+        if page_text:
+            parts.append(f"[page {index}]\n{page_text}")
+        if sum(len(part) for part in parts) >= max_chars:
+            break
+    text = "\n\n".join(parts).strip()
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip()
+    return DocumentText(
+        filename=filename,
+        mime_type=mime_type,
+        text=text,
+        page_count=len(reader.pages),
+        error=None if text else "pdf contains no extractable text",
+    )
 
 
 def _mime_from_name(name: str) -> str | None:

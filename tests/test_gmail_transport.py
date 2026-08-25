@@ -156,7 +156,7 @@ async def test_poll_once_fetches_unread_message_and_sends_threaded_reply():
     assert "Director reply" in outbound.get_content()
 
 
-def test_html_and_attachments_are_normalized_without_attachment_content():
+def test_html_and_attachments_are_normalized_with_pdf_payload_for_extraction():
     parsed = GmailImapSmtpTransport._to_gateway_message(
         GmailImapSmtpTransport(
             RecordingGateway(),
@@ -176,3 +176,4 @@ def test_html_and_attachments_are_normalized_without_attachment_content():
     assert len(parsed.attachments) == 1
     assert parsed.attachments[0].filename == "invoice.pdf"
     assert parsed.attachments[0].size_bytes == len(b"not trusted")
+    assert parsed.attachments[0].data_base64 is not None

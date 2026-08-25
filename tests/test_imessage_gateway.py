@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 from unittest.mock import AsyncMock, patch
 
@@ -11,6 +12,7 @@ from connectors.imessage.family_observer import FamilyIMessageObserver
 from connectors.imessage.models import IMessage, IMessageAttachment
 from connectors.messaging import parse_allowed_senders
 from freyja.memory.store import MemoryStore
+from tests.test_media import SIMPLE_PDF_BASE64
 
 
 def _make_request() -> httpx.Request:
@@ -137,6 +139,32 @@ async def test_imessage_missing_image_payload_is_not_sent_as_inspected_image(ena
     assert "images" not in payload
     assert "image payload unavailable" in payload["prompt"]
     assert "Do not describe their contents" in payload["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_imessage_pdf_payload_adds_extracted_document_text(enabled_gateway, tmp_path):
+    pdf_path = tmp_path / "plan.pdf"
+    pdf_path.write_bytes(base64.b64decode(SIMPLE_PDF_BASE64))
+    message = make_message(text="What does this say?", message_id="imsg-pdf").model_copy(
+        update={
+            "attachments": [
+                IMessageAttachment(
+                    filename="plan.pdf",
+                    mime_type="application/pdf",
+                    path=str(pdf_path),
+                )
+            ]
+        }
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "It mentions dinner Friday."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert "Extracted PDF/document text" in payload["prompt"]
+    assert "Family dinner Friday" in payload["prompt"]
 
 
 @pytest.mark.asyncio

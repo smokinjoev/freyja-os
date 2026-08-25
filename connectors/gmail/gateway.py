@@ -183,6 +183,7 @@ class GmailGateway:
             "Do not assume their contents unless a separate safe attachment reader has inspected them:\n"
             + "\n".join(attachment_lines)
             + self._attachment_honesty_note(message)
+            + normalized.document_text_prompt()
             if attachment_lines
             else "\nNo attachments were provided."
         )

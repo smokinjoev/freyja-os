@@ -10,6 +10,7 @@ from connectors.signal.config import SignalSettings
 from connectors.signal.gateway import RejectionReason, SignalGateway
 from connectors.signal.models import InboundMessage, SignalAttachment
 from connectors.messaging import parse_allowed_senders
+from tests.test_media import SIMPLE_PDF_BASE64
 
 
 def _make_request() -> httpx.Request:
@@ -161,6 +162,31 @@ async def test_signal_missing_image_payload_is_not_sent_as_inspected_image(enabl
     assert "images" not in payload
     assert "image payload unavailable" in payload["prompt"]
     assert "Do not describe their contents" in payload["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_signal_pdf_payload_adds_extracted_document_text(enabled_gateway):
+    message = InboundMessage(
+        sender="+15551234567",
+        text="What does this say?",
+        message_id="signal-pdf",
+        attachments=[
+            SignalAttachment(
+                filename="plan.pdf",
+                mime_type="application/pdf",
+                data_base64=SIMPLE_PDF_BASE64,
+            )
+        ],
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "It mentions dinner Friday."})
+        result = await enabled_gateway.handle(message)
+
+    assert result.success is True
+    payload = mock_post.await_args.kwargs["json"]
+    assert "Extracted PDF/document text" in payload["prompt"]
+    assert "Family dinner Friday" in payload["prompt"]
 
 
 @pytest.mark.asyncio

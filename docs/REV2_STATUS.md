@@ -161,6 +161,12 @@ the current state of that scope.
   in Director prompts and are not sent as inspected images. Focused gateway,
   router, provider-health, MacAgent, and voice tests passed:
   `221 passed, 1 warning`.
+- PDF/document handling: payload-backed PDF attachments now use bounded native
+  PDF text extraction before Director dispatch. Extracted text is appended to
+  the originating transport prompt with page metadata; missing or malformed PDF
+  payloads produce explicit failure text instead of fabricated document
+  descriptions. Focused media and gateway/transport tests passed:
+  `73 passed, 1 warning`.
 - Shortcut/HomePod ingress candidate: Director exposes protected
   `POST /shortcuts/message` for Siri Shortcuts/HomePod flows. It reuses normal
   private `RouteRequest` dispatch, preserves `shortcut-conv:<id>` continuity,

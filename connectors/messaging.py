@@ -5,7 +5,7 @@ from datetime import datetime
 
 from freyja.agents.household import HouseholdAgent, household_agents
 from freyja.identity import IdentityService, Person, person_from_legacy_member, person_memory_subject
-from freyja.media import AttachmentInput, ImageInput, images_from_attachments
+from freyja.media import AttachmentInput, DocumentText, ImageInput, images_from_attachments, pdf_texts_from_attachments
 from freyja.memory.principal import stable_identity
 
 
@@ -120,6 +120,10 @@ class NormalizedMessage:
         return images_from_attachments([attachment.to_attachment_input() for attachment in self.attachments])
 
     @property
+    def document_texts(self) -> list[DocumentText]:
+        return pdf_texts_from_attachments([attachment.to_attachment_input() for attachment in self.attachments])
+
+    @property
     def missing_payload_attachments(self) -> list[NormalizedAttachment]:
         return [
             attachment
@@ -141,9 +145,24 @@ class NormalizedMessage:
                 "\nPayload honesty constraint: one or more image/document payloads are unavailable. "
                 "Do not describe their contents unless bytes were actually provided to the vision/document path."
             )
+        document_note = self.document_text_prompt()
         if self.has_text:
-            return f"{self.text}\n\n{metadata_label}:\n{attachment_summary}{honesty_note}"
-        return f"{empty_caption}\n\n{metadata_label}:\n{attachment_summary}{honesty_note}"
+            return f"{self.text}\n\n{metadata_label}:\n{attachment_summary}{honesty_note}{document_note}"
+        return f"{empty_caption}\n\n{metadata_label}:\n{attachment_summary}{honesty_note}{document_note}"
+
+    def document_text_prompt(self) -> str:
+        documents = self.document_texts
+        if not documents:
+            return ""
+        lines = ["\n\nExtracted PDF/document text:"]
+        for document in documents:
+            if document.ok:
+                lines.append(
+                    f"{document.filename} ({document.page_count} page(s), native text extraction):\n{document.text}"
+                )
+            else:
+                lines.append(f"{document.filename}: {document.error or 'document text unavailable'}")
+        return "\n".join(lines)
 
 
 def parse_allowed_senders(

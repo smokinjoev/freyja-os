@@ -217,7 +217,7 @@ class GmailImapSmtpTransport:
                         mime_type=content_type,
                         size_bytes=len(payload),
                         data_base64=base64.b64encode(payload).decode("ascii")
-                        if content_type.lower().startswith("image/")
+                        if content_type.lower().startswith("image/") or content_type.lower() == "application/pdf"
                         else None,
                     )
                 )
