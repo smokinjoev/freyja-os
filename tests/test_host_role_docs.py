@@ -111,7 +111,11 @@ def test_rev2_status_document_tracks_current_implementation_candidate() -> None:
     assert "Installed-wheel preflight console check" in status
     assert "`dry_run_command` and" in status
     assert "Repository hygiene, compileall, and `git diff --check`: `passed`" in status
-    assert "1100 passed, 2 skipped, 1 warning" in status
+    assert "Vulcan and Signal operator" in status
+    assert "readiness reports can be attached" in status
+    assert "status: not-ready" in status
+    assert "signal-readiness-report" in status
+    assert "1110 passed, 2 skipped, 1 warning" in status
     assert "Final operator handoff" in status
     assert "stops before readiness" in status
     assert "Do not mark Freyja 2.0 complete from this status file alone" in status
@@ -151,6 +155,10 @@ def test_rev2_completion_audit_tracks_every_workstream() -> None:
     assert "failed only `imessage-live-smoke-report`" in audit
     assert "`fast`, `reason`, `code`, and `vision` logical" in audit
     assert "`ready_for_certification: true`" in audit
+    assert "Signal readiness report" in audit
+    assert "20260825T215042.944492Z0000-rev2-readiness.json" in audit
+    assert "signal-readiness-report" in audit
+    assert "1110 passed, 2 skipped, 1 warning" in audit
     assert "Do not mark the Freyja 2.0 goal complete" in audit
     assert "Signal onboarding/live-smoke" in audit
     assert "Vulcan `vision` profile readiness gap" not in audit
@@ -221,10 +229,10 @@ def test_operations_deployment_tracks_current_signal_gate() -> None:
 def test_rev2_status_documents_preflight_handoff_commands() -> None:
     docs = _read("docs/REV2_STATUS.md")
 
-    assert "preferred operator command" in docs
-    assert "the approval-only `--yes` command" in docs
-    assert "`dry_run_command`" in docs
-    assert "`final_command`" in docs
+    assert "scripts/rev2-preflight-status.py --json" in docs
+    assert "status: not-ready" in docs
+    assert "signal-readiness-report" in docs
+    assert "approved Signal live-smoke path" in docs
     assert "/providers/health" in docs
     assert "/macagent/health" in docs
 

@@ -47,7 +47,9 @@ the current state of that scope.
   targeting. A memory provenance audit report can be attached to prove existing
   shared-memory rows normalize under Rev 2 provenance rules. Approval exercise
   reports can be attached to prove consequential actions deny without approval
-  and allow only after Director authorization.
+  and allow only after Director authorization. Vulcan and Signal operator
+  readiness reports can be attached to prove local profile availability and
+  Signal account/allowlist/enablement gates before live smoke.
 - Heavy local reasoning is treated as an optional provider tier unless the
   readiness command is given `--required-provider-profile heavy_local`.
 - Freyja 2.0 live evidence now binds iMessage/terminal route equivalence to the
@@ -57,9 +59,9 @@ the current state of that scope.
 
 ## Verification Evidence
 
-- Focused Rev 2 certification/readiness checks: `30 passed, 1 warning`
-- Full project suite after one-command final-handoff consolidation:
-  `1100 passed, 2 skipped, 1 warning`
+- Focused Rev 2 certification/readiness/doc checks: `103 passed, 1 warning`
+- Full project suite after Signal readiness artifact and deployment runbook
+  alignment: `1110 passed, 2 skipped, 1 warning`
 - Local one-command selected-connector readiness bundle: `passed`
 - Live local Rev 2 entrypoint check: `freyja.atlas_app:app` starts and serves
   `/health`, `/providers/health`, `/iris-router/health`, `/macagent/health`,
@@ -112,16 +114,15 @@ the current state of that scope.
   because the local `imsg` send did not complete.
   Historical note: at this point the local Messages/`imsg` send transport must be corrected before a final live-smoke claim.
 - Rev 2 preflight summary:
-  `freyja-rev2-preflight-status` is the preferred operator command and reports
-  the latest readiness artifact as `ready-for-final-smoke` with exit code `2`,
-  meaning every non-smoke check passed and the only remaining proof is the
-  approved sent iMessage smoke report. Its remaining-work lines and JSON
-  `dry_run_command` and `final_command` fields include the complete
-  `scripts/rev2-readiness-bundle.py --imessage-live-smoke` review command and
-  the approval-only `--yes` command, populated from the latest readiness
-  artifact. Source checkouts can use the equivalent
-  `scripts/rev2-preflight-status.py` wrapper. Both support `--json` for
-  monitor-friendly status output.
+  `scripts/rev2-preflight-status.py --json` reads the latest strict readiness
+  artifact,
+  `certification/reports/20260825T215042.944492Z0000-rev2-readiness.json`, and
+  reports `status: not-ready`. The failed checks are limited to
+  `connector-production-report`, `signal-readiness-report`, and
+  `signal-live-smoke-report`. Its redacted remaining-work lines name the actual
+  Signal gate: keep Signal disabled until account registration or device
+  linking succeeds, configure a reviewed sender allowlist, and then run the
+  approved Signal live-smoke path.
 - Final operator handoff:
   `scripts/rev2-readiness-bundle.py --imessage-live-smoke` consolidates the
   last smoke-plus-readiness step. Without `--yes`, it dry-runs the iMessage

@@ -18,13 +18,13 @@ tests alone.
 | G - Capability Broker | Candidate implemented | Capability authorization evidence records actor, permission, risk, approval policy, connector trust, scope, and approval state; final readiness can validate an attached approval exercise report. | Live consequential-action approvals must be exercised in deployment. |
 | H - Trust-Aware External Workers | Candidate implemented | Worker policy blocks untrusted authoritative memory write, message send, home control, admin config, and privileged execution. | Any future external worker implementation must use this boundary. |
 | I - Memory Provenance | Candidate implemented | Shared memory stores provenance, trust level, kind, observed timestamp, derivation links, and non-authoritative external observations; `freyja-certify rev2-memory-audit` inspects existing shared-memory rows read-only and can feed the final readiness report. | Existing long-lived production memory should be inspected after rollout for expected provenance defaults. |
-| J - Certification | Candidate implemented | Rev 2 vertical spine covers the 15 required cases; route requests are executable; expectation keys are guarded by `SUPPORTED_EXPECTATION_KEYS`; `freyja-certify rev2-readiness` validates the required final cutover artifact bundle. | A timestamped Rev 2 certification report, benchmark report, connector report, memory report, approval report, and readiness report should be generated against the target deployment before final cutover. |
+| J - Certification | Candidate implemented | Rev 2 vertical spine covers the 15 required cases; route requests are executable; expectation keys are guarded by `SUPPORTED_EXPECTATION_KEYS`; `freyja-certify rev2-readiness` validates the required final cutover artifact bundle, including Vulcan and Signal operator readiness artifacts. | A timestamped Rev 2 certification report, benchmark report, connector reports, memory report, approval report, Vulcan readiness report, Signal readiness report, smoke reports, and readiness report should be generated against the target deployment before final cutover. |
 
 ## Current Verification
 
-- Focused docs/certification/readiness-bundle checks: `30 passed, 1 warning`
-- Full project suite: `1100 passed, 2 skipped, 1 warning`
-- Final status-doc guard: `11 passed, 1 warning`
+- Focused docs/certification/readiness-bundle checks: `103 passed, 1 warning`
+- Full project suite: `1110 passed, 2 skipped, 1 warning`
+- Final status-doc guard: `13 passed, 1 warning`
 - Live local Rev 2 entrypoint: started `freyja.atlas_app:app` on
   `127.0.0.1:8767`; health, provider, Iris, MacAgent boundary, and Road Mode
   endpoints responded.
@@ -90,6 +90,15 @@ tests alone.
   profiles are installed. `scripts/vulcan-operator.py readiness` reports
   `ready_for_certification: true` after installing the configured `moondream`
   vision profile model.
+- Current Rev 2 readiness evidence
+  `certification/reports/20260825T215042.944492Z0000-rev2-readiness.json`
+  attaches Vulcan readiness, Signal readiness, iMessage smoke, connector
+  production, memory audit, approval exercise, certification, and benchmark
+  artifacts. It passes every non-Signal gate and fails only
+  `connector-production-report`, `signal-readiness-report`, and
+  `signal-live-smoke-report`; the redacted Signal missing actions are reviewed
+  sender allowlist configuration, account registration or device linking, and
+  enabling Signal after those gates are complete.
 - Package wheel build via `pip wheel . --no-deps`: `passed`
 - Installed-wheel preflight console command reports both the safe dry-run review
   command and the approval-only final command with shell-safe quoting.
