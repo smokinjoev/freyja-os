@@ -32,6 +32,7 @@ class IMessageSettings(BaseSettings):
     imessage_provisional_reply_delay_seconds: float = 2.0
     imessage_provisional_reply_text: str = "Working on it..."
     imessage_direct_requires_addressed: bool = True
+    imessage_direct_unaddressed_allowed_senders: str = ""
     imessage_watch_enabled: bool = True
     imessage_poll_database_enabled: bool = True
     imessage_poll_interval_seconds: float = 5.0
@@ -57,6 +58,14 @@ class IMessageSettings(BaseSettings):
     @property
     def family_chat_identifier_set(self) -> set[str]:
         return {value.strip() for value in self.imessage_family_chat_identifiers.split(",") if value.strip()}
+
+    @property
+    def direct_unaddressed_allowed_sender_set(self) -> set[str]:
+        return {
+            value.strip()
+            for value in self.imessage_direct_unaddressed_allowed_senders.split(",")
+            if value.strip()
+        }
 
     @property
     def family_invocation_names(self) -> tuple[str, ...]:

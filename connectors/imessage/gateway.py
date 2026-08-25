@@ -74,6 +74,7 @@ class IMessageGateway:
         self._provisional_reply_enabled = settings.imessage_provisional_reply_enabled
         self._provisional_reply_text = settings.imessage_provisional_reply_text
         self._direct_requires_addressed = settings.imessage_direct_requires_addressed
+        self._direct_unaddressed_allowed_senders = settings.direct_unaddressed_allowed_sender_set
         self._family_observer_enabled = settings.imessage_family_observer_enabled
         self._family_memory_enabled = settings.imessage_family_memory_enabled
         self._family_chat_identifiers = settings.family_chat_identifier_set
@@ -131,7 +132,7 @@ class IMessageGateway:
         if message.is_group:
             return await self._handle_group(message, identity)
 
-        if not self._is_direct_message_routable(prompt_text):
+        if not self._is_direct_message_routable(message, prompt_text):
             self._log_rejection(message, RejectionReason.DIRECT_MESSAGE_NOT_ADDRESSED)
             return None
 
@@ -150,7 +151,7 @@ class IMessageGateway:
             return False
         prompt_text = self._message_text_for_limits_and_tools(message)
         if not message.is_group:
-            return self._is_direct_message_routable(prompt_text)
+            return self._is_direct_message_routable(message, prompt_text)
         return (
             self._family_observer_enabled
             and message.chat_identifier in self._family_chat_identifiers
@@ -213,8 +214,8 @@ class IMessageGateway:
                 return True
         return False
 
-    def _is_direct_message_routable(self, text: str) -> bool:
-        if not self._direct_requires_addressed:
+    def _is_direct_message_routable(self, message: IMessage, text: str) -> bool:
+        if not self._direct_requires_addressed or message.sender in self._direct_unaddressed_allowed_senders:
             return True
         return self._is_explicitly_addressed(text)
 

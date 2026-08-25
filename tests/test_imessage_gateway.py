@@ -54,6 +54,7 @@ async def enabled_gateway():
     gw._timeout = 5.0
     gw._provisional_reply_enabled = False
     gw._provisional_reply_text = "Working on it..."
+    gw._direct_unaddressed_allowed_senders = set()
     yield gw
     await gw.close()
 
@@ -479,6 +480,30 @@ async def test_direct_imessage_can_be_configured_for_legacy_auto_reply(enabled_g
 
     assert result is not None
     assert result.text == "Legacy direct reply"
+
+
+@pytest.mark.asyncio
+async def test_direct_imessage_allows_unaddressed_for_configured_sender(enabled_gateway):
+    enabled_gateway._direct_unaddressed_allowed_senders = {"+15551234567"}
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Joe direct reply"})
+        result = await enabled_gateway.handle(make_message(text="Can you pick up milk?"))
+
+    assert result is not None
+    assert result.text == "Joe direct reply"
+
+
+@pytest.mark.asyncio
+async def test_direct_imessage_still_requires_address_for_other_allowed_senders(enabled_gateway):
+    enabled_gateway._allowed_senders = {"+15551234567", "+15550000000"}
+    enabled_gateway._direct_unaddressed_allowed_senders = {"+15551234567"}
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        result = await enabled_gateway.handle(make_message(sender="+15550000000", text="Can you pick up milk?"))
+
+    assert result is None
+    mock_post.assert_not_called()
 
 
 @pytest.mark.asyncio
