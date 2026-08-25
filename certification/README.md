@@ -226,10 +226,12 @@ scripts/rev2-readiness-bundle.py \
   --connector-report certification/reports/<messaging-production-check>.json \
   --memory-report certification/reports/<rev2-memory-provenance>.json \
   --approval-report certification/reports/<rev2-approval-exercise>.json \
+  --vulcan-report certification/reports/<vulcan-readiness>.json \
   --smoke-report certification/reports/<imessage-live-smoke-sent>.json \
   --signal-smoke-report certification/reports/<signal-live-smoke-sent>.json \
   --require-smoke-report \
   --require-signal-smoke-report \
+  --require-vulcan-report \
   --latency-winner-target <expected-fastest-target-id>
 ```
 
@@ -243,10 +245,12 @@ freyja-certify rev2-readiness \
   --connector-report certification/reports/<messaging-production-check>.json \
   --memory-report certification/reports/<rev2-memory-provenance>.json \
   --approval-report certification/reports/<rev2-approval-exercise>.json \
+  --vulcan-report certification/reports/<vulcan-readiness>.json \
   --smoke-report certification/reports/<imessage-live-smoke-sent>.json \
   --signal-smoke-report certification/reports/<signal-live-smoke-sent>.json \
   --require-smoke-report \
   --require-signal-smoke-report \
+  --require-vulcan-report \
   --latency-winner-target <expected-fastest-target-id>
 ```
 
@@ -260,7 +264,9 @@ command also requires a benchmark report and `--latency-winner-target`; the
 benchmark must contain at least two targets with no failures and the expected
 fastest target must lead the latency ranking. The command fails if any final
 cutover artifact is omitted: certification report, benchmark report, connector
-report, memory report, approval report, or expected latency winner. Add
+report, memory report, approval report, Vulcan readiness report, or expected
+latency winner. Add `--require-vulcan-report` for final profile cutover;
+the report must prove `fast`, `reason`, `code`, and `vision` are ready. Add
 `--require-smoke-report` for final iMessage cutover and
 `--require-signal-smoke-report` for final Signal cutover; each requires a
 non-dry-run live-smoke report with one successful sent message.

@@ -12,6 +12,7 @@ from typing import Any
 DEFAULT_REPORT_DIR = Path("certification/reports")
 IMESSAGE_SMOKE_CHECK = "imessage-live-smoke-report"
 SIGNAL_SMOKE_CHECK = "signal-live-smoke-report"
+VULCAN_CHECK = "vulcan-readiness-report"
 SMOKE_CHECKS = (IMESSAGE_SMOKE_CHECK, SIGNAL_SMOKE_CHECK)
 
 
@@ -25,6 +26,7 @@ class PreflightSummary:
     director_url: str | None
     smoke_report: str | None
     signal_smoke_report: str | None
+    vulcan_report: str | None
     latency_winner_target: str | None
     dry_run_command: str | None
     final_command: str | None
@@ -97,6 +99,7 @@ def summarize_report(path: Path) -> PreflightSummary:
         director_url=_optional_str(payload.get("director_url")),
         smoke_report=_optional_str(payload.get("smoke_report")),
         signal_smoke_report=_optional_str(payload.get("signal_smoke_report")),
+        vulcan_report=_optional_str(payload.get("vulcan_report")),
         latency_winner_target=_optional_str(payload.get("latency_winner_target")),
         dry_run_command=dry_run_command,
         final_command=final_command,
@@ -112,6 +115,7 @@ def render_summary(summary: PreflightSummary) -> str:
         f"Latency winner target: {summary.latency_winner_target or 'not recorded'}",
         f"iMessage smoke report: {summary.smoke_report or 'not supplied'}",
         f"Signal smoke report: {summary.signal_smoke_report or 'not supplied'}",
+        f"Vulcan readiness report: {summary.vulcan_report or 'not supplied'}",
     ]
     if summary.failed_checks:
         lines.append("Failed checks:")
@@ -134,6 +138,7 @@ def render_summary_json(summary: PreflightSummary) -> str:
             "director_url": summary.director_url,
             "smoke_report": summary.smoke_report,
             "signal_smoke_report": summary.signal_smoke_report,
+            "vulcan_report": summary.vulcan_report,
             "latency_winner_target": summary.latency_winner_target,
             "dry_run_command": summary.dry_run_command,
             "final_command": summary.final_command,
@@ -180,8 +185,18 @@ def _remaining_work(checks: list[Any], *, failed_checks: tuple[str, ...]) -> tup
             remaining.append("Replace the Signal dry-run smoke report with a sent live-smoke report.")
         else:
             remaining.append(f"Resolve {SIGNAL_SMOKE_CHECK}: {smoke_status}")
+    if VULCAN_CHECK in failed_checks:
+        check = _check(checks, VULCAN_CHECK)
+        details = check.get("details") if isinstance(check, dict) else {}
+        not_ready = details.get("not_ready_model_profiles") if isinstance(details, dict) else None
+        if isinstance(not_ready, list) and "vision" in not_ready:
+            remaining.append("Install the configured Vulcan vision profile model, rerun scripts/vulcan-operator.py readiness, and attach it with --vulcan-report.")
+        elif "missing required --vulcan-report" in _check_status(checks, VULCAN_CHECK):
+            remaining.append("Run scripts/vulcan-operator.py readiness --output logs/vulcan-readiness.json and pass --vulcan-report.")
+        else:
+            remaining.append(f"Resolve {VULCAN_CHECK}: {_check_status(checks, VULCAN_CHECK)}")
     for name in failed_checks:
-        if name not in SMOKE_CHECKS:
+        if name not in SMOKE_CHECKS and name != VULCAN_CHECK:
             remaining.append(f"Resolve {name}.")
     return tuple(remaining)
 
@@ -213,6 +228,7 @@ def _handoff_command(payload: dict[str, Any], *, failed_checks: tuple[str, ...],
     benchmark_report = _optional_str(payload.get("benchmark_report"))
     memory_report = _optional_str(payload.get("memory_report"))
     approval_report = _optional_str(payload.get("approval_report"))
+    vulcan_report = _optional_str(payload.get("vulcan_report"))
     latency_winner_target = _optional_str(payload.get("latency_winner_target"))
     smoke_report = _optional_str(payload.get("smoke_report"))
     signal_smoke_report = _optional_str(payload.get("signal_smoke_report"))
@@ -220,7 +236,17 @@ def _handoff_command(payload: dict[str, Any], *, failed_checks: tuple[str, ...],
     if not isinstance(connector_reports, list):
         connector_reports = []
     connector_reports = [item for item in connector_reports if isinstance(item, str) and item]
-    if not all((director_url, certification_report, benchmark_report, memory_report, approval_report, latency_winner_target)):
+    if not all(
+        (
+            director_url,
+            certification_report,
+            benchmark_report,
+            memory_report,
+            approval_report,
+            vulcan_report,
+            latency_winner_target,
+        )
+    ):
         return None
     if not connector_reports:
         return None
@@ -236,7 +262,7 @@ def _handoff_command(payload: dict[str, Any], *, failed_checks: tuple[str, ...],
     ]
     for connector_report in connector_reports:
         command.extend(["--connector-report", connector_report])
-    command.extend(["--memory-report", memory_report, "--approval-report", approval_report])
+    command.extend(["--memory-report", memory_report, "--approval-report", approval_report, "--vulcan-report", vulcan_report])
     if IMESSAGE_SMOKE_CHECK in failed_checks:
         command.append("--imessage-live-smoke")
         if send:
@@ -249,8 +275,21 @@ def _handoff_command(payload: dict[str, Any], *, failed_checks: tuple[str, ...],
             command.append("--signal-yes")
     elif signal_smoke_report:
         command.extend(["--signal-smoke-report", signal_smoke_report])
-    command.extend(["--require-smoke-report", "--require-signal-smoke-report", "--latency-winner-target", latency_winner_target])
+    command.extend([
+        "--require-smoke-report",
+        "--require-signal-smoke-report",
+        "--require-vulcan-report",
+        "--latency-winner-target",
+        latency_winner_target,
+    ])
     return shlex.join(command)
+
+
+def _check(checks: list[Any], name: str) -> dict[str, Any]:
+    for check in checks:
+        if isinstance(check, dict) and check.get("name") == name:
+            return check
+    return {}
 
 
 if __name__ == "__main__":
