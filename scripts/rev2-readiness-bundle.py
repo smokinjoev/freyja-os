@@ -10,6 +10,9 @@ import sys
 from pathlib import Path
 
 
+DEFAULT_SIGNAL_ENV_FILE = Path("deploy/compose/signal/.env")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the final Freyja Rev 2 readiness gate with the required artifact bundle."
@@ -52,6 +55,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--signal-live-smoke",
         action="store_true",
         help="Run the Signal live-smoke operator step before readiness. Dry-run unless --signal-yes is present.",
+    )
+    parser.add_argument(
+        "--signal-env-file",
+        type=Path,
+        default=DEFAULT_SIGNAL_ENV_FILE,
+        help=(
+            "Signal connector env file for --signal-live-smoke. Defaults to "
+            "deploy/compose/signal/.env so the configured account and tokens do not need shell export."
+        ),
     )
     parser.add_argument(
         "--signal-smoke-output",
@@ -144,6 +156,8 @@ def build_signal_smoke_command(args: argparse.Namespace) -> list[str] | None:
     command = [
         args.python,
         "scripts/signal-operator.py",
+        "--env-file",
+        str(args.signal_env_file),
         "live-smoke",
         "--text",
         args.signal_smoke_text,

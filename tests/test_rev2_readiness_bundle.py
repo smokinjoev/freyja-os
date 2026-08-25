@@ -191,6 +191,8 @@ def test_bundle_builds_signal_smoke_dry_run_command(tmp_path: Path) -> None:
     assert command == [
         "python",
         "scripts/signal-operator.py",
+        "--env-file",
+        "deploy/compose/signal/.env",
         "live-smoke",
         "--text",
         "Freyja 2.0 Signal live smoke test.",
@@ -200,6 +202,39 @@ def test_bundle_builds_signal_smoke_dry_run_command(tmp_path: Path) -> None:
         "+15550000001",
         "--dry-run",
     ]
+
+
+def test_bundle_signal_smoke_allows_custom_env_file(tmp_path: Path) -> None:
+    module = _load_script()
+    env_file = tmp_path / "signal.env"
+    args = module.build_parser().parse_args(
+        [
+            "--director-url",
+            "http://atlas.test:8000",
+            "--certification-report",
+            str(tmp_path / "rev2.json"),
+            "--benchmark-report",
+            str(tmp_path / "bench.json"),
+            "--connector-report",
+            str(tmp_path / "signal.json"),
+            "--memory-report",
+            str(tmp_path / "memory.json"),
+            "--approval-report",
+            str(tmp_path / "approval.json"),
+            "--signal-live-smoke",
+            "--signal-env-file",
+            str(env_file),
+            "--latency-winner-target",
+            "director:health",
+            "--python",
+            "python",
+        ]
+    )
+
+    command = module.build_signal_smoke_command(args)
+
+    assert command is not None
+    assert command[command.index("--env-file") + 1] == str(env_file)
 
 
 def test_bundle_yes_signal_smoke_report_feeds_final_readiness(tmp_path: Path) -> None:
