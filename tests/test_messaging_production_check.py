@@ -83,6 +83,77 @@ def test_imessage_status_reports_transport_diagnostics_without_requiring_send(mo
     assert "joe@example.com" not in str(status)
 
 
+def test_imessage_family_agent_mapping_requires_four_people(monkeypatch, tmp_path):
+    module = _load_script()
+    db_path = tmp_path / "chat.db"
+    db_path.touch()
+    imsg_path = tmp_path / "imsg"
+    imsg_path.touch()
+    monkeypatch.setenv("IMESSAGE_ENABLED", "true")
+    monkeypatch.setenv("IMESSAGE_IMSG_PATH", str(imsg_path))
+    monkeypatch.setenv("IMESSAGE_DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("IMESSAGE_ALLOWED_SENDERS", "joe=+15550000001")
+    monkeypatch.setenv("FREYJA_CONNECTOR_TOKEN", "secret")
+    monkeypatch.setattr(module, "_imsg_whois_local", lambda settings, address, timeout: {"known": True, "service": "imessage"})
+    monkeypatch.setattr(module, "_run_command", lambda command, timeout: {"ok": True, "status_code": 0})
+    monkeypatch.setattr(module, "_messages_applescript_status", lambda timeout: {"ok": True})
+    monkeypatch.setattr(module, "_imessage_runtime_source_drift", lambda: {"ok": True, "drift_count": 0, "files": []})
+    monkeypatch.setattr(module, "_imessage_runtime_import_check", lambda: {"ok": True})
+
+    status = module._imessage_status(
+        check_director=False,
+        check_rev2_director=False,
+        check_route_smoke=False,
+        check_inprocess_route_smoke=False,
+        require_family_agents=True,
+        route_identity=None,
+    )
+
+    assert status["ready_for_live_smoke"] is False
+    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "cloyd-gibbler"
+    assert status["family_agent_mapping"]["missing_people"] == ["beth", "liam", "jenna"]
+    assert "+15550000001" not in str(status)
+
+
+def test_imessage_family_agent_mapping_accepts_four_labeled_senders(monkeypatch, tmp_path):
+    module = _load_script()
+    db_path = tmp_path / "chat.db"
+    db_path.touch()
+    imsg_path = tmp_path / "imsg"
+    imsg_path.touch()
+    monkeypatch.setenv("IMESSAGE_ENABLED", "true")
+    monkeypatch.setenv("IMESSAGE_IMSG_PATH", str(imsg_path))
+    monkeypatch.setenv("IMESSAGE_DATABASE_PATH", str(db_path))
+    monkeypatch.setenv(
+        "IMESSAGE_ALLOWED_SENDERS",
+        "joe=+15550000001,beth=+15550000002,liam=+15550000003,jenna=+15550000004",
+    )
+    monkeypatch.setenv("FREYJA_CONNECTOR_TOKEN", "secret")
+    monkeypatch.setattr(module, "_imsg_whois_local", lambda settings, address, timeout: {"known": True, "service": "imessage"})
+    monkeypatch.setattr(module, "_run_command", lambda command, timeout: {"ok": True, "status_code": 0})
+    monkeypatch.setattr(module, "_messages_applescript_status", lambda timeout: {"ok": True})
+    monkeypatch.setattr(module, "_imessage_runtime_source_drift", lambda: {"ok": True, "drift_count": 0, "files": []})
+    monkeypatch.setattr(module, "_imessage_runtime_import_check", lambda: {"ok": True})
+
+    status = module._imessage_status(
+        check_director=False,
+        check_rev2_director=False,
+        check_route_smoke=False,
+        check_inprocess_route_smoke=False,
+        require_family_agents=True,
+        route_identity=None,
+    )
+
+    assert status["ready_for_live_smoke"] is True
+    assert status["family_agent_mapping"]["ok"] is True
+    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "cloyd-gibbler"
+    assert status["family_agent_mapping"]["people"]["beth"]["agent_id"] == "benedict"
+    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "agent-44"
+    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jenna"
+    assert "+15550000001" not in str(status)
+    assert "+15550000004" not in str(status)
+
+
 def test_signal_status_redacts_sender_values(monkeypatch):
     module = _load_script()
     monkeypatch.setenv("SIGNAL_ENABLED", "true")

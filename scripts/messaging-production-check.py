@@ -35,6 +35,7 @@ if _ROOT_DIR not in sys.path:
 from connectors.imessage.config import IMessageSettings  # noqa: E402
 from connectors.gmail.config import GmailSettings  # noqa: E402
 from connectors.signal.config import SignalSettings  # noqa: E402
+from connectors.messaging import household_agent_for_sender  # noqa: E402
 
 
 def _imessage_runtime_source_paths(manifest: Path = _IMESSAGE_RUNTIME_MANIFEST) -> tuple[str, ...]:
@@ -391,6 +392,37 @@ def _imessage_route_smoke(
     }
 
 
+def _imessage_family_agent_mapping(
+    settings: IMessageSettings,
+    *,
+    required_people: tuple[str, ...] = ("joe", "beth", "liam", "jenna"),
+) -> dict[str, object]:
+    people: dict[str, dict[str, object]] = {
+        person_id: {"mapped": False, "agent_id": None, "sender_count": 0}
+        for person_id in required_people
+    }
+    unmapped_sender_count = 0
+    for identity in settings.allowed_sender_identities.values():
+        person_id = (identity.member_id or "").strip().lower()
+        if person_id in people:
+            agent = household_agent_for_sender(identity)
+            people[person_id] = {
+                "mapped": True,
+                "agent_id": agent.agent_id,
+                "sender_count": int(people[person_id]["sender_count"]) + 1,
+            }
+        else:
+            unmapped_sender_count += 1
+    missing_people = [person_id for person_id, entry in people.items() if entry["mapped"] is not True]
+    return {
+        "ok": not missing_people,
+        "required_people": list(required_people),
+        "people": people,
+        "missing_people": missing_people,
+        "unmapped_sender_count": unmapped_sender_count,
+    }
+
+
 def _imessage_inprocess_route_smoke(
     settings: IMessageSettings,
     *,
@@ -578,6 +610,7 @@ def _imessage_status(
     check_rev2_director: bool,
     check_route_smoke: bool,
     check_inprocess_route_smoke: bool,
+    require_family_agents: bool = False,
     route_identity: SyntheticRouteIdentity | None = None,
     env_file: str | None = None,
 ) -> dict[str, object]:
@@ -603,6 +636,7 @@ def _imessage_status(
     status["runtime_source_drift"] = _imessage_runtime_source_drift()
     status["runtime_import_check"] = _imessage_runtime_import_check()
     allowed_identities = settings.allowed_sender_identities
+    status["family_agent_mapping"] = _imessage_family_agent_mapping(settings)
     whois_timeout = min(max(1.0, settings.imessage_command_timeout_seconds), 5.0)
     local_reachable = []
     for address in allowed_identities:
@@ -644,6 +678,7 @@ def _imessage_status(
             status["allowed_sender_count"],
             status["runtime_source_drift"]["ok"],
             status["runtime_import_check"]["ok"],
+            not require_family_agents or status["family_agent_mapping"]["ok"],
             bool(settings.freyja_director_url.strip()),
             not check_director or status.get("director_health", {}).get("ok") is True,
             not check_rev2_director or status.get("director_rev2_health", {}).get("ok") is True,
@@ -796,6 +831,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Exercise Director /canonical/route in-process with synthetic iMessage and terminal envelopes; does not prove live transport.",
     )
+    parser.add_argument(
+        "--require-imessage-family-agents",
+        action="store_true",
+        help="Require iMessage allowed senders to map all four family members to personal agents.",
+    )
     parser.add_argument("--route-smoke-person-id", default="joe", help="Person ID used by --check-imessage-route-smoke.")
     parser.add_argument("--route-smoke-person-display-name", default="Joe", help="Person display name used by --check-imessage-route-smoke.")
     parser.add_argument("--route-smoke-person-preferred-name", default="Joe", help="Person preferred name used by --check-imessage-route-smoke.")
@@ -833,6 +873,7 @@ def main(argv: list[str] | None = None) -> int:
             check_rev2_director=args.check_rev2_director,
             check_route_smoke=args.check_imessage_route_smoke,
             check_inprocess_route_smoke=args.check_inprocess_route_smoke,
+            require_family_agents=args.require_imessage_family_agents,
             route_identity=route_identity,
             env_file=args.env_file,
         )
