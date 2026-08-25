@@ -171,6 +171,13 @@ the current state of that scope.
   `POST /shortcuts/message` for Siri Shortcuts/HomePod flows. It reuses normal
   private `RouteRequest` dispatch, preserves `shortcut-conv:<id>` continuity,
   supports tool execution, and returns concise `response`/`spoken` text.
+- Gmail production check: `scripts/messaging-production-check.py --connector
+  gmail` now reports sanitized Gmail readiness, including identity/allowlist,
+  IMAP/SMTP credential presence, Director token, lifecycle tunables, and
+  LaunchAgent loaded state. The current local report is not ready for live smoke
+  because `com.freyja-os.gmail-connector` is not loaded; prior connector logs
+  showed Gmail authentication failures, so restarting it remains blocked on
+  reviewed working credentials.
 
 ## Still Not Claimed Complete
 

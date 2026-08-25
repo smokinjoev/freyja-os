@@ -113,13 +113,16 @@ completion audit names them as final deployment evidence.
   account authorization/credentials outside Git. Code and mocked
   gateway/transport tests are complete for sender allowlisting, Gmail thread
   preservation, HTML sanitization, image attachment forwarding,
-  metadata-only PDF/image honesty, safe failure replies, loop prevention, and
-  sanitized logs. Joe must configure `GMAIL_IDENTITY`,
+  payload-backed PDF text extraction, metadata-only PDF/image honesty, safe
+  failure replies, loop prevention, and sanitized logs. Joe must configure
+  `GMAIL_IDENTITY`,
   `GMAIL_ALLOWED_SENDERS`, `GMAIL_IMAP_USERNAME`, `GMAIL_IMAP_PASSWORD`,
   `GMAIL_SMTP_USERNAME`, and `GMAIL_SMTP_PASSWORD` outside Git, then install or
   restart the connector with `scripts/install-gmail-connector.sh`. Afterward run
-  `scripts/status-gmail-connector.sh` and send one allowlisted test email, then
-  run `python3 -m pytest tests/test_gmail_gateway.py tests/test_gmail_transport.py tests/test_gmail_launchagent.py`.
+  `scripts/status-gmail-connector.sh`,
+  `scripts/messaging-production-check.py --connector gmail`, and send one
+  allowlisted test email, then run
+  `python3 -m pytest tests/test_gmail_gateway.py tests/test_gmail_transport.py tests/test_gmail_launchagent.py`.
 - BLOCKED_BY_USER - iMessage - Iris - live validation can require macOS
   Messages/iCloud account state, Full Disk Access, Automation approval, and an
   approved outbound smoke. Code and mocked tests are complete for direct

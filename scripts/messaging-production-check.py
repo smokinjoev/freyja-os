@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import subprocess
 import sys
 import urllib.error
@@ -30,6 +31,7 @@ if _ROOT_DIR not in sys.path:
     sys.path.insert(1, _ROOT_DIR)
 
 from connectors.imessage.config import IMessageSettings  # noqa: E402
+from connectors.gmail.config import GmailSettings  # noqa: E402
 from connectors.signal.config import SignalSettings  # noqa: E402
 
 
@@ -89,6 +91,14 @@ def _run_command(command: list[str], *, timeout: float) -> dict[str, object]:
         "ok": completed.returncode == 0,
         "status_code": completed.returncode,
     }
+
+
+def _launchagent_status(label: str, *, timeout: float = 5.0) -> dict[str, object]:
+    if platform.system() != "Darwin":
+        return {"ok": None, "platform": platform.system(), "checked": False}
+    uid = os.getuid()
+    status = _run_command(["launchctl", "print", f"gui/{uid}/{label}"], timeout=timeout)
+    return {**status, "checked": True, "label": label}
 
 
 def _sha256(path: Path) -> str:
@@ -662,13 +672,70 @@ def _signal_status(
     return status
 
 
+def _gmail_status(
+    *,
+    check_director: bool,
+    check_rev2_director: bool,
+    env_file: str | None = None,
+) -> dict[str, object]:
+    settings = GmailSettings(_env_file=env_file) if env_file else GmailSettings()
+    status: dict[str, object] = {
+        "enabled": settings.gmail_enabled,
+        "host_role": "atlas-launchagent",
+        "director_url": settings.freyja_director_url,
+        "connector_token_configured": bool(settings.freyja_connector_token),
+        "identity_configured": bool(settings.gmail_identity.strip()),
+        "allowed_sender_count": len(settings.allowed_sender_set),
+        "transport_configured": settings.transport_configured,
+        "imap_host": settings.gmail_imap_host,
+        "imap_port": settings.gmail_imap_port,
+        "imap_mailbox": settings.gmail_imap_mailbox,
+        "imap_username_configured": bool(settings.gmail_imap_username.strip()),
+        "imap_password_configured": bool(settings.gmail_imap_password.strip()),
+        "smtp_host": settings.gmail_smtp_host,
+        "smtp_port": settings.gmail_smtp_port,
+        "smtp_username_configured": bool(settings.gmail_smtp_username.strip()),
+        "smtp_password_configured": bool(settings.gmail_smtp_password.strip()),
+        "smtp_starttls": settings.gmail_smtp_starttls,
+        "poll_interval_seconds": settings.gmail_poll_interval_seconds,
+        "reconnect_max_seconds": settings.gmail_reconnect_max_seconds,
+        "max_message_chars": settings.gmail_max_message_chars,
+    }
+    status["launchagent"] = _launchagent_status("com.freyja-os.gmail-connector")
+    if check_director:
+        status["director_health"] = _http_health(
+            f"{settings.freyja_director_url.rstrip('/')}/health",
+            timeout=min(settings.gmail_request_timeout_seconds, 5.0),
+        )
+    if check_rev2_director:
+        status["director_rev2_health"] = _director_rev2_health(
+            settings.freyja_director_url,
+            settings.freyja_connector_token,
+            timeout=min(settings.gmail_request_timeout_seconds, 5.0),
+        )
+    status["ready_for_live_smoke"] = all(
+        [
+            status["enabled"],
+            status["connector_token_configured"],
+            status["identity_configured"],
+            status["allowed_sender_count"],
+            status["transport_configured"],
+            status["launchagent"].get("ok") is True or status["launchagent"].get("checked") is False,
+            bool(settings.freyja_director_url.strip()),
+            not check_director or status.get("director_health", {}).get("ok") is True,
+            not check_rev2_director or status.get("director_rev2_health", {}).get("ok") is True,
+        ]
+    )
+    return status
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Check Freyja iMessage and Signal production readiness without printing secrets."
+        description="Check Freyja messaging connector production readiness without printing secrets."
     )
     parser.add_argument(
         "--connector",
-        choices=("all", "imessage", "signal"),
+        choices=("all", "imessage", "signal", "gmail"),
         default="all",
         help="Connector to check.",
     )
@@ -741,6 +808,12 @@ def main(argv: list[str] | None = None) -> int:
             check_director=args.check_director,
             check_rev2_director=args.check_rev2_director,
             check_rest=args.check_signal_rest,
+            env_file=args.env_file,
+        )
+    if args.connector in {"all", "gmail"}:
+        report["gmail"] = _gmail_status(
+            check_director=args.check_director,
+            check_rev2_director=args.check_rev2_director,
             env_file=args.env_file,
         )
 

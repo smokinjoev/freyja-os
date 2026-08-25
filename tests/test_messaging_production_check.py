@@ -128,6 +128,56 @@ def test_signal_status_requires_requested_health_checks(monkeypatch):
     assert status["director_health"]["ok"] is False
 
 
+def test_gmail_status_reports_configuration_without_secrets(monkeypatch):
+    module = _load_script()
+    monkeypatch.setenv("GMAIL_ENABLED", "true")
+    monkeypatch.setenv("GMAIL_IDENTITY", "freyja@example.com")
+    monkeypatch.setenv("GMAIL_ALLOWED_SENDERS", "joe=worker@example.com")
+    monkeypatch.setenv("GMAIL_IMAP_USERNAME", "freyja@example.com")
+    monkeypatch.setenv("GMAIL_IMAP_PASSWORD", "imap-secret")
+    monkeypatch.setenv("GMAIL_SMTP_USERNAME", "freyja@example.com")
+    monkeypatch.setenv("GMAIL_SMTP_PASSWORD", "smtp-secret")
+    monkeypatch.setenv("FREYJA_CONNECTOR_TOKEN", "connector-secret")
+    monkeypatch.setattr(module, "_launchagent_status", lambda label: {"ok": True, "checked": True, "label": label})
+
+    status = module._gmail_status(check_director=False, check_rev2_director=False)
+
+    assert status["enabled"] is True
+    assert status["host_role"] == "atlas-launchagent"
+    assert status["identity_configured"] is True
+    assert status["allowed_sender_count"] == 1
+    assert status["transport_configured"] is True
+    assert status["imap_username_configured"] is True
+    assert status["imap_password_configured"] is True
+    assert status["smtp_username_configured"] is True
+    assert status["smtp_password_configured"] is True
+    assert status["launchagent"]["ok"] is True
+    assert status["ready_for_live_smoke"] is True
+    assert "imap-secret" not in str(status)
+    assert "smtp-secret" not in str(status)
+    assert "connector-secret" not in str(status)
+
+
+def test_gmail_status_blocks_live_smoke_until_credentials(monkeypatch):
+    module = _load_script()
+    monkeypatch.setenv("GMAIL_ENABLED", "false")
+    monkeypatch.setenv("GMAIL_IDENTITY", "")
+    monkeypatch.setenv("GMAIL_ALLOWED_SENDERS", "")
+    monkeypatch.setenv("GMAIL_IMAP_USERNAME", "")
+    monkeypatch.setenv("GMAIL_IMAP_PASSWORD", "")
+    monkeypatch.setenv("GMAIL_SMTP_USERNAME", "")
+    monkeypatch.setenv("GMAIL_SMTP_PASSWORD", "")
+    monkeypatch.setattr(module, "_launchagent_status", lambda label: {"ok": False, "checked": True, "label": label})
+
+    status = module._gmail_status(check_director=False, check_rev2_director=False)
+
+    assert status["ready_for_live_smoke"] is False
+    assert status["identity_configured"] is False
+    assert status["allowed_sender_count"] == 0
+    assert status["transport_configured"] is False
+    assert status["launchagent"]["ok"] is False
+
+
 def test_http_health_reports_permission_denied_detail(monkeypatch):
     module = _load_script()
 
