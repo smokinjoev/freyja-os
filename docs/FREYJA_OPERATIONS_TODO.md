@@ -107,12 +107,15 @@ completion audit names them as final deployment evidence.
   account/service setup. Code and mocked gateway/transport tests are complete
   for allowlisting, identity mapping, duplicate suppression, attachment
   metadata, image payload forwarding, missing-payload honesty, Director routing,
-  retries/timeouts, and sanitized logs. Joe must start or repair
-  `signal-cli-rest-api`, configure the linked `SIGNAL_ACCOUNT_NUMBER`, set a
-  reviewed `SIGNAL_ALLOWED_SENDERS` allowlist, and set `SIGNAL_ENABLED=true`
-  outside Git. Use `scripts/signal-operator.py onboarding-plan --number <account>`
-  or the equivalent Compose `signal-operator onboarding-plan` command for a
-  redacted setup checklist before changing state. Afterward run
+  retries/timeouts, and sanitized logs. The Atlas Compose Signal REST API is
+  healthy and the dedicated account number is configured in private env, but
+  Signal rejected SMS and voice registration requests with HTTP 400 pending
+  captcha/linking. Joe must complete captcha-backed registration or link an
+  existing Signal mobile account, set a reviewed `SIGNAL_ALLOWED_SENDERS`
+  allowlist, and set `SIGNAL_ENABLED=true` outside Git. Use
+  `scripts/signal-operator.py onboarding-plan --number <account>` or the
+  equivalent Compose `python scripts/signal-operator.py onboarding-plan` command
+  for a redacted setup checklist before changing state. Afterward run
   `scripts/run-signal-connector.py --once` and
   `scripts/messaging-production-check.py --connector signal`.
 - BLOCKED_BY_USER - Gmail - Atlas - live validation requires Freyja Gmail

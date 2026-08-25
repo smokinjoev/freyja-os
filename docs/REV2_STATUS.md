@@ -150,9 +150,11 @@ the current state of that scope.
 - Current Signal evidence:
   `certification/reports/freyja-live-signal-route-evidence.json` proves the
   Signal gateway targets Atlas Director and protected Rev 2 health checks pass,
-  but live Signal smoke is blocked by external service/account setup:
-  `SIGNAL_ENABLED=false`, no configured account number, no allowed sender, and
-  `signal-cli-rest-api` unreachable at the configured REST URL.
+  and the Atlas Compose Signal REST API is now running healthy. Live Signal
+  smoke remains blocked by external account setup: the dedicated account number
+  is configured in private env, Signal rejected SMS and voice registration
+  attempts with HTTP 400 pending captcha/linking, `SIGNAL_ENABLED=false`, and no
+  reviewed allowed sender is configured.
 - Current Vulcan profile evidence:
   `certification/reports/vulcan-readiness-latest.json` reports
   `ready_for_certification: true` for the `fast`, `reason`, `code`, and
@@ -188,10 +190,10 @@ the current state of that scope.
 - Production deployment must rerun the selected-connector readiness bundle
   against the real Atlas/Iris hosts and real connector account state after any
   host or credential changes.
-- Signal live smoke remains an external onboarding item: start or repair
-  `signal-cli-rest-api`, configure the linked `SIGNAL_ACCOUNT_NUMBER`, set at
-  least one reviewed `SIGNAL_ALLOWED_SENDERS` value, and enable
-  `SIGNAL_ENABLED=true` only after that allowlist is reviewed.
+- Signal live smoke remains an external onboarding item: complete captcha-backed
+  registration or link an existing Signal mobile account, set at least one
+  reviewed `SIGNAL_ALLOWED_SENDERS` value, and enable `SIGNAL_ENABLED=true` only
+  after that allowlist is reviewed.
 - Gmail live smoke remains external until Joe configures Freyja Gmail IMAP/SMTP
   credentials and the reviewed sender allowlist outside Git.
 - HomePod live smoke remains external until Joe creates or approves the Siri

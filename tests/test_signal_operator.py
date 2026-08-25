@@ -411,6 +411,62 @@ def test_register_posts_only_with_yes_semantics(monkeypatch) -> None:
     assert "+15550000009" not in str(result)
 
 
+def test_register_http_error_reports_sanitized_hint(monkeypatch) -> None:
+    import asyncio
+
+    import httpx
+
+    operator = _load_operator()
+    settings = SignalSettings(
+        _env_file=None,
+        signal_account_number="+15550000009",
+        signal_rest_api_url="http://signal-api:8080",
+    )
+
+    class FakeResponse:
+        status_code = 400
+
+        def json(self):
+            return {"error": "Captcha required for verification for +15550000009"}
+
+        def raise_for_status(self):
+            request = httpx.Request("POST", "http://signal-api:8080/v1/register/+15550000009")
+            response = httpx.Response(self.status_code, request=request, json=self.json())
+            raise httpx.HTTPStatusError("bad request", request=request, response=response)
+
+    class FakeClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, *, json):
+            return FakeResponse()
+
+    monkeypatch.setattr(operator.httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        operator._request_registration(
+            settings,
+            number=None,
+            use_voice=False,
+            captcha=None,
+            dry_run=False,
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"] == "HTTPStatusError"
+    assert result["http_status"] == 400
+    assert result["failure_hint"] == "captcha_required_or_invalid"
+    assert "+15550000009" not in str(result)
+    assert "Captcha required" not in str(result)
+
+
 def test_verify_registration_posts_code_without_reporting_secrets(monkeypatch) -> None:
     import asyncio
 
@@ -465,6 +521,63 @@ def test_verify_registration_posts_code_without_reporting_secrets(monkeypatch) -
     assert "+15550000009" not in str(result)
     assert "123-456" not in str(result)
     assert "9876" not in str(result)
+
+
+def test_verify_http_error_reports_status_without_code(monkeypatch) -> None:
+    import asyncio
+
+    import httpx
+
+    operator = _load_operator()
+    settings = SignalSettings(
+        _env_file=None,
+        signal_account_number="+15550000009",
+        signal_rest_api_url="http://signal-api:8080",
+    )
+
+    class FakeResponse:
+        status_code = 429
+
+        def json(self):
+            return {"error": "Rate limit for verification code 123-456"}
+
+        def raise_for_status(self):
+            request = httpx.Request("POST", "http://signal-api:8080/v1/register/+15550000009/verify/123-456")
+            response = httpx.Response(self.status_code, request=request, json=self.json())
+            raise httpx.HTTPStatusError("rate limit", request=request, response=response)
+
+    class FakeClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, *, json):
+            return FakeResponse()
+
+    monkeypatch.setattr(operator.httpx, "AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        operator._verify_registration(
+            settings,
+            number=None,
+            code="123-456",
+            pin=None,
+            dry_run=False,
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"] == "HTTPStatusError"
+    assert result["http_status"] == 429
+    assert result["failure_hint"] == "rate_limited"
+    assert "+15550000009" not in str(result)
+    assert "123-456" not in str(result)
+    assert "Rate limit" not in str(result)
 
 
 def test_link_device_writes_sensitive_uri_outside_report(tmp_path, monkeypatch) -> None:

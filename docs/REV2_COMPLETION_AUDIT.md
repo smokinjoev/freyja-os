@@ -81,8 +81,10 @@ tests alone.
 - Current Signal production evidence
   `certification/reports/freyja-live-signal-route-evidence.json` proves Atlas
   Director targeting and protected Rev 2 health, but Signal live smoke remains
-  blocked by external account/service setup: `SIGNAL_ENABLED=false`, no account
-  number, no allowed sender, and `signal-cli-rest-api` unreachable.
+  blocked by external account setup: the Compose Signal REST API is healthy and
+  the dedicated account number is configured in private env, but Signal rejected
+  SMS and voice registration requests with HTTP 400 pending captcha/linking;
+  `SIGNAL_ENABLED=false` and no reviewed allowed sender is configured.
 - Current Vulcan operator evidence shows Atlas can reach the configured Vulcan
   Ollama endpoint and the `fast`, `reason`, `code`, and `vision` logical
   profiles are installed. `scripts/vulcan-operator.py readiness` reports

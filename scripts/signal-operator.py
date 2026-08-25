@@ -61,6 +61,38 @@ def _operator_report(report_type: str, result: dict[str, object], *, dry_run: bo
     return report
 
 
+def _signal_http_error(exc: Exception) -> dict[str, object]:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return {"error": type(exc).__name__}
+
+    response = exc.response
+    hint = "http_error"
+    body = ""
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    if isinstance(payload, dict):
+        raw_error = payload.get("error")
+        if isinstance(raw_error, str):
+            body = raw_error.lower()
+
+    if "captcha" in body:
+        hint = "captcha_required_or_invalid"
+    elif "rate" in body or response.status_code == 429:
+        hint = "rate_limited"
+    elif "pin" in body:
+        hint = "registration_pin_required"
+    elif response.status_code == 400:
+        hint = "bad_registration_request"
+
+    return {
+        "error": "HTTPStatusError",
+        "http_status": response.status_code,
+        "failure_hint": hint,
+    }
+
+
 def _account_number(settings: SignalSettings, number: str | None) -> str:
     return (number or settings.signal_account_number).strip()
 
@@ -206,7 +238,7 @@ async def _request_registration(
     except Exception as exc:  # noqa: BLE001 - operator report should preserve failure class
         return _operator_report(
             "signal-register",
-            {"status": "failed", "plan": plan, "error": type(exc).__name__},
+            {"status": "failed", "plan": plan, **_signal_http_error(exc)},
             dry_run=False,
         )
     return _operator_report(
@@ -260,7 +292,7 @@ async def _verify_registration(
     except Exception as exc:  # noqa: BLE001 - operator report should preserve failure class
         return _operator_report(
             "signal-verify",
-            {"status": "failed", "plan": plan, "error": type(exc).__name__},
+            {"status": "failed", "plan": plan, **_signal_http_error(exc)},
             dry_run=False,
         )
     return _operator_report(
