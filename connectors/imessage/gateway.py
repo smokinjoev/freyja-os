@@ -9,7 +9,19 @@ import httpx
 from connectors.imessage.config import settings
 from connectors.imessage.family_observer import FamilyIMessageObserver
 from connectors.imessage.models import IMessage, IMessageReply
-from connectors.messaging import AuthorizedSender, NormalizedAttachment, NormalizedMessage, household_agent_for_sender
+from connectors.messaging import (
+    AuthorizedSender,
+    NormalizedAttachment,
+    NormalizedMessage,
+    canonical_director_payload,
+    director_headers,
+    director_response_model,
+    director_response_provider,
+    director_response_request_id,
+    director_response_text,
+    household_agent_for_sender,
+    post_canonical_to_director,
+)
 from freyja.agents.household import household_agents
 from freyja.memory.principal import build_memory_principal, stable_identity
 
@@ -241,9 +253,11 @@ class IMessageGateway:
                 "tools_required": self._tools_required_for(self._message_text_for_limits_and_tools(message)),
             },
         )
-        payload = canonical.model_dump(mode="json")
-        payload["conversation_id"] = principal.conversation_id
-        payload["text"] = prompt or self._prompt_for_message(message)
+        payload = canonical_director_payload(
+            canonical,
+            conversation_id=principal.conversation_id,
+            text=prompt or self._prompt_for_message(message),
+        )
 
         logger.info(
             {
@@ -264,24 +278,24 @@ class IMessageGateway:
 
         try:
             client = await self._client()
-            headers = identity.safe_headers()
-            headers["X-Freyja-Client-Type"] = principal.client_type
-            headers["X-Freyja-Client-Subject"] = principal.client_subject
-            headers["X-Freyja-Conversation-Id"] = principal.conversation_id or ""
-            headers["X-Freyja-Account-Owner"] = principal.account_owner or ""
-            headers["X-Freyja-Agent-Id"] = agent_context.agent_id
-            headers["X-Freyja-Agent-Display-Name"] = agent_context.display_name
-            headers["X-Freyja-Person-Id"] = agent_context.person_id
-            headers["X-Freyja-Trace-Id"] = canonical.trace_id
-            if self._director_token:
-                headers["Authorization"] = f"Bearer {self._director_token}"
-            response = await client.post(
-                f"{self._director_url}/canonical/route",
-                json=payload,
+            headers = director_headers(
+                identity=identity,
+                client_type=principal.client_type,
+                client_subject=principal.client_subject,
+                conversation_id=principal.conversation_id or "",
+                trace_id=canonical.trace_id,
+                connector_token=self._director_token,
+                account_owner=principal.account_owner,
+                agent_id=agent_context.agent_id,
+                agent_display_name=agent_context.display_name,
+                person_id=agent_context.person_id,
+            )
+            data = await post_canonical_to_director(
+                client=client,
+                director_url=self._director_url,
+                payload=payload,
                 headers=headers,
             )
-            response.raise_for_status()
-            data = response.json()
         except httpx.TimeoutException:
             logger.warning(
                 {
@@ -311,7 +325,7 @@ class IMessageGateway:
             )
             return None
 
-        text = data.get("text") or data.get("response", "")
+        text = director_response_text(data)
         if not text:
             logger.warning(
                 {
@@ -328,9 +342,9 @@ class IMessageGateway:
                 "trace_id": canonical.trace_id,
                 "sender_hash": self._safe_sender_hash(message.sender),
                 "message_id": message.message_id,
-                "director_request_id": data.get("trace_id") or data.get("request_id"),
-                "provider": (data.get("channel_metadata") or {}).get("provider") or data.get("provider"),
-                "model": (data.get("channel_metadata") or {}).get("model") or data.get("model"),
+                "director_request_id": director_response_request_id(data),
+                "provider": director_response_provider(data),
+                "model": director_response_model(data),
                 "agent_id": agent_context.agent_id,
                 "person_id": agent_context.person_id,
                 "reply_length": len(text),

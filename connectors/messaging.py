@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import httpx
+
 from freyja.agents.household import HouseholdAgent, household_agents
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalSender
 from freyja.identity import IdentityService, Person, person_from_legacy_member, person_memory_subject
@@ -257,6 +259,94 @@ def person_id_for_sender(identity: AuthorizedSender) -> str:
     if identity.member_id:
         return identity.member_id.lower().strip()
     return "family"
+
+
+def canonical_director_payload(
+    request: CanonicalRequest,
+    *,
+    conversation_id: str | None = None,
+    text: str | None = None,
+) -> dict[str, object]:
+    payload = request.model_dump(mode="json")
+    if conversation_id is not None:
+        payload["conversation_id"] = conversation_id
+    if text is not None:
+        payload["text"] = text
+    return payload
+
+
+def director_headers(
+    *,
+    identity: AuthorizedSender,
+    client_type: str,
+    client_subject: str,
+    conversation_id: str,
+    trace_id: str,
+    connector_token: str = "",
+    account_owner: str | None = None,
+    agent_id: str | None = None,
+    agent_display_name: str | None = None,
+    person_id: str | None = None,
+    extra: dict[str, str] | None = None,
+) -> dict[str, str]:
+    headers = identity.safe_headers()
+    headers["X-Freyja-Client-Type"] = client_type
+    headers["X-Freyja-Client-Subject"] = client_subject
+    headers["X-Freyja-Conversation-Id"] = conversation_id
+    headers["X-Freyja-Trace-Id"] = trace_id
+    if account_owner:
+        headers["X-Freyja-Account-Owner"] = account_owner
+    if agent_id:
+        headers["X-Freyja-Agent-Id"] = agent_id
+    if agent_display_name:
+        headers["X-Freyja-Agent-Display-Name"] = agent_display_name
+    if person_id:
+        headers["X-Freyja-Person-Id"] = person_id
+    if extra:
+        headers.update(extra)
+    if connector_token:
+        headers["Authorization"] = f"Bearer {connector_token}"
+    return headers
+
+
+async def post_canonical_to_director(
+    *,
+    client: httpx.AsyncClient,
+    director_url: str,
+    payload: dict[str, object],
+    headers: dict[str, str],
+) -> dict[str, object]:
+    response = await client.post(
+        f"{director_url.rstrip('/')}/canonical/route",
+        json=payload,
+        headers=headers,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, dict) else {}
+
+
+def director_response_text(data: dict[str, object]) -> str:
+    value = data.get("text") or data.get("response") or ""
+    return value if isinstance(value, str) else ""
+
+
+def director_response_provider(data: dict[str, object]) -> object:
+    metadata = data.get("channel_metadata")
+    if isinstance(metadata, dict) and metadata.get("provider") is not None:
+        return metadata.get("provider")
+    return data.get("provider")
+
+
+def director_response_model(data: dict[str, object]) -> object:
+    metadata = data.get("channel_metadata")
+    if isinstance(metadata, dict) and metadata.get("model") is not None:
+        return metadata.get("model")
+    return data.get("model")
+
+
+def director_response_request_id(data: dict[str, object]) -> object:
+    return data.get("trace_id") or data.get("request_id")
 
 
 def household_agent_for_sender(identity: AuthorizedSender) -> HouseholdAgent:

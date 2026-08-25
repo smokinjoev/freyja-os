@@ -9,7 +9,15 @@ import httpx
 from connectors.gmail.config import settings
 from connectors.gmail.models import GmailMessage, GmailReply
 from connectors.gmail.sanitizer import sanitize_gmail_body
-from connectors.messaging import AuthorizedSender, NormalizedAttachment, NormalizedMessage
+from connectors.messaging import (
+    AuthorizedSender,
+    NormalizedAttachment,
+    NormalizedMessage,
+    canonical_director_payload,
+    director_headers,
+    director_response_text,
+    post_canonical_to_director,
+)
 from freyja.memory.principal import build_memory_principal
 
 logger = logging.getLogger(__name__)
@@ -112,27 +120,29 @@ class GmailGateway:
                 "subject": message.subject,
             },
         )
-        canonical_payload = canonical.model_dump(mode="json")
-        canonical_payload["conversation_id"] = principal.conversation_id
-        canonical_payload["text"] = self._director_prompt(message, body)
+        canonical_payload = canonical_director_payload(
+            canonical,
+            conversation_id=principal.conversation_id,
+            text=self._director_prompt(message, body),
+        )
         try:
             client = await self._client()
-            headers = identity.safe_headers()
-            headers["X-Freyja-Client-Type"] = principal.client_type
-            headers["X-Freyja-Client-Subject"] = principal.client_subject
-            headers["X-Freyja-Account-Owner"] = principal.account_owner or ""
-            headers["X-Freyja-Conversation-Id"] = principal.conversation_id or ""
-            headers["X-Freyja-Gmail-Identity"] = self._identity
-            headers["X-Freyja-Trace-Id"] = canonical.trace_id
-            if self._director_token:
-                headers["Authorization"] = f"Bearer {self._director_token}"
-            response = await client.post(
-                f"{self._director_url}/canonical/route",
-                json=canonical_payload,
+            headers = director_headers(
+                identity=identity,
+                client_type=principal.client_type,
+                client_subject=principal.client_subject,
+                conversation_id=principal.conversation_id or "",
+                trace_id=canonical.trace_id,
+                connector_token=self._director_token,
+                account_owner=principal.account_owner,
+                extra={"X-Freyja-Gmail-Identity": self._identity},
+            )
+            data = await post_canonical_to_director(
+                client=client,
+                director_url=self._director_url,
+                payload=canonical_payload,
                 headers=headers,
             )
-            response.raise_for_status()
-            data = response.json()
         except httpx.TimeoutException:
             logger.warning(
                 {
@@ -165,7 +175,7 @@ class GmailGateway:
             )
             return self._safe_error_response(message)
 
-        text = data.get("text") or data.get("response", "")
+        text = director_response_text(data)
         if not text:
             return self._safe_error_response(message)
 
