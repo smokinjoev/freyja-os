@@ -149,7 +149,11 @@ def test_rev2_completion_audit_tracks_every_workstream() -> None:
     assert "Messages AppleScript" in audit
     assert "20260825T040632.268989Z0000-rev2-readiness.json" in audit
     assert "failed only `imessage-live-smoke-report`" in audit
+    assert "`fast`, `reason`, `code`, and `vision` logical" in audit
+    assert "`ready_for_certification: true`" in audit
     assert "Do not mark the Freyja 2.0 goal complete" in audit
+    assert "Signal onboarding/live-smoke" in audit
+    assert "Vulcan `vision` profile readiness gap" not in audit
 
 
 def test_operations_todo_is_not_the_rev2_completion_gate() -> None:

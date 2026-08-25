@@ -153,6 +153,10 @@ the current state of that scope.
   but live Signal smoke is blocked by external service/account setup:
   `SIGNAL_ENABLED=false`, no configured account number, no allowed sender, and
   `signal-cli-rest-api` unreachable at the configured REST URL.
+- Current Vulcan profile evidence:
+  `certification/reports/vulcan-readiness-latest.json` reports
+  `ready_for_certification: true` for the `fast`, `reason`, `code`, and
+  `vision` logical profiles after installing the configured local vision model.
 - Messaging attachment hardening: Signal, iMessage, and Gmail now share a
   normalized message/attachment abstraction for text, thread/group metadata,
   attachment metadata, local references, and payload availability. Image

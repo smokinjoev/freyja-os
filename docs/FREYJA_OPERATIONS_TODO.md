@@ -12,11 +12,11 @@ Current code-side Rev 2 work has implemented and tested the Atlas Director,
 Iris MacAgent boundary, provider registry, Iris classifier fallback behavior,
 capability evidence, memory provenance, external-worker policy, certification
 suite, canonical connector ingress, and strict readiness bundle. The active
-release gates are now Signal onboarding/live smoke, a passing Vulcan profile
-readiness report that includes `vision`, and a final readiness bundle that
-includes the required operator reports, including `--require-smoke-report`,
+release gates are now Signal onboarding/live smoke and a final readiness bundle
+that includes the required operator reports, including `--require-smoke-report`,
 `--require-signal-smoke-report`, and `--require-vulcan-report` where live
-cutover is being certified.
+cutover is being certified. The current Vulcan readiness evidence proves the
+`fast`, `reason`, `code`, and `vision` profiles are installed and reachable.
 
 Items below that require logging into macOS accounts, changing Apple/iCloud
 identity, joining machines to Tailscale, installing Linux on Odin, or sending
@@ -79,8 +79,6 @@ completion audit names them as final deployment evidence.
 
 - [ ] Validate Atlas Director compose config before restart.
 - [ ] Capture `scripts/vulcan-operator.py readiness --output logs/vulcan-readiness.json`.
-- [ ] Install the configured `MODEL_VISION` profile model on Vulcan if the
-  Vulcan readiness report shows it missing.
 - [ ] Restart only the Director service unless another service truly changed.
 - [ ] Verify `/health` and `/iris-router/health`.
 - [ ] Run Iris shadow smoke and standard gauntlets.
@@ -117,13 +115,6 @@ completion audit names them as final deployment evidence.
   redacted setup checklist before changing state. Afterward run
   `scripts/run-signal-connector.py --once` and
   `scripts/messaging-production-check.py --connector signal`.
-- BLOCKED_BY_USER - Vulcan - model install - live profile certification requires
-  the configured `MODEL_VISION` model to be installed and reachable from Atlas.
-  Current operator evidence can distinguish a private-network outage from a
-  missing model. Joe must run `scripts/vulcan-operator.py readiness`; if only
-  `vision` is missing, run `scripts/vulcan-operator.py pull-profile vision --yes`
-  from a network context that can reach Vulcan, then rerun readiness and attach
-  the resulting JSON to the final Rev 2 readiness gate with `--vulcan-report`.
 - BLOCKED_BY_USER - Gmail - Atlas - live validation requires Freyja Gmail
   account authorization/credentials outside Git. Code and mocked
   gateway/transport tests are complete for sender allowlisting, Gmail thread

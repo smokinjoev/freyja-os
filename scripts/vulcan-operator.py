@@ -87,6 +87,14 @@ async def _pull_ollama_model(provider: InferenceProviderProfile) -> int:
     return response.status_code
 
 
+def _ollama_model_available(configured_model: str, available_models: set[str]) -> bool:
+    if configured_model in available_models:
+        return True
+    if ":" not in configured_model and f"{configured_model}:latest" in available_models:
+        return True
+    return False
+
+
 async def _readiness(settings: Settings) -> dict[str, Any]:
     providers = _providers_by_profile(settings)
     checks: dict[str, Any] = {}
@@ -122,7 +130,7 @@ async def _readiness(settings: Settings) -> dict[str, Any]:
             missing.append(f"Reach Ollama at {provider.base_url} for the {profile} profile.")
         else:
             check["host_reachable"] = True
-            check["model_available"] = provider.model in available
+            check["model_available"] = _ollama_model_available(provider.model, available)
             check["available_model_count"] = len(available)
             check["ready"] = bool(check["model_available"])
             if not check["model_available"]:

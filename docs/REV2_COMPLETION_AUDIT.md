@@ -1,7 +1,7 @@
 # Rev 2 Completion Audit
 
 **Date:** 2026-08-25  
-**Status:** local production candidate; Signal onboarding and Vulcan vision readiness still external
+**Status:** local production candidate; Signal onboarding/live smoke still external
 
 This audit maps `docs/REV2_IMPLEMENTATION_PLAN.md` to current evidence. It is
 intended to prevent Freyja 2.0 from being marked complete based on broad green
@@ -84,10 +84,10 @@ tests alone.
   blocked by external account/service setup: `SIGNAL_ENABLED=false`, no account
   number, no allowed sender, and `signal-cli-rest-api` unreachable.
 - Current Vulcan operator evidence shows Atlas can reach the configured Vulcan
-  Ollama endpoint and the `fast`, `reason`, and `code` logical profiles are
-  installed. The configured `vision` profile model is not installed, so
-  `scripts/vulcan-operator.py readiness` correctly reports
-  `ready_for_certification: false`.
+  Ollama endpoint and the `fast`, `reason`, `code`, and `vision` logical
+  profiles are installed. `scripts/vulcan-operator.py readiness` reports
+  `ready_for_certification: true` after installing the configured `moondream`
+  vision profile model.
 - Package wheel build via `pip wheel . --no-deps`: `passed`
 - Installed-wheel preflight console command reports both the safe dry-run review
   command and the approval-only final command with shell-safe quoting.
@@ -97,6 +97,6 @@ tests alone.
 
 ## Completion Decision
 
-Do not mark the Freyja 2.0 goal complete until the Signal onboarding gap and
-Vulcan `vision` profile readiness gap are resolved or explicitly accepted as
-external-service action items under the active goal's completion criteria.
+Do not mark the Freyja 2.0 goal complete until the Signal onboarding/live-smoke
+gap is resolved or explicitly accepted as an external-service action item under
+the active goal's completion criteria.

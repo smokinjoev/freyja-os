@@ -85,6 +85,46 @@ def test_readiness_passes_when_all_profile_models_are_available(monkeypatch) -> 
     assert result["missing"] == []
 
 
+def test_readiness_treats_untagged_model_as_latest_alias(monkeypatch) -> None:
+    import asyncio
+
+    operator = _load_operator()
+
+    async def fake_ollama_tags(provider):
+        if provider.logical_profile == "vision":
+            return {"moondream:latest"}
+        return {provider.model}
+
+    monkeypatch.setattr(operator, "_ollama_tags", fake_ollama_tags)
+
+    result = asyncio.run(operator._readiness(_settings()))
+
+    assert result["status"] == "ready"
+    assert result["checks"]["vision"]["model"] == "moondream"
+    assert result["checks"]["vision"]["model_available"] is True
+    assert result["checks"]["vision"]["ready"] is True
+
+
+def test_readiness_does_not_match_different_explicit_tag(monkeypatch) -> None:
+    import asyncio
+
+    operator = _load_operator()
+
+    async def fake_ollama_tags(provider):
+        if provider.logical_profile == "vision":
+            return {"moondream:latest"}
+        return {provider.model}
+
+    monkeypatch.setattr(operator, "_ollama_tags", fake_ollama_tags)
+
+    result = asyncio.run(operator._readiness(_settings(model_vision="moondream:1b")))
+
+    assert result["status"] == "blocked"
+    assert result["checks"]["vision"]["model"] == "moondream:1b"
+    assert result["checks"]["vision"]["model_available"] is False
+    assert "Install model moondream:1b for the vision profile." in result["missing"]
+
+
 def test_pull_profile_defaults_to_dry_run() -> None:
     import asyncio
 
