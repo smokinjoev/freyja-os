@@ -70,26 +70,30 @@ This separates the two setup choices:
 - register or link the Signal account Freyja will use to send and receive;
 - add reviewed human sender numbers to `SIGNAL_ALLOWED_SENDERS`.
 
-Request and verify a dedicated Signal number:
+Request and verify the configured dedicated Signal number. Omit `--number`
+when `SIGNAL_ACCOUNT_NUMBER` is already set in the private env file so the raw
+number does not need to appear in command history:
 
 ```bash
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  python scripts/signal-operator.py register --number +15555550100
+  python scripts/signal-operator.py register
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  python scripts/signal-operator.py register --number +15555550100 --yes
+  python scripts/signal-operator.py register --yes
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  python scripts/signal-operator.py verify --number +15555550100 --code 123-456
+  python scripts/signal-operator.py verify --code 123-456
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  python scripts/signal-operator.py verify --number +15555550100 --code 123-456 --yes
+  python scripts/signal-operator.py verify --code 123-456 --yes
 ```
 
 Use `--voice` on `register` when SMS is unavailable. Use `--captcha` only when
-Signal requires a captcha token. For an existing mobile Signal account, link
-the REST wrapper as a secondary device:
+Signal requires a captcha token. Generate that token at
+`https://signalcaptchas.org/registration/generate.html`, then pass the returned
+`signalcaptcha://...` value only to the approved operator command. For an
+existing mobile Signal account, link the REST wrapper as a secondary device:
 
 ```bash
 docker compose --env-file deploy/compose/signal/.env \

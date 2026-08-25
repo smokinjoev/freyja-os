@@ -222,6 +222,8 @@ def test_operations_deployment_tracks_current_signal_gate() -> None:
 
     assert "Atlas Compose Signal REST API is running healthy" in docs
     assert "fresh Signal captcha-backed registration" in docs
+    assert "https://signalcaptchas.org/registration/generate.html" in docs
+    assert "signalcaptcha://..." in docs
     assert "device-link approval" in docs
     assert "Signal account/service is" not in docs
 

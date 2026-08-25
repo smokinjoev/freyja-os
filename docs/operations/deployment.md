@@ -58,15 +58,18 @@ Registration and linking are operator actions:
 
 ```bash
 scripts/signal-operator.py readiness --check-registered
-scripts/signal-operator.py register --number +15555550100
-scripts/signal-operator.py register --number +15555550100 --yes
-scripts/signal-operator.py verify --number +15555550100 --code 123-456
-scripts/signal-operator.py verify --number +15555550100 --code 123-456 --yes
+scripts/signal-operator.py register
+scripts/signal-operator.py register --yes
+scripts/signal-operator.py verify --code 123-456
+scripts/signal-operator.py verify --code 123-456 --yes
 ```
 
 Use `--voice` on `register` when SMS is unavailable, and `--captcha` when
-Signal requires a captcha token. For an existing mobile Signal account, link
-the REST wrapper as a secondary device instead:
+Signal requires a captcha token. Generate registration captcha tokens at
+`https://signalcaptchas.org/registration/generate.html` and pass the returned
+`signalcaptcha://...` value only to the approved registration command. For an
+existing mobile Signal account, link the REST wrapper as a secondary device
+instead:
 
 ```bash
 scripts/signal-operator.py link-device --device-name freyja-atlas
