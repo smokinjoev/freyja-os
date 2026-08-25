@@ -183,6 +183,7 @@ def test_certification_docs_describe_rev2_fixture_contract() -> None:
     assert "scripts/rev2-readiness-bundle.py" in docs
     assert "--benchmark-report" in docs
     assert "--connector-report" in docs
+    assert "--signal-readiness-report" in docs
     assert "--imessage-live-smoke" in docs
     assert "stops before readiness" in docs
     assert "add `--yes`" in docs

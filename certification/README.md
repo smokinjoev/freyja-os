@@ -227,6 +227,7 @@ scripts/rev2-readiness-bundle.py \
   --memory-report certification/reports/<rev2-memory-provenance>.json \
   --approval-report certification/reports/<rev2-approval-exercise>.json \
   --vulcan-report certification/reports/<vulcan-readiness>.json \
+  --signal-readiness-report certification/reports/<signal-readiness>.json \
   --smoke-report certification/reports/<imessage-live-smoke-sent>.json \
   --signal-smoke-report certification/reports/<signal-live-smoke-sent>.json \
   --require-smoke-report \
@@ -246,6 +247,7 @@ freyja-certify rev2-readiness \
   --memory-report certification/reports/<rev2-memory-provenance>.json \
   --approval-report certification/reports/<rev2-approval-exercise>.json \
   --vulcan-report certification/reports/<vulcan-readiness>.json \
+  --signal-readiness-report certification/reports/<signal-readiness>.json \
   --smoke-report certification/reports/<imessage-live-smoke-sent>.json \
   --signal-smoke-report certification/reports/<signal-live-smoke-sent>.json \
   --require-smoke-report \
@@ -264,10 +266,13 @@ command also requires a benchmark report and `--latency-winner-target`; the
 benchmark must contain at least two targets with no failures and the expected
 fastest target must lead the latency ranking. The command fails if any final
 cutover artifact is omitted: certification report, benchmark report, connector
-report, memory report, approval report, Vulcan readiness report, or expected
-latency winner. Add `--require-vulcan-report` for final profile cutover;
-the report must prove `fast`, `reason`, `code`, and `vision` are ready. Add
-`--require-smoke-report` for final iMessage cutover and
+report, memory report, approval report, Vulcan readiness report, Signal
+readiness report, or expected latency winner. Add `--require-vulcan-report` for
+final profile cutover; the report must prove `fast`, `reason`, `code`, and
+`vision` are ready. Add `--signal-readiness-report` for final Signal cutover;
+the report must prove the account is registered or linked, Signal is enabled,
+the reviewed sender allowlist is present, and the private Signal REST API is
+healthy. Add `--require-smoke-report` for final iMessage cutover and
 `--require-signal-smoke-report` for final Signal cutover; each requires a
 non-dry-run live-smoke report with one successful sent message.
 
