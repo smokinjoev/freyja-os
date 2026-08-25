@@ -54,6 +54,22 @@ docker compose --env-file deploy/compose/signal/.env \
 Run operator commands inside the Compose network so `SIGNAL_REST_API_URL` stays
 private as `http://signal-api:8080`.
 
+First generate a redacted onboarding plan. Use `--number` for the candidate
+Freyja Signal account number; the report hashes account and sender numbers and
+does not change Signal or `.env` state:
+
+```bash
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
+  onboarding-plan --number +15555550100 \
+  | tee certification/reports/signal-onboarding-plan.json
+```
+
+This separates the two setup choices:
+
+- register or link the Signal account Freyja will use to send and receive;
+- add reviewed human sender numbers to `SIGNAL_ALLOWED_SENDERS`.
+
 Request and verify a dedicated Signal number:
 
 ```bash

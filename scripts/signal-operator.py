@@ -73,6 +73,53 @@ def _account_plan(settings: SignalSettings, number: str) -> dict[str, object]:
     }
 
 
+def _onboarding_plan(settings: SignalSettings, *, account_number: str | None = None) -> dict[str, object]:
+    account = _account_number(settings, account_number)
+    recipients = _configured_recipients(settings)
+    account_ready = settings.transport_configured and bool(account)
+    senders_ready = bool(recipients)
+    connector_ready = settings.signal_enabled and account_ready and senders_ready
+    actions: list[str] = []
+
+    if not account:
+        actions.append("Choose a dedicated Signal account number or link an existing mobile Signal account.")
+    elif not settings.transport_configured:
+        actions.append("Set SIGNAL_ACCOUNT_NUMBER to the registered or linked Signal account number.")
+    actions.append("Register the account with `register --number <account> --yes` and then `verify --number <account> --code <code> --yes`, or use `link-device --yes` for an existing mobile account.")
+    if not senders_ready:
+        actions.append("Set SIGNAL_ALLOWED_SENDERS to reviewed human sender numbers in E.164 format.")
+    if not settings.freyja_director_url.strip():
+        actions.append("Set FREYJA_DIRECTOR_URL to the private Atlas Director endpoint reachable from the connector.")
+    if not settings.freyja_connector_token.strip():
+        actions.append("Set FREYJA_CONNECTOR_TOKEN to the Director connector token outside Git.")
+    if not settings.signal_enabled:
+        actions.append("Set SIGNAL_ENABLED=true only after the account is registered or linked and the allowlist is reviewed.")
+    actions.append("Run `readiness --check-registered` and then one approved `live-smoke --yes`.")
+
+    return {
+        "schema_version": "1.0",
+        "report_type": "signal-onboarding-plan",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "status": "ready-for-live-smoke" if connector_ready else "action-required",
+        "account": {
+            "configured": account_ready,
+            "number_hash": _safe_hash(account) if account else None,
+            "registration_or_linking_required": bool(account),
+        },
+        "senders": {
+            "allowed_sender_count": len(recipients),
+            "allowed_sender_hashes": [_safe_hash(recipient) for recipient in recipients],
+        },
+        "connector": {
+            "enabled": settings.signal_enabled,
+            "director_url_configured": bool(settings.freyja_director_url.strip()),
+            "connector_token_configured": bool(settings.freyja_connector_token.strip()),
+            "rest_api_url": settings.signal_rest_api_url,
+        },
+        "next_actions": actions,
+    }
+
+
 def _render_report(report: dict[str, object], output: Path | None = None) -> None:
     rendered = json.dumps(report, indent=2, sort_keys=True)
     print(rendered)
@@ -422,6 +469,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("allowlist", help="Print configured allowlist metadata")
 
+    onboarding = subparsers.add_parser(
+        "onboarding-plan",
+        help="Print redacted Signal account and sender onboarding actions without changing state.",
+    )
+    onboarding.add_argument(
+        "--number",
+        help="Candidate E.164 account number to plan around. Defaults to SIGNAL_ACCOUNT_NUMBER.",
+    )
+    onboarding.add_argument(
+        "--output",
+        type=Path,
+        help="Optional JSON report path for onboarding evidence.",
+    )
+
     readiness = subparsers.add_parser(
         "readiness",
         help="Check Signal configuration and REST/account readiness without sending.",
@@ -573,6 +634,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+
+    if args.command == "onboarding-plan":
+        result = _onboarding_plan(settings, account_number=args.number)
+        _render_report(result, args.output)
+        return 0 if result["status"] == "ready-for-live-smoke" else 1
 
     if args.command == "readiness":
         result = asyncio.run(_readiness(settings, check_registered=args.check_registered))

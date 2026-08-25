@@ -48,6 +48,91 @@ def test_allowlist_output_hashes_recipients(monkeypatch, capsys) -> None:
     assert "+15550000001" not in output
 
 
+def test_onboarding_plan_reports_redacted_next_actions_for_empty_setup() -> None:
+    operator = _load_operator()
+    settings = SignalSettings(
+        _env_file=None,
+        signal_enabled=False,
+        signal_account_number="",
+        signal_allowed_senders="",
+        freyja_director_url="",
+        freyja_connector_token="",
+        signal_rest_api_url="http://signal-api:8080",
+    )
+
+    result = operator._onboarding_plan(settings)
+
+    assert result["report_type"] == "signal-onboarding-plan"
+    assert result["status"] == "action-required"
+    assert result["account"]["configured"] is False
+    assert result["account"]["number_hash"] is None
+    assert result["senders"]["allowed_sender_count"] == 0
+    assert result["connector"]["enabled"] is False
+    assert "Choose a dedicated Signal account number" in result["next_actions"][0]
+    assert any("SIGNAL_ALLOWED_SENDERS" in action for action in result["next_actions"])
+
+
+def test_onboarding_plan_can_use_candidate_number_without_reporting_it() -> None:
+    operator = _load_operator()
+    settings = SignalSettings(
+        _env_file=None,
+        signal_enabled=False,
+        signal_account_number="",
+        signal_allowed_senders="+15550000001",
+        freyja_director_url="http://atlas:8000",
+        freyja_connector_token="token",
+        signal_rest_api_url="http://signal-api:8080",
+    )
+
+    result = operator._onboarding_plan(settings, account_number="+15550000009")
+
+    assert result["status"] == "action-required"
+    assert result["account"]["configured"] is False
+    assert result["account"]["number_hash"] == operator._safe_hash("+15550000009")
+    assert result["senders"]["allowed_sender_hashes"] == [operator._safe_hash("+15550000001")]
+    assert "+15550000009" not in str(result)
+    assert "+15550000001" not in str(result)
+
+
+def test_onboarding_plan_ready_when_connector_state_is_configured() -> None:
+    operator = _load_operator()
+    settings = SignalSettings(
+        _env_file=None,
+        signal_enabled=True,
+        signal_account_number="+15550000009",
+        signal_allowed_senders="+15550000001",
+        freyja_director_url="http://atlas:8000",
+        freyja_connector_token="token",
+        signal_rest_api_url="http://signal-api:8080",
+    )
+
+    result = operator._onboarding_plan(settings)
+
+    assert result["status"] == "ready-for-live-smoke"
+    assert result["account"]["configured"] is True
+    assert result["account"]["number_hash"] == operator._safe_hash("+15550000009")
+    assert result["senders"]["allowed_sender_count"] == 1
+    assert "+15550000009" not in str(result)
+    assert "+15550000001" not in str(result)
+
+
+def test_onboarding_plan_command_writes_report_and_exit_code(tmp_path, monkeypatch) -> None:
+    operator = _load_operator()
+    output = tmp_path / "signal-onboarding.json"
+    monkeypatch.setattr(
+        operator,
+        "_settings",
+        lambda env_file: SignalSettings(_env_file=None, signal_allowed_senders=""),
+    )
+
+    result = operator.main(["onboarding-plan", "--number", "+15550000009", "--output", str(output)])
+
+    assert result == 1
+    text = output.read_text(encoding="utf-8")
+    assert '"report_type": "signal-onboarding-plan"' in text
+    assert "+15550000009" not in text
+
+
 def test_live_smoke_defaults_to_dry_run_for_first_allowlisted_recipient() -> None:
     import asyncio
 
