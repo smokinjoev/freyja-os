@@ -61,7 +61,7 @@ does not change Signal or `.env` state:
 ```bash
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  onboarding-plan --number +15555550100 \
+  python scripts/signal-operator.py onboarding-plan --number +15555550100 \
   | tee certification/reports/signal-onboarding-plan.json
 ```
 
@@ -75,16 +75,16 @@ Request and verify a dedicated Signal number:
 ```bash
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  register --number +15555550100
+  python scripts/signal-operator.py register --number +15555550100
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  register --number +15555550100 --yes
+  python scripts/signal-operator.py register --number +15555550100 --yes
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  verify --number +15555550100 --code 123-456
+  python scripts/signal-operator.py verify --number +15555550100 --code 123-456
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  verify --number +15555550100 --code 123-456 --yes
+  python scripts/signal-operator.py verify --number +15555550100 --code 123-456 --yes
 ```
 
 Use `--voice` on `register` when SMS is unavailable. Use `--captcha` only when
@@ -94,7 +94,7 @@ the REST wrapper as a secondary device:
 ```bash
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  link-device --device-name freyja-atlas
+  python scripts/signal-operator.py link-device --device-name freyja-atlas
 ```
 
 The dry-run output redacts phone numbers and does not include codes, PINs,
@@ -110,7 +110,7 @@ docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml ps
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  readiness --check-registered \
+  python scripts/signal-operator.py readiness --check-registered \
   | tee certification/reports/signal-readiness.json
 python scripts/messaging-production-check.py --connector signal \
   --env-file deploy/compose/signal/.env \
@@ -130,7 +130,7 @@ dry-runs by default and redacts phone numbers in the report:
 ```bash
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  live-smoke \
+  python scripts/signal-operator.py live-smoke \
   --text "Freyja 2.0 Signal live smoke test." \
   | tee certification/reports/signal-live-smoke-dry-run.json
 ```
@@ -141,7 +141,7 @@ the single approved smoke message:
 ```bash
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml run --rm signal-operator \
-  live-smoke \
+  python scripts/signal-operator.py live-smoke \
   --text "Freyja 2.0 Signal live smoke test." \
   --yes \
   | tee certification/reports/signal-live-smoke-sent.json
