@@ -111,10 +111,10 @@ def test_rev2_status_document_tracks_current_implementation_candidate() -> None:
     assert "Installed-wheel preflight console check" in status
     assert "`dry_run_command` and" in status
     assert "Repository hygiene, compileall, and `git diff --check`: `passed`" in status
-    assert "964 passed, 1 skipped, 1 warning" in status
+    assert "1100 passed, 2 skipped, 1 warning" in status
     assert "Final operator handoff" in status
     assert "stops before readiness" in status
-    assert "Do not mark Freya 2.0 complete from this status file alone" in status
+    assert "Do not mark Freyja 2.0 complete from this status file alone" in status
 
 
 def test_rev2_completion_audit_tracks_every_workstream() -> None:
@@ -149,7 +149,7 @@ def test_rev2_completion_audit_tracks_every_workstream() -> None:
     assert "Messages AppleScript" in audit
     assert "20260825T040632.268989Z0000-rev2-readiness.json" in audit
     assert "failed only `imessage-live-smoke-report`" in audit
-    assert "Do not mark the Freya 2.0 goal complete" in audit
+    assert "Do not mark the Freyja 2.0 goal complete" in audit
 
 
 def test_operations_todo_is_not_the_rev2_completion_gate() -> None:
@@ -159,6 +159,7 @@ def test_operations_todo_is_not_the_rev2_completion_gate() -> None:
     assert "docs/REV2_STATUS.md" in docs
     assert "docs/REV2_COMPLETION_AUDIT.md" in docs
     assert "--require-smoke-report" in docs
+    assert "onboarding-plan --number <account>" in docs
     assert "operator actions" in docs
 
 

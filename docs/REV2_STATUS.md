@@ -59,7 +59,7 @@ the current state of that scope.
 
 - Focused Rev 2 certification/readiness checks: `30 passed, 1 warning`
 - Full project suite after one-command final-handoff consolidation:
-  `964 passed, 1 skipped, 1 warning`
+  `1100 passed, 2 skipped, 1 warning`
 - Local one-command selected-connector readiness bundle: `passed`
 - Live local Rev 2 entrypoint check: `freyja.atlas_app:app` starts and serves
   `/health`, `/providers/health`, `/iris-router/health`, `/macagent/health`,
@@ -200,6 +200,6 @@ the current state of that scope.
 
 ## Completion Rule
 
-Do not mark Freya 2.0 complete from this status file alone. Completion requires
+Do not mark Freyja 2.0 complete from this status file alone. Completion requires
 the active goal audit to verify each implementation-plan requirement against
 current code, tests, certification reports, and deployment evidence.

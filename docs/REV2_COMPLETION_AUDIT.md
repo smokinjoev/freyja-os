@@ -23,7 +23,7 @@ tests alone.
 ## Current Verification
 
 - Focused docs/certification/readiness-bundle checks: `30 passed, 1 warning`
-- Full project suite: `964 passed, 1 skipped, 1 warning`
+- Full project suite: `1100 passed, 2 skipped, 1 warning`
 - Final status-doc guard: `11 passed, 1 warning`
 - Live local Rev 2 entrypoint: started `freyja.atlas_app:app` on
   `127.0.0.1:8767`; health, provider, Iris, MacAgent boundary, and Road Mode
@@ -97,6 +97,6 @@ tests alone.
 
 ## Completion Decision
 
-Do not mark the Freya 2.0 goal complete until the Signal onboarding gap and
+Do not mark the Freyja 2.0 goal complete until the Signal onboarding gap and
 Vulcan `vision` profile readiness gap are resolved or explicitly accepted as
 external-service action items under the active goal's completion criteria.

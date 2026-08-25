@@ -112,7 +112,9 @@ completion audit names them as final deployment evidence.
   retries/timeouts, and sanitized logs. Joe must start or repair
   `signal-cli-rest-api`, configure the linked `SIGNAL_ACCOUNT_NUMBER`, set a
   reviewed `SIGNAL_ALLOWED_SENDERS` allowlist, and set `SIGNAL_ENABLED=true`
-  outside Git. Afterward run
+  outside Git. Use `scripts/signal-operator.py onboarding-plan --number <account>`
+  or the equivalent Compose `signal-operator onboarding-plan` command for a
+  redacted setup checklist before changing state. Afterward run
   `scripts/run-signal-connector.py --once` and
   `scripts/messaging-production-check.py --connector signal`.
 - BLOCKED_BY_USER - Vulcan - model install - live profile certification requires
