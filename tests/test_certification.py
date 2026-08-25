@@ -889,6 +889,157 @@ def test_rev2_readiness_probe_requires_signal_smoke_report(
     assert signal_smoke.status == "missing required --signal-smoke-report"
 
 
+def test_rev2_readiness_probe_checks_vulcan_report(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    vulcan_path = tmp_path / "vulcan-readiness.json"
+    vulcan_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "report_type": "vulcan-readiness",
+                "status": "ready",
+                "ready_for_certification": True,
+                "checks": {
+                    "fast": {"ready": True},
+                    "reason": {"ready": True},
+                    "code": {"ready": True},
+                    "vision": {"ready": True},
+                },
+                "missing": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "/providers/health": {
+                    "providers": [
+                        {"provider_id": "legacy_ollama", "ready": True},
+                        {"provider_id": "iris_router", "ready": True},
+                        {"provider_id": "openrouter_frontier", "ready": True},
+                    ]
+                },
+                "/iris-router/health": {"enabled": True, "available": True},
+                "/macagent/health": {
+                    "enabled": True,
+                    "reachable": True,
+                    "authenticated": True,
+                    "capabilities": list(REQUIRED_REV2_CAPABILITIES),
+                },
+            }[request.url.path],
+        )
+    )
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        "certification.rev2_readiness.httpx.Client",
+        lambda **kwargs: real_client(transport=transport, **kwargs),
+    )
+
+    report = run_readiness_probe("http://atlas.test:8000", vulcan_report=vulcan_path)
+
+    assert report.passed is True
+    assert report.vulcan_report == str(vulcan_path)
+    assert any(check.name == "vulcan-readiness-report" and check.passed for check in report.checks)
+
+
+def test_rev2_readiness_probe_fails_vulcan_report_with_missing_vision(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    vulcan_path = tmp_path / "vulcan-readiness.json"
+    vulcan_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "report_type": "vulcan-readiness",
+                "status": "blocked",
+                "ready_for_certification": False,
+                "checks": {
+                    "fast": {"ready": True},
+                    "reason": {"ready": True},
+                    "code": {"ready": True},
+                    "vision": {"ready": False},
+                },
+                "missing": ["Install model moondream for the vision profile."],
+            }
+        ),
+        encoding="utf-8",
+    )
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "/providers/health": {
+                    "providers": [
+                        {"provider_id": "legacy_ollama", "ready": True},
+                        {"provider_id": "iris_router", "ready": True},
+                        {"provider_id": "openrouter_frontier", "ready": True},
+                    ]
+                },
+                "/iris-router/health": {"enabled": True, "available": True},
+                "/macagent/health": {
+                    "enabled": True,
+                    "reachable": True,
+                    "authenticated": True,
+                    "capabilities": list(REQUIRED_REV2_CAPABILITIES),
+                },
+            }[request.url.path],
+        )
+    )
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        "certification.rev2_readiness.httpx.Client",
+        lambda **kwargs: real_client(transport=transport, **kwargs),
+    )
+
+    report = run_readiness_probe("http://atlas.test:8000", vulcan_report=vulcan_path)
+    vulcan = next(check for check in report.checks if check.name == "vulcan-readiness-report")
+
+    assert report.passed is False
+    assert vulcan.passed is False
+    assert vulcan.details["not_ready_model_profiles"] == ["vision"]
+    assert "Install model moondream" in vulcan.details["missing"][0]
+
+
+def test_rev2_readiness_probe_requires_vulcan_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "/providers/health": {
+                    "providers": [
+                        {"provider_id": "legacy_ollama", "ready": True},
+                        {"provider_id": "iris_router", "ready": True},
+                        {"provider_id": "openrouter_frontier", "ready": True},
+                    ]
+                },
+                "/iris-router/health": {"enabled": True, "available": True},
+                "/macagent/health": {
+                    "enabled": True,
+                    "reachable": True,
+                    "authenticated": True,
+                    "capabilities": list(REQUIRED_REV2_CAPABILITIES),
+                },
+            }[request.url.path],
+        )
+    )
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        "certification.rev2_readiness.httpx.Client",
+        lambda **kwargs: real_client(transport=transport, **kwargs),
+    )
+
+    report = run_readiness_probe("http://atlas.test:8000", require_vulcan_report=True)
+    vulcan = next(check for check in report.checks if check.name == "vulcan-readiness-report")
+
+    assert report.passed is False
+    assert vulcan.status == "missing required --vulcan-report"
+
+
 def test_rev2_readiness_probe_checks_memory_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     memory_path = tmp_path / "memory.json"
     memory_path.write_text(
@@ -1243,6 +1394,8 @@ def test_rev2_readiness_cli_writes_report_and_returns_failure(monkeypatch: pytes
             str(tmp_path / "memory.json"),
             "--approval-report",
             str(tmp_path / "approvals.json"),
+            "--vulcan-report",
+            str(tmp_path / "vulcan.json"),
             "--latency-winner-target",
             "ollama:qwen2.5:7b",
             "--output-dir",
@@ -1257,11 +1410,13 @@ def test_rev2_readiness_cli_writes_report_and_returns_failure(monkeypatch: pytes
     assert called["require_connector_report"] is True
     assert called["require_memory_report"] is True
     assert called["require_approval_report"] is True
+    assert called["require_vulcan_report"] is False
     assert called["require_smoke_report"] is False
     assert called["require_latency_winner_target"] is True
     assert called["connector_reports"] == (tmp_path / "connectors.json",)
     assert called["memory_report"] == tmp_path / "memory.json"
     assert called["approval_report"] == tmp_path / "approvals.json"
+    assert called["vulcan_report"] == tmp_path / "vulcan.json"
     assert called["latency_winner_target"] == "ollama:qwen2.5:7b"
     assert called["required_provider_profiles"] == DEFAULT_REQUIRED_PROVIDER_PROFILES
     assert any(path.name.endswith("rev2-readiness.json") for path in tmp_path.iterdir())

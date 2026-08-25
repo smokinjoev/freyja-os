@@ -90,6 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--required-model-profile", action="append", default=None)
     parser.add_argument("--memory-report", type=Path)
     parser.add_argument("--memory-db", type=Path)
+    parser.add_argument("--vulcan-report", type=Path)
+    parser.add_argument(
+        "--require-vulcan-report",
+        action="store_true",
+        help="Require a passing Vulcan operator readiness report for final readiness.",
+    )
     parser.add_argument(
         "--benchmark-probe",
         action="store_true",
@@ -225,6 +231,10 @@ def build_commands(args: argparse.Namespace) -> list[list[str]]:
         readiness.append("--require-smoke-report")
     if args.require_signal_smoke_report:
         readiness.append("--require-signal-smoke-report")
+    if args.vulcan_report is not None:
+        readiness.extend(["--vulcan-report", str(args.vulcan_report)])
+    if args.require_vulcan_report:
+        readiness.append("--require-vulcan-report")
     for connector_report in args.connector_report:
         readiness.extend(["--connector-report", str(connector_report)])
     for profile_id in args.required_provider_profile or ():

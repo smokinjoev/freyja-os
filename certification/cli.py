@@ -142,6 +142,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Consequential-action approval exercise JSON report to include in rev2-readiness evidence.",
     )
     parser.add_argument(
+        "--vulcan-report",
+        type=Path,
+        default=None,
+        help="Vulcan operator readiness JSON report to include in rev2-readiness evidence.",
+    )
+    parser.add_argument(
         "--smoke-report",
         type=Path,
         default=None,
@@ -162,6 +168,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-signal-smoke-report",
         action="store_true",
         help="Require a non-dry-run Signal live-smoke report for final rev2-readiness.",
+    )
+    parser.add_argument(
+        "--require-vulcan-report",
+        action="store_true",
+        help="Require a passing Vulcan operator readiness report for final rev2-readiness.",
     )
     parser.add_argument(
         "--memory-db",
@@ -267,6 +278,7 @@ def _rev2_readiness(args: argparse.Namespace) -> int:
             connector_reports=tuple(args.connector_report or ()),
             memory_report=args.memory_report,
             approval_report=args.approval_report,
+            vulcan_report=args.vulcan_report,
             smoke_report=args.smoke_report,
             signal_smoke_report=args.signal_smoke_report,
             latency_winner_target=args.latency_winner_target,
@@ -275,6 +287,7 @@ def _rev2_readiness(args: argparse.Namespace) -> int:
             require_connector_report=True,
             require_memory_report=True,
             require_approval_report=True,
+            require_vulcan_report=args.require_vulcan_report,
             require_smoke_report=args.require_smoke_report,
             require_signal_smoke_report=args.require_signal_smoke_report,
             require_latency_winner_target=True,

@@ -27,6 +27,7 @@ Check required profile readiness with:
 
 ```bash
 scripts/vulcan-operator.py readiness
+scripts/vulcan-operator.py readiness --output logs/vulcan-readiness.json
 ```
 
 Install a missing profile model deliberately:

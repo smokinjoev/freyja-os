@@ -59,6 +59,7 @@ class Rev2ReadinessReport:
     connector_reports: tuple[str, ...] = ()
     memory_report: str | None = None
     approval_report: str | None = None
+    vulcan_report: str | None = None
     smoke_report: str | None = None
     signal_smoke_report: str | None = None
     latency_winner_target: str | None = None
@@ -84,6 +85,7 @@ class Rev2ReadinessReport:
             "connector_reports": list(self.connector_reports),
             "memory_report": self.memory_report,
             "approval_report": self.approval_report,
+            "vulcan_report": self.vulcan_report,
             "smoke_report": self.smoke_report,
             "signal_smoke_report": self.signal_smoke_report,
             "latency_winner_target": self.latency_winner_target,
@@ -111,6 +113,7 @@ def run_readiness_probe(
     connector_reports: tuple[Path, ...] = (),
     memory_report: Path | None = None,
     approval_report: Path | None = None,
+    vulcan_report: Path | None = None,
     smoke_report: Path | None = None,
     signal_smoke_report: Path | None = None,
     latency_winner_target: str | None = None,
@@ -119,6 +122,7 @@ def run_readiness_probe(
     require_connector_report: bool = False,
     require_memory_report: bool = False,
     require_approval_report: bool = False,
+    require_vulcan_report: bool = False,
     require_smoke_report: bool = False,
     require_signal_smoke_report: bool = False,
     require_latency_winner_target: bool = False,
@@ -165,6 +169,10 @@ def run_readiness_probe(
         checks.append(_check_approval_report(approval_report))
     elif require_approval_report:
         checks.append(_missing_required_artifact("approval-exercise-report", "--approval-report"))
+    if vulcan_report is not None:
+        checks.append(_check_vulcan_report(vulcan_report))
+    elif require_vulcan_report:
+        checks.append(_missing_required_artifact("vulcan-readiness-report", "--vulcan-report"))
     if smoke_report is not None:
         checks.append(_check_messaging_smoke_report(smoke_report, connector="imessage"))
     elif require_smoke_report:
@@ -186,6 +194,7 @@ def run_readiness_probe(
         connector_reports=tuple(str(path) for path in connector_reports),
         memory_report=str(memory_report) if memory_report is not None else None,
         approval_report=str(approval_report) if approval_report is not None else None,
+        vulcan_report=str(vulcan_report) if vulcan_report is not None else None,
         smoke_report=str(smoke_report) if smoke_report is not None else None,
         signal_smoke_report=str(signal_smoke_report) if signal_smoke_report is not None else None,
         latency_winner_target=latency_winner_target,
@@ -213,6 +222,7 @@ def write_readiness_report(report: Rev2ReadinessReport, output_dir: Path = DEFAU
         connector_reports=report.connector_reports,
         memory_report=report.memory_report,
         approval_report=report.approval_report,
+        vulcan_report=report.vulcan_report,
         smoke_report=report.smoke_report,
         signal_smoke_report=report.signal_smoke_report,
         latency_winner_target=report.latency_winner_target,
@@ -240,6 +250,7 @@ def render_readiness_markdown(report: Rev2ReadinessReport) -> str:
         f"- Connector reports: {', '.join(report.connector_reports) if report.connector_reports else 'not supplied'}",
         f"- Memory report: {report.memory_report or 'not supplied'}",
         f"- Approval report: {report.approval_report or 'not supplied'}",
+        f"- Vulcan report: {report.vulcan_report or 'not supplied'}",
         f"- Smoke report: {report.smoke_report or 'not supplied'}",
         f"- Signal smoke report: {report.signal_smoke_report or 'not supplied'}",
         f"- Latency winner target: {report.latency_winner_target or 'not supplied'}",
@@ -559,6 +570,44 @@ def _check_approval_report(path: Path) -> ReadinessCheck:
             "denied_without_approval_count": len(denied_without_approval),
             "allowed_with_approval_count": len(allowed_with_approval),
             "unsafe_allowed_without_director_authorization": sorted(unsafe),
+        },
+    )
+
+
+def _check_vulcan_report(path: Path) -> ReadinessCheck:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return ReadinessCheck("vulcan-readiness-report", False, str(exc), {"path": str(path)})
+
+    if not isinstance(payload, dict):
+        return ReadinessCheck("vulcan-readiness-report", False, "invalid Vulcan readiness report", {"path": str(path)})
+    checks = payload.get("checks") if isinstance(payload.get("checks"), dict) else {}
+    missing_profiles = [
+        profile
+        for profile in DEFAULT_REQUIRED_MODEL_PROFILES
+        if not isinstance(checks.get(profile), dict) or checks[profile].get("ready") is not True
+    ]
+    passed = (
+        payload.get("report_type") == "vulcan-readiness"
+        and payload.get("status") == "ready"
+        and payload.get("ready_for_certification") is True
+        and not missing_profiles
+    )
+    return ReadinessCheck(
+        "vulcan-readiness-report",
+        passed,
+        "Vulcan readiness report supports cutover"
+        if passed
+        else "Vulcan readiness report does not support cutover",
+        {
+            "path": str(path),
+            "report_type": payload.get("report_type"),
+            "status": payload.get("status"),
+            "ready_for_certification": payload.get("ready_for_certification"),
+            "required_model_profiles": list(DEFAULT_REQUIRED_MODEL_PROFILES),
+            "not_ready_model_profiles": missing_profiles,
+            "missing": payload.get("missing") if isinstance(payload.get("missing"), list) else [],
         },
     )
 

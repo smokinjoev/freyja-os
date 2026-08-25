@@ -29,6 +29,7 @@ Before live certification, capture:
 ```bash
 scripts/vulcan-operator.py readiness --output logs/vulcan-readiness.json
 scripts/signal-operator.py readiness --check-registered --output logs/signal-readiness.json
+freyja-certify rev2-readiness --vulcan-report logs/vulcan-readiness.json
 ```
 
 `vulcan-readiness.json` must show `ready_for_certification: true` before

@@ -41,12 +41,15 @@ def test_bundle_builds_strict_readiness_command_with_all_artifacts(tmp_path: Pat
             str(tmp_path / "memory.json"),
             "--approval-report",
             str(tmp_path / "approval.json"),
+            "--vulcan-report",
+            str(tmp_path / "vulcan.json"),
             "--smoke-report",
             str(tmp_path / "smoke.json"),
             "--signal-smoke-report",
             str(tmp_path / "signal-smoke.json"),
             "--require-smoke-report",
             "--require-signal-smoke-report",
+            "--require-vulcan-report",
             "--latency-winner-target",
             "ollama:qwen2.5:7b",
             "--required-provider-profile",
@@ -68,10 +71,12 @@ def test_bundle_builds_strict_readiness_command_with_all_artifacts(tmp_path: Pat
     assert command.count("--connector-report") == 2
     assert "--memory-report" in command
     assert "--approval-report" in command
+    assert "--vulcan-report" in command
     assert "--smoke-report" in command
     assert "--signal-smoke-report" in command
     assert "--require-smoke-report" in command
     assert "--require-signal-smoke-report" in command
+    assert "--require-vulcan-report" in command
     assert "--latency-winner-target" in command
     assert command[command.index("--required-provider-profile") + 1] == "heavy_local"
 
