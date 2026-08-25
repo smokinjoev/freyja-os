@@ -1,5 +1,26 @@
 # Freyja Operations TODO
 
+## Rev 2 Triage
+
+**Last reviewed:** 2026-08-24
+
+This file is an operator backlog, not the Freyja 2.0 completion gate. Rev 2
+release status is tracked in `docs/REV2_STATUS.md`, and the requirement matrix
+is `docs/REV2_COMPLETION_AUDIT.md`.
+
+Current code-side Rev 2 work has implemented and tested the Atlas Director,
+Iris MacAgent boundary, provider registry, Iris classifier fallback behavior,
+capability evidence, memory provenance, external-worker policy, certification
+suite, and strict readiness bundle. The active release gate is the final
+approved iMessage live smoke report plus a final readiness bundle that includes
+`--require-smoke-report`.
+
+Items below that require logging into macOS accounts, changing Apple/iCloud
+identity, joining machines to Tailscale, installing Linux on Odin, or sending
+real messages are operator actions. They are intentionally not automated from
+the repository and remain outside the code-only readiness proof unless the Rev 2
+completion audit names them as final deployment evidence.
+
 ## Agent Roles
 
 - [ ] Treat `freyja` as the family/household agent and shared issue-review coordinator.

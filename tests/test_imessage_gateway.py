@@ -8,7 +8,7 @@ import pytest
 
 from connectors.imessage.gateway import IMessageGateway
 from connectors.imessage.family_observer import FamilyIMessageObserver
-from connectors.imessage.models import IMessage
+from connectors.imessage.models import IMessage, IMessageAttachment
 from connectors.messaging import parse_allowed_senders
 from freyja.memory.store import MemoryStore
 
@@ -70,19 +70,53 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     mock_post.assert_awaited_once()
     payload = mock_post.await_args.kwargs["json"]
     assert payload["prompt"] == "Hello Freyja"
+    assert "IMESSAGE AGENT ROLE" not in payload["prompt"]
+    assert "Required response identity" not in payload["prompt"]
+    assert "+15551234567" not in payload["prompt"]
     assert payload["provider"] == "auto"
     assert payload["tools_required"] is True
     assert payload["conversation_id"].startswith("imessage-conv:")
+    assert "images" not in payload
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Client-Type"] == "imessage"
-    assert headers["X-Freyja-Client-Subject"].startswith("imessage:")
+    assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
+    assert headers["X-Freyja-Account-Owner"] == "person:family"
+    assert headers["X-Freyja-Agent-Id"] == "freyja"
+    assert headers["X-Freyja-Person-Id"] == "family"
     assert headers["X-Freyja-Conversation-Id"] == payload["conversation_id"]
     assert "+15551234567" not in str(headers)
 
 
 @pytest.mark.asyncio
+async def test_photo_only_message_is_forwarded_in_same_conversation(enabled_gateway):
+    message = make_message(text="", message_id="photo-001").model_copy(
+        update={
+            "attachments": [
+                IMessageAttachment(
+                    filename="photo.jpg",
+                    mime_type="image/jpeg",
+                    path="/Users/freyja/Library/Messages/Attachments/photo.jpg",
+                )
+            ]
+        }
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "I got the photo."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    assert result.text == "I got the photo."
+    payload = mock_post.await_args.kwargs["json"]
+    assert "photo or attachment content" in payload["prompt"]
+    assert "image/jpeg: photo.jpg" in payload["prompt"]
+    assert payload["conversation_id"].startswith("imessage-conv:")
+    headers = mock_post.await_args.kwargs["headers"]
+    assert headers["X-Freyja-Conversation-Id"] == payload["conversation_id"]
+
+
+@pytest.mark.asyncio
 async def test_auto_tool_mode_keeps_plain_chat_fast(enabled_gateway):
-    enabled_gateway._model = "qwen2.5:7b"
     enabled_gateway._tools_required_mode = "auto"
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
@@ -91,13 +125,27 @@ async def test_auto_tool_mode_keeps_plain_chat_fast(enabled_gateway):
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["model"] == "qwen2.5:7b"
+    assert "model" not in payload
+    assert payload["tools_required"] is False
+
+
+@pytest.mark.asyncio
+async def test_auto_tool_mode_does_not_force_weather_into_tools(enabled_gateway):
+    enabled_gateway._tools_required_mode = "auto"
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Checking weather context"})
+        result = await enabled_gateway.handle(make_message(text="What's the weather tomorrow in Aiken?"))
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert "model" not in payload
+    assert payload["provider"] == "auto"
     assert payload["tools_required"] is False
 
 
 @pytest.mark.asyncio
 async def test_auto_tool_mode_preserves_tool_like_requests(enabled_gateway):
-    enabled_gateway._model = "qwen2.5:7b"
     enabled_gateway._tools_required_mode = "auto"
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
@@ -106,7 +154,7 @@ async def test_auto_tool_mode_preserves_tool_like_requests(enabled_gateway):
 
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
-    assert payload["model"] == "qwen2.5:7b"
+    assert "model" not in payload
     assert payload["tools_required"] is True
 
 
@@ -331,7 +379,9 @@ async def test_family_group_addressed_message_routes_to_director(enabled_gateway
     assert "explicitly addressed" in payload["prompt"]
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Conversation-Id"] == payload["conversation_id"]
+    assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
     assert headers["X-Freyja-Account-Owner"] == "person:family"
+    assert headers["X-Freyja-Agent-Id"] == "freyja"
 
 
 @pytest.mark.asyncio
@@ -346,8 +396,7 @@ async def test_joe_alias_routes_direct_imessage_to_cloyd_private_agent(enabled_g
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert "Your name is Cloyd Gibbler" in payload["prompt"]
-    assert "Required response identity: Cloyd Gibbler" in payload["prompt"]
+    assert payload["prompt"] == "Hello"
     assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
     assert headers["X-Freyja-Account-Owner"] == "person:joe"
     assert headers["X-Freyja-Agent-Id"] == "cloyd-gibbler"
@@ -367,8 +416,7 @@ async def test_beth_alias_routes_direct_imessage_to_benedict_private_agent(enabl
     assert result is not None
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert "Your name is Benedict" in payload["prompt"]
-    assert "Required response identity: Benedict" in payload["prompt"]
+    assert payload["prompt"] == "Hello"
     assert headers["X-Freyja-Client-Subject"] == "agent:benedict"
     assert headers["X-Freyja-Account-Owner"] == "person:beth"
     assert headers["X-Freyja-Agent-Id"] == "benedict"
@@ -411,7 +459,8 @@ async def test_duplicate_message_is_dropped_after_first_forward(enabled_gateway)
 
 
 @pytest.mark.asyncio
-async def test_director_error_returns_safe_error(enabled_gateway):
+async def test_director_error_does_not_send_gateway_authored_answer(enabled_gateway, caplog):
+    caplog.set_level(logging.WARNING, logger="connectors.imessage.gateway")
     error_response = httpx.Response(503, json={}, request=_make_request())
     error_response.raise_for_status = lambda: (_ for _ in ()).throw(
         httpx.HTTPStatusError(
@@ -425,12 +474,24 @@ async def test_director_error_returns_safe_error(enabled_gateway):
         mock_post.return_value = error_response
         result = await enabled_gateway.handle(make_message())
 
-    assert result is not None
-    assert result.text == "Freyja could not process your message. Please try again later."
+    assert result is None
+    assert "imessage_gateway_director_error" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_raw_allowlisted_sender_keeps_platform_memory_subject(enabled_gateway):
+async def test_empty_director_response_does_not_send_gateway_authored_answer(enabled_gateway, caplog):
+    caplog.set_level(logging.WARNING, logger="connectors.imessage.gateway")
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": ""})
+        result = await enabled_gateway.handle(make_message())
+
+    assert result is None
+    assert "imessage_gateway_empty_director_response" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_raw_allowlisted_sender_routes_to_family_freyja_agent(enabled_gateway):
     enabled_gateway._allowed_identities = {}
     enabled_gateway._allowed_senders = {"+15551234567"}
 
@@ -442,9 +503,9 @@ async def test_raw_allowlisted_sender_keeps_platform_memory_subject(enabled_gate
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
     assert payload["prompt"] == "Hello Freyja"
-    assert headers["X-Freyja-Client-Subject"].startswith("imessage:")
-    assert "X-Freyja-Account-Owner" not in headers
-    assert "X-Freyja-Agent-Id" not in headers
+    assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
+    assert headers["X-Freyja-Account-Owner"] == "person:family"
+    assert headers["X-Freyja-Agent-Id"] == "freyja"
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,30 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MemoryKind = Literal["fact", "preference", "project_state", "summary"]
 MemorySensitivity = Literal["routine", "private", "sensitive"]
+MemoryTrustLevel = Literal[
+    "trusted_internal",
+    "trusted_connector",
+    "user_confirmed",
+    "untrusted_external_content",
+    "inferred",
+]
+MemoryProvenanceKind = Literal["observation", "user_confirmed_fact", "trusted_system_fact", "derived_fact"]
+
+
+class MemoryProvenance(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    source: str = Field(min_length=1, max_length=128)
+    source_id: str | None = Field(default=None, max_length=160)
+    source_type: str = Field(default="client", min_length=1, max_length=64)
+    trust_level: MemoryTrustLevel = "trusted_connector"
+    kind: MemoryProvenanceKind = "trusted_system_fact"
+    authoritative: bool = True
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    observation_id: str | None = Field(default=None, max_length=160)
+    worker_id: str | None = Field(default=None, max_length=128)
+    derivation_links: list[str] = Field(default_factory=list, max_length=20)
+    evidence: dict[str, Any] = Field(default_factory=dict)
 
 
 class MemoryPrincipal(BaseModel):
@@ -93,6 +117,7 @@ class SharedMemory(BaseModel):
     created_at: datetime
     updated_at: datetime
     expires_at: datetime | None = None
+    provenance: MemoryProvenance | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -100,9 +125,11 @@ class PutSharedMemoryRequest(BaseModel):
     memory_id: str | None = Field(default=None, max_length=128)
     kind: MemoryKind
     content: str = Field(min_length=1)
+    source: str | None = Field(default=None, max_length=128)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     sensitivity: MemorySensitivity = "private"
     expires_at: datetime | None = None
+    provenance: MemoryProvenance | None = None
     metadata: dict[str, Any] | None = None
 
 

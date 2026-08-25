@@ -33,6 +33,7 @@ async def test_healthy_requires_configured_model() -> None:
 def test_system_prompt_prefers_upward_routing_when_uncertain() -> None:
     assert "When uncertain, route upward" in IRIS_ROUTER_SYSTEM_PROMPT
     assert "avoid under-routing" in IRIS_ROUTER_SYSTEM_PROMPT
+    assert "complexity" in IRIS_ROUTER_SYSTEM_PROMPT
 
 
 async def test_warm_requests_indefinite_residency() -> None:
@@ -69,7 +70,7 @@ async def test_recommend_parses_strict_route_json() -> None:
             "model": "qwen2.5:7b",
             "message": {
                 "content": (
-                    '{"tier":3,"task":"coding","needs_tools":false,'
+                    '{"tier":3,"task":"coding","complexity":4,"needs_tools":false,'
                     '"sensitivity":"routine","confidence":0.96,'
                     '"preferred_target":"local_heavy",'
                     '"reason":"Requires complex coding reasoning"}'
@@ -85,6 +86,7 @@ async def test_recommend_parses_strict_route_json() -> None:
     assert result.ok is True
     assert result.recommendation is not None
     assert result.recommendation.tier == 3
+    assert result.recommendation.complexity == 4
     assert result.recommendation.preferred_target == "local_heavy"
 
     _, kwargs = mock_http.post.call_args

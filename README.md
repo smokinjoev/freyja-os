@@ -4,10 +4,11 @@ Freyja-OS is a locally controlled personal-agent platform.
 
 ## Current architecture
 
-- Mars: Freyja Director and control plane
-- Atlas: always-on infrastructure services and Signal connector
-- Hera: primary complex local_reasoning provider through Tailscale; not an always-on control-plane host
-- Iris: fast local inference tier; inference-focused
+- Atlas: Freyja Director, control plane, policy authority, memory/identity state, and always-on connector services
+- Iris: Apple-native MacAgent host and always-hot 7B routing/reflex tier
+- Vulcan or another heavy inference node: optional complex `local_reasoning` provider through the private tailnet
+- Hera: household voice/avatar presence and development/experimental node
+- Mars: utility, fallback, monitoring, or test node; not the authoritative Director host
 - Raspberry Pi: future edge automation node
 - Additional computers: optional worker nodes
 

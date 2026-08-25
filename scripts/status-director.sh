@@ -6,6 +6,8 @@ set -euo pipefail
 PLIST_NAME="com.freyja-os.director.plist"
 PROJECT_DIR="/Users/freyja/freyja-os"
 LOG_FILE="${PROJECT_DIR}/logs/director.log"
+ENV_FILE="${PROJECT_DIR}/.env"
+FREYJA_CONNECTOR_TOKEN_VALUE="${FREYJA_CONNECTOR_TOKEN:-}"
 
 if [[ "$(id -un)" == "freyja" ]]; then
     UID_VAL=$(id -u)
@@ -39,6 +41,33 @@ if curl -s --max-time 3 http://127.0.0.1:8000/health 2>/dev/null; then
     echo "Director is reachable."
 else
     echo "Director is not reachable on 127.0.0.1:8000."
+fi
+
+if [[ -z "${FREYJA_CONNECTOR_TOKEN_VALUE}" && -f "${ENV_FILE}" ]]; then
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            FREYJA_CONNECTOR_TOKEN)
+                FREYJA_CONNECTOR_TOKEN_VALUE="${value%\"}"
+                FREYJA_CONNECTOR_TOKEN_VALUE="${FREYJA_CONNECTOR_TOKEN_VALUE#\"}"
+                ;;
+        esac
+    done < <(grep -E '^FREYJA_CONNECTOR_TOKEN=' "${ENV_FILE}" || true)
+fi
+
+echo ""
+echo "=== Rev 2 protected health checks ==="
+if [[ -z "${FREYJA_CONNECTOR_TOKEN_VALUE}" ]]; then
+    echo "FREYJA_CONNECTOR_TOKEN is not configured; skipping protected health checks."
+else
+    for path in /providers/health /iris-router/health /macagent/health; do
+        if curl -s --fail --max-time 5 \
+            -H "Authorization: Bearer ${FREYJA_CONNECTOR_TOKEN_VALUE}" \
+            "http://127.0.0.1:8000${path}" >/dev/null; then
+            echo "${path}: OK"
+        else
+            echo "${path}: FAILED"
+        fi
+    done
 fi
 
 echo ""

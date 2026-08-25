@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import hashlib
 import logging
 import os
@@ -15,12 +16,8 @@ from typing import Any
 import httpx
 
 from freyja.config import settings as freyja_settings
-from freyja.tools.weather import (
-    WeatherRequest,
-    classify_weather_request,
-    is_time_sensitive_query,
-    weather_response_text,
-)
+from freyja.media import ImageInput
+from freyja.tools.weather import is_time_sensitive_query
 
 from .config import TelegramSettings
 from .models import TelegramInboundUpdate, TelegramMessage, TelegramOutboundMessage
@@ -236,23 +233,24 @@ class TelegramGateway:
             return self._reply(message, _UNAUTHORIZED_TEXT, success=False)
 
         text = update.text.strip()
-        if not text:
+        if not text and not update.has_image:
             self._log_rejection(update, RejectionReason.EMPTY_MESSAGE)
             return self._reply(message, self._safe_error_text, success=False)
 
-        if len(text) > self._max_message_chars:
+        prompt_text = text or "Please identify the photo or image I sent."
+        if len(prompt_text) > self._max_message_chars:
             self._log_rejection(update, RejectionReason.OVERSIZED_MESSAGE)
             return self._reply(message, self._safe_error_text, success=False)
 
         # An allowlist grants gateway access, not the right to impersonate the
         # person who owns this personal agent. Keep /whoami available during
         # onboarding, but fail closed before attaching trusted person headers.
-        command = text.split(maxsplit=1)[0].lower()
+        command = prompt_text.split(maxsplit=1)[0].lower()
         if command != "/whoami" and user_id != self._settings.telegram_person_user_id:
             self._log_rejection(update, RejectionReason.UNKNOWN_USER)
             return self._reply(message, _UNAUTHORIZED_TEXT, success=False)
 
-        return await self._route_command(text, message, user_id)
+        return await self._route_command(prompt_text, message, user_id)
 
     def _log_rejection(self, update: TelegramInboundUpdate, reason: str) -> None:
         log: dict[str, Any] = {
@@ -358,27 +356,10 @@ class TelegramGateway:
         text: str,
         message: TelegramMessage,
     ) -> TelegramOutboundMessage:
-        """For time-sensitive queries, use the weather tool if enabled; otherwise state unavailability."""
+        """Forward normal time-sensitive weather queries to the agent path."""
         lowered = text.lower()
         if "weather" in lowered or "temperature" in lowered or "forecast" in lowered or "rain" in lowered or "snow" in lowered or "storm" in lowered:
-            request = classify_weather_request(text)
-            if freyja_settings.weather_tool_enabled:
-                try:
-                    weather_text = await weather_response_text(request)
-                    return self._reply(message, weather_text)
-                except Exception:
-                    logger.exception({"event": "telegram_weather_tool_failed"})
-                    return self._reply(
-                        message,
-                        "Live weather data is currently unavailable. Please check a trusted weather service.",
-                        success=False,
-                    )
-            return self._reply(
-                message,
-                "I don't have live weather data configured right now, so I can't check the forecast. "
-                "Please use a trusted weather service for current conditions.",
-                success=False,
-            )
+            return await self._forward_to_agent(text, message, tools_required=False)
 
         return self._reply(
             message,
@@ -461,6 +442,9 @@ class TelegramGateway:
             "provider": "auto",
             "tools_required": tools_required,
         }
+        images = await self._images_for_message(message)
+        if images:
+            payload["images"] = [image.model_dump(mode="json", exclude_none=True) for image in images]
         if self._settings.telegram_model.strip():
             payload["model"] = self._settings.telegram_model.strip()
         headers, conversation_id = self._director_identity(message.chat.id)
@@ -490,6 +474,47 @@ class TelegramGateway:
         except Exception:
             logger.exception({"event": "telegram_unexpected_error"})
             return self._reply(message, self._safe_error_text, success=False)
+
+    async def _images_for_message(self, message: TelegramMessage) -> list[ImageInput]:
+        file_id: str | None = None
+        filename: str | None = None
+        mime_type: str | None = None
+        if message.photo:
+            largest = max(message.photo, key=lambda photo: photo.file_size or photo.width * photo.height)
+            file_id = largest.file_id
+            filename = f"telegram-photo-{largest.file_unique_id or largest.file_id}.jpg"
+            mime_type = "image/jpeg"
+        elif message.document and (message.document.mime_type or "").lower().startswith("image/"):
+            file_id = message.document.file_id
+            filename = message.document.file_name
+            mime_type = message.document.mime_type
+        if not file_id:
+            return []
+        try:
+            client = await self._client()
+            file_response = await client.get(
+                f"https://api.telegram.org/bot{self._settings.telegram_bot_token}/getFile",
+                params={"file_id": file_id},
+            )
+            file_response.raise_for_status()
+            file_payload = file_response.json()
+            file_path = ((file_payload.get("result") or {}).get("file_path"))
+            if not isinstance(file_path, str) or not file_path:
+                return []
+            download = await client.get(
+                f"https://api.telegram.org/file/bot{self._settings.telegram_bot_token}/{file_path}"
+            )
+            download.raise_for_status()
+            return [
+                ImageInput(
+                    mime_type=mime_type or "image/jpeg",
+                    filename=filename or Path(file_path).name,
+                    data_base64=base64.b64encode(download.content).decode("ascii"),
+                )
+            ]
+        except Exception:
+            logger.exception({"event": "telegram_image_download_failed"})
+            return []
 
     async def _handle_smith(
         self,

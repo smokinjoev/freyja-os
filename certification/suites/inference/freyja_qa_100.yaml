@@ -1,0 +1,110 @@
+name: freyja-qa-100
+category: inference
+difficulty: standard
+description: 100 deterministic inference questions for judging Freyja answer accuracy. Passing target is at least 95%.
+passing_score: 0.95
+cases:
+  - {name: arithmetic-001, prompt: "Answer with only the number: 17 + 28.", expected_keywords: ["45"]}
+  - {name: arithmetic-002, prompt: "Answer with only the number: 91 - 37.", expected_keywords: ["54"]}
+  - {name: arithmetic-003, prompt: "Answer with only the number: 12 * 8.", expected_keywords: ["96"]}
+  - {name: arithmetic-004, prompt: "Answer with only the number: 144 / 12.", expected_keywords: ["12"]}
+  - {name: arithmetic-005, prompt: "Answer with only the number: half of 86.", expected_keywords: ["43"]}
+  - {name: arithmetic-006, prompt: "Answer with only the number: 15% of 200.", expected_keywords: ["30"]}
+  - {name: arithmetic-007, prompt: "Answer with only the number: 7 squared.", expected_keywords: ["49"]}
+  - {name: arithmetic-008, prompt: "Answer with only the number: cube root of 27.", expected_keywords: ["3"]}
+  - {name: arithmetic-009, prompt: "Answer with only the number: 3 dozen.", expected_keywords: ["36"]}
+  - {name: arithmetic-010, prompt: "Answer with only the number: 2 hours in minutes.", expected_keywords: ["120"]}
+  - {name: arithmetic-011, prompt: "Answer with only the number: 5 quarters in cents.", expected_keywords: ["125"]}
+  - {name: arithmetic-012, prompt: "Answer with only the number: 9 + 6 * 2.", expected_keywords: ["21"]}
+  - {name: arithmetic-013, prompt: "Answer with only the number: (9 + 6) * 2.", expected_keywords: ["30"]}
+  - {name: arithmetic-014, prompt: "Answer with only the number: 1000 minus 1.", expected_keywords: ["999"]}
+  - {name: arithmetic-015, prompt: "Answer with only the number: 64 divided by 8 plus 3.", expected_keywords: ["11"]}
+  - {name: arithmetic-016, prompt: "Answer with only the number: 18 plus twice 7.", expected_keywords: ["32"]}
+  - {name: arithmetic-017, prompt: "Answer with only the number: 20% of 45.", expected_keywords: ["9"]}
+  - {name: arithmetic-018, prompt: "Answer with only the number: 13 * 11.", expected_keywords: ["143"]}
+  - {name: arithmetic-019, prompt: "Answer with only the number: 81 square root.", expected_keywords: ["9"]}
+  - {name: arithmetic-020, prompt: "Answer with only the number: 4 cubed.", expected_keywords: ["64"]}
+
+  - {name: logic-001, prompt: "If all daxes are blue and Mira is a dax, what color is Mira? Answer with one word.", expected_keywords: ["blue"]}
+  - {name: logic-002, prompt: "A box has red, red, and green marbles. Is every marble green? Answer yes or no.", expected_keywords: ["no"]}
+  - {name: logic-003, prompt: "If the lamp is on only when the switch is up, and the switch is down, is the lamp on? Answer yes or no.", expected_keywords: ["no"]}
+  - {name: logic-004, prompt: "Tom is older than Ana. Ana is older than Bo. Who is oldest? Answer with the name.", expected_keywords: ["Tom"]}
+  - {name: logic-005, prompt: "The code is the second letter of 'chair'. Answer with one letter.", expected_keywords: ["h"]}
+  - {name: logic-006, prompt: "Which comes next: Monday, Tuesday, Wednesday, Thursday, ? Answer with one word.", expected_keywords: ["Friday"]}
+  - {name: logic-007, prompt: "If a recipe needs 2 eggs per cake, how many eggs for 3 cakes? Answer with only the number.", expected_keywords: ["6"]}
+  - {name: logic-008, prompt: "A train leaves at 2 PM and arrives 3 hours later. What hour does it arrive? Answer like '5 PM'.", expected_keywords: ["5 PM"]}
+  - {name: logic-009, prompt: "Which is heavier: one pound of feathers or one pound of steel? Answer with 'same'.", expected_keywords: ["same"]}
+  - {name: logic-010, prompt: "If every zorp is a plant, can a zorp be an animal under that rule? Answer yes or no.", expected_keywords: ["no"]}
+  - {name: logic-011, prompt: "A password rule says exactly 4 digits. Is 12345 valid? Answer yes or no.", expected_keywords: ["no"]}
+  - {name: logic-012, prompt: "If the meeting is before lunch and lunch is at noon, is 10 AM before lunch? Answer yes or no.", expected_keywords: ["yes"]}
+  - {name: logic-013, prompt: "A rectangle has four sides. How many sides do two rectangles have total if they do not overlap? Answer number only.", expected_keywords: ["8"]}
+  - {name: logic-014, prompt: "If Pat has no pets, does Pat have a dog? Answer yes or no.", expected_keywords: ["no"]}
+  - {name: logic-015, prompt: "Order these numbers ascending and answer as digits separated by commas: 9, 2, 5.", expected_keywords: ["2,5,9"]}
+  - {name: logic-016, prompt: "Which word does not belong: apple, pear, carrot, peach? Answer one word.", expected_keywords: ["carrot"]}
+  - {name: logic-017, prompt: "If north is opposite south, what is opposite east? Answer one word.", expected_keywords: ["west"]}
+  - {name: logic-018, prompt: "A cup is empty after all water is poured out. Is there water in the cup? Answer yes or no.", expected_keywords: ["no"]}
+  - {name: logic-019, prompt: "If Sam is both a parent and a teacher, is Sam a teacher? Answer yes or no.", expected_keywords: ["yes"]}
+  - {name: logic-020, prompt: "Complete the pattern: AB, BC, CD, ? Answer two letters.", expected_keywords: ["DE"]}
+
+  - {name: language-001, prompt: "Answer with the plural of 'child'.", expected_keywords: ["children"]}
+  - {name: language-002, prompt: "Answer with the past tense of 'run'.", expected_keywords: ["ran"]}
+  - {name: language-003, prompt: "Answer with the antonym of 'hot'.", expected_keywords: ["cold"]}
+  - {name: language-004, prompt: "Answer with the synonym of 'fast' that starts with q.", expected_keywords: ["quick"]}
+  - {name: language-005, prompt: "How many distinct vowel letters are in the word 'apple'? Answer with only the number.", expected_keywords: ["2"]}
+  - {name: language-006, prompt: "Alphabetize these words and answer comma-separated: beta, alpha, gamma.", expected_keywords: ["alpha,beta,gamma"]}
+  - {name: language-007, prompt: "Answer with the first letter of the word 'Freyja'.", expected_keywords: ["F"]}
+  - {name: language-008, prompt: "Answer with the last letter of the word 'terminal'.", expected_keywords: ["l"]}
+  - {name: language-009, prompt: "Is 'quietly' an adverb? Answer yes or no.", expected_keywords: ["yes"]}
+  - {name: language-010, prompt: "Is 'blue' a noun in 'the blue car'? Answer yes or no.", expected_keywords: ["no"]}
+  - {name: language-011, prompt: "Rewrite 'do not' as a contraction.", expected_keywords: ["don't"]}
+  - {name: language-012, prompt: "Answer with the singular of 'mice'.", expected_keywords: ["mouse"]}
+  - {name: language-013, prompt: "Answer with the comparative form of 'good'.", expected_keywords: ["better"]}
+  - {name: language-014, prompt: "How many space-separated words are inside the quoted phrase 'Freyja reads messages'? Answer number only.", expected_keywords: ["3"]}
+  - {name: language-015, prompt: "Answer with the word in this sentence that is a color: 'The red cup fell.'", expected_keywords: ["red"]}
+  - {name: language-016, prompt: "Answer with the opposite of 'increase'.", expected_keywords: ["decrease"]}
+  - {name: language-017, prompt: "Answer with the root word of 'running'.", expected_keywords: ["run"]}
+  - {name: language-018, prompt: "Does the word 'book' have a silent k? Answer yes or no.", expected_keywords: ["no"]}
+  - {name: language-019, prompt: "Answer with a word that rhymes with 'light' and means correct.", expected_keywords: ["right"]}
+  - {name: language-020, prompt: "Answer with the correct article: '__ apple'.", expected_keywords: ["an"]}
+
+  - {name: knowledge-001, prompt: "What planet is known as the Red Planet? Answer one word.", expected_keywords: ["Mars"]}
+  - {name: knowledge-002, prompt: "What gas do humans need to breathe? Answer one word.", expected_keywords: ["oxygen"]}
+  - {name: knowledge-003, prompt: "How many days are in a common non-leap year? Answer number only.", expected_keywords: ["365"]}
+  - {name: knowledge-004, prompt: "How many continents are commonly counted on Earth? Answer number only.", expected_keywords: ["7"]}
+  - {name: knowledge-005, prompt: "What is the chemical symbol for water? Answer only the formula.", expected_keywords: ["H2O"]}
+  - {name: knowledge-006, prompt: "What force pulls objects toward Earth? Answer one word.", expected_keywords: ["gravity"]}
+  - {name: knowledge-007, prompt: "What organ pumps blood? Answer one word.", expected_keywords: ["heart"]}
+  - {name: knowledge-008, prompt: "What is the largest ocean on Earth? Answer with two words.", expected_keywords: ["Pacific Ocean"]}
+  - {name: knowledge-009, prompt: "Which star is at the center of our solar system? Answer one word.", expected_keywords: ["Sun"]}
+  - {name: knowledge-010, prompt: "What do bees make from nectar? Answer one word.", expected_keywords: ["honey"]}
+  - {name: knowledge-011, prompt: "What device measures temperature? Answer one word.", expected_keywords: ["thermometer"]}
+  - {name: knowledge-012, prompt: "What is frozen water called? Answer one word.", expected_keywords: ["ice"]}
+  - {name: knowledge-013, prompt: "Which direction does the sun generally rise from? Answer one word.", expected_keywords: ["east"]}
+  - {name: knowledge-014, prompt: "How many wheels does a standard bicycle have? Answer number only.", expected_keywords: ["2"]}
+  - {name: knowledge-015, prompt: "What is the primary language of Brazil? Answer one word.", expected_keywords: ["Portuguese"]}
+  - {name: knowledge-016, prompt: "What is the capital of France? Answer one word.", expected_keywords: ["Paris"]}
+  - {name: knowledge-017, prompt: "What instrument has keys, hammers, and strings? Answer one word.", expected_keywords: ["piano"]}
+  - {name: knowledge-018, prompt: "What shape has three sides? Answer one word.", expected_keywords: ["triangle"]}
+  - {name: knowledge-019, prompt: "How many hours are in one day? Answer number only.", expected_keywords: ["24"]}
+  - {name: knowledge-020, prompt: "What pigment do plants use to capture light for photosynthesis? Answer one word.", expected_keywords: ["chlorophyll"]}
+
+  - {name: instruction-001, prompt: "Reply with exactly this token: ALPHA-17", expected_keywords: ["ALPHA-17"]}
+  - {name: instruction-002, prompt: "Reply with exactly this token: BETA-24", expected_keywords: ["BETA-24"]}
+  - {name: instruction-003, prompt: "Reply with exactly this token: CLOYD-OK", expected_keywords: ["CLOYD-OK"]}
+  - {name: instruction-004, prompt: "Reply with exactly this token: FREYJA-OK", expected_keywords: ["FREYJA-OK"]}
+  - {name: instruction-005, prompt: "Answer yes or no only: Is 10 greater than 3?", expected_keywords: ["yes"]}
+  - {name: instruction-006, prompt: "Answer yes or no only: Is a triangle four-sided?", expected_keywords: ["no"]}
+  - {name: instruction-007, prompt: "Return the three letters in reverse order: A B C.", expected_keywords: ["C B A"]}
+  - {name: instruction-008, prompt: "Return the lowercase form of 'SIGNAL'.", expected_keywords: ["signal"]}
+  - {name: instruction-009, prompt: "Return the uppercase form of 'imessage'.", expected_keywords: ["IMESSAGE"]}
+  - {name: instruction-010, prompt: "Return only the middle word from: red blue green.", expected_keywords: ["blue"]}
+  - {name: instruction-011, prompt: "Return only the first item from: calendar, signal, terminal.", expected_keywords: ["calendar"]}
+  - {name: instruction-012, prompt: "Return only the last item from: calendar, signal, terminal.", expected_keywords: ["terminal"]}
+  - {name: instruction-013, prompt: "Count the letter r in 'router'. Answer number only.", expected_keywords: ["2"]}
+  - {name: instruction-014, prompt: "Count the letter s in 'messages'. Answer number only.", expected_keywords: ["3"]}
+  - {name: instruction-015, prompt: "Answer with the JSON boolean for true.", expected_keywords: ["true"]}
+  - {name: instruction-016, prompt: "Answer with the JSON null literal.", expected_keywords: ["null"]}
+  - {name: instruction-017, prompt: "Answer with exactly two words: local agent", expected_keywords: ["local agent"]}
+  - {name: instruction-018, prompt: "Answer with exactly two words: direct terminal", expected_keywords: ["direct terminal"]}
+  - {name: instruction-019, prompt: "Answer with the platform name in 'Signal message'.", expected_keywords: ["Signal"]}
+  - {name: instruction-020, prompt: "Answer with the platform name in 'iMessage thread'.", expected_keywords: ["iMessage"]}

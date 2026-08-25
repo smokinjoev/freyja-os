@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from freyja.agents.household import HouseholdAgent, household_agents
 from freyja.identity import IdentityService, Person, person_from_legacy_member, person_memory_subject
 from freyja.memory.principal import stable_identity
 
@@ -74,6 +75,18 @@ def parse_allowed_senders(
             person=person,
         )
     return identities
+
+
+def person_id_for_sender(identity: AuthorizedSender) -> str:
+    if identity.person:
+        return identity.person.person_id.lower().strip()
+    if identity.member_id:
+        return identity.member_id.lower().strip()
+    return "family"
+
+
+def household_agent_for_sender(identity: AuthorizedSender) -> HouseholdAgent:
+    return household_agents.resolve(person_id_for_sender(identity))
 
 
 def _safe_member_id(value: str) -> str:

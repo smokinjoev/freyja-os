@@ -1,0 +1,46 @@
+{
+  "signal": {
+    "account_number_configured": false,
+    "allowed_sender_count": 0,
+    "connector_token_configured": true,
+    "director_health": {
+      "ok": true,
+      "status_code": 200
+    },
+    "director_rev2_health": {
+      "checks": {
+        "/iris-router/health": {
+          "ok": true,
+          "status_code": 200
+        },
+        "/macagent/health": {
+          "ok": true,
+          "status_code": 200
+        },
+        "/providers/health": {
+          "missing_required_providers": [],
+          "ok": true,
+          "required_provider_readiness": {
+            "heavy_local": true,
+            "legacy_ollama": true
+          },
+          "status_code": 200,
+          "unavailable_required_providers": []
+        }
+      },
+      "ok": true
+    },
+    "director_url": "http://127.0.0.1:8000",
+    "enabled": false,
+    "host_role": "atlas-compose",
+    "max_message_chars": 4000,
+    "poll_interval_seconds": 5.0,
+    "ready_for_live_smoke": false,
+    "rest_api_url": "http://127.0.0.1:8080",
+    "signal_rest_health": {
+      "detail": "errno=61 Connection refused",
+      "error": "URLError",
+      "ok": false
+    }
+  }
+}

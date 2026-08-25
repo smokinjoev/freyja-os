@@ -1,0 +1,140 @@
+{
+  "action_items": [],
+  "coding": {
+    "command": [
+      "/Users/freyja/freyja-os/.venv/bin/python",
+      "-m",
+      "certification.cli",
+      "inference/freyja_iterative_coding",
+      "--provider",
+      "local_reasoning",
+      "--model",
+      "gpt-oss-freyja:20b-analysis-prefill",
+      "--output-dir",
+      "certification/reports"
+    ],
+    "failed_cases": 0,
+    "failure_summary": {
+      "all_failures_are_connection_errors": false,
+      "failed_cases": 0,
+      "first_error": null,
+      "top_categories": [],
+      "top_errors": [],
+      "top_forbidden_matches": [],
+      "top_missing_keywords": [],
+      "unique_error_count": 0
+    },
+    "mean_generation_tokens_per_second": 30.372,
+    "overall_score": 1.0,
+    "passed": true,
+    "passing_score": 0.9,
+    "path": "certification/reports/20260825T173051Z0000-freyja-iterative-coding.json",
+    "returncode": 0,
+    "skip_reason": null,
+    "skipped": false,
+    "speed_samples": 10,
+    "total_cases": 10
+  },
+  "completion_gates": {
+    "all_gates_passed": true,
+    "imessage_runtime_synced": true,
+    "imessage_terminal_equivalent": true,
+    "live_imessage_route_smoke": true,
+    "vulcan_inference_accuracy": true,
+    "vulcan_iterative_coding": true,
+    "vulcan_preflight": true,
+    "vulcan_speed_measured": true
+  },
+  "director_url": "http://127.0.0.1:8000",
+  "inference": {
+    "command": [
+      "/Users/freyja/freyja-os/.venv/bin/python",
+      "-m",
+      "certification.cli",
+      "inference/freyja_qa_100",
+      "--provider",
+      "local_reasoning",
+      "--model",
+      "gpt-oss-freyja:20b-analysis-prefill",
+      "--output-dir",
+      "certification/reports"
+    ],
+    "failed_cases": 0,
+    "failure_summary": {
+      "all_failures_are_connection_errors": false,
+      "failed_cases": 0,
+      "first_error": null,
+      "top_categories": [],
+      "top_errors": [],
+      "top_forbidden_matches": [],
+      "top_missing_keywords": [],
+      "unique_error_count": 0
+    },
+    "mean_generation_tokens_per_second": 31.238,
+    "overall_score": 1.0,
+    "passed": true,
+    "passing_score": 0.95,
+    "path": "certification/reports/20260825T173013Z0000-freyja-qa-100.json",
+    "returncode": 0,
+    "skip_reason": null,
+    "skipped": false,
+    "speed_samples": 100,
+    "total_cases": 100
+  },
+  "messaging": {
+    "command": [
+      "/Users/freyja/freyja-os/.venv/bin/python",
+      "scripts/messaging-production-check.py",
+      "--connector",
+      "imessage",
+      "--check-director",
+      "--check-rev2-director",
+      "--check-imessage-route-smoke",
+      "--check-inprocess-route-smoke",
+      "--route-smoke-person-id",
+      "joe",
+      "--route-smoke-person-display-name",
+      "Joe",
+      "--route-smoke-person-preferred-name",
+      "Joe",
+      "--route-smoke-agent-id",
+      "cloyd-gibbler",
+      "--route-smoke-agent-display-name",
+      "Cloyd Gibbler",
+      "--route-smoke-expected-provider",
+      "local_reasoning",
+      "--output",
+      "certification/reports/freyja-live-imessage-route-evidence.json"
+    ],
+    "director_health_ok": true,
+    "inprocess_route_smoke_ok": true,
+    "live_route_smoke_ok": true,
+    "path": "certification/reports/freyja-live-imessage-route-evidence.json",
+    "prompt_context_equivalent": true,
+    "ready_for_live_smoke": true,
+    "returncode": 0,
+    "runtime_import_error": null,
+    "runtime_import_ok": true,
+    "runtime_source_drift_count": 0,
+    "runtime_source_drift_ok": true,
+    "terminal_equivalent": true
+  },
+  "ok": true,
+  "runtime_sync": {
+    "command": [
+      "scripts/sync-imessage-runtime.sh"
+    ],
+    "requested": true,
+    "returncode": 0
+  },
+  "vulcan_model": "gpt-oss-freyja:20b-analysis-prefill",
+  "vulcan_preflight": {
+    "base_url": "http://100.115.228.56:11434",
+    "host_reachable": true,
+    "model": "gpt-oss-freyja:20b-analysis-prefill",
+    "model_available": true,
+    "model_count": 5,
+    "ok": true
+  },
+  "vulcan_url": "http://100.115.228.56:11434"
+}

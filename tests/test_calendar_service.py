@@ -14,8 +14,10 @@ from freyja.calendar import (
     AppleCalendarProvider,
     GoogleCalendarProvider,
     InMemoryCalendarProvider,
+    MacAgentAppleCalendarProvider,
 )
 from freyja.identity import Alias, IdentityService, Person
+from freyja.macagent import MacAgentOperationResult
 
 
 def _dt(hour: int, minute: int = 0) -> datetime:
@@ -222,3 +224,60 @@ async def test_apple_provider_creates_events_on_mapped_family_calendar() -> None
     assert calls[0][1]["attendee_ids"] == ["joe"]
     assert created.event_id == "created-1"
     assert created.provider == "apple"
+
+
+@pytest.mark.asyncio
+async def test_macagent_apple_provider_lists_events_through_authenticated_envelope() -> None:
+    calls = []
+
+    class Client:
+        async def invoke(self, request):
+            calls.append(request)
+            return MacAgentOperationResult(
+                ok=True,
+                capability=request.capability,
+                operation=request.operation,
+                output={
+                    "events": [
+                        {
+                            "event_id": "apple-1",
+                            "calendar_id": "Family",
+                            "title": "Dinner",
+                            "start": "2026-08-03T22:00:00.000Z",
+                            "end": "2026-08-03T23:00:00.000Z",
+                            "attendee_ids": [],
+                            "metadata": {},
+                        }
+                    ]
+                },
+            )
+
+    provider = MacAgentAppleCalendarProvider(calendar_aliases={"joe": "iCloud::Family"}, client=Client())
+
+    events = await provider.list_events(calendar_ids=["joe"], start=_dt(17), end=_dt(20))
+
+    assert len(events) == 1
+    assert events[0].event_id == "apple-1"
+    request = calls[0]
+    assert request.capability == "apple.calendar.read"
+    assert request.operation == "list_events"
+    assert request.director_authorized is True
+    assert request.required_permission == "household:calendar.read"
+    assert request.arguments["calendar_selectors"] == ["iCloud::Family"]
+
+
+@pytest.mark.asyncio
+async def test_macagent_apple_provider_raises_safe_error_on_failure() -> None:
+    class Client:
+        async def invoke(self, request):
+            return MacAgentOperationResult(
+                ok=False,
+                capability=request.capability,
+                operation=request.operation,
+                error="macagent disabled",
+            )
+
+    provider = MacAgentAppleCalendarProvider(client=Client())
+
+    with pytest.raises(RuntimeError, match="macagent disabled"):
+        await provider.list_events(calendar_ids=["family"], start=_dt(17), end=_dt(20))

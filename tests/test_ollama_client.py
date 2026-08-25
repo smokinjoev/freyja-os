@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from freyja.ollama_client import OllamaClient
+from freyja.media import ImageInput
 from freyja.system_prompt import FREYJA_SYSTEM_PROMPT
 
 
@@ -71,6 +72,32 @@ async def test_chat_excludes_thinking_from_result(client: OllamaClient) -> None:
     assert result["message"]["content"] == "visible"
     assert "thinking" not in result["message"]
     assert "private chain of thought" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_chat_sends_images_to_ollama_message(client: OllamaClient) -> None:
+    captured: dict[str, object] = {}
+
+    def _capture(*args, **kwargs):
+        request = httpx.Request("POST", str(args[0]))
+        captured["payload"] = kwargs.get("json")
+        return httpx.Response(
+            200,
+            json={"model": "llava:latest", "message": {"content": "a red square"}},
+            request=request,
+        )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=_capture):
+        result = await client.chat(
+            "Identify this image",
+            model="llava:latest",
+            images=[ImageInput(mime_type="image/png", data_base64="ZmFrZQ==")],
+        )
+
+    assert result["message"]["content"] == "a red square"
+    user_message = captured["payload"]["messages"][1]
+    assert user_message["content"] == "Identify this image"
+    assert user_message["images"] == ["ZmFrZQ=="]
 
 
 @pytest.mark.asyncio

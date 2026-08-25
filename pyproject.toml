@@ -23,6 +23,7 @@ freyja-memory-identity-migrate = "freyja.cli.memory_identity_migrate:main"
 freyja-identity-backup = "freyja.cli.identity_backup:main"
 freyja-identity-import-vcard = "freyja.cli.identity_import_vcard:main"
 freyja-identity-import-apple = "freyja.cli.identity_import_apple:main"
+freyja-rev2-preflight-status = "certification.rev2_preflight_status:main"
 
 [tool.setuptools]
 packages = ["certification", "connectors", "connectors.gmail", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.identity", "freyja.memory", "freyja.tools"]

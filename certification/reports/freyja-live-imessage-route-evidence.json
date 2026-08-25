@@ -1,0 +1,205 @@
+{
+  "imessage": {
+    "allowed_sender_count": 1,
+    "connector_token_configured": true,
+    "database_exists": true,
+    "database_path": "/Users/freyja/Library/Messages/chat.db",
+    "director_health": {
+      "ok": true,
+      "status_code": 200
+    },
+    "director_rev2_health": {
+      "checks": {
+        "/iris-router/health": {
+          "ok": true,
+          "status_code": 200
+        },
+        "/macagent/health": {
+          "ok": true,
+          "status_code": 200
+        },
+        "/providers/health": {
+          "missing_required_providers": [],
+          "ok": true,
+          "required_provider_readiness": {
+            "heavy_local": true,
+            "legacy_ollama": true
+          },
+          "status_code": 200,
+          "unavailable_required_providers": []
+        }
+      },
+      "ok": true
+    },
+    "director_url": "http://127.0.0.1:8000",
+    "enabled": true,
+    "family_chat_count": 0,
+    "family_observer_enabled": false,
+    "host_role": "iris-macos-launchagent",
+    "imsg_exists": true,
+    "imsg_path": "/opt/homebrew/bin/imsg",
+    "imsg_status": {
+      "ok": true,
+      "status_code": 0
+    },
+    "inprocess_route_smoke": {
+      "direct_agent_context_present": true,
+      "imessage": {
+        "checks": {
+          "interface_matches": true,
+          "person_matches": true,
+          "principal_matches": true,
+          "provider_matches": true,
+          "response_present": true
+        },
+        "expected_client_subject": "agent:cloyd-gibbler",
+        "expected_person_id": "joe",
+        "expected_provider": "local_reasoning",
+        "model": "gpt-oss-freyja:20b-analysis-prefill",
+        "ok": true,
+        "privacy_classification": "routine",
+        "provider": "local_reasoning",
+        "status_code": 200
+      },
+      "ok": true,
+      "prompt_context_equivalent": true,
+      "source": "inprocess",
+      "terminal": {
+        "checks": {
+          "interface_matches": true,
+          "person_matches": true,
+          "principal_matches": true,
+          "provider_matches": true,
+          "response_present": true
+        },
+        "expected_client_subject": "agent:cloyd-gibbler",
+        "expected_person_id": "joe",
+        "expected_provider": "local_reasoning",
+        "model": "gpt-oss-freyja:20b-analysis-prefill",
+        "ok": true,
+        "privacy_classification": "routine",
+        "provider": "local_reasoning",
+        "status_code": 200
+      },
+      "terminal_equivalent": true
+    },
+    "locally_known_imessage_sender_count": 0,
+    "messages_applescript": {
+      "error": "timeout",
+      "ok": false
+    },
+    "poll_interval_seconds": 5.0,
+    "provisional_reply_enabled": false,
+    "ready_for_live_smoke": true,
+    "runtime_import_check": {
+      "modules": [
+        "freyja.router",
+        "connectors.imessage.gateway"
+      ],
+      "ok": true,
+      "python": "/Users/freyja/freyja-os-imessage-runtime/.venv/bin/python",
+      "status_code": 0
+    },
+    "runtime_source_drift": {
+      "checkout_root": "/Users/freyja/freyja-os",
+      "drift_count": 0,
+      "files": [
+        {
+          "checkout_sha256": "5a25eabd59af7dcfb7dd85618c4e37a73a9eb2957ec949faea3a664dc9de365a",
+          "path": "connectors/imessage/gateway.py",
+          "runtime_sha256": "5a25eabd59af7dcfb7dd85618c4e37a73a9eb2957ec949faea3a664dc9de365a",
+          "status": "ok"
+        },
+        {
+          "checkout_sha256": "a2af8dc2011a1f82fbee66fa03893a820d772898e67427df0b0dfa872803ac79",
+          "path": "connectors/messaging.py",
+          "runtime_sha256": "a2af8dc2011a1f82fbee66fa03893a820d772898e67427df0b0dfa872803ac79",
+          "status": "ok"
+        },
+        {
+          "checkout_sha256": "40dec1325b5802847088fc0e5f150f200959d16a6535be044983797053c81104",
+          "path": "src/freyja/agents/coding_lane.py",
+          "runtime_sha256": "40dec1325b5802847088fc0e5f150f200959d16a6535be044983797053c81104",
+          "status": "ok"
+        },
+        {
+          "checkout_sha256": "c532b6835c624097f72cd330005dcffc28b392fca7a8c500a57fcd6724b50d57",
+          "path": "src/freyja/agents/household.py",
+          "runtime_sha256": "c532b6835c624097f72cd330005dcffc28b392fca7a8c500a57fcd6724b50d57",
+          "status": "ok"
+        },
+        {
+          "checkout_sha256": "0388acfa66f3f7d12fa1b0dc92253418341d91503b37167f5dac33e362a6a9f6",
+          "path": "src/freyja/inference.py",
+          "runtime_sha256": "0388acfa66f3f7d12fa1b0dc92253418341d91503b37167f5dac33e362a6a9f6",
+          "status": "ok"
+        },
+        {
+          "checkout_sha256": "711a8a2fcf080ef2a497a32a8f33c848135700ecc9a806c9ef22787362ade441",
+          "path": "src/freyja/media.py",
+          "runtime_sha256": "711a8a2fcf080ef2a497a32a8f33c848135700ecc9a806c9ef22787362ade441",
+          "status": "ok"
+        },
+        {
+          "checkout_sha256": "080cae88ecd9d3241cf5178765e9a8dddf3171586c974dbdc5a5f47b90e3d77c",
+          "path": "src/freyja/router.py",
+          "runtime_sha256": "080cae88ecd9d3241cf5178765e9a8dddf3171586c974dbdc5a5f47b90e3d77c",
+          "status": "ok"
+        },
+        {
+          "checkout_sha256": "c207be65f9c2cc0db715d752251f89a7e6d7434d0d2b19af213d34cd93389e6b",
+          "path": "scripts/run-imessage-connector.py",
+          "runtime_sha256": "c207be65f9c2cc0db715d752251f89a7e6d7434d0d2b19af213d34cd93389e6b",
+          "status": "ok"
+        },
+        {
+          "checkout_sha256": "8ddefa8e21f1a1b014d206cfb74be823fa2ff5635971a22dece492d0662d89c0",
+          "path": "scripts/com.freyja-os.imessage-connector.plist",
+          "runtime_sha256": "8ddefa8e21f1a1b014d206cfb74be823fa2ff5635971a22dece492d0662d89c0",
+          "status": "ok"
+        }
+      ],
+      "ok": true,
+      "runtime_root": "/Users/freyja/freyja-os-imessage-runtime"
+    },
+    "synthetic_route_smoke": {
+      "imessage": {
+        "checks": {
+          "interface_matches": true,
+          "person_matches": true,
+          "principal_matches": true,
+          "provider_matches": true,
+          "response_present": true
+        },
+        "expected_client_subject": "agent:cloyd-gibbler",
+        "expected_person_id": "joe",
+        "expected_provider": "local_reasoning",
+        "model": "gpt-oss-freyja:20b-analysis-prefill",
+        "ok": true,
+        "privacy_classification": "routine",
+        "provider": "local_reasoning",
+        "status_code": 200
+      },
+      "ok": true,
+      "terminal": {
+        "checks": {
+          "interface_matches": true,
+          "person_matches": true,
+          "principal_matches": true,
+          "provider_matches": true,
+          "response_present": true
+        },
+        "expected_client_subject": "agent:cloyd-gibbler",
+        "expected_person_id": "joe",
+        "expected_provider": "local_reasoning",
+        "model": "gpt-oss-freyja:20b-analysis-prefill",
+        "ok": true,
+        "privacy_classification": "routine",
+        "provider": "local_reasoning",
+        "status_code": 200
+      },
+      "terminal_equivalent": true
+    },
+    "watch_enabled": true
+  }
+}

@@ -173,7 +173,11 @@ class AgentHierarchy:
                 "personal agent. Do not say you are Freyja, do not answer as Freyja, "
                 "and do not describe Freyja as your identity. Freyja is only the "
                 "family/household agent and infrastructure context. Protect Joe's "
-                "private context and keep personal data internal."
+                "private context and keep personal data internal. Do not claim you "
+                "checked calendars, notes, memories, messages, files, or shared "
+                "context unless Director supplied that data in this request or a "
+                "tool result. If you do not have verified data, say you cannot "
+                "verify it from here."
             )
         if agent is AgentName.BENEDICT and person is PersonName.BETH:
             return (
@@ -182,7 +186,10 @@ class AgentHierarchy:
                 "not describe Freyja as your identity. Freyja is only the family/"
                 "household agent and infrastructure context. Protect Beth's private "
                 "context and share only the minimum necessary household information "
-                "when Beth explicitly asks."
+                "when Beth explicitly asks. Do not claim you checked calendars, "
+                "notes, memories, messages, files, or shared context unless Director "
+                "supplied that data in this request or a tool result. If you do not "
+                "have verified data, say you cannot verify it from here."
             )
         return (
             "Your name is Freyja. You are the family and household agent for this "

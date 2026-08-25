@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import email
+import base64
 import imaplib
 import logging
 import re
@@ -215,6 +216,9 @@ class GmailImapSmtpTransport:
                         filename=filename or "unnamed",
                         mime_type=content_type,
                         size_bytes=len(payload),
+                        data_base64=base64.b64encode(payload).decode("ascii")
+                        if content_type.lower().startswith("image/")
+                        else None,
                     )
                 )
                 continue

@@ -26,6 +26,7 @@ class CertificationSuite:
     category: str = "core"
     difficulty: str = "standard"
     path: str | None = None
+    passing_score: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -68,14 +69,23 @@ class CertificationReport:
     suite_description: str
     cases: tuple[CaseResult, ...]
     category_scores: dict[str, float] = field(default_factory=dict)
+    speed_metrics: dict[str, Any] = field(default_factory=dict)
     report_paths: dict[str, str] = field(default_factory=dict)
     schema_version: str = "1.0"
+    passing_score: float = 1.0
+
+    @property
+    def passed(self) -> bool:
+        return self.metadata.overall_score >= self.passing_score
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
+            "passed": self.passed,
+            "passing_score": self.passing_score,
             "metadata": dict(self.metadata.__dict__),
             "suite_description": self.suite_description,
+            "speed_metrics": dict(self.speed_metrics),
             "cases": [
                 {
                     "name": case.name,

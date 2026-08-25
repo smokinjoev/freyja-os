@@ -25,9 +25,12 @@ certification/reports/*.json
 certification/reports/*.md
 certification/reports/iris-shadow-*.json
 certification/reports/iris-shadow-*.md
+certification/benchmarks/*.json
+certification/benchmarks/*.md
 !logs/.gitkeep
 !data/.gitkeep
 !certification/reports/.gitkeep
+!certification/benchmarks/.gitkeep
 
 # macOS
 .DS_Store

@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/freyja/freyja-os/.venv/bin/uvicorn</string>
-        <string>freyja.roadmode_app:app</string>
+        <string>freyja.atlas_app:app</string>
         <string>--host</string>
         <string>127.0.0.1</string>
         <string>--port</string>

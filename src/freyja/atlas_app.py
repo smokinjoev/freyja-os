@@ -7,32 +7,10 @@ from typing import Any, Awaitable, Callable
 
 from freyja.config import settings
 from freyja.iris_router import IrisRouterClient, IrisShadowResult
-from freyja.main import app as director_app
+from freyja.roadmode_app import app as director_app
 
 logger = logging.getLogger(__name__)
 iris_router = IrisRouterClient()
-
-
-@director_app.get("/iris-router/health")
-async def iris_router_health() -> dict[str, Any]:
-    healthy = await iris_router.healthy()
-    return {
-        "enabled": settings.iris_router_enabled,
-        "shadow_enabled": settings.iris_router_shadow_enabled,
-        "reachable": healthy,
-        "base_url": settings.iris_ollama_base_url,
-        "model": settings.iris_router_model,
-    }
-
-
-@director_app.post("/iris-router/warm")
-async def iris_router_warm() -> dict[str, Any]:
-    warmed = await iris_router.warm()
-    return {
-        "warmed": warmed,
-        "model": settings.iris_router_model,
-        "keep_alive": settings.iris_router_keep_alive,
-    }
 
 
 def _provider_target(provider: str | None) -> str | None:

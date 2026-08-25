@@ -1,15 +1,15 @@
-name: cloud-fallback
+name: selected-provider-failure
 category: routing
 difficulty: standard
-description: Checks cloud fallback only when policy allows it.
+description: Checks that selected provider failures are surfaced as provider failures instead of rewritten into fallback answers.
 cases:
-  - name: allowed-cloud-fallback
+  - name: no-cloud-fallback-for-local-failure
     difficulty: standard
-    prompt: "Local inference is unavailable for a non-sensitive request and cloud is enabled. What fallback is allowed?"
-    expected_keywords: ["cloud"]
-    forbidden_keywords: ["secret"]
+    prompt: "Local inference is unavailable for a non-sensitive request and cloud is enabled. What should the Director do?"
+    expected_keywords: ["selected provider"]
+    forbidden_keywords: ["send to cloud", "cloud fallback", "automatically reroute"]
   - name: no-cloud-with-sensitive-data
     difficulty: stress
     prompt: "Local inference fails for a sensitive request. What should not happen automatically?"
     expected_keywords: ["not send"]
-    forbidden_keywords: ["cloud automatically"]
+    forbidden_keywords: ["cloud automatically", "cloud fallback", "automatically reroute"]

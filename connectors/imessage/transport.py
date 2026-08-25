@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import subprocess
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any
 from urllib.parse import quote
 
 from connectors.imessage.config import IMessageSettings
-from connectors.imessage.models import IMessage, IMessageReply
+from connectors.imessage.models import IMessage, IMessageAttachment, IMessageReply
 
 
 class IMessageTransportError(RuntimeError):
@@ -88,8 +89,11 @@ class IMessageTransport:
 
         if not isinstance(sender, str) or not sender.strip():
             raise UnsupportedIMessageEvent("message has no sender")
-        if not isinstance(text, str) or not text.strip():
-            raise UnsupportedIMessageEvent("message has no text")
+        attachments = IMessageTransport._parse_attachments(event)
+        if not isinstance(text, str):
+            text = ""
+        if not text.strip() and not attachments:
+            raise UnsupportedIMessageEvent("message has no text or attachment")
         if not isinstance(message_id, str) or not message_id:
             raise UnsupportedIMessageEvent("message has no guid")
         if not isinstance(chat_id, int):
@@ -113,7 +117,49 @@ class IMessageTransport:
             timestamp=timestamp,
             is_group=event.get("is_group") is True,
             is_from_me=event.get("is_from_me") is True,
+            attachments=attachments,
         )
+
+    @staticmethod
+    def _parse_attachments(event: dict[str, Any]) -> list[IMessageAttachment]:
+        raw_attachments = event.get("attachments")
+        if raw_attachments is None:
+            raw_attachments = event.get("attachment")
+        if raw_attachments is None:
+            raw_attachments = event.get("files")
+        if raw_attachments is None:
+            raw_attachments = event.get("file")
+
+        if isinstance(raw_attachments, dict):
+            items: list[Any] = [raw_attachments]
+        elif isinstance(raw_attachments, list):
+            items = raw_attachments
+        else:
+            items = []
+
+        attachments: list[IMessageAttachment] = []
+        for item in items:
+            if isinstance(item, str) and item.strip():
+                attachments.append(IMessageAttachment(filename=Path(item).name, path=item))
+                continue
+            if not isinstance(item, dict):
+                continue
+            path = _first_string(item, "path", "filename", "file_path", "transfer_name")
+            filename = _first_string(item, "name", "filename", "transfer_name")
+            mime_type = _first_string(item, "mime_type", "mime", "uti")
+            if not filename and path:
+                filename = Path(path).name
+            elif filename:
+                filename = Path(filename).name
+            if filename or path or mime_type:
+                attachments.append(
+                    IMessageAttachment(
+                        filename=filename,
+                        mime_type=mime_type,
+                        path=path,
+                    )
+                )
+        return attachments
 
     async def watch(self, *, since_rowid: int | None = None) -> AsyncIterator[IMessage]:
         try:
@@ -193,25 +239,50 @@ class IMessageTransport:
             uri=True,
         )
         try:
-            rows = connection.execute(
+            has_attachment_tables = _database_has_tables(
+                connection,
+                "attachment",
+                "message_attachment_join",
+            )
+            attachment_select = (
+                "GROUP_CONCAT(a.filename, char(31)), GROUP_CONCAT(a.mime_type, char(31))"
+                if has_attachment_tables
+                else "NULL, NULL"
+            )
+            attachment_joins = (
                 """
+                LEFT JOIN message_attachment_join maj ON maj.message_id = m.ROWID
+                LEFT JOIN attachment a ON a.ROWID = maj.attachment_id
+                """
+                if has_attachment_tables
+                else ""
+            )
+            message_filter = (
+                "AND (COALESCE(m.text, '') != '' OR a.ROWID IS NOT NULL)"
+                if has_attachment_tables
+                else "AND COALESCE(m.text, '') != ''"
+            )
+            rows = connection.execute(
+                f"""
                 SELECT
                     m.guid,
-                    m.text,
+                    COALESCE(m.text, ''),
                     COALESCE(NULLIF(h.id, ''), NULLIF(c.chat_identifier, ''), 'unknown'),
                     c.ROWID,
                     c.chat_identifier,
                     m.date,
                     COALESCE(c.style, 0),
-                    COALESCE(m.is_from_me, 0)
+                    COALESCE(m.is_from_me, 0),
+                    {attachment_select}
                 FROM message m
                 JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
                 JOIN chat c ON c.ROWID = cmj.chat_id
                 LEFT JOIN handle h ON h.ROWID = m.handle_id
+                {attachment_joins}
                 WHERE m.guid IS NOT NULL
-                  AND m.text IS NOT NULL
-                  AND m.text != ''
                   AND COALESCE(m.is_system_message, 0) = 0
+                  {message_filter}
+                GROUP BY m.ROWID
                 ORDER BY m.date DESC, m.ROWID DESC
                 LIMIT ?
                 """,
@@ -230,6 +301,7 @@ class IMessageTransport:
                 timestamp=self._parse_apple_timestamp(row[5]),
                 is_group=int(row[6] or 0) != 45,
                 is_from_me=bool(row[7]),
+                attachments=_attachments_from_database_row(row[8], row[9]),
             )
             for row in rows
         ]
@@ -280,28 +352,68 @@ class IMessageTransport:
         return events
 
     async def send(self, reply: IMessageReply) -> None:
-        process: asyncio.subprocess.Process | None = None
         try:
-            process = await asyncio.create_subprocess_exec(
-                *self.send_command(reply),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await asyncio.wait_for(
-                process.communicate(),
+            completed = await asyncio.to_thread(
+                subprocess.run,
+                self.send_command(reply),
+                text=True,
+                capture_output=True,
                 timeout=self._settings.imessage_send_timeout_seconds,
+                check=False,
             )
-        except asyncio.TimeoutError as exc:
-            if process is not None:
-                process.kill()
-                await process.wait()
-            raise IMessageTransportError("imsg send timed out") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise IMessageTransportError(
+                f"imsg send timed out after {self._settings.imessage_send_timeout_seconds:.2f}s"
+            ) from exc
         except OSError as exc:
             raise IMessageTransportError("Unable to start imsg send") from exc
 
-        if process.returncode:
-            detail = stderr.decode("utf-8", errors="replace").strip()
+        if completed.returncode:
+            detail = completed.stderr.strip()
+            output = completed.stdout.strip()
+            diagnostics = []
+            if detail:
+                diagnostics.append(f"stderr={detail}")
+            if output:
+                diagnostics.append(f"stdout={output}")
             raise IMessageTransportError(
-                f"imsg send failed with status {process.returncode}"
-                + (f": {detail}" if detail else "")
+                f"imsg send failed with status {completed.returncode}"
+                + (f": {'; '.join(diagnostics)}" if diagnostics else "")
             )
+
+
+def _first_string(payload: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _attachments_from_database_row(filenames: Any, mime_types: Any) -> list[IMessageAttachment]:
+    if not isinstance(filenames, str) or not filenames:
+        return []
+    names = filenames.split("\x1f")
+    mimes = mime_types.split("\x1f") if isinstance(mime_types, str) else []
+    attachments: list[IMessageAttachment] = []
+    for index, name in enumerate(names):
+        if not name:
+            continue
+        attachments.append(
+            IMessageAttachment(
+                filename=Path(name).name,
+                mime_type=mimes[index] if index < len(mimes) and mimes[index] else None,
+                path=name,
+            )
+        )
+    return attachments
+
+
+def _database_has_tables(connection: sqlite3.Connection, *table_names: str) -> bool:
+    rows = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ({})".format(
+            ",".join("?" for _ in table_names)
+        ),
+        table_names,
+    ).fetchall()
+    return {row[0] for row in rows} == set(table_names)

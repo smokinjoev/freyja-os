@@ -21,12 +21,31 @@ class TelegramChat(BaseModel):
     type: str
 
 
+class TelegramPhotoSize(BaseModel):
+    file_id: str
+    file_unique_id: str | None = None
+    width: int
+    height: int
+    file_size: int | None = None
+
+
+class TelegramDocument(BaseModel):
+    file_id: str
+    file_unique_id: str | None = None
+    file_name: str | None = None
+    mime_type: str | None = None
+    file_size: int | None = None
+
+
 class TelegramMessage(BaseModel):
     message_id: int
     from_user: TelegramUser | None = Field(default=None, alias="from")
     chat: TelegramChat
     date: int
     text: str = ""
+    caption: str = ""
+    photo: list[TelegramPhotoSize] = Field(default_factory=list)
+    document: TelegramDocument | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -74,8 +93,17 @@ class TelegramInboundUpdate(BaseModel):
     @property
     def text(self) -> str:
         if self.message:
-            return self.message.text or ""
+            return self.message.text or self.message.caption or ""
         return ""
+
+    @property
+    def has_image(self) -> bool:
+        if not self.message:
+            return False
+        if self.message.photo:
+            return True
+        document = self.message.document
+        return bool(document and (document.mime_type or "").lower().startswith("image/"))
 
     @property
     def is_direct_message(self) -> bool:

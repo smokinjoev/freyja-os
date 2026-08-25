@@ -13,6 +13,7 @@ from freyja.calendar.providers import (
     CalendarProvider,
     GoogleCalendarProvider,
     InMemoryCalendarProvider,
+    MacAgentAppleCalendarProvider,
 )
 from freyja.calendar.service import CalendarService
 
@@ -26,6 +27,7 @@ __all__ = [
     "CalendarService",
     "GoogleCalendarProvider",
     "InMemoryCalendarProvider",
+    "MacAgentAppleCalendarProvider",
     "RankedTimeOption",
     "TimeWindow",
 ]

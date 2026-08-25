@@ -22,7 +22,6 @@ class IMessageSettings(BaseSettings):
     )
     imessage_allowed_senders: str = ""
     imessage_max_message_chars: int = 4000
-    imessage_model: str = ""
     imessage_tools_required_mode: str = "always"
     freyja_director_url: str = "http://127.0.0.1:8000"
     freyja_connector_token: str = ""

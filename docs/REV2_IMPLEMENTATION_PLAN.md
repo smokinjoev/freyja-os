@@ -1,7 +1,7 @@
 # Rev 2 Implementation Plan
 
 **Date:** 2026-08-16  
-**Status:** prepared; implementation not yet started  
+**Status:** superseded by the current implementation audit in `docs/REV2_STATUS.md`
 **Architecture:** `ARCHITECTURE.md` v0.2 Rev 2
 
 ## Goal

@@ -26,3 +26,20 @@ It is delimited as untrusted quoted data, capped by item count, item size, and
 total injected characters, and instruction-like stored content is neutralized.
 Cloud prompt recall requires the explicit `MEMORY_RECALL_INCLUDE_IN_CLOUD=true`
 policy setting.
+
+## Provenance
+
+Every shared-memory write is normalized with provenance metadata. Existing
+callers can continue sending the older request shape; the Director derives a
+trusted connector provenance record from the authenticated principal when no
+explicit provenance is supplied.
+
+The provenance record includes source type, source ID when available, trust
+level, memory kind, observed timestamp, authoritative status, optional worker
+observation details, and derivation links. It is stored inside the existing
+metadata JSON so no schema migration is required.
+
+External-content worker observations are not authoritative facts. If an
+untrusted worker attempts to write authoritative shared memory, the Director
+records it as a non-authoritative observation for later interpretation or user
+confirmation.

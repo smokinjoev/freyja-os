@@ -13,6 +13,7 @@ class IrisRouteRecommendation(BaseModel):
 
     tier: Literal[0, 1, 2, 3, 4]
     task: str = Field(min_length=1, max_length=80)
+    complexity: int = Field(ge=1, le=5)
     needs_tools: bool
     sensitivity: Literal["public", "routine", "private", "sensitive"]
     confidence: float = Field(ge=0.0, le=1.0)
@@ -37,8 +38,9 @@ class IrisShadowResult(BaseModel):
 IRIS_ROUTER_SYSTEM_PROMPT = """You are the Freyja-OS routing classifier running on Iris.
 Classify only. Do not answer the request and do not authorize tools.
 Return only one compact JSON object with exactly these required keys:
-tier, task, needs_tools, sensitivity, confidence, preferred_target, reason.
+tier, task, complexity, needs_tools, sensitivity, confidence, preferred_target, reason.
 tier: 0 deterministic, 1 tiny reflex, 2 routine Iris, 3 heavy local, 4 cloud.
+complexity: integer 1 to 5, where 1 is trivial and 5 is hard multi-step work.
 sensitivity: public, routine, private, sensitive.
 preferred_target: deterministic, iris, local_heavy, isolated_worker, cloud.
 confidence must be a decimal from 0.0 to 1.0, for example 0.75.

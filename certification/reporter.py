@@ -28,8 +28,10 @@ def write_reports(report: CertificationReport, output_dir: Path = DEFAULT_REPORT
         suite_description=report.suite_description,
         cases=report.cases,
         category_scores=report.category_scores,
+        speed_metrics=report.speed_metrics,
         report_paths={"json": str(json_path), "markdown": str(md_path)},
         schema_version=report.schema_version,
+        passing_score=report.passing_score,
     )
 
 
@@ -50,7 +52,11 @@ def render_markdown(report: CertificationReport) -> str:
         f"- Router mode: {metadata.router_mode}",
         f"- Suite: {metadata.suite_name}",
         f"- Overall score: {metadata.overall_score:.3f}",
+        f"- Passing score: {report.passing_score:.3f}",
+        f"- Passed: {report.passed}",
         f"- Execution time: {metadata.execution_time:.3f}s",
+        f"- Mean generation speed: {_format_speed(report.speed_metrics.get('mean_generation_tokens_per_second'))}",
+        f"- Speed samples: {report.speed_metrics.get('measured_cases', 0)}",
         f"- Certification CLI version: {metadata.certification_cli_version}",
         "",
         "## Category Scores",
@@ -78,6 +84,15 @@ def render_markdown(report: CertificationReport) -> str:
     for case in report.cases:
         lines.extend(_case_lines(case))
     return "\n".join(lines)
+
+
+def _format_speed(value: object) -> str:
+    if value is None:
+        return "n/a"
+    try:
+        return f"{float(value):.3f} tokens/s"
+    except (TypeError, ValueError):
+        return "n/a"
 
 
 def _case_lines(case: CaseResult) -> list[str]:

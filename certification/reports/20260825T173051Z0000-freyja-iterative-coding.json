@@ -1,0 +1,816 @@
+{
+  "cases": [
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "python-fix-off-by-one",
+      "passed": true,
+      "prompt": "You are revising code after a failed unit test.\n\nBroken code:\n```python\ndef inclusive_range_total(start, end):\n    return sum(range(start, end))\n```\n\nFailed expectation: inclusive_range_total(1, 3) should return 6.\n\nReturn only the corrected Python function.\n",
+      "response": "```python\ndef inclusive_range_total(start, end):\n    return sum(range(start, end + 1))\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.83
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 2910.982667002827,
+          "time_to_first_token_ms": 2910.0,
+          "total_provider_latency_ms": 2910.0
+        },
+        "token_counts": {
+          "completion_tokens": 48,
+          "prompt_tokens": 550,
+          "total_tokens": 598
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "python-preserve-empty-list",
+      "passed": true,
+      "prompt": "First attempt failed because empty input raised an exception.\n\nBroken code:\n```python\ndef average(values):\n    return sum(values) / len(values)\n```\n\nRequirement: return 0 for an empty list, otherwise return the arithmetic mean.\n\nReturn only the corrected Python function.\n",
+      "response": "```python\ndef average(values):\n    if not values:\n        return 0\n    return sum(values) / len(values)\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.73
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 3250.320167047903,
+          "time_to_first_token_ms": 3250.0,
+          "total_provider_latency_ms": 3250.0
+        },
+        "token_counts": {
+          "completion_tokens": 58,
+          "prompt_tokens": 545,
+          "total_tokens": 603
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "passed",
+          "assertion": "python_behavior",
+          "evidence": "",
+          "expected": "all assertions pass",
+          "passed": true,
+          "verifier": "python_behavior"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "javascript-fix-sort-numeric",
+      "passed": true,
+      "prompt": "A JavaScript test failed:\nsortNumbers([10, 2, 1]) returned [1, 10, 2], expected [1, 2, 10].\n\nBroken code:\n```javascript\nfunction sortNumbers(values) {\n  return values.sort();\n}\n```\n\nReturn only the corrected function.\n",
+      "response": "```javascript\nfunction sortNumbers(values) {\n  return values.sort((a, b) => a - b);\n}\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.48
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 3473.5037500504404,
+          "time_to_first_token_ms": 3473.0,
+          "total_provider_latency_ms": 3473.0
+        },
+        "token_counts": {
+          "completion_tokens": 63,
+          "prompt_tokens": 554,
+          "total_tokens": 617
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "python-fix-mutable-default",
+      "passed": true,
+      "prompt": "A second call leaked state from the first call.\n\nBroken code:\n```python\ndef add_tag(tag, tags=[]):\n    tags.append(tag)\n    return tags\n```\n\nRequirement: each omitted tags argument should start fresh.\n\nReturn only the corrected Python function.\n",
+      "response": "```python\ndef add_tag(tag, tags=None):\n    if tags is None:\n        tags = []\n    tags.append(tag)\n    return tags\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.44
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 3131.7256659967825,
+          "time_to_first_token_ms": 3131.0,
+          "total_provider_latency_ms": 3131.0
+        },
+        "token_counts": {
+          "completion_tokens": 54,
+          "prompt_tokens": 543,
+          "total_tokens": 597
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "python-fix-case-insensitive-count",
+      "passed": true,
+      "prompt": "Tests show count_word(\"Hello hello\", \"hello\") should return 2, but the current version returns 1.\n\nBroken code:\n```python\ndef count_word(text, word):\n    return text.split().count(word)\n```\n\nReturn only the corrected Python function.\n",
+      "response": "```python\ndef count_word(text, word):\n    \"\"\"Count occurrences of *word* in *text*, case\u2011insensitively.\"\"\"\n    target = word.lower()\n    return sum(1 for token in text.split() if token.lower() == target)\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.18
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 5535.376625019126,
+          "time_to_first_token_ms": 5535.0,
+          "total_provider_latency_ms": 5535.0
+        },
+        "token_counts": {
+          "completion_tokens": 125,
+          "prompt_tokens": 545,
+          "total_tokens": 670
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "passed",
+          "assertion": "python_behavior",
+          "evidence": "",
+          "expected": "all assertions pass",
+          "passed": true,
+          "verifier": "python_behavior"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "python-fix-json-error-handling",
+      "passed": true,
+      "prompt": "The first implementation crashes on malformed JSON.\n\nBroken code:\n```python\nimport json\n\ndef read_name(raw):\n    return json.loads(raw)[\"name\"]\n```\n\nRequirement: return None when the JSON is invalid or when \"name\" is missing.\n\nReturn only the corrected Python code.\n",
+      "response": "```python\nimport json\n\ndef read_name(raw):\n    try:\n        data = json.loads(raw)\n    except (json.JSONDecodeError, TypeError):\n        return None\n    return data.get(\"name\")\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 28.89
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 4010.04645798821,
+          "time_to_first_token_ms": 4009.0,
+          "total_provider_latency_ms": 4009.0
+        },
+        "token_counts": {
+          "completion_tokens": 76,
+          "prompt_tokens": 547,
+          "total_tokens": 623
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "typescript-fix-null-guard",
+      "passed": true,
+      "prompt": "Review this TypeScript function after a crash when user is null.\n\nBroken code:\n```typescript\nfunction displayName(user: { first: string; last: string } | null): string {\n  return user.first + \" \" + user.last;\n}\n```\n\nRequirement: return \"Unknown\" when user is null.\n\nReturn only the corrected function.\n",
+      "response": "```typescript\nfunction displayName(user: { first: string; last: string } | null): string {\n  return user ? `${user.first} ${user.last}` : \"Unknown\";\n}\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.35
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 3731.2856659991667,
+          "time_to_first_token_ms": 3731.0,
+          "total_provider_latency_ms": 3731.0
+        },
+        "token_counts": {
+          "completion_tokens": 70,
+          "prompt_tokens": 560,
+          "total_tokens": 630
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "python-fix-deduplicate-stable",
+      "passed": true,
+      "prompt": "The current implementation removes duplicates but changes order.\n\nRequirement: unique_stable([\"b\", \"a\", \"b\"]) returns [\"b\", \"a\"].\n\nReturn only a Python function named unique_stable.\n",
+      "response": "```python\ndef unique_stable(seq):\n    \"\"\"Return a list of the elements in *seq* with duplicates removed,\n    preserving the original order of first occurrences.\"\"\"\n    seen = set()\n    result = []\n    for item in seq:\n        if item not in seen:\n            seen.add(item)\n            result.append(item)\n    return result\n```",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.29
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 4941.760582965799,
+          "time_to_first_token_ms": 4941.0,
+          "total_provider_latency_ms": 4941.0
+        },
+        "token_counts": {
+          "completion_tokens": 108,
+          "prompt_tokens": 532,
+          "total_tokens": 640
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "passed",
+          "assertion": "python_behavior",
+          "evidence": "",
+          "expected": "all assertions pass",
+          "passed": true,
+          "verifier": "python_behavior"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "python-fix-context-manager-close",
+      "passed": true,
+      "prompt": "A resource leak test failed because the file was not closed on exceptions.\n\nBroken code:\n```python\ndef read_first_line(path):\n    f = open(path)\n    return f.readline()\n```\n\nReturn only the corrected Python function.\n",
+      "response": "```python\ndef read_first_line(path):\n    with open(path, \"r\") as f:\n        return f.readline()\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.85
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 2749.5740830199793,
+          "time_to_first_token_ms": 2749.0,
+          "total_provider_latency_ms": 2749.0
+        },
+        "token_counts": {
+          "completion_tokens": 43,
+          "prompt_tokens": 537,
+          "total_tokens": 580
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        }
+      ]
+    },
+    {
+      "category": "coding",
+      "difficulty": "standard",
+      "error": null,
+      "forbidden_matches": [],
+      "max_score": 1.0,
+      "missing_keywords": [],
+      "name": "python-fix-boundary-validation",
+      "passed": true,
+      "prompt": "A validation test failed: clamp(11, 0, 10) should return 10 and clamp(-1, 0, 10) should return 0.\n\nReturn only a Python function named clamp(value, minimum, maximum).\n",
+      "response": "```python\ndef clamp(value, minimum, maximum):\n    \"\"\"Clamp `value` to the inclusive range [minimum, maximum].\"\"\"\n    if value < minimum:\n        return minimum\n    if value > maximum:\n        return maximum\n    return value\n```\n",
+      "runtime_context": {
+        "capability_authorizations": [],
+        "classifier_complexity": null,
+        "classifier_confidence": null,
+        "classifier_error": null,
+        "classifier_latency_ms": null,
+        "classifier_model": null,
+        "classifier_provider": null,
+        "classifier_target": null,
+        "connector_operations": [],
+        "cost": null,
+        "fallback_events": [],
+        "interface": "certification",
+        "memory_lookups": [],
+        "model_selected": "gpt-oss-freyja:20b-analysis-prefill",
+        "person": null,
+        "principal": null,
+        "provider_locality": "local_heavy",
+        "provider_profile_id": "heavy_local",
+        "provider_readiness": null,
+        "provider_selected": "local_reasoning",
+        "request_id": null,
+        "rev2_evidence": {
+          "base_url": "http://100.115.228.56:11434",
+          "direct_model_inference": true,
+          "generation_tokens_per_second": 30.68
+        },
+        "routing_decision": "direct_local_reasoning",
+        "routing_reason": "direct certification run against local heavy inference model",
+        "selected_tier": 3,
+        "timing": {
+          "duration_ms": 3567.5410830881447,
+          "time_to_first_token_ms": 3567.0,
+          "total_provider_latency_ms": 3567.0
+        },
+        "token_counts": {
+          "completion_tokens": 67,
+          "prompt_tokens": 539,
+          "total_tokens": 606
+        },
+        "tool_calls": [],
+        "vision_executions": []
+      },
+      "score": 1.0,
+      "suite_name": "freyja-iterative-coding",
+      "verifier_results": [
+        {
+          "actual": "local_reasoning",
+          "assertion": "provider",
+          "evidence": "",
+          "expected": "local_reasoning",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "heavy_local",
+          "assertion": "provider_profile_id",
+          "evidence": "",
+          "expected": "heavy_local",
+          "passed": true,
+          "verifier": "router"
+        },
+        {
+          "actual": "passed",
+          "assertion": "python_behavior",
+          "evidence": "",
+          "expected": "all assertions pass",
+          "passed": true,
+          "verifier": "python_behavior"
+        }
+      ]
+    }
+  ],
+  "category_scores": {
+    "coding": 1.0
+  },
+  "metadata": {
+    "branch": "main",
+    "certification_cli_version": "0.1.0",
+    "execution_time": 37.452448084019125,
+    "git_sha": "1735657802883d32f32dbb0e6db7b08b1238d19b",
+    "hostname": "iris.lan",
+    "model": "gpt-oss-freyja:20b-analysis-prefill",
+    "overall_score": 1.0,
+    "provider": "local_reasoning",
+    "router_mode": "default",
+    "suite_name": "freyja-iterative-coding",
+    "timestamp": "2026-08-25T17:30:51+00:00",
+    "working_tree": "dirty"
+  },
+  "passed": true,
+  "passing_score": 0.9,
+  "report_paths": {},
+  "schema_version": "1.0",
+  "speed_metrics": {
+    "generated_tokens": 712,
+    "max_generation_tokens_per_second": 30.85,
+    "mean_generation_tokens_per_second": 30.372,
+    "measured_cases": 10,
+    "min_generation_tokens_per_second": 28.89,
+    "prompt_tokens": 5452
+  },
+  "suite_description": "Iterative coding prompts that require reading a failure, revising the implementation, and returning the corrected final artifact."
+}

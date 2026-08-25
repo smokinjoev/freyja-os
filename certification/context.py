@@ -33,9 +33,20 @@ class CertificationContext:
     principal: dict[str, Any] | None = None
     person: dict[str, str] | None = None
     provider_selected: str | None = None
+    provider_profile_id: str | None = None
+    provider_locality: str | None = None
+    selected_tier: int | None = None
+    provider_readiness: dict[str, Any] | None = None
     model_selected: str | None = None
     routing_decision: str | None = None
     routing_reason: str | None = None
+    classifier_provider: str | None = None
+    classifier_model: str | None = None
+    classifier_confidence: float | None = None
+    classifier_latency_ms: int | None = None
+    classifier_target: str | None = None
+    classifier_complexity: int | None = None
+    classifier_error: str | None = None
     fallback_events: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[ToolCallEvidence] = field(default_factory=list)
     capability_authorizations: list[dict[str, Any]] = field(default_factory=list)
@@ -45,6 +56,7 @@ class CertificationContext:
     timing: dict[str, float] = field(default_factory=dict)
     token_counts: dict[str, int] = field(default_factory=dict)
     cost: float | None = None
+    rev2_evidence: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -53,9 +65,20 @@ class CertificationContext:
             "principal": dict(self.principal) if self.principal else None,
             "person": dict(self.person) if self.person else None,
             "provider_selected": self.provider_selected,
+            "provider_profile_id": self.provider_profile_id,
+            "provider_locality": self.provider_locality,
+            "selected_tier": self.selected_tier,
+            "provider_readiness": dict(self.provider_readiness) if self.provider_readiness else None,
             "model_selected": self.model_selected,
             "routing_decision": self.routing_decision,
             "routing_reason": self.routing_reason,
+            "classifier_provider": self.classifier_provider,
+            "classifier_model": self.classifier_model,
+            "classifier_confidence": self.classifier_confidence,
+            "classifier_latency_ms": self.classifier_latency_ms,
+            "classifier_target": self.classifier_target,
+            "classifier_complexity": self.classifier_complexity,
+            "classifier_error": self.classifier_error,
             "fallback_events": list(self.fallback_events),
             "tool_calls": [call.to_dict() for call in self.tool_calls],
             "capability_authorizations": list(self.capability_authorizations),
@@ -65,6 +88,7 @@ class CertificationContext:
             "timing": dict(self.timing),
             "token_counts": dict(self.token_counts),
             "cost": self.cost,
+            "rev2_evidence": dict(self.rev2_evidence),
         }
 
 

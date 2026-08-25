@@ -6,12 +6,21 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class SignalAttachment(BaseModel):
+    filename: str | None = None
+    mime_type: str | None = None
+    path: str | None = None
+    data_base64: str | None = None
+    size_bytes: int | None = Field(default=None, ge=0)
+
+
 class InboundMessage(BaseModel):
     sender: str
     text: str = ""
     message_id: str
     timestamp: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
     group_id: str | None = None
+    attachments: list[SignalAttachment] = Field(default_factory=list)
 
     @property
     def has_text(self) -> bool:
@@ -19,7 +28,7 @@ class InboundMessage(BaseModel):
 
     @property
     def is_attachment_only(self) -> bool:
-        return not self.has_text
+        return not self.has_text and bool(self.attachments)
 
 
 class OutboundResponse(BaseModel):

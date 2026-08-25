@@ -3,47 +3,47 @@ category: routing
 difficulty: standard
 description: Validates Atlas routing across Iris, Hera presence ingress, Odin heavy local reasoning, privacy-internal, and cloud-explicit layers.
 cases:
-  - {name: iris-routine-001, difficulty: smoke, prompt: "Say hello in one sentence.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-002, difficulty: smoke, prompt: "Summarize this reminder: take out trash.", route_request: {task_type: summarize}, expects: {provider: ollama}}
-  - {name: iris-routine-003, difficulty: smoke, prompt: "Classify this as urgent or not: buy milk.", route_request: {task_type: classify}, expects: {provider: ollama}}
-  - {name: iris-routine-004, difficulty: smoke, prompt: "Extract the date from: dinner tomorrow.", route_request: {task_type: extract}, expects: {provider: ollama}}
-  - {name: iris-routine-005, difficulty: smoke, prompt: "Rewrite this politely: send the file.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-006, difficulty: standard, prompt: "What is a concise grocery list title?", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-007, difficulty: standard, prompt: "Turn this note into a short checklist.", route_request: {task_type: summarize}, expects: {provider: ollama}}
-  - {name: iris-routine-008, difficulty: standard, prompt: "Is this message friendly or formal?", route_request: {task_type: classification}, expects: {provider: ollama}}
-  - {name: iris-routine-009, difficulty: standard, prompt: "Draft a quick thank-you text.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-010, difficulty: standard, prompt: "Name three dinner ideas.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-011, difficulty: standard, prompt: "Summarize a two-line household note.", route_request: {task_type: summary}, expects: {provider: ollama}}
-  - {name: iris-routine-012, difficulty: standard, prompt: "Extract action items from a short note.", route_request: {task_type: extraction}, expects: {provider: ollama}}
-  - {name: iris-routine-013, difficulty: standard, prompt: "Classify a request as calendar or reminder.", route_request: {task_type: classification}, expects: {provider: ollama}}
-  - {name: iris-routine-014, difficulty: standard, prompt: "Give a simple bedtime reminder wording.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-015, difficulty: standard, prompt: "Paraphrase: I will be there soon.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-016, difficulty: standard, prompt: "Make this warmer: meeting moved.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-017, difficulty: standard, prompt: "Identify whether this asks for a tool: check lights.", route_request: {task_type: classify}, expects: {provider: ollama}}
-  - {name: iris-routine-018, difficulty: standard, prompt: "Summarize a weather forecast sentence.", route_request: {task_type: summarize}, expects: {provider: ollama}}
-  - {name: iris-routine-019, difficulty: standard, prompt: "Generate a short label for errands.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: iris-routine-020, difficulty: standard, prompt: "Answer briefly: what is a checklist?", route_request: {task_type: chat}, expects: {provider: ollama}}
+  - {name: iris-routine-001, difficulty: smoke, prompt: "Say hello in one sentence.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-002, difficulty: smoke, prompt: "Summarize this reminder: take out trash.", route_request: {task_type: summarize}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-003, difficulty: smoke, prompt: "Classify this as urgent or not: buy milk.", route_request: {task_type: classify}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-004, difficulty: smoke, prompt: "Extract the date from: dinner tomorrow.", route_request: {task_type: extract}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-005, difficulty: smoke, prompt: "Rewrite this politely: send the file.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-006, difficulty: standard, prompt: "What is a concise grocery list title?", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-007, difficulty: standard, prompt: "Turn this note into a short checklist.", route_request: {task_type: summarize}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-008, difficulty: standard, prompt: "Is this message friendly or formal?", route_request: {task_type: classification}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-009, difficulty: standard, prompt: "Draft a quick thank-you text.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-010, difficulty: standard, prompt: "Name three dinner ideas.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-011, difficulty: standard, prompt: "Summarize a two-line household note.", route_request: {task_type: summary}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-012, difficulty: standard, prompt: "Extract action items from a short note.", route_request: {task_type: extraction}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-013, difficulty: standard, prompt: "Classify a request as calendar or reminder.", route_request: {task_type: classification}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-014, difficulty: standard, prompt: "Give a simple bedtime reminder wording.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-015, difficulty: standard, prompt: "Paraphrase: I will be there soon.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-016, difficulty: standard, prompt: "Make this warmer: meeting moved.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-017, difficulty: standard, prompt: "Identify whether this asks for a tool: check lights.", route_request: {task_type: classify}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-018, difficulty: standard, prompt: "Summarize a weather forecast sentence.", route_request: {task_type: summarize}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-019, difficulty: standard, prompt: "Generate a short label for errands.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: iris-routine-020, difficulty: standard, prompt: "Answer briefly: what is a checklist?", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
 
-  - {name: hera-presence-001, difficulty: smoke, prompt: "Kitchen display heard wake word; greet the room.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-002, difficulty: smoke, prompt: "Hera avatar needs a short listening acknowledgement.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-003, difficulty: smoke, prompt: "Kitchen presence node asks for a concise status phrase.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-004, difficulty: smoke, prompt: "Living room screen wants a simple response to hello.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-005, difficulty: smoke, prompt: "Hera should say she is checking with Atlas.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-006, difficulty: standard, prompt: "Wake word node asks for a short no-tool answer.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-007, difficulty: standard, prompt: "Kitchen avatar needs a one-line apology.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-008, difficulty: standard, prompt: "Presence display asks for a friendly idle message.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-009, difficulty: standard, prompt: "Hera asks Atlas to classify a simple household note.", route_request: {task_type: classification}, expects: {provider: ollama}}
-  - {name: hera-presence-010, difficulty: standard, prompt: "Kitchen microphone transcript needs cleanup.", route_request: {task_type: extraction}, expects: {provider: ollama}}
-  - {name: hera-presence-011, difficulty: standard, prompt: "Hera needs a short phrase while Odin warms.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-012, difficulty: standard, prompt: "Presence node asks if a simple request needs cloud.", route_request: {task_type: classify}, expects: {provider: ollama}}
-  - {name: hera-presence-013, difficulty: standard, prompt: "Kitchen screen asks for a simple timer wording.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-014, difficulty: standard, prompt: "Hera asks for a brief room-status caption.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-015, difficulty: standard, prompt: "Presence node wants a safe response to unclear speech.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-016, difficulty: standard, prompt: "Kitchen avatar asks for a neutral acknowledgement.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-017, difficulty: standard, prompt: "Hera display asks for a short family-friendly joke.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-018, difficulty: standard, prompt: "Presence transcript asks for punctuation cleanup.", route_request: {task_type: extraction}, expects: {provider: ollama}}
-  - {name: hera-presence-019, difficulty: standard, prompt: "Hera asks for a concise wake acknowledgement.", route_request: {task_type: chat}, expects: {provider: ollama}}
-  - {name: hera-presence-020, difficulty: standard, prompt: "Kitchen node asks for a simple route explanation.", route_request: {task_type: summarize}, expects: {provider: ollama}}
+  - {name: hera-presence-001, difficulty: smoke, prompt: "Kitchen display heard wake word; greet the room.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-002, difficulty: smoke, prompt: "Hera avatar needs a short listening acknowledgement.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-003, difficulty: smoke, prompt: "Kitchen presence node asks for a concise status phrase.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-004, difficulty: smoke, prompt: "Living room screen wants a simple response to hello.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-005, difficulty: smoke, prompt: "Hera should say she is checking with Atlas.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-006, difficulty: standard, prompt: "Wake word node asks for a short no-tool answer.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-007, difficulty: standard, prompt: "Kitchen avatar needs a one-line apology.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-008, difficulty: standard, prompt: "Presence display asks for a friendly idle message.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-009, difficulty: standard, prompt: "Hera asks Atlas to classify a simple household note.", route_request: {task_type: classification}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-010, difficulty: standard, prompt: "Kitchen microphone transcript needs cleanup.", route_request: {task_type: extraction}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-011, difficulty: standard, prompt: "Hera needs a short phrase while Odin warms.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-012, difficulty: standard, prompt: "Presence node asks if a simple request needs cloud.", route_request: {task_type: classify}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-013, difficulty: standard, prompt: "Kitchen screen asks for a simple timer wording.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-014, difficulty: standard, prompt: "Hera asks for a brief room-status caption.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-015, difficulty: standard, prompt: "Presence node wants a safe response to unclear speech.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-016, difficulty: standard, prompt: "Kitchen avatar asks for a neutral acknowledgement.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-017, difficulty: standard, prompt: "Hera display asks for a short family-friendly joke.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-018, difficulty: standard, prompt: "Presence transcript asks for punctuation cleanup.", route_request: {task_type: extraction}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-019, difficulty: standard, prompt: "Hera asks for a concise wake acknowledgement.", route_request: {task_type: chat}, expects: {provider: local_reasoning}}
+  - {name: hera-presence-020, difficulty: standard, prompt: "Kitchen node asks for a simple route explanation.", route_request: {task_type: summarize}, expects: {provider: local_reasoning}}
 
   - {name: odin-heavy-001, difficulty: smoke, prompt: "Debug this stack trace and propose a patch.", route_request: {task_type: debug}, expects: {provider: local_reasoning}}
   - {name: odin-heavy-002, difficulty: smoke, prompt: "Write code to fix a race condition.", route_request: {task_type: coding}, expects: {provider: local_reasoning}}
@@ -76,16 +76,16 @@ cases:
   - {name: odin-heavy-029, difficulty: standard, prompt: "Write an implementation plan for Odin deployment.", route_request: {task_type: planning}, expects: {provider: local_reasoning}}
   - {name: odin-heavy-030, difficulty: standard, prompt: "Debug a stack trace involving async routing middleware.", route_request: {task_type: debug}, expects: {provider: local_reasoning}}
 
-  - {name: privacy-internal-001, difficulty: smoke, prompt: "My SSN is 123-45-6789; summarize this safely.", route_request: {privacy: sensitive}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-002, difficulty: smoke, prompt: "Use my private family context to draft a short note.", route_request: {privacy: private}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-003, difficulty: smoke, prompt: "A prompt contains a password; classify it.", route_request: {privacy: sensitive, task_type: classify}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-004, difficulty: smoke, prompt: "Private calendar detail needs a short summary.", route_request: {privacy: private, task_type: summarize}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-005, difficulty: smoke, prompt: "Confidential note: extract one action item.", route_request: {privacy: sensitive, task_type: extraction}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-006, difficulty: standard, prompt: "Private address appears in a simple request.", route_request: {privacy: private}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-007, difficulty: standard, prompt: "Bank account note needs a short label.", route_request: {privacy: sensitive}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-008, difficulty: standard, prompt: "Medical appointment detail needs a reminder title.", route_request: {privacy: sensitive}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-009, difficulty: standard, prompt: "Private household preference needs classification.", route_request: {privacy: private, task_type: classification}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
-  - {name: privacy-internal-010, difficulty: standard, prompt: "Secret token appears; say what routing class applies.", route_request: {privacy: sensitive}, expects: {provider: ollama, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-001, difficulty: smoke, prompt: "My SSN is 123-45-6789; summarize this safely.", route_request: {privacy: sensitive}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-002, difficulty: smoke, prompt: "Use my private family context to draft a short note.", route_request: {privacy: private}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-003, difficulty: smoke, prompt: "A prompt contains a password; classify it.", route_request: {privacy: sensitive, task_type: classify}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-004, difficulty: smoke, prompt: "Private calendar detail needs a short summary.", route_request: {privacy: private, task_type: summarize}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-005, difficulty: smoke, prompt: "Confidential note: extract one action item.", route_request: {privacy: sensitive, task_type: extraction}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-006, difficulty: standard, prompt: "Private address appears in a simple request.", route_request: {privacy: private}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-007, difficulty: standard, prompt: "Bank account note needs a short label.", route_request: {privacy: sensitive}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-008, difficulty: standard, prompt: "Medical appointment detail needs a reminder title.", route_request: {privacy: sensitive}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-009, difficulty: standard, prompt: "Private household preference needs classification.", route_request: {privacy: private, task_type: classification}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
+  - {name: privacy-internal-010, difficulty: standard, prompt: "Secret token appears; say what routing class applies.", route_request: {privacy: sensitive}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
   - {name: privacy-internal-011, difficulty: standard, prompt: "Debug this private stack trace with an API key.", route_request: {privacy: sensitive, task_type: debug}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
   - {name: privacy-internal-012, difficulty: standard, prompt: "Write code using private internal architecture notes.", route_request: {privacy: private, task_type: coding}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}
   - {name: privacy-internal-013, difficulty: standard, prompt: "Design a system using confidential family context.", route_request: {privacy: sensitive, task_type: architecture}, expects: {provider: local_reasoning, provider_not: openrouter, privacy_local: true}}

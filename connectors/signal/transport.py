@@ -9,7 +9,7 @@ from urllib.parse import quote
 import httpx
 
 from connectors.signal.config import SignalSettings
-from connectors.signal.models import InboundMessage, OutboundResponse
+from connectors.signal.models import InboundMessage, OutboundResponse, SignalAttachment
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,7 @@ class SignalRestTransport:
         text = data_message.get("message")
         if not isinstance(text, str):
             text = ""
+        attachments = SignalRestTransport._parse_attachments(data_message)
 
         group_id: str | None = None
         group_info = data_message.get("groupInfo")
@@ -105,7 +106,33 @@ class SignalRestTransport:
             message_id=f"{_safe_identifier(sender)}:{timestamp_ms}",
             timestamp=timestamp,
             group_id=group_id,
+            attachments=attachments,
         )
+
+    @staticmethod
+    def _parse_attachments(data_message: dict[str, Any]) -> list[SignalAttachment]:
+        raw_attachments = data_message.get("attachments")
+        if not isinstance(raw_attachments, list):
+            return []
+        attachments: list[SignalAttachment] = []
+        for item in raw_attachments:
+            if not isinstance(item, dict):
+                continue
+            filename = _first_string(item, "filename", "fileName", "name")
+            path = _first_string(item, "path", "localPath", "storedFilename")
+            mime_type = _first_string(item, "contentType", "mime_type", "mimeType")
+            data_base64 = _first_string(item, "data", "data_base64", "base64")
+            size = item.get("size") or item.get("size_bytes")
+            attachments.append(
+                SignalAttachment(
+                    filename=filename,
+                    mime_type=mime_type,
+                    path=path,
+                    data_base64=data_base64,
+                    size_bytes=size if isinstance(size, int) and size >= 0 else None,
+                )
+            )
+        return attachments
 
     async def poll_once(self) -> list[OutboundResponse]:
         """Fetch available events, forward supported messages, and send replies."""
@@ -208,3 +235,11 @@ class SignalRestTransport:
 
 def _safe_identifier(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def _first_string(payload: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None

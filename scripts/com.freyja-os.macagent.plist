@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.freyja-os.macagent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/freyja/freyja-os/.venv/bin/python</string>
+        <string>/Users/freyja/freyja-os/scripts/run-macagent.py</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/freyja</string>
+        <key>USER</key>
+        <string>freyja</string>
+        <key>LOGNAME</key>
+        <string>freyja</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/freyja/freyja-os/src:/Users/freyja/freyja-os</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/freyja/freyja-os</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/freyja/freyja-os/logs/macagent.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/freyja/freyja-os/logs/macagent.log</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

@@ -129,6 +129,102 @@ def test_local_reasoning_warm(monkeypatch) -> None:
     mock_warm.assert_awaited_once_with("gpt-oss:20b")
 
 
+def test_providers_health_reports_enabled_profiles(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "iris_router_enabled", False)
+    monkeypatch.setattr(settings, "cloud_enabled", True)
+    monkeypatch.setattr(settings, "ollama_chat_model", "qwen2.5:7b")
+    monkeypatch.setattr(settings, "ollama_reasoning_model", "gpt-oss:20b")
+    monkeypatch.setattr(settings, "ollama_coding_model", "qwen2.5-coder:14b-q3")
+    with patch("freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock) as mock_healthy, patch(
+        "freyja.ollama_client.OllamaClient.has_model", new_callable=AsyncMock
+    ) as mock_has_model, patch(
+        "freyja.openrouter_client.OpenRouterClient.healthy", new_callable=AsyncMock
+    ) as mock_openrouter_healthy:
+        mock_healthy.side_effect = [True, True, True]
+        mock_has_model.side_effect = [True, True, False]
+        mock_openrouter_healthy.return_value = False
+        response = client.get("/providers/health")
+
+    assert response.status_code == 200
+    providers = {entry["provider_id"]: entry for entry in response.json()["providers"]}
+    assert set(providers) == {"legacy_ollama", "heavy_local", "qwen_coding", "openrouter_frontier"}
+    assert providers["legacy_ollama"]["locality"] == "iris"
+    assert providers["legacy_ollama"]["tier"] == 1
+    assert providers["legacy_ollama"]["ready"] is True
+    assert providers["heavy_local"]["locality"] == "local_heavy"
+    assert providers["heavy_local"]["tier"] == 3
+    assert providers["heavy_local"]["ready"] is True
+    assert providers["qwen_coding"]["locality"] == "local_heavy"
+    assert providers["qwen_coding"]["tier"] == 3
+    assert providers["qwen_coding"]["ready"] is False
+    assert providers["openrouter_frontier"]["locality"] == "cloud"
+    assert providers["openrouter_frontier"]["tier"] == 4
+    assert providers["openrouter_frontier"]["ready"] is False
+
+
+def test_providers_health_reports_iris_router_residency(monkeypatch) -> None:
+    from freyja.config import settings
+    from freyja import main as director_main
+
+    monkeypatch.setattr(settings, "iris_router_enabled", True)
+    monkeypatch.setattr(settings, "cloud_enabled", False)
+    with patch.object(director_main.iris_router, "healthy", new_callable=AsyncMock) as mock_healthy, patch.object(
+        director_main.iris_router, "model_resident", new_callable=AsyncMock
+    ) as mock_resident, patch(
+        "freyja.ollama_client.OllamaClient.healthy", new_callable=AsyncMock
+    ) as mock_ollama_healthy, patch(
+        "freyja.ollama_client.OllamaClient.has_model", new_callable=AsyncMock
+    ) as mock_has_model:
+        mock_healthy.return_value = True
+        mock_resident.return_value = True
+        mock_ollama_healthy.side_effect = [True, True]
+        mock_has_model.side_effect = [True, True]
+        response = client.get("/providers/health")
+
+    assert response.status_code == 200
+    providers = {entry["provider_id"]: entry for entry in response.json()["providers"]}
+    iris = providers["iris_router"]
+    assert iris["ready"] is True
+    assert iris["readiness"]["model_resident"] is True
+
+
+def test_iris_router_health_endpoint_reports_router_status(monkeypatch) -> None:
+    from freyja.config import settings
+    from freyja import main as director_main
+
+    monkeypatch.setattr(settings, "iris_router_enabled", True)
+    monkeypatch.setattr(settings, "iris_router_advisory_enabled", True)
+    with patch.object(director_main.iris_router, "healthy", new_callable=AsyncMock) as mock_healthy:
+        mock_healthy.return_value = True
+        response = client.get("/iris-router/health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["enabled"] is True
+    assert data["advisory_enabled"] is True
+    assert data["available"] is True
+    assert data["reachable"] is True
+    assert data["model"] == settings.iris_router_model
+
+
+def test_iris_router_warm_endpoint_reports_warm_result(monkeypatch) -> None:
+    from freyja.config import settings
+    from freyja import main as director_main
+
+    with patch.object(director_main.iris_router, "warm", new_callable=AsyncMock) as mock_warm:
+        mock_warm.return_value = True
+        response = client.post("/iris-router/warm")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "warmed": True,
+        "model": settings.iris_router_model,
+        "keep_alive": settings.iris_router_keep_alive,
+    }
+
+
 def test_ollama_models_lists_models() -> None:
     with patch("freyja.ollama_client.OllamaClient.tags", new_callable=AsyncMock) as mock_tags:
         mock_tags.return_value = {"models": [{"name": "tinyllama:latest"}]}
@@ -219,6 +315,34 @@ def test_route_local_uses_ollama() -> None:
     assert "tool_results" not in data
 
 
+def test_route_trace_includes_provider_profile_metadata(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+    with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat:
+        mock_chat.return_value = {
+            "model": "qwen2.5:7b",
+            "message": {"role": "assistant", "content": "Local hello"},
+        }
+        response = client.post("/route", json={"prompt": "Say hello", "provider": "local", "include_trace": True})
+
+    assert response.status_code == 200
+    trace = response.json()["trace"]
+    assert trace["provider_selected"] == "ollama"
+    assert trace["provider_profile_id"] == "legacy_ollama"
+    assert trace["provider_locality"] == "iris"
+    assert trace["selected_tier"] == 1
+    assert trace["provider_readiness"] == {
+        "ready": True,
+        "host_reachable": True,
+        "endpoint_healthy": True,
+        "model_available": True,
+        "model_resident": None,
+        "observed_latency_ms": None,
+        "detail": "provider response ok",
+    }
+
+
 def test_route_cloud_uses_openrouter() -> None:
     with patch("freyja.openrouter_client.OpenRouterClient.chat", new_callable=AsyncMock) as mock_chat:
         mock_chat.return_value = {
@@ -245,30 +369,28 @@ def test_route_auto_succeeds_locally_without_fallback() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["provider"] == "ollama"
+    assert data["provider"] == "local_reasoning"
     assert data["response"] == "Local auto hello"
     mock_openrouter.assert_not_called()
 
 
-def test_route_auto_falls_back_to_openrouter() -> None:
+def test_route_auto_does_not_fallback_to_openrouter() -> None:
     with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_ollama, patch(
         "freyja.openrouter_client.OpenRouterClient.chat", new_callable=AsyncMock
     ) as mock_openrouter:
         mock_ollama.return_value = {"error": "Ollama unreachable"}
         mock_openrouter.return_value = {
             "model": "openai/gpt-4o-mini",
-            "response": "Fallback hello",
+            "response": "Unexpected cloud hello",
         }
         response = client.post("/route", json={"prompt": "Say hello", "provider": "auto"})
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["provider"] == "openrouter"
-    assert data["response"] == "Fallback hello"
-    mock_openrouter.assert_called_once()
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Local model provider is unavailable."
+    mock_openrouter.assert_not_called()
 
 
-def test_route_auto_returns_503_when_both_fail() -> None:
+def test_route_auto_returns_503_when_selected_local_provider_fails() -> None:
     with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_ollama, patch(
         "freyja.openrouter_client.OpenRouterClient.chat", new_callable=AsyncMock
     ) as mock_openrouter:
@@ -278,7 +400,8 @@ def test_route_auto_returns_503_when_both_fail() -> None:
 
     assert response.status_code == 503
     detail = response.json()["detail"]
-    assert detail == "No approved provider is currently available."
+    assert detail == "Local model provider is unavailable."
+    mock_openrouter.assert_not_called()
 
 
 def test_route_503_does_not_expose_credentials() -> None:
@@ -292,7 +415,7 @@ def test_route_503_does_not_expose_credentials() -> None:
     assert response.status_code == 503
     body = response.json()
     detail = body["detail"]
-    assert detail == "No approved provider is currently available."
+    assert detail == "Local model provider is unavailable."
     raw = str(body)
     assert "sk-" not in raw
     assert "Bearer" not in raw
@@ -404,7 +527,16 @@ def test_route_with_tools_required_failed_tool_returns_error_category() -> None:
     with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat, patch.object(
         router._registry, "execute", new_callable=AsyncMock
     ) as mock_execute:
-        mock_chat.return_value = first_response
+        mock_chat.side_effect = [
+            first_response,
+            {
+                "model": "qwen2.5:1.5b",
+                "message": {
+                    "role": "assistant",
+                    "content": "The disk usage tool timed out, so I cannot verify disk usage from the tool result.",
+                },
+            },
+        ]
         mock_execute.return_value = tool_result
         response = client.post(
             "/route",
@@ -413,7 +545,7 @@ def test_route_with_tools_required_failed_tool_returns_error_category() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["response"] == "Tool 'disk_usage' failed (tool_timeout): Tool timed out."
+    assert data["response"] == "The disk usage tool timed out, so I cannot verify disk usage from the tool result."
     assert "tool_results" in data
     assert data["tool_results"][0] == {
         "tool_name": "disk_usage",

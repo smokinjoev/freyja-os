@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Awaitable, Callable, Protocol
 
 from freyja.calendar.models import CalendarEvent
+from freyja.macagent import MacAgentClient, MacAgentOperationRequest
 
 CommandRunner = Callable[[list[str], float], Awaitable[str]]
 
@@ -168,6 +169,137 @@ class AppleCalendarProvider:
             message = str(data.get("error") or "Apple Calendar bridge failed")
             raise RuntimeError(message)
         return data
+
+    def _calendar_names(self, calendar_ids: list[str]) -> list[str]:
+        names = [self._calendar_name(calendar_id) for calendar_id in calendar_ids]
+        if not names:
+            names = [self.default_calendar_name]
+        return list(dict.fromkeys(names))
+
+    def _calendar_name(self, calendar_id: str | None) -> str:
+        if not calendar_id:
+            return self.default_calendar_name
+        return self.calendar_aliases.get(calendar_id, calendar_id)
+
+    def _event_from_payload(self, payload: dict) -> CalendarEvent:
+        return CalendarEvent(
+            event_id=str(payload.get("event_id") or ""),
+            calendar_id=str(payload.get("calendar_id") or self.default_calendar_name),
+            title=str(payload.get("title") or ""),
+            start=datetime.fromisoformat(str(payload["start"]).replace("Z", "+00:00")),
+            end=datetime.fromisoformat(str(payload["end"]).replace("Z", "+00:00")),
+            attendee_ids=tuple(str(item) for item in payload.get("attendee_ids", [])),
+            location=payload.get("location"),
+            description=payload.get("description"),
+            provider=self.name,
+            metadata=dict(payload.get("metadata") or {}),
+        )
+
+
+class MacAgentAppleCalendarProvider:
+    """Apple Calendar provider that calls Iris MacAgent through Atlas policy.
+
+    Tool authorization still happens before CalendarService invokes this
+    provider. The MacAgent envelope carries Director authorization metadata so
+    Iris can reject unauthenticated or non-Director requests without becoming
+    the authorization authority.
+    """
+
+    name = "apple"
+
+    def __init__(
+        self,
+        *,
+        default_calendar_name: str = "iCloud::Family",
+        calendar_aliases: dict[str, str] | None = None,
+        client: MacAgentClient | None = None,
+    ) -> None:
+        self.default_calendar_name = default_calendar_name
+        self.calendar_aliases = calendar_aliases or {}
+        self._client = client or MacAgentClient()
+
+    async def list_events(
+        self,
+        *,
+        calendar_ids: list[str],
+        start: datetime,
+        end: datetime,
+    ) -> list[CalendarEvent]:
+        output = await self._invoke(
+            capability="apple.calendar.read",
+            operation="list_events",
+            arguments={
+                "calendar_selectors": self._calendar_names(calendar_ids),
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+            required_permission="household:calendar.read",
+        )
+        return [self._event_from_payload(item) for item in output.get("events", [])]
+
+    async def create_event(self, event: CalendarEvent) -> CalendarEvent:
+        output = await self._invoke(
+            capability="apple.calendar.write",
+            operation="create_event",
+            arguments={
+                "calendar_selector": self._calendar_name(event.calendar_id),
+                "title": event.title,
+                "start": event.start.isoformat(),
+                "end": event.end.isoformat(),
+                "attendee_ids": list(event.attendee_ids),
+                "location": event.location,
+                "description": event.description,
+            },
+            required_permission="household:calendar.write",
+            approval_granted=True,
+        )
+        return self._event_from_payload(output["event"])
+
+    async def modify_event(self, event_id: str, updates: dict) -> CalendarEvent | None:
+        output = await self._invoke(
+            capability="apple.calendar.write",
+            operation="modify_event",
+            arguments={"event_id": event_id, "updates": _serialize_updates(updates)},
+            required_permission="household:calendar.write",
+            approval_granted=True,
+        )
+        event = output.get("event")
+        return self._event_from_payload(event) if event else None
+
+    async def delete_event(self, event_id: str) -> bool:
+        output = await self._invoke(
+            capability="apple.calendar.write",
+            operation="delete_event",
+            arguments={"event_id": event_id},
+            required_permission="household:calendar.write",
+            approval_granted=True,
+        )
+        return bool(output.get("deleted"))
+
+    async def _invoke(
+        self,
+        *,
+        capability: str,
+        operation: str,
+        arguments: dict,
+        required_permission: str,
+        approval_granted: bool = False,
+    ) -> dict:
+        result = await self._client.invoke(
+            MacAgentOperationRequest(
+                capability=capability,
+                operation=operation,
+                arguments=arguments,
+                request_id=f"calendar-{operation}",
+                actor="atlas_director",
+                director_authorized=True,
+                required_permission=required_permission,
+                approval_granted=approval_granted,
+            )
+        )
+        if not result.ok:
+            raise RuntimeError(result.error or "MacAgent Apple Calendar operation failed")
+        return result.output
 
     def _calendar_names(self, calendar_ids: list[str]) -> list[str]:
         names = [self._calendar_name(calendar_id) for calendar_id in calendar_ids]

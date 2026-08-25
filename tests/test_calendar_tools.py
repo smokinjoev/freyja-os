@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 import pytest
 
 from freyja.calendar import CalendarEvent, CalendarMember, CalendarService, InMemoryCalendarProvider
-from freyja.tools.calendar import register_calendar_tools, set_calendar_service
+from freyja.calendar.providers import MacAgentAppleCalendarProvider
+from freyja.tools.calendar import build_calendar_service, register_calendar_tools, set_calendar_service
 from freyja.tools.models import ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry
 
@@ -46,6 +47,18 @@ def service() -> CalendarService:
     )
     set_calendar_service(service)
     return service
+
+
+def test_build_calendar_service_can_use_macagent_apple_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "apple_calendar_enabled", True)
+    monkeypatch.setattr(settings, "apple_calendar_backend", "macagent")
+    monkeypatch.setattr(settings, "calendar_default_provider", "apple")
+
+    service = build_calendar_service()
+
+    assert isinstance(service._providers["apple"], MacAgentAppleCalendarProvider)
 
 
 @pytest.mark.asyncio

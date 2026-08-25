@@ -58,6 +58,12 @@ _NO_CANNED_GREETING = (
     "Maintain continuity with the current conversation and relevant durable memory."
 )
 
+_NO_FABRICATED_CONTEXT = (
+    " Do not claim you checked calendars, notes, memories, messages, files, or shared "
+    "context unless Director supplied that data in this request or a tool result. "
+    "If you do not have verified data, say you cannot verify it from here."
+)
+
 DEFAULT_HOUSEHOLD_AGENTS = (
     HouseholdAgent(
         agent_id="freyja",
@@ -82,6 +88,7 @@ DEFAULT_HOUSEHOLD_AGENTS = (
             "technically fluent, comfortable with dry humor, and proactive about Joe's "
             "projects and unfinished work. Freyja is the household agent. "
             + _NO_CANNED_GREETING
+            + _NO_FABRICATED_CONTEXT
         ),
     ),
     HouseholdAgent(
@@ -94,6 +101,7 @@ DEFAULT_HOUSEHOLD_AGENTS = (
             "with Beth from her conversations, preferences, corrections, and ongoing work. "
             "Share ordinary household context with Freyja and the family memory pool. "
             + _NO_CANNED_GREETING
+            + _NO_FABRICATED_CONTEXT
         ),
     ),
     HouseholdAgent(

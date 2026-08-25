@@ -14,6 +14,7 @@ from freyja.memory.models import (
     AppendMessageRequest,
     CreateConversationRequest,
     MemoryPrincipal,
+    MemoryProvenance,
     PutSharedMemoryRequest,
 )
 from freyja.memory.store import (
@@ -280,6 +281,79 @@ def test_shared_memory_round_trip_and_cross_principal_isolation(store: MemorySto
     assert store.get_shared_memory(_principal("signal:two"), "timezone") is None
     assert store.delete_shared_memory(_principal("signal:two"), "timezone") is False
     assert store.get_shared_memory(_principal("signal:one"), "timezone") is not None
+
+
+def test_shared_memory_defaults_to_trusted_connector_provenance(store: MemoryStore) -> None:
+    saved = store.put_shared_memory(
+        _principal(client_type="imessage"),
+        PutSharedMemoryRequest(memory_id="timezone", kind="preference", content="Eastern."),
+    )
+
+    assert saved.source == "imessage"
+    assert saved.provenance is not None
+    assert saved.provenance.source == "imessage"
+    assert saved.provenance.trust_level == "trusted_connector"
+    assert saved.provenance.kind == "trusted_system_fact"
+    assert saved.provenance.authoritative is True
+    assert saved.provenance.observed_at is not None
+    assert saved.metadata["provenance"]["source"] == "imessage"
+
+
+def test_shared_memory_preserves_explicit_provenance(store: MemoryStore) -> None:
+    saved = store.put_shared_memory(
+        _principal(),
+        PutSharedMemoryRequest(
+            memory_id="calendar",
+            kind="fact",
+            content="Dentist is Tuesday.",
+            provenance=MemoryProvenance(
+                source="calendar:apple",
+                source_id="evt-1",
+                source_type="connector",
+                trust_level="user_confirmed",
+                kind="user_confirmed_fact",
+                evidence={"event_id": "evt-1"},
+            ),
+            metadata={"existing": True},
+        ),
+    )
+    reloaded = store.get_shared_memory(_principal(), "calendar")
+
+    assert reloaded is not None
+    assert reloaded.metadata["existing"] is True
+    assert reloaded.provenance is not None
+    assert reloaded.provenance.source == "calendar:apple"
+    assert reloaded.provenance.source_id == "evt-1"
+    assert reloaded.provenance.trust_level == "user_confirmed"
+    assert reloaded.provenance.kind == "user_confirmed_fact"
+    assert reloaded.provenance.evidence == {"event_id": "evt-1"}
+
+
+def test_untrusted_external_shared_memory_is_not_authoritative(store: MemoryStore) -> None:
+    saved = store.put_shared_memory(
+        _principal(client_type="worker"),
+        PutSharedMemoryRequest(
+            memory_id="invoice-observation",
+            kind="summary",
+            content="The attachment appears to mention an invoice.",
+            provenance=MemoryProvenance(
+                source="attachment:invoice.pdf",
+                source_type="worker_observation",
+                trust_level="untrusted_external_content",
+                kind="observation",
+                authoritative=True,
+                observation_id="obs-1",
+                worker_id="pdf-worker",
+                derivation_links=["attachment:invoice.pdf#page=1"],
+            ),
+        ),
+    )
+
+    assert saved.provenance is not None
+    assert saved.provenance.authoritative is False
+    assert saved.provenance.kind == "observation"
+    assert saved.provenance.derivation_links == ["attachment:invoice.pdf#page=1"]
+    assert saved.metadata["provenance"]["authoritative"] is False
 
 
 def test_shared_memory_upsert_scoped_by_principal(store: MemoryStore) -> None:

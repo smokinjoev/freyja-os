@@ -13,7 +13,7 @@ import pytest
 
 from connectors.telegram.config import TelegramSettings, configured_telegram_settings
 from connectors.telegram.gateway import RejectionReason, TelegramGateway
-from connectors.telegram.models import TelegramInboundUpdate, TelegramMessage, TelegramUser, TelegramChat
+from connectors.telegram.models import TelegramInboundUpdate, TelegramMessage, TelegramUser, TelegramChat, TelegramPhotoSize
 
 
 def _make_request() -> httpx.Request:
@@ -52,6 +52,34 @@ def _make_update(
     return TelegramInboundUpdate(update_id=update_id, message=message)
 
 
+def _make_photo_update(update_id: int, user_id: int, chat_id: int) -> TelegramInboundUpdate:
+    return TelegramInboundUpdate(
+        update_id=update_id,
+        message=TelegramMessage(
+            message_id=update_id,
+            from_user=TelegramUser(id=user_id),
+            chat=TelegramChat(id=chat_id, type="private"),
+            date=0,
+            photo=[
+                TelegramPhotoSize(
+                    file_id="small-photo",
+                    file_unique_id="small",
+                    width=64,
+                    height=64,
+                    file_size=100,
+                ),
+                TelegramPhotoSize(
+                    file_id="large-photo",
+                    file_unique_id="large",
+                    width=512,
+                    height=512,
+                    file_size=1000,
+                ),
+            ],
+        ),
+    )
+
+
 @pytest.fixture
 def settings(tmp_path) -> TelegramSettings:
     return TelegramSettings(
@@ -79,10 +107,10 @@ async def gateway(settings) -> AsyncIterator[TelegramGateway]:
 async def test_authorized_user_accepted(gateway):
     update = _make_update(1, 123456, 123456, "private", "Hello Freyja")
     mock_response = _ok_response({
-        "provider": "ollama",
-        "model": "qwen2.5:1.5b",
+        "provider": "local_reasoning",
+        "model": "gpt-oss-freyja:20b-analysis-prefill",
         "response": "Local auto hello",
-        "reason": "routine request defaults to local",
+        "reason": "auto default routed to Vulcan/local_reasoning",
         "request_id": "req-001",
     })
 
@@ -183,6 +211,38 @@ async def test_ordinary_text_routes_to_freyja(gateway):
     assert kwargs["json"]["provider"] == "auto"
     assert kwargs["json"]["tools_required"] is False
     assert kwargs["json"]["conversation_id"].startswith("telegram:freyja:")
+
+
+@pytest.mark.asyncio
+async def test_photo_message_downloads_and_forwards_image(gateway):
+    update = _make_photo_update(77, 123456, 123456)
+
+    async def _mock_get(url: str, *args, **kwargs):
+        if url.endswith("/getFile"):
+            assert kwargs["params"] == {"file_id": "large-photo"}
+            return _ok_response({"ok": True, "result": {"file_path": "photos/file.jpg"}})
+        if "/file/bot" in url:
+            return httpx.Response(200, content=b"fake", request=httpx.Request("GET", url))
+        return _ok_response({})
+
+    with (
+        patch("httpx.AsyncClient.get", new_callable=AsyncMock, side_effect=_mock_get),
+        patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post,
+    ):
+        mock_post.return_value = _ok_response({"response": "That looks like a photo."})
+        result = await gateway.handle(update)
+
+    assert result is not None
+    assert result.success is True
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["prompt"].endswith("Please identify the photo or image I sent.")
+    assert payload["images"] == [
+        {
+            "mime_type": "image/jpeg",
+            "data_base64": "ZmFrZQ==",
+            "filename": "telegram-photo-large.jpg",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -408,71 +468,83 @@ async def test_help_command(gateway):
 
 
 @pytest.mark.asyncio
-async def test_weather_query_returns_safe_fallback_when_unconfigured(gateway, monkeypatch):
+async def test_weather_query_forwards_to_agent_when_unconfigured(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", False)
     update = _make_update(1, 123456, 123456, "private", "What is the weather tomorrow in Aiken, South Carolina?")
-    result = await gateway.handle(update)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Model handled weather context."})
+        result = await gateway.handle(update)
+
     assert result is not None
-    assert "live" in result.text.lower() or "configured" in result.text.lower()
-    assert "weather" in result.text.lower()
+    assert result.text == "Model handled weather context."
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["provider"] == "auto"
+    assert payload["tools_required"] is False
 
 
 @pytest.mark.asyncio
-async def test_weather_now_invokes_current_conditions(gateway, monkeypatch):
+async def test_weather_now_forwards_to_agent_even_when_tool_enabled(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
 
-    captured_request = {}
-    async def _capture(request):
-        captured_request["request"] = request
-        return "Current weather for Aiken: sunny, 76°F."
-
-    with patch("connectors.telegram.gateway.weather_response_text", new_callable=AsyncMock, side_effect=_capture):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Model handled current weather."})
         update = _make_update(1, 123456, 123456, "private", "What is the weather now in Aiken, South Carolina?")
         result = await gateway.handle(update)
 
     assert result is not None
-    assert captured_request["request"].request_type.value == "current"
-    assert captured_request["request"].target_label == "now"
+    assert result.text == "Model handled current weather."
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["provider"] == "auto"
+    assert payload["tools_required"] is False
 
 
 @pytest.mark.asyncio
-async def test_weather_tomorrow_invokes_forecast(gateway, monkeypatch):
+async def test_weather_tomorrow_forwards_to_agent_even_when_tool_enabled(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
 
-    captured_request = {}
-    async def _capture(request):
-        captured_request["request"] = request
-        return "Forecast for Aiken tomorrow: sunny."
-
-    with patch("connectors.telegram.gateway.weather_response_text", new_callable=AsyncMock, side_effect=_capture):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Model handled forecast."})
         update = _make_update(1, 123456, 123456, "private", "What is the weather tomorrow in Aiken, South Carolina?")
         result = await gateway.handle(update)
 
     assert result is not None
-    assert captured_request["request"].request_type.value == "forecast"
-    assert captured_request["request"].target_label == "tomorrow"
+    assert result.text == "Model handled forecast."
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["provider"] == "auto"
+    assert payload["tools_required"] is False
 
 
 @pytest.mark.asyncio
-async def test_weather_unsupported_future_date_returns_limitation(gateway, monkeypatch):
+async def test_weather_unsupported_future_date_forwards_to_agent(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
 
-    update = _make_update(1, 123456, 123456, "private", "What is the weather in 10 days in Aiken, South Carolina?")
-    result = await gateway.handle(update)
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Model handled weather limits."})
+        update = _make_update(1, 123456, 123456, "private", "What is the weather in 10 days in Aiken, South Carolina?")
+        result = await gateway.handle(update)
+
     assert result is not None
-    assert "outside" in result.text.lower() or "range" in result.text.lower()
+    assert result.text == "Model handled weather limits."
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["provider"] == "auto"
+    assert payload["tools_required"] is False
 
 
 @pytest.mark.asyncio
-async def test_weather_query_invokes_tool_when_enabled(gateway, monkeypatch):
+async def test_weather_query_forwards_to_agent_when_enabled(gateway, monkeypatch):
     monkeypatch.setattr("freyja.config.settings.weather_tool_enabled", True)
 
-    with patch("connectors.telegram.gateway.weather_response_text", new_callable=AsyncMock, return_value="Weather for Aiken: sunny, 75°F."):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Model handled weather."})
         update = _make_update(1, 123456, 123456, "private", "What is the weather in Aiken, South Carolina?")
         result = await gateway.handle(update)
 
     assert result is not None
-    assert ("75°F" in result.text or "Aiken" in result.text)
+    assert result.text == "Model handled weather."
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["provider"] == "auto"
+    assert payload["tools_required"] is False
 
 
 @pytest.mark.asyncio

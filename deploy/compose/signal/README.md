@@ -52,9 +52,46 @@ Verify:
 curl --fail http://<atlas-director-private-host>:8000/health
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml ps
+python scripts/signal-operator.py --env-file deploy/compose/signal/.env \
+  readiness \
+  --check-registered \
+  --output certification/reports/signal-readiness.json
 python scripts/messaging-production-check.py --connector signal \
-  --check-director --check-signal-rest
+  --env-file deploy/compose/signal/.env \
+  --check-director --check-signal-rest \
+  --output certification/reports/signal-production-check.json
+```
+
+`signal-operator.py readiness` is read-only. It reports whether Signal is ready
+for an approved live smoke and lists the exact missing configuration or REST
+state without printing raw phone numbers.
+
+## Signal live smoke
+
+Use the operator smoke command before relying on Signal for daily use. It
+dry-runs by default and redacts phone numbers in the report:
+
+```bash
+python scripts/signal-operator.py --env-file deploy/compose/signal/.env \
+  live-smoke \
+  --text "Freyja 2.0 Signal live smoke test." \
+  --output certification/reports/signal-live-smoke-dry-run.json
+```
+
+Review the dry-run plan, confirm it targets one allowlisted recipient, then send
+the single approved smoke message:
+
+```bash
+python scripts/signal-operator.py --env-file deploy/compose/signal/.env \
+  live-smoke \
+  --text "Freyja 2.0 Signal live smoke test." \
+  --output certification/reports/signal-live-smoke-sent.json \
+  --yes
 ```
 
 All services use `restart: unless-stopped`, and Docker is enabled at boot, so
 the Signal connector returns automatically after an Atlas restart.
+
+Attach the sent report to final Rev 2 readiness with
+`--signal-smoke-report certification/reports/signal-live-smoke-sent.json` and
+`--require-signal-smoke-report`.

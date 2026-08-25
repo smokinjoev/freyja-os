@@ -1,5 +1,6 @@
 from certification.iris_shadow import IrisComparison, provider_target, summarize
-from freyja.atlas_app import _parse_route_request
+from fastapi.testclient import TestClient
+from freyja.atlas_app import _parse_route_request, app
 
 
 def _comparison(**overrides):
@@ -122,3 +123,12 @@ def test_parse_route_request_accepts_valid_request() -> None:
 def test_parse_route_request_rejects_invalid_or_empty_body() -> None:
     assert _parse_route_request(b"not-json") is None
     assert _parse_route_request(b'{"prompt":""}') is None
+
+
+def test_atlas_entrypoint_preserves_road_mode_routes() -> None:
+    client = TestClient(app)
+
+    response = client.get("/road")
+
+    assert response.status_code == 200
+    assert "Freyja Road Mode" in response.text

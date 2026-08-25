@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     ollama_chat_model: str = "qwen2.5:7b"
     ollama_classification_model: str = "qwen2.5:1.5b"
     ollama_reasoning_model: str = "gpt-oss:20b"
+    ollama_coding_model: str = "qwen2.5-coder:14b-q3"
     ollama_min_output_tokens: int = 160
     ollama_default_output_tokens: int = 512
     ollama_retry_output_tokens: int = 1024
@@ -49,10 +50,12 @@ class Settings(BaseSettings):
     # intentionally separate from the legacy Ollama provider so Iris can be
     # introduced in shadow mode without changing production routing behavior.
     iris_router_enabled: bool = False
+    iris_router_advisory_enabled: bool = False
     iris_router_shadow_enabled: bool = False
     iris_ollama_base_url: str = "http://iris:11434"
     iris_router_model: str = "qwen2.5:7b"
     iris_router_timeout_seconds: float = 4.0
+    iris_router_confidence_threshold: float = 0.80
     iris_router_keep_alive: str = "-1"
     iris_router_max_prompt_chars: int = 12000
     iris_router_warm_enabled: bool = True
@@ -69,6 +72,7 @@ class Settings(BaseSettings):
     openrouter_per_request_limit: float = 1.0
     local_max_prompt_chars: int = 8000
     openrouter_allowlist: str = Field(default="", alias="OPENROUTER_ALLOWLIST")
+    inference_provider_profiles_json: str = Field(default="", alias="FREYJA_INFERENCE_PROVIDER_PROFILES")
 
     memory_enabled: bool = True
     memory_database_path: str = str(_repo_root() / "data" / "freyja.db")
@@ -94,9 +98,15 @@ class Settings(BaseSettings):
 
     calendar_default_provider: str = "memory"
     apple_calendar_enabled: bool = False
+    apple_calendar_backend: str = "swift"
     apple_calendar_default_calendar_name: str = "iCloud::Family"
     apple_calendar_calendar_aliases: str = "joe=iCloud::Family,beth=iCloud::Family,family=iCloud::Family"
     apple_calendar_timeout_seconds: float = 10.0
+
+    macagent_enabled: bool = False
+    macagent_base_url: str = "http://iris:8765"
+    macagent_token: str = ""
+    macagent_timeout_seconds: float = 5.0
 
     agent_smith_enabled: bool = False
     agent_smith_dry_run_enabled: bool = False

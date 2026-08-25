@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from freyja.config import settings
+from freyja.media import ImageInput
 from freyja.system_prompt import FREYJA_SYSTEM_PROMPT, FREYJA_TOOL_CALL_INSTRUCTION
 
 
@@ -64,6 +65,7 @@ class OllamaClient:
         tools: list[Any] | None = None,
         output_tokens: int | None = None,
         retry_on_empty_length: bool = True,
+        images: list[ImageInput] | None = None,
     ) -> dict:
         target_model = model or self.model
         if not target_model:
@@ -81,6 +83,7 @@ class OllamaClient:
             stream=stream,
             tools=tools,
             output_tokens=first_budget,
+            images=images,
             retry=False,
         )
         if "error" in response:
@@ -101,6 +104,7 @@ class OllamaClient:
                 stream=stream,
                 tools=tools,
                 output_tokens=retry_budget,
+                images=images,
                 retry=True,
             )
             if "error" in retry_response:
@@ -130,13 +134,17 @@ class OllamaClient:
         stream: bool,
         tools: list[Any] | None,
         output_tokens: int,
+        images: list[ImageInput] | None,
         retry: bool,
     ) -> dict[str, Any]:
+        user_message: dict[str, Any] = {"role": "user", "content": prompt}
+        if images:
+            user_message["images"] = [image.as_ollama_image() for image in images]
         payload: dict[str, Any] = {
             "model": target_model,
             "messages": [
                 {"role": "system", "content": system_content},
-                {"role": "user", "content": prompt},
+                user_message,
             ],
             "stream": stream,
             "think": False,

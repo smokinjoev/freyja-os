@@ -8,7 +8,7 @@ import pytest
 
 from connectors.signal.config import SignalSettings
 from connectors.signal.gateway import RejectionReason, SignalGateway
-from connectors.signal.models import InboundMessage
+from connectors.signal.models import InboundMessage, SignalAttachment
 from connectors.messaging import parse_allowed_senders
 
 
@@ -53,15 +53,30 @@ def make_message(sender: str, text: str, message_id: str, group_id: str | None =
     )
 
 
+def make_photo_message(sender: str, message_id: str) -> InboundMessage:
+    return InboundMessage(
+        sender=sender,
+        text="",
+        message_id=message_id,
+        attachments=[
+            SignalAttachment(
+                filename="photo.png",
+                mime_type="image/png",
+                data_base64="ZmFrZQ==",
+            )
+        ],
+    )
+
+
 @pytest.mark.asyncio
 async def test_approved_sender_is_forwarded(enabled_gateway):
     message = make_message("+15551234567", "Hello Freyja", "msg-001")
 
     mock_response = _ok_response({
-        "provider": "ollama",
-        "model": "qwen2.5:1.5b",
+        "provider": "local_reasoning",
+        "model": "gpt-oss-freyja:20b-analysis-prefill",
         "response": "Local auto hello",
-        "reason": "routine request defaults to local",
+        "reason": "auto default routed to Vulcan/local_reasoning",
         "request_id": "req-001",
     })
 
@@ -75,12 +90,12 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
     assert result.reply_to_message_id == "msg-001"
     mock_post.assert_awaited_once()
     _, kwargs = mock_post.call_args
-    assert "Your name is Freyja" in kwargs["json"]["prompt"]
-    assert kwargs["json"]["prompt"].endswith("Hello Freyja")
+    assert kwargs["json"]["prompt"] == "Hello Freyja"
     assert kwargs["json"]["provider"] == "auto"
     assert kwargs["json"]["privacy"] == "private"
     assert kwargs["json"]["tools_required"] is False
     assert kwargs["json"]["conversation_id"].startswith("signal-conv:")
+    assert "images" not in kwargs["json"]
     headers = kwargs["headers"]
     assert headers["X-Freyja-Client-Type"] == "signal"
     assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
@@ -104,6 +119,22 @@ async def test_director_token_is_sent_as_bearer_header(enabled_gateway):
     assert headers["Authorization"] == "Bearer test-connector-token"
     assert headers["X-Freyja-Client-Type"] == "signal"
     assert mock_post.await_args.kwargs["json"]["privacy"] == "private"
+
+
+@pytest.mark.asyncio
+async def test_photo_only_signal_message_forwards_image(enabled_gateway):
+    message = make_photo_message("+15551234567", "signal-photo")
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "That is a photo."})
+        result = await enabled_gateway.handle(message)
+
+    assert result.success is True
+    payload = mock_post.await_args.kwargs["json"]
+    assert "photo or attachment content" in payload["prompt"]
+    assert payload["images"] == [
+        {"mime_type": "image/png", "data_base64": "ZmFrZQ==", "filename": "photo.png"}
+    ]
 
 
 @pytest.mark.asyncio
@@ -239,19 +270,18 @@ async def test_director_success_returns_response(enabled_gateway):
 
 
 @pytest.mark.asyncio
-async def test_director_timeout_returns_safe_error(enabled_gateway):
+async def test_director_timeout_returns_no_gateway_authored_reply(enabled_gateway):
     message = make_message("+15551234567", "Slow question", "msg-009")
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.side_effect = httpx.TimeoutException("Request timed out")
         result = await enabled_gateway.handle(message)
 
-    assert result.success is False
-    assert result.text == "Freyja could not process your message. Please try again later."
+    assert result is None
 
 
 @pytest.mark.asyncio
-async def test_director_503_returns_safe_error(enabled_gateway):
+async def test_director_503_returns_no_gateway_authored_reply(enabled_gateway):
     message = make_message("+15551234567", "Broken question", "msg-010")
 
     error_response = _error_response(503, text="Service Unavailable")
@@ -267,14 +297,11 @@ async def test_director_503_returns_safe_error(enabled_gateway):
         mock_post.return_value = error_response
         result = await enabled_gateway.handle(message)
 
-    assert result.success is False
-    assert "sk-" not in result.text
-    assert "Authorization" not in result.text
-    assert "Bearer" not in result.text
+    assert result is None
 
 
 @pytest.mark.asyncio
-async def test_outbound_error_text_does_not_expose_internal_details(enabled_gateway):
+async def test_director_error_details_are_not_sent_to_signal(enabled_gateway):
     message = make_message("+15551234567", "Error question", "msg-011")
 
     error_response = _error_response(503, payload={"detail": "Authorization: Bearer sk-secret-12345"})
@@ -290,11 +317,7 @@ async def test_outbound_error_text_does_not_expose_internal_details(enabled_gate
         mock_post.return_value = error_response
         result = await enabled_gateway.handle(message)
 
-    assert result.success is False
-    assert "sk-" not in result.text
-    assert "Authorization" not in result.text
-    assert "Bearer" not in result.text
-    assert "secret" not in result.text.lower()
+    assert result is None
 
 
 @pytest.mark.asyncio
@@ -347,9 +370,7 @@ async def test_joe_alias_routes_to_cloyd_gibbler_private_agent(enabled_gateway):
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert "Your name is Cloyd Gibbler" in payload["prompt"]
-    assert "Required response identity: Cloyd Gibbler" in payload["prompt"]
-    assert "Do not say you are Freyja" in payload["prompt"]
+    assert payload["prompt"] == "Hello from Joe"
     assert payload["privacy"] == "private"
     assert payload["tools_required"] is False
     assert headers["X-Freyja-Family-Member"] == "joe"
@@ -373,14 +394,39 @@ async def test_beth_alias_routes_to_benedict_private_agent(enabled_gateway):
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert "Your name is Benedict" in payload["prompt"]
-    assert "Required response identity: Benedict" in payload["prompt"]
-    assert "Do not say you are Freyja" in payload["prompt"]
+    assert payload["prompt"] == "Hello from Beth"
     assert payload["privacy"] == "private"
     assert payload["tools_required"] is False
     assert headers["X-Freyja-Client-Subject"] == "agent:benedict"
     assert headers["X-Freyja-Account-Owner"] == "person:beth"
     assert headers["X-Freyja-Agent-Id"] == "benedict"
+
+
+@pytest.mark.asyncio
+async def test_benedict_signal_path_matches_cloyd_simple_chat_path(enabled_gateway):
+    enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567,beth=+15557654321", "signal")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+
+    async def route(sender: str, text: str, message_id: str):
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = _ok_response({"response": "ok"})
+            result = await enabled_gateway.handle(make_message(sender, text, message_id))
+        assert result.success is True
+        return mock_post.await_args.kwargs
+
+    joe = await route("+15551234567", "What is the plan?", "msg-joe-simple")
+    beth = await route("+15557654321", "What is the plan?", "msg-beth-simple")
+
+    for kwargs in (joe, beth):
+        assert kwargs["json"]["prompt"] == "What is the plan?"
+        assert kwargs["json"]["provider"] == "auto"
+        assert kwargs["json"]["task_type"] is None
+        assert kwargs["json"]["tools_required"] is False
+
+    assert joe["headers"]["X-Freyja-Agent-Id"] == "cloyd-gibbler"
+    assert joe["headers"]["X-Freyja-Account-Owner"] == "person:joe"
+    assert beth["headers"]["X-Freyja-Agent-Id"] == "benedict"
+    assert beth["headers"]["X-Freyja-Account-Owner"] == "person:beth"
 
 
 @pytest.mark.asyncio
@@ -396,7 +442,7 @@ async def test_family_alias_routes_to_freyja_household_agent(enabled_gateway):
     assert result.success is True
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
-    assert "Your name is Freyja" in payload["prompt"]
+    assert payload["prompt"] == "House status please"
     assert payload["privacy"] == "private"
     assert payload["tools_required"] is False
     assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
@@ -426,8 +472,8 @@ async def test_cloyd_coding_request_uses_local_reasoning_and_tools(enabled_gatew
     assert payload["provider"] == "local_reasoning"
     assert payload["task_type"] == "coding"
     assert payload["tools_required"] is True
-    assert "CLOYD LOCAL CODER MODE" in payload["prompt"]
-    assert "inspect -> reason -> edit -> tests -> diff" in payload["prompt"]
+    assert "SIGNAL CODING REQUEST CONTEXT" in payload["prompt"]
+    assert "Director owns final routing and agent identity." in payload["prompt"]
 
 
 @pytest.mark.asyncio

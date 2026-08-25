@@ -1,0 +1,194 @@
+name: freyja-iterative-coding
+category: coding
+difficulty: standard
+description: Iterative coding prompts that require reading a failure, revising the implementation, and returning the corrected final artifact.
+passing_score: 0.90
+cases:
+  - name: python-fix-off-by-one
+    route_request: {provider: auto, task_type: coding}
+    expects: {provider: local_reasoning, provider_profile_id: heavy_local}
+    prompt: |
+      You are revising code after a failed unit test.
+
+      Broken code:
+      ```python
+      def inclusive_range_total(start, end):
+          return sum(range(start, end))
+      ```
+
+      Failed expectation: inclusive_range_total(1, 3) should return 6.
+
+      Return only the corrected Python function.
+    expected_keywords: ["def inclusive_range_total", "range(start, end + 1)"]
+    forbidden_keywords: ["I can't", "cannot"]
+
+  - name: python-preserve-empty-list
+    route_request: {provider: auto, task_type: coding}
+    expects:
+      provider: local_reasoning
+      provider_profile_id: heavy_local
+      python_behavior:
+        - _freyja_assert(average([]) == 0, "returns zero for empty input")
+        - _freyja_assert(average([2, 4, 6]) == 4, "returns arithmetic mean")
+    prompt: |
+      First attempt failed because empty input raised an exception.
+
+      Broken code:
+      ```python
+      def average(values):
+          return sum(values) / len(values)
+      ```
+
+      Requirement: return 0 for an empty list, otherwise return the arithmetic mean.
+
+      Return only the corrected Python function.
+    expected_keywords: ["def average"]
+    forbidden_keywords: ["I can't", "cannot"]
+
+  - name: javascript-fix-sort-numeric
+    route_request: {provider: auto, task_type: coding}
+    expects: {provider: local_reasoning, provider_profile_id: heavy_local}
+    prompt: |
+      A JavaScript test failed:
+      sortNumbers([10, 2, 1]) returned [1, 10, 2], expected [1, 2, 10].
+
+      Broken code:
+      ```javascript
+      function sortNumbers(values) {
+        return values.sort();
+      }
+      ```
+
+      Return only the corrected function.
+    expected_keywords: ["function sortNumbers", "sort", "a - b"]
+    forbidden_keywords: ["I can't", "cannot"]
+
+  - name: python-fix-mutable-default
+    route_request: {provider: auto, task_type: coding}
+    expects: {provider: local_reasoning, provider_profile_id: heavy_local}
+    prompt: |
+      A second call leaked state from the first call.
+
+      Broken code:
+      ```python
+      def add_tag(tag, tags=[]):
+          tags.append(tag)
+          return tags
+      ```
+
+      Requirement: each omitted tags argument should start fresh.
+
+      Return only the corrected Python function.
+    expected_keywords: ["def add_tag", "tags=None", "if tags is None"]
+    forbidden_keywords: ["I can't", "cannot"]
+
+  - name: python-fix-case-insensitive-count
+    route_request: {provider: auto, task_type: coding}
+    expects:
+      provider: local_reasoning
+      provider_profile_id: heavy_local
+      python_behavior:
+        - _freyja_assert(count_word("Hello hello", "hello") == 2, "counts case-insensitively")
+        - _freyja_assert(count_word("One two ONE", "one") == 2, "normalizes text words")
+        - _freyja_assert(count_word("miss", "hit") == 0, "returns zero for absent words")
+    prompt: |
+      Tests show count_word("Hello hello", "hello") should return 2, but the current version returns 1.
+
+      Broken code:
+      ```python
+      def count_word(text, word):
+          return text.split().count(word)
+      ```
+
+      Return only the corrected Python function.
+    expected_keywords: ["def count_word", ".lower()"]
+    forbidden_keywords: ["I can't", "cannot"]
+
+  - name: python-fix-json-error-handling
+    route_request: {provider: auto, task_type: coding}
+    expects: {provider: local_reasoning, provider_profile_id: heavy_local}
+    prompt: |
+      The first implementation crashes on malformed JSON.
+
+      Broken code:
+      ```python
+      import json
+
+      def read_name(raw):
+          return json.loads(raw)["name"]
+      ```
+
+      Requirement: return None when the JSON is invalid or when "name" is missing.
+
+      Return only the corrected Python code.
+    expected_keywords: ["import json", "try:", "except", ".get(\"name\")"]
+    forbidden_keywords: ["I can't", "cannot"]
+
+  - name: typescript-fix-null-guard
+    route_request: {provider: auto, task_type: coding}
+    expects: {provider: local_reasoning, provider_profile_id: heavy_local}
+    prompt: |
+      Review this TypeScript function after a crash when user is null.
+
+      Broken code:
+      ```typescript
+      function displayName(user: { first: string; last: string } | null): string {
+        return user.first + " " + user.last;
+      }
+      ```
+
+      Requirement: return "Unknown" when user is null.
+
+      Return only the corrected function.
+    expected_keywords: ["function displayName", "user", "Unknown", "user.first"]
+    forbidden_keywords: ["I can't", "cannot"]
+
+  - name: python-fix-deduplicate-stable
+    route_request: {provider: auto, task_type: coding}
+    expects:
+      provider: local_reasoning
+      provider_profile_id: heavy_local
+      python_behavior:
+        - _freyja_assert(unique_stable(["b", "a", "b"]) == ["b", "a"], "keeps first occurrence order")
+        - _freyja_assert(unique_stable([1, 1, 2, 1, 3]) == [1, 2, 3], "deduplicates repeated values")
+    prompt: |
+      The current implementation removes duplicates but changes order.
+
+      Requirement: unique_stable(["b", "a", "b"]) returns ["b", "a"].
+
+      Return only a Python function named unique_stable.
+    expected_keywords: ["def unique_stable"]
+    forbidden_keywords: ["set(values)", "I can't", "cannot"]
+
+  - name: python-fix-context-manager-close
+    route_request: {provider: auto, task_type: coding}
+    expects: {provider: local_reasoning, provider_profile_id: heavy_local}
+    prompt: |
+      A resource leak test failed because the file was not closed on exceptions.
+
+      Broken code:
+      ```python
+      def read_first_line(path):
+          f = open(path)
+          return f.readline()
+      ```
+
+      Return only the corrected Python function.
+    expected_keywords: ["def read_first_line", "with open", "readline"]
+    forbidden_keywords: ["I can't", "cannot"]
+
+  - name: python-fix-boundary-validation
+    route_request: {provider: auto, task_type: coding}
+    expects:
+      provider: local_reasoning
+      provider_profile_id: heavy_local
+      python_behavior:
+        - _freyja_assert(clamp(11, 0, 10) == 10, "clamps high values")
+        - _freyja_assert(clamp(-1, 0, 10) == 0, "clamps low values")
+        - _freyja_assert(clamp(5, 0, 10) == 5, "preserves in-range values")
+    prompt: |
+      A validation test failed: clamp(11, 0, 10) should return 10 and clamp(-1, 0, 10) should return 0.
+
+      Return only a Python function named clamp(value, minimum, maximum).
+    expected_keywords: ["def clamp"]
+    forbidden_keywords: ["I can't", "cannot"]

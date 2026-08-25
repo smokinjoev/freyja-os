@@ -1,0 +1,19 @@
+{
+  "dry_run": false,
+  "failed": 0,
+  "plan": {
+    "database_path": "/Users/freyja/Library/Messages/chat.db",
+    "imsg_path": "/opt/homebrew/bin/imsg",
+    "recipient": "+18032068790",
+    "recipient_resolution": "apple-contacts-local-imessage",
+    "requested_recipient": "jverant@gmail.com",
+    "resolved_contact": "Joseph Verant",
+    "resolved_from_member": "joe",
+    "text": "Freyja 2.0 live smoke test."
+  },
+  "report_type": "imessage-live-smoke",
+  "schema_version": "1.0",
+  "sent": 1,
+  "status": "sent",
+  "timestamp": "2026-08-25T04:23:28.206474+00:00"
+}

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from freyja.calendar import AppleCalendarProvider, CalendarService, InMemoryCalendarProvider
+from freyja.calendar import AppleCalendarProvider, CalendarService, InMemoryCalendarProvider, MacAgentAppleCalendarProvider
 from freyja.calendar.service import parse_date, parse_datetime
 from freyja.config import settings
 from freyja.memory.models import MemoryPrincipal
@@ -31,11 +31,17 @@ def build_calendar_service() -> CalendarService:
     providers = {"memory": InMemoryCalendarProvider()}
     default_provider = settings.calendar_default_provider.strip() or "memory"
     if settings.apple_calendar_enabled and default_provider == "apple":
-        providers["apple"] = AppleCalendarProvider(
-            default_calendar_name=settings.apple_calendar_default_calendar_name,
-            calendar_aliases=_parse_aliases(settings.apple_calendar_calendar_aliases),
-            timeout_seconds=settings.apple_calendar_timeout_seconds,
-        )
+        provider_kwargs = {
+            "default_calendar_name": settings.apple_calendar_default_calendar_name,
+            "calendar_aliases": _parse_aliases(settings.apple_calendar_calendar_aliases),
+        }
+        if settings.apple_calendar_backend.strip().lower() == "macagent":
+            providers["apple"] = MacAgentAppleCalendarProvider(**provider_kwargs)
+        else:
+            providers["apple"] = AppleCalendarProvider(
+                **provider_kwargs,
+                timeout_seconds=settings.apple_calendar_timeout_seconds,
+            )
     if default_provider not in providers:
         default_provider = "memory"
     return CalendarService(providers=providers, default_provider_name=default_provider)

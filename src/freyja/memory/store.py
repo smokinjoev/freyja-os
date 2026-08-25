@@ -19,8 +19,9 @@ from freyja.memory.models import (
     CreateConversationRequest,
     CreateConversationResponse,
     ListConversationsResponse,
-    MemoryPrincipal,
     MemoryMessage,
+    MemoryPrincipal,
+    MemoryProvenance,
     PutSharedMemoryRequest,
     PruneResponse,
     SharedMemory,
@@ -30,6 +31,7 @@ from freyja.memory.models import (
 
 logger = logging.getLogger(__name__)
 
+PROVENANCE_METADATA_KEY = "provenance"
 _LOCK = threading.Lock()
 _SCHEMA_COMPONENT = "memory_store"
 _SCHEMA_VERSION = 2
@@ -41,6 +43,46 @@ class MemoryAccessDeniedError(Exception):
 
 class MemoryStorageError(Exception):
     """Raised when durable memory storage is unavailable or unsafe."""
+
+
+def _memory_provenance_for_request(
+    principal: MemoryPrincipal,
+    request: PutSharedMemoryRequest,
+    metadata: dict[str, Any],
+) -> MemoryProvenance:
+    source = request.source or principal.client_type
+    raw_metadata_provenance = metadata.get(PROVENANCE_METADATA_KEY)
+    if request.provenance is not None:
+        provenance = request.provenance
+    elif isinstance(raw_metadata_provenance, dict):
+        try:
+            provenance = MemoryProvenance.model_validate(raw_metadata_provenance)
+        except ValidationError:
+            provenance = MemoryProvenance(source=source)
+    else:
+        provenance = MemoryProvenance(source=source)
+
+    if provenance.trust_level == "untrusted_external_content" and provenance.authoritative:
+        provenance = provenance.model_copy(update={"authoritative": False})
+    if request.source and provenance.source != request.source:
+        provenance = provenance.model_copy(update={"source": request.source})
+    return provenance
+
+
+def _memory_provenance_from_metadata(
+    source: str,
+    metadata: dict[str, Any],
+) -> MemoryProvenance:
+    raw_provenance = metadata.get(PROVENANCE_METADATA_KEY)
+    if isinstance(raw_provenance, dict):
+        try:
+            provenance = MemoryProvenance.model_validate(raw_provenance)
+        except ValidationError:
+            return MemoryProvenance(source=source)
+        if provenance.trust_level == "untrusted_external_content" and provenance.authoritative:
+            return provenance.model_copy(update={"authoritative": False})
+        return provenance
+    return MemoryProvenance(source=source)
 
 
 class MemoryStore:
@@ -399,7 +441,9 @@ class MemoryStore:
         memory_id = _safe_memory_id(request.memory_id)
         now = utc_now()
         safe_content = redact_content(request.content)[: self._shared_max_item_chars]
-        metadata = request.metadata or {}
+        metadata = dict(request.metadata or {})
+        provenance = _memory_provenance_for_request(principal, request, metadata)
+        metadata[PROVENANCE_METADATA_KEY] = provenance.model_dump(mode="json", exclude_none=True)
         scope = principal.scope_key
         with _LOCK:
             conn = self._connect()
@@ -438,7 +482,7 @@ class MemoryStore:
                     (
                         row_id,
                         scope,
-                        principal.client_type,
+                        provenance.source,
                         principal.client_subject,
                         principal.account_owner,
                         principal.conversation_id,
@@ -464,12 +508,13 @@ class MemoryStore:
                     conversation_id=principal.conversation_id,
                     kind=request.kind,
                     content=safe_content,
-                    source=principal.client_type,
+                    source=provenance.source,
                     confidence=request.confidence,
                     sensitivity=request.sensitivity,
                     created_at=created_at,
                     updated_at=now,
                     expires_at=request.expires_at,
+                    provenance=provenance,
                     metadata=metadata,
                 )
             except sqlite3.Error as exc:
@@ -634,6 +679,9 @@ class MemoryStore:
             metadata = json.loads(row["metadata"])
         except json.JSONDecodeError:
             metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        provenance = _memory_provenance_from_metadata(row["source"], metadata)
         try:
             return SharedMemory(
                 memory_id=row["memory_id"],
@@ -653,7 +701,8 @@ class MemoryStore:
                     if row["expires_at"]
                     else None
                 ),
-                metadata=metadata if isinstance(metadata, dict) else {},
+                provenance=provenance,
+                metadata=metadata,
             )
         except (ValidationError, ValueError, TypeError) as exc:
             logger.warning("Skipping malformed shared memory row: %s", exc)
@@ -871,6 +920,9 @@ class MemoryDisabledStore:
         content = redact_content(request.content)[
             : max(1, int(getattr(settings, "memory_shared_max_item_chars", 2000)))
         ]
+        metadata = dict(request.metadata or {})
+        provenance = _memory_provenance_for_request(principal, request, metadata)
+        metadata[PROVENANCE_METADATA_KEY] = provenance.model_dump(mode="json", exclude_none=True)
         return SharedMemory(
             memory_id=_safe_memory_id(request.memory_id),
             client_type=principal.client_type,
@@ -879,13 +931,14 @@ class MemoryDisabledStore:
             conversation_id=principal.conversation_id,
             kind=request.kind,
             content=content,
-            source=principal.client_type,
+            source=provenance.source,
             confidence=request.confidence,
             sensitivity=request.sensitivity,
             created_at=now,
             updated_at=now,
             expires_at=request.expires_at,
-            metadata=request.metadata or {},
+            provenance=provenance,
+            metadata=metadata,
         )
 
     def list_shared_memories(

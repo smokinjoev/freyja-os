@@ -21,6 +21,19 @@ PRINCIPAL_HEADERS = {
 }
 
 
+IMESSAGE_JOE_HEADERS = {
+    "X-Freyja-Client-Type": "imessage",
+    "X-Freyja-Client-Subject": "agent:cloyd-gibbler",
+    "X-Freyja-Account-Owner": "person:joe",
+    "X-Freyja-Conversation-Id": "imessage-conv:joe",
+    "X-Freyja-Agent-Id": "cloyd-gibbler",
+    "X-Freyja-Agent-Display-Name": "Cloyd Gibbler",
+    "X-Freyja-Person-Id": "joe",
+    "X-Freyja-Person-Display-Name": "Joe",
+    "X-Freyja-Person-Preferred-Name": "Joe",
+}
+
+
 @pytest.fixture
 def isolated_store(tmp_path, monkeypatch):
     db_path = str(tmp_path / "route_memory.db")
@@ -71,6 +84,42 @@ def test_route_without_conversation_id_does_not_persist(isolated_store):
 
     assert response.status_code == 200
     assert isolated_store.list_conversations().conversations == []
+
+
+def test_route_adds_direct_agent_context_from_imessage_headers(isolated_store, monkeypatch):
+    monkeypatch.setattr(settings, "memory_shared_enabled", False)
+    monkeypatch.setattr(settings, "ollama_reasoning_model", "gpt-oss-freyja:20b-analysis-prefill")
+    with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat:
+        mock_chat.return_value = {
+            "model": "gpt-oss-freyja:20b-analysis-prefill",
+            "message": {"role": "assistant", "content": "Plan noted."},
+        }
+        response = client.post(
+            "/route",
+            json={
+                "request_id": "req-imessage-direct-agent",
+                "prompt": "What is the plan?",
+                "provider": "auto",
+                "include_trace": True,
+            },
+            headers=IMESSAGE_JOE_HEADERS,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["provider"] == "local_reasoning"
+    assert data["response"] == "Plan noted."
+    trace = data["trace"]
+    assert trace["interface"] == "imessage"
+    assert trace["principal"]["client_subject"] == "agent:cloyd-gibbler"
+    assert trace["person"]["person_id"] == "joe"
+    prompt = mock_chat.await_args.kwargs["prompt"]
+    assert "BEGIN FREYJA DIRECT AGENT CONTEXT" in prompt
+    assert "Interface: imessage" in prompt
+    assert "Addressing person: Joe (person_id=joe)" in prompt
+    assert "Active agent: Cloyd Gibbler (agent_id=cloyd-gibbler)" in prompt
+    assert "Required response identity: Cloyd Gibbler" in prompt
+    assert prompt.endswith("Current user request:\nWhat is the plan?")
 
 
 def test_route_trace_for_home_assistant_read_slice(isolated_store, monkeypatch):

@@ -18,7 +18,10 @@ from freyja.home_assistant_monitor import (
     stop_home_assistant_inventory_monitor,
 )
 from freyja.identity import person_context_from_headers
+from freyja.inference import InferenceProviderProfile, ProviderReadiness, provider_registry_from_settings
+from freyja.iris_router import IrisRouterClient
 from freyja.iris_monitor import start_iris_warm_monitor, stop_iris_warm_monitor
+from freyja.macagent import MacAgentClient
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
@@ -75,8 +78,11 @@ reasoning_ollama = OllamaClient(
     model=settings.ollama_reasoning_model,
 )
 openrouter = OpenRouterClient()
+iris_router = IrisRouterClient()
+macagent = MacAgentClient()
 router.register_clients(ollama, openrouter)
 router.register_reasoning_client(reasoning_ollama)
+router.register_iris_router_client(iris_router)
 
 app.include_router(memory_router)
 app.include_router(tools_router)
@@ -126,6 +132,104 @@ async def local_reasoning_health() -> dict[str, bool | str]:
         "base_url": settings.ollama_reasoning_base_url or settings.ollama_base_url,
         "model": settings.ollama_reasoning_model,
         "model_available": model_available,
+    }
+
+
+async def _readiness_for_profile(profile: InferenceProviderProfile) -> ProviderReadiness:
+    if not profile.enabled:
+        return ProviderReadiness(detail="provider disabled")
+    if profile.provider_id == "legacy_ollama":
+        healthy = await ollama.healthy()
+        model_available = await ollama.has_model(profile.model) if healthy and profile.model else healthy
+        return ProviderReadiness(
+            host_reachable=healthy,
+            endpoint_healthy=healthy,
+            model_available=model_available,
+        )
+    if profile.provider_id == "heavy_local":
+        healthy = await reasoning_ollama.healthy()
+        model_available = await reasoning_ollama.has_model(profile.model) if healthy and profile.model else healthy
+        return ProviderReadiness(
+            host_reachable=healthy,
+            endpoint_healthy=healthy,
+            model_available=model_available,
+        )
+    if profile.provider_id == "openrouter_frontier":
+        healthy = await openrouter.healthy()
+        return ProviderReadiness(
+            host_reachable=healthy,
+            endpoint_healthy=healthy,
+            model_available=bool(profile.model),
+            detail="api key configured" if settings.openrouter_api_key else "api key not configured",
+        )
+    if profile.provider_id == "iris_router":
+        healthy = await iris_router.healthy()
+        resident = await iris_router.model_resident() if healthy else False
+        return ProviderReadiness(
+            host_reachable=healthy,
+            endpoint_healthy=healthy,
+            model_available=healthy,
+            model_resident=resident,
+        )
+    return ProviderReadiness(detail="no readiness probe configured")
+
+
+@app.get("/providers/health")
+async def providers_health() -> dict[str, Any]:
+    registry = provider_registry_from_settings()
+    providers: list[dict[str, Any]] = []
+    for profile in registry.enabled():
+        readiness = await _readiness_for_profile(profile)
+        providers.append(
+            {
+                "provider_id": profile.provider_id,
+                "kind": profile.kind,
+                "base_url": profile.base_url,
+                "model": profile.model,
+                "capabilities": sorted(profile.capabilities),
+                "locality": profile.locality.value,
+                "tier": profile.tier,
+                "priority": profile.priority,
+                "enabled": profile.enabled,
+                "readiness": readiness.model_dump(mode="json"),
+                "ready": readiness.ready,
+            }
+        )
+    return {"providers": providers}
+
+
+@app.get("/iris-router/health")
+async def iris_router_health() -> dict[str, Any]:
+    healthy = await iris_router.healthy()
+    return {
+        "enabled": settings.iris_router_enabled,
+        "advisory_enabled": settings.iris_router_advisory_enabled,
+        "shadow_enabled": settings.iris_router_shadow_enabled,
+        "confidence_threshold": settings.iris_router_confidence_threshold,
+        "available": healthy,
+        "reachable": healthy,
+        "base_url": settings.iris_ollama_base_url,
+        "model": settings.iris_router_model,
+    }
+
+
+@app.post("/iris-router/warm")
+async def iris_router_warm() -> dict[str, Any]:
+    warmed = await iris_router.warm()
+    return {
+        "warmed": warmed,
+        "model": settings.iris_router_model,
+        "keep_alive": settings.iris_router_keep_alive,
+    }
+
+
+@app.get("/macagent/health")
+async def macagent_health() -> dict[str, Any]:
+    health = await macagent.health()
+    return {
+        **health.model_dump(mode="json"),
+        "authority": "atlas_director",
+        "authorization_granted_by_macagent": False,
     }
 
 

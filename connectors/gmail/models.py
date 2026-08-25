@@ -10,6 +10,7 @@ class GmailAttachment(BaseModel):
     mime_type: str | None = None
     size_bytes: int | None = Field(default=None, ge=0)
     attachment_id: str | None = None
+    data_base64: str | None = None
 
 
 class GmailMessage(BaseModel):

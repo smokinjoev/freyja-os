@@ -57,6 +57,7 @@ fastapi.testclient.TestClient = ASGITestClient
 def stable_calendar_test_settings(monkeypatch):
     monkeypatch.setattr(settings, "calendar_default_provider", "memory")
     monkeypatch.setattr(settings, "apple_calendar_enabled", False)
+    monkeypatch.setattr(settings, "freyja_connector_token", "")
     set_calendar_service(None)
     yield
     set_calendar_service(None)

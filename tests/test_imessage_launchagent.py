@@ -14,6 +14,8 @@ PLIST_SRC = REPO_ROOT / "scripts" / "com.freyja-os.imessage-connector.plist"
 INSTALL_SCRIPT = REPO_ROOT / "scripts" / "install-imessage-connector.sh"
 STATUS_SCRIPT = REPO_ROOT / "scripts" / "status-imessage-connector.sh"
 REMOVE_SCRIPT = REPO_ROOT / "scripts" / "remove-imessage-connector.sh"
+SYNC_SCRIPT = REPO_ROOT / "scripts" / "sync-imessage-runtime.sh"
+RUNTIME_MANIFEST = REPO_ROOT / "scripts" / "imessage-runtime-files.txt"
 RUNTIME_ROOT = pathlib.Path("/Users/freyja/freyja-os-imessage-runtime")
 
 
@@ -86,3 +88,74 @@ def test_imessage_launchagent_scripts_exist() -> None:
     assert INSTALL_SCRIPT.exists()
     assert STATUS_SCRIPT.exists()
     assert REMOVE_SCRIPT.exists()
+    assert SYNC_SCRIPT.exists()
+    assert RUNTIME_MANIFEST.exists()
+
+
+def test_imessage_runtime_manifest_lists_required_files() -> None:
+    manifest = RUNTIME_MANIFEST.read_text()
+
+    assert "connectors/imessage/gateway.py" in manifest
+    assert "connectors/messaging.py" in manifest
+    assert "src/freyja/agents/coding_lane.py" in manifest
+    assert "src/freyja/inference.py" in manifest
+    assert "src/freyja/media.py" in manifest
+    assert "src/freyja/router.py" in manifest
+    assert "scripts/run-imessage-connector.py" in manifest
+    assert "scripts/com.freyja-os.imessage-connector.plist" in manifest
+
+
+def test_imessage_status_reports_runtime_source_drift() -> None:
+    status_source = STATUS_SCRIPT.read_text()
+
+    assert "=== Runtime source drift ===" in status_source
+    assert "=== Runtime import check ===" in status_source
+    assert "check_runtime_imports" in status_source
+    assert "freyja.router" in status_source
+    assert "connectors.imessage.gateway" in status_source
+    assert "imessage-runtime-files.txt" in status_source
+    assert "DRIFT_PATHS=()" in status_source
+    assert "while IFS= read -r REL_PATH" in status_source
+    assert "cmp -s" in status_source
+    assert "scripts/sync-imessage-runtime.sh" in status_source
+    assert "--fail-on-drift" in status_source
+    assert 'exit 1' in status_source
+
+
+def test_imessage_sync_script_copies_runtime_critical_files_and_restarts() -> None:
+    sync_source = SYNC_SCRIPT.read_text()
+
+    assert "imessage-runtime-files.txt" in sync_source
+    assert "BACKUP_DIR" in sync_source
+    assert "restore_runtime_backup" in sync_source
+    assert "backup_runtime_file" in sync_source
+    assert "trap 'restore_runtime_backup' ERR" in sync_source
+    assert "Verifying runtime imports" in sync_source
+    assert "check_runtime_imports" in sync_source
+    assert "freyja.router" in sync_source
+    assert "connectors.imessage.gateway" in sync_source
+    assert "SYNC_PATHS=()" in sync_source
+    assert "while IFS= read -r REL_PATH" in sync_source
+    assert 'rsync "${RSYNC_FLAGS[@]}" "${SRC}" "${DST}"' in sync_source
+    assert '"${PROJECT_DIR}/scripts/install-imessage-connector.sh"' in sync_source
+    assert '"${CHECKOUT_DIR}/scripts/status-imessage-connector.sh" --fail-on-drift' in sync_source
+
+
+def test_imessage_sync_rolls_back_before_restart_on_import_failure() -> None:
+    sync_source = SYNC_SCRIPT.read_text()
+
+    assert "if ! check_runtime_imports; then" in sync_source
+    assert "restore_runtime_backup" in sync_source
+    assert "exit 1" in sync_source
+    restart_index = sync_source.rindex('"${PROJECT_DIR}/scripts/install-imessage-connector.sh"')
+    assert sync_source.index("if ! check_runtime_imports; then") < restart_index
+    assert "SYNC_COMMITTED=1" in sync_source
+
+
+def test_imessage_sync_script_supports_dry_run_without_restart() -> None:
+    sync_source = SYNC_SCRIPT.read_text()
+
+    assert "--dry-run" in sync_source
+    assert "--no-restart" in sync_source
+    assert "would sync" in sync_source
+    assert "Dry run complete; runtime was not modified." in sync_source

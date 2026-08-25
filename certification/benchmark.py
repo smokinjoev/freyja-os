@@ -300,7 +300,11 @@ def rank_benchmark_entries(entries: tuple[BenchmarkEntry, ...]) -> dict[str, lis
         "routing": _rank(entries, lambda entry: entry.metrics.routing_score),
         "memory": _rank(entries, lambda entry: entry.metrics.memory_score),
         "vision": _rank(entries, lambda entry: entry.metrics.vision_score),
-        "latency": _rank(entries, lambda entry: entry.metrics.average_latency_ms, reverse=False),
+        "latency": _rank(
+            entries,
+            lambda entry: (entry.metrics.failures, entry.metrics.average_latency_ms),
+            reverse=False,
+        ),
     }
 
 
@@ -624,8 +628,16 @@ def _rank(
     scored = [(entry, score) for entry, score in scored if score is not None]
     return [
         entry.target.target_id
-        for entry, _ in sorted(scored, key=lambda item: (float(item[1]), item[0].target.target_id), reverse=reverse)
+        for entry, _ in sorted(scored, key=lambda item: (_rank_score(item[1]), item[0].target.target_id), reverse=reverse)
     ]
+
+
+def _rank_score(score: Any) -> tuple[float, ...]:
+    if isinstance(score, tuple):
+        return tuple(float(item) for item in score)
+    if isinstance(score, list):
+        return tuple(float(item) for item in score)
+    return (float(score),)
 
 
 def _score_delta(left: dict[str, Any], right: dict[str, Any]) -> dict[str, float]:

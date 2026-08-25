@@ -67,6 +67,8 @@ def test_agent_profiles_are_reusable_connector_identity_contracts() -> None:
     assert beth is not None
     assert beth.agent_id is AgentName.BENEDICT
     assert beth.account_owner == "person:beth"
+    assert "cannot verify it from here" in joe.prompt_role
+    assert "cannot verify it from here" in beth.prompt_role
     assert family is not None
     assert family.agent_id is AgentName.FREYJA
     assert family.account_owner == "person:family"
@@ -83,6 +85,21 @@ def test_agent_prompt_names_required_response_identity() -> None:
     assert "Required response identity: Cloyd Gibbler" in prompt
     assert "private Signal context" in prompt
     assert prompt.endswith("Hello")
+
+
+def test_benedict_prompt_has_same_no_fabricated_context_contract_as_cloyd() -> None:
+    hierarchy = AgentHierarchy()
+
+    joe = hierarchy.profile_for_person(PersonName.JOE).prompt_role
+    beth = hierarchy.profile_for_person(PersonName.BETH).prompt_role
+
+    for phrase in (
+        "Do not claim you checked calendars",
+        "unless Director supplied that data",
+        "say you cannot verify it from here",
+    ):
+        assert phrase in joe
+        assert phrase in beth
 
 
 def test_agent_cannot_delegate_for_another_agents_person() -> None:

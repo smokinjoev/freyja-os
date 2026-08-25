@@ -101,6 +101,32 @@ async def test_html_is_sanitized_before_director(enabled_gateway):
 
 
 @pytest.mark.asyncio
+async def test_image_only_gmail_message_forwards_image(enabled_gateway):
+    message = make_message(
+        text="",
+        attachments=[
+            GmailAttachment(
+                filename="photo.jpg",
+                mime_type="image/jpeg",
+                size_bytes=4,
+                data_base64="ZmFrZQ==",
+            )
+        ],
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "That is a photo."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert "[No readable body text was provided.]" in payload["prompt"]
+    assert payload["images"] == [
+        {"mime_type": "image/jpeg", "data_base64": "ZmFrZQ==", "filename": "photo.jpg"}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_attachments_are_metadata_only(enabled_gateway):
     message = make_message(
         attachments=[

@@ -34,6 +34,15 @@ def test_plist_arguments_bind_localhost_only() -> None:
     assert "8000" in args, "Director port must be 8000"
 
 
+def test_plist_starts_rev2_director_entrypoint() -> None:
+    with open(PLIST_SRC, "rb") as f:
+        data = plistlib.load(f)
+
+    args = data.get("ProgramArguments", [])
+    assert "freyja.atlas_app:app" in args
+    assert "freyja.roadmode_app:app" not in args
+
+
 def test_plist_keepalive_restarts_on_unexpected_exit() -> None:
     with open(PLIST_SRC, "rb") as f:
         data = plistlib.load(f)
@@ -75,10 +84,21 @@ def test_expected_paths_exist() -> None:
     uvicorn = REPO_ROOT / ".venv" / "bin" / "uvicorn"
     assert uvicorn.exists() or shutil.which("uvicorn") is not None
     assert (REPO_ROOT / "src" / "freyja" / "main.py").exists()
+    assert (REPO_ROOT / "src" / "freyja" / "atlas_app.py").exists()
     assert (REPO_ROOT / "scripts" / "install-director.sh").exists()
     assert (REPO_ROOT / "scripts" / "status-director.sh").exists()
     assert (REPO_ROOT / "scripts" / "restart-director.sh").exists()
     assert (REPO_ROOT / "scripts" / "remove-director.sh").exists()
+
+
+def test_director_status_script_checks_rev2_protected_health_without_printing_token() -> None:
+    script = (REPO_ROOT / "scripts" / "status-director.sh").read_text(encoding="utf-8")
+
+    assert "/providers/health" in script
+    assert "/iris-router/health" in script
+    assert "/macagent/health" in script
+    assert "Authorization: Bearer ${FREYJA_CONNECTOR_TOKEN_VALUE}" in script
+    assert 'echo "${FREYJA_CONNECTOR_TOKEN_VALUE}"' not in script
 
 
 @pytest.mark.skipif(platform.system() != "Darwin", reason="LaunchAgent ownership checks are macOS-specific")
