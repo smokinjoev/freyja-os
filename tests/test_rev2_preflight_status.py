@@ -195,7 +195,8 @@ def test_preflight_status_builds_signal_final_command_from_readiness_evidence(tm
         "--approval-report certification/reports/approval.json "
         "--vulcan-report certification/reports/vulcan.json "
         "--smoke-report certification/reports/imessage-live-smoke-sent.json "
-        "--signal-live-smoke --signal-yes --require-smoke-report --require-signal-smoke-report "
+        "--signal-live-smoke --signal-env-file deploy/compose/signal/.env "
+        "--signal-yes --require-smoke-report --require-signal-smoke-report "
         "--require-vulcan-report "
         "--latency-winner-target director:health"
     )
@@ -243,7 +244,8 @@ def test_preflight_status_builds_combined_smoke_command(tmp_path: Path) -> None:
         "--memory-report certification/reports/memory.json "
         "--approval-report certification/reports/approval.json "
         "--vulcan-report certification/reports/vulcan.json "
-        "--imessage-live-smoke --yes --signal-live-smoke --signal-yes "
+        "--imessage-live-smoke --yes --signal-live-smoke "
+        "--signal-env-file deploy/compose/signal/.env --signal-yes "
         "--require-smoke-report --require-signal-smoke-report --require-vulcan-report "
         "--latency-winner-target director:health"
     )

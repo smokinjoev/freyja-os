@@ -352,7 +352,7 @@ def _handoff_command(payload: dict[str, Any], *, failed_checks: tuple[str, ...],
     elif smoke_report:
         command.extend(["--smoke-report", smoke_report])
     if SIGNAL_SMOKE_CHECK in failed_checks:
-        command.append("--signal-live-smoke")
+        command.extend(["--signal-live-smoke", "--signal-env-file", SIGNAL_ENV_FILE])
         if send:
             command.append("--signal-yes")
     elif signal_smoke_report:
