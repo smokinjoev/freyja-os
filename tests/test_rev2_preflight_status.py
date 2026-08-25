@@ -401,8 +401,17 @@ def test_preflight_status_reports_signal_readiness_missing_items(tmp_path: Path)
     assert summary.remaining == (
         "Resolve signal-readiness-report: Set SIGNAL_ALLOWED_SENDERS to at least one reviewed E.164 sender.",
         "Resolve signal-readiness-report: Register or link SIGNAL_ACCOUNT_NUMBER in signal-cli-rest-api.",
+        "Signal account action: complete captcha-backed registration with "
+        "`scripts/signal-operator.py --env-file deploy/compose/signal/.env register --captcha 'signalcaptcha://...' --yes` "
+        "using a token from https://signalcaptchas.org/registration/generate.html, then verify with "
+        "`scripts/signal-operator.py --env-file deploy/compose/signal/.env verify --code <code> --yes`; "
+        "or link an existing mobile account with "
+        "`scripts/signal-operator.py --env-file deploy/compose/signal/.env link-device --device-name freyja-atlas --yes`.",
+        "Signal allowlist action: set reviewed E.164 senders in SIGNAL_ALLOWED_SENDERS inside deploy/compose/signal/.env.",
+        "Signal enablement action: set SIGNAL_ENABLED=true in deploy/compose/signal/.env only after registration/linking and allowlist review.",
     )
     assert "Signal readiness report: certification/reports/signal-readiness-latest.json" in rendered
+    assert "signalcaptcha://..." in rendered
 
 
 def test_preflight_status_reports_not_ready_for_other_failures(tmp_path: Path) -> None:

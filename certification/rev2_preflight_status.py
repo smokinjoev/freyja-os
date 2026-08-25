@@ -15,6 +15,8 @@ SIGNAL_SMOKE_CHECK = "signal-live-smoke-report"
 VULCAN_CHECK = "vulcan-readiness-report"
 SIGNAL_READINESS_CHECK = "signal-readiness-report"
 SMOKE_CHECKS = (IMESSAGE_SMOKE_CHECK, SIGNAL_SMOKE_CHECK)
+SIGNAL_ENV_FILE = "deploy/compose/signal/.env"
+SIGNAL_CAPTCHA_URL = "https://signalcaptchas.org/registration/generate.html"
 
 
 @dataclass(frozen=True)
@@ -258,18 +260,39 @@ def _signal_readiness_remaining_work(checks: list[Any]) -> list[str]:
     if not isinstance(details, dict):
         return [f"Resolve {SIGNAL_READINESS_CHECK}."]
     missing = details.get("missing")
-    if isinstance(missing, list) and missing:
-        return [f"Resolve {SIGNAL_READINESS_CHECK}: {item}" for item in map(str, missing)]
-    reasons: list[str] = []
+    remaining: list[str] = []
+    missing_text = [str(item) for item in missing] if isinstance(missing, list) else []
+    for item in missing_text:
+        remaining.append(f"Resolve {SIGNAL_READINESS_CHECK}: {item}")
     if details.get("account_registered") is not True:
-        reasons.append("register or link the Signal account")
+        remaining.append(
+            "Signal account action: complete captcha-backed registration with "
+            f"`scripts/signal-operator.py --env-file {SIGNAL_ENV_FILE} register --captcha 'signalcaptcha://...' --yes` "
+            f"using a token from {SIGNAL_CAPTCHA_URL}, then verify with "
+            f"`scripts/signal-operator.py --env-file {SIGNAL_ENV_FILE} verify --code <code> --yes`; "
+            "or link an existing mobile account with "
+            f"`scripts/signal-operator.py --env-file {SIGNAL_ENV_FILE} link-device --device-name freyja-atlas --yes`."
+        )
     if details.get("allowed_recipient_count") in (None, 0):
-        reasons.append("configure reviewed sender allowlist")
+        remaining.append(f"Signal allowlist action: set reviewed E.164 senders in SIGNAL_ALLOWED_SENDERS inside {SIGNAL_ENV_FILE}.")
     if details.get("signal_enabled") is not True:
-        reasons.append("enable Signal after registration and allowlist review")
+        remaining.append(f"Signal enablement action: set SIGNAL_ENABLED=true in {SIGNAL_ENV_FILE} only after registration/linking and allowlist review.")
     if details.get("signal_rest_ok") is not True:
-        reasons.append("restore Signal REST health")
-    return [f"Resolve {SIGNAL_READINESS_CHECK}: {', '.join(reasons) or _check_status(checks, SIGNAL_READINESS_CHECK)}."]
+        remaining.append("Signal REST action: restore signal-cli-rest-api health before live smoke.")
+    if remaining:
+        return _dedupe(remaining)
+    return [f"Resolve {SIGNAL_READINESS_CHECK}: {_check_status(checks, SIGNAL_READINESS_CHECK)}."]
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped
 
 
 def _optional_str(value: object) -> str | None:
