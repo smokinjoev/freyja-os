@@ -5,6 +5,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SIGNAL_COMPOSE = REPO_ROOT / "deploy" / "compose" / "signal" / "compose.yaml"
+SIGNAL_DOCKERFILE = REPO_ROOT / "deploy" / "docker" / "signal-connector.Dockerfile"
 
 
 def _load_signal_compose() -> dict:
@@ -28,3 +29,27 @@ def test_signal_connector_uses_private_api_and_director_egress() -> None:
 
     assert connector["networks"] == ["signal-private", "atlas-egress"]
     assert connector["environment"]["SIGNAL_REST_API_URL"] == "http://signal-api:8080"
+
+
+def test_signal_operator_is_private_one_shot_profile() -> None:
+    compose = _load_signal_compose()
+    operator = compose["services"]["signal-operator"]
+
+    assert operator["profiles"] == ["operator"]
+    assert operator["depends_on"]["signal-api"]["condition"] == "service_healthy"
+    assert operator["environment"]["SIGNAL_REST_API_URL"] == "http://signal-api:8080"
+    assert operator["networks"] == ["signal-private", "atlas-egress"]
+    assert operator["read_only"] is True
+    assert operator["command"] == [
+        "python",
+        "scripts/signal-operator.py",
+        "readiness",
+        "--check-registered",
+    ]
+
+
+def test_signal_image_packages_operator_cli() -> None:
+    dockerfile = SIGNAL_DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "COPY scripts/run-signal-connector.py ./scripts/run-signal-connector.py" in dockerfile
+    assert "COPY scripts/signal-operator.py ./scripts/signal-operator.py" in dockerfile

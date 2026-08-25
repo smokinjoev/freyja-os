@@ -4,6 +4,8 @@ This Compose project runs the always-on Signal transport stack on Atlas:
 
 - `signal-api`: `bbernhard/signal-cli-rest-api` in `native` mode.
 - `signal-connector`: the Freyja Signal transport adapter and policy gateway.
+- `signal-operator`: a one-shot operator profile for registration, linking,
+  readiness, and live-smoke actions on the private Compose network.
 
 The Freyja Director is not part of this stack. Atlas is the authoritative
 Director/control-plane host, and the connector forwards authorized requests to
@@ -32,8 +34,9 @@ populated `.env` must remain mode `0600` and uncommitted.
 
 Keep `SIGNAL_ENABLED=false` and leave `SIGNAL_ACCOUNT_NUMBER` and
 `SIGNAL_ALLOWED_SENDERS` blank until an existing Signal account is deliberately
-registered or linked and the sender allowlist has been reviewed. This
-deployment never performs account registration or device linking.
+registered or linked and the sender allowlist has been reviewed. Registration
+and linking are explicit one-shot operator commands; they are not performed by
+the always-on connector.
 
 Validate and start the Signal connector stack:
 
@@ -46,16 +49,53 @@ docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml up -d --build
 ```
 
+## Account registration or linking
+
+Run operator commands inside the Compose network so `SIGNAL_REST_API_URL` stays
+private as `http://signal-api:8080`.
+
+Request and verify a dedicated Signal number:
+
+```bash
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
+  register --number +15555550100
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
+  register --number +15555550100 --yes
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
+  verify --number +15555550100 --code 123-456
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
+  verify --number +15555550100 --code 123-456 --yes
+```
+
+Use `--voice` on `register` when SMS is unavailable. Use `--captcha` only when
+Signal requires a captcha token. For an existing mobile Signal account, link
+the REST wrapper as a secondary device:
+
+```bash
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
+  link-device --device-name freyja-atlas
+```
+
+The dry-run output redacts phone numbers and does not include codes, PINs,
+captcha tokens, or link URIs. If a link URI must be written for manual use,
+write it to a temporary path inside the container and copy it through an
+operator-approved mechanism, then delete it after scanning.
+
 Verify:
 
 ```bash
 curl --fail http://<atlas-director-private-host>:8000/health
 docker compose --env-file deploy/compose/signal/.env \
   -f deploy/compose/signal/compose.yaml ps
-python scripts/signal-operator.py --env-file deploy/compose/signal/.env \
-  readiness \
-  --check-registered \
-  --output certification/reports/signal-readiness.json
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
+  readiness --check-registered \
+  | tee certification/reports/signal-readiness.json
 python scripts/messaging-production-check.py --connector signal \
   --env-file deploy/compose/signal/.env \
   --check-director --check-signal-rest \
@@ -72,21 +112,23 @@ Use the operator smoke command before relying on Signal for daily use. It
 dry-runs by default and redacts phone numbers in the report:
 
 ```bash
-python scripts/signal-operator.py --env-file deploy/compose/signal/.env \
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
   live-smoke \
   --text "Freyja 2.0 Signal live smoke test." \
-  --output certification/reports/signal-live-smoke-dry-run.json
+  | tee certification/reports/signal-live-smoke-dry-run.json
 ```
 
 Review the dry-run plan, confirm it targets one allowlisted recipient, then send
 the single approved smoke message:
 
 ```bash
-python scripts/signal-operator.py --env-file deploy/compose/signal/.env \
+docker compose --env-file deploy/compose/signal/.env \
+  -f deploy/compose/signal/compose.yaml run --rm signal-operator \
   live-smoke \
   --text "Freyja 2.0 Signal live smoke test." \
-  --output certification/reports/signal-live-smoke-sent.json \
-  --yes
+  --yes \
+  | tee certification/reports/signal-live-smoke-sent.json
 ```
 
 All services use `restart: unless-stopped`, and Docker is enabled at boot, so

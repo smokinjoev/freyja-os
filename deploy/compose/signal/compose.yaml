@@ -55,6 +55,41 @@ services:
       retries: 3
       start_period: 10s
 
+  signal-operator:
+    profiles:
+      - operator
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/signal-connector.Dockerfile
+    depends_on:
+      signal-api:
+        condition: service_healthy
+    environment:
+      SIGNAL_ENABLED: ${SIGNAL_ENABLED:-false}
+      SIGNAL_ACCOUNT_NUMBER: ${SIGNAL_ACCOUNT_NUMBER:-}
+      SIGNAL_ALLOWED_SENDERS: ${SIGNAL_ALLOWED_SENDERS:-}
+      SIGNAL_REST_API_URL: http://signal-api:8080
+      FREYJA_DIRECTOR_URL: ${FREYJA_DIRECTOR_URL}
+      FREYJA_CONNECTOR_TOKEN: ${FREYJA_CONNECTOR_TOKEN}
+      SIGNAL_POLL_INTERVAL_SECONDS: ${SIGNAL_POLL_INTERVAL_SECONDS:-5}
+      SIGNAL_TRANSPORT_TIMEOUT_SECONDS: ${SIGNAL_TRANSPORT_TIMEOUT_SECONDS:-60}
+      SIGNAL_REQUEST_TIMEOUT_SECONDS: ${SIGNAL_REQUEST_TIMEOUT_SECONDS:-30}
+      SIGNAL_RECONNECT_MAX_SECONDS: ${SIGNAL_RECONNECT_MAX_SECONDS:-60}
+      SIGNAL_MAX_MESSAGE_CHARS: ${SIGNAL_MAX_MESSAGE_CHARS:-4000}
+    command:
+      - python
+      - scripts/signal-operator.py
+      - readiness
+      - --check-registered
+    networks:
+      - signal-private
+      - atlas-egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
 networks:
   signal-private:
     internal: true

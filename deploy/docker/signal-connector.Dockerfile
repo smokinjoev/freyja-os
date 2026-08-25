@@ -10,6 +10,7 @@ COPY certification ./certification
 COPY src ./src
 COPY connectors ./connectors
 COPY scripts/run-signal-connector.py ./scripts/run-signal-connector.py
+COPY scripts/signal-operator.py ./scripts/signal-operator.py
 
 RUN python -m pip install --no-cache-dir .
 
