@@ -141,22 +141,6 @@ async def local_reasoning_health() -> dict[str, bool | str]:
 async def _readiness_for_profile(profile: InferenceProviderProfile) -> ProviderReadiness:
     if not profile.enabled:
         return ProviderReadiness(detail="provider disabled")
-    if profile.provider_id in {"legacy_ollama", "local_vision"}:
-        healthy = await ollama.healthy()
-        model_available = await ollama.has_model(profile.model) if healthy and profile.model else healthy
-        return ProviderReadiness(
-            host_reachable=healthy,
-            endpoint_healthy=healthy,
-            model_available=model_available,
-        )
-    if profile.provider_id == "heavy_local":
-        healthy = await reasoning_ollama.healthy()
-        model_available = await reasoning_ollama.has_model(profile.model) if healthy and profile.model else healthy
-        return ProviderReadiness(
-            host_reachable=healthy,
-            endpoint_healthy=healthy,
-            model_available=model_available,
-        )
     if profile.provider_id == "openrouter_frontier":
         healthy = await openrouter.healthy()
         return ProviderReadiness(
@@ -173,6 +157,15 @@ async def _readiness_for_profile(profile: InferenceProviderProfile) -> ProviderR
             endpoint_healthy=healthy,
             model_available=healthy,
             model_resident=resident,
+        )
+    if profile.kind == "ollama":
+        client = OllamaClient(base_url=profile.base_url, model=profile.model)
+        healthy = await client.healthy()
+        model_available = await client.has_model(profile.model) if healthy and profile.model else healthy
+        return ProviderReadiness(
+            host_reachable=healthy,
+            endpoint_healthy=healthy,
+            model_available=model_available,
         )
     return ProviderReadiness(detail="no readiness probe configured")
 

@@ -2,6 +2,7 @@ connectors/imessage/gateway.py
 connectors/messaging.py
 src/freyja/agents/coding_lane.py
 src/freyja/agents/household.py
+src/freyja/contracts.py
 src/freyja/inference.py
 src/freyja/media.py
 src/freyja/router.py

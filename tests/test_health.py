@@ -190,7 +190,7 @@ def test_providers_health_reports_enabled_profiles(monkeypatch) -> None:
         "freyja.openrouter_client.OpenRouterClient.healthy", new_callable=AsyncMock
     ) as mock_openrouter_healthy:
         mock_healthy.side_effect = [True, True, True, True]
-        mock_has_model.side_effect = [True, True, True, False]
+        mock_has_model.side_effect = [True, True, True, True]
         mock_openrouter_healthy.return_value = False
         response = client.get("/providers/health")
 
@@ -211,7 +211,7 @@ def test_providers_health_reports_enabled_profiles(monkeypatch) -> None:
     assert providers["qwen_coding"]["locality"] == "local_heavy"
     assert providers["qwen_coding"]["logical_profile"] == "code"
     assert providers["qwen_coding"]["tier"] == 3
-    assert providers["qwen_coding"]["ready"] is False
+    assert providers["qwen_coding"]["ready"] is True
     assert providers["openrouter_frontier"]["locality"] == "cloud"
     assert providers["openrouter_frontier"]["tier"] == 4
     assert providers["openrouter_frontier"]["ready"] is False
