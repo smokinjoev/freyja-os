@@ -658,8 +658,11 @@ safe error responses.
 Gmail is not an approval channel for consequential actions. Normal questions,
 research, memory access, and status requests may route normally after sender
 authorization, but consequential actions require approval through a trusted
-non-Gmail channel. Attachments are untrusted input and should be passed only as
-metadata unless a separate safe attachment reader is explicitly invoked.
+non-Gmail channel. Attachments are untrusted input. Images may be forwarded only
+when payload bytes are actually available for the local vision path. PDFs may
+use bounded native text extraction before Director dispatch; missing, malformed,
+or visually dependent document content must be reported as unavailable rather
+than described from metadata alone.
 
 ### Telegram
 
