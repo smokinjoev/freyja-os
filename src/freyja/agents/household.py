@@ -117,15 +117,16 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         ),
     ),
     HouseholdAgent(
-        agent_id="jenna-agent-pending",
-        display_name="Jenna's agent (TBD)",
+        agent_id="jenna",
+        display_name="Jenna",
         owner="person:jenna",
         person_id="jenna",
         prompt_role=(
-            "Jenna's personal-agent identity and personality have not been selected yet. "
-            "Until they are selected, route Jenna through Freyja without inventing a name."
+            "Your name is Jenna. You are Jenna's personal agent. Develop your relationship "
+            "from Jenna's preferences, corrections, and ongoing work while remaining useful, "
+            "honest, and age-appropriate. Share ordinary household context with the family memory pool. "
+            + _NO_CANNED_GREETING
         ),
-        active=False,
     ),
     HouseholdAgent(
         agent_id="smith",

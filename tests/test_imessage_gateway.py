@@ -11,6 +11,7 @@ from connectors.imessage.gateway import IMessageGateway
 from connectors.imessage.family_observer import FamilyIMessageObserver
 from connectors.imessage.models import IMessage, IMessageAttachment
 from connectors.messaging import parse_allowed_senders
+from freyja.identity import Identity, IdentityService, Person
 from freyja.memory.store import MemoryStore
 from tests.test_media import SIMPLE_PDF_BASE64
 
@@ -625,3 +626,44 @@ async def test_family_member_alias_uses_agent_memory_subject(enabled_gateway):
     assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
     assert headers["X-Freyja-Account-Owner"] == "person:joe"
     assert "+15551234567" not in str(headers)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("person_id", "sender", "agent_id", "owner"),
+    [
+        ("joe", "+15550000001", "cloyd-gibbler", "person:joe"),
+        ("beth", "+15550000002", "benedict", "person:beth"),
+        ("liam", "+15550000003", "agent-44", "person:liam"),
+        ("jenna", "+15550000004", "jenna", "person:jenna"),
+    ],
+)
+async def test_family_imessage_phone_identities_route_to_personal_agents(
+    enabled_gateway,
+    person_id,
+    sender,
+    agent_id,
+    owner,
+):
+    identity_service = IdentityService(
+        people=[
+            Person(person_id, person_id.title(), identities=(Identity(kind="phone", value=sender),)),
+        ]
+    )
+    enabled_gateway._allowed_identities = parse_allowed_senders(sender, "imessage", identity_service=identity_service)
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
+    enabled_gateway._direct_requires_addressed = False
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": f"Hi {person_id}"})
+        result = await enabled_gateway.handle(make_message(sender=sender, text="Are you there?"))
+
+    assert result is not None
+    headers = mock_post.await_args.kwargs["headers"]
+    payload = mock_post.await_args.kwargs["json"]
+    assert headers["X-Freyja-Client-Subject"] == f"agent:{agent_id}"
+    assert headers["X-Freyja-Account-Owner"] == owner
+    assert headers["X-Freyja-Agent-Id"] == agent_id
+    assert headers["X-Freyja-Person-Id"] == person_id
+    assert payload["resolved_agent_id"] == agent_id
+    assert payload["resolved_user_id"] == person_id

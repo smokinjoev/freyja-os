@@ -216,9 +216,28 @@ def seeded_identity_service() -> IdentityService:
         aliases=(Alias("Mom"), Alias("Mother")),
         identities=(Identity(kind="calendar", value="beth"),),
     )
-    service = IdentityService(people=(joe, beth))
+    liam = Person(
+        person_id="liam",
+        display_name="Liam",
+        preferred_name="Liam",
+        aliases=(Alias("Son"),),
+        identities=(Identity(kind="calendar", value="liam"),),
+    )
+    jenna = Person(
+        person_id="jenna",
+        display_name="Jenna",
+        preferred_name="Jenna",
+        aliases=(Alias("Daughter"),),
+        identities=(Identity(kind="calendar", value="jenna"),),
+    )
+    service = IdentityService(people=(joe, beth, liam, jenna))
     service.add_relationship(Relationship("joe", "spouse", "beth"))
     service.add_relationship(Relationship("beth", "spouse", "joe"))
+    for child in ("liam", "jenna"):
+        service.add_relationship(Relationship("joe", "child", child))
+        service.add_relationship(Relationship("beth", "child", child))
+        service.add_relationship(Relationship(child, "parent", "joe"))
+        service.add_relationship(Relationship(child, "parent", "beth"))
     return service
 
 

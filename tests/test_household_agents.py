@@ -15,13 +15,13 @@ def test_legacy_person_aliases_resolve_to_personal_agents() -> None:
     assert household_agents.resolve("home").agent_id == "freyja"
 
 
-def test_jenna_routes_to_freyja_until_agent_is_named() -> None:
-    pending = household_agents.assigned("jenna")
+def test_jenna_has_active_personal_agent() -> None:
+    agent = household_agents.assigned("jenna")
 
-    assert pending is not None
-    assert pending.active is False
-    assert pending.display_name == "Jenna's agent (TBD)"
-    assert household_agents.resolve("jenna").agent_id == "freyja"
+    assert agent is not None
+    assert agent.active is True
+    assert agent.display_name == "Jenna"
+    assert household_agents.resolve("jenna").agent_id == "jenna"
 
 
 def test_unknown_people_fail_to_household_freyja() -> None:
@@ -29,7 +29,7 @@ def test_unknown_people_fail_to_household_freyja() -> None:
 
 
 def test_conversational_agents_reject_canned_reset_greetings() -> None:
-    for person_id in ("family", "joe", "beth", "liam"):
+    for person_id in ("family", "joe", "beth", "liam", "jenna"):
         prompt = household_agents.resolve(person_id).prompt_role
         assert "How may I help you?" in prompt
         assert "Maintain continuity" in prompt
