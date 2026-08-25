@@ -124,11 +124,12 @@ the current state of that scope.
   linking succeeds, configure a reviewed sender allowlist, and then run the
   approved Signal live-smoke path.
 - Final operator handoff:
-  `scripts/rev2-readiness-bundle.py --imessage-live-smoke` consolidates the
-  last smoke-plus-readiness step. Without `--yes`, it dry-runs the iMessage
-  smoke and stops before readiness. With `--yes`, it sends one allowlisted
-  smoke, writes the sent report, attaches it as `--smoke-report`, and runs
-  strict readiness.
+  `scripts/rev2-readiness-bundle.py` consolidates the smoke-plus-readiness
+  steps. `--imessage-live-smoke` dry-runs iMessage until `--yes` is supplied;
+  `--signal-live-smoke` dry-runs Signal until `--signal-yes` is supplied and
+  uses `--signal-env-file deploy/compose/signal/.env` by default. Sent reports
+  are attached as `--smoke-report` and `--signal-smoke-report` before strict
+  readiness runs.
 - Package wheel build via `pip wheel . --no-deps`: `passed`
 - Installed-wheel preflight console check:
   `freyja-rev2-preflight-status --json` reports both `dry_run_command` and

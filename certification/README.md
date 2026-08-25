@@ -277,7 +277,8 @@ healthy. Add `--require-smoke-report` for final iMessage cutover and
 non-dry-run live-smoke report with one successful sent message.
 
 To consolidate the final operator handoff, the same readiness helper can run
-the iMessage smoke step first. It previews the smoke by default and stops before readiness:
+the iMessage and Signal smoke steps first. Each previews the smoke by default
+and stops before readiness:
 
 ```bash
 scripts/rev2-readiness-bundle.py \
@@ -298,8 +299,10 @@ one allowlisted smoke message, writes
 `--smoke-report`, and then runs final readiness.
 
 The helper can do the same guarded flow for Signal with `--signal-live-smoke`.
-It dry-runs by default and stops before readiness; adding `--signal-yes` sends
-one allowlisted Signal smoke message, writes
+It uses `--signal-env-file deploy/compose/signal/.env` by default so the
+configured account and tokens do not need to be shell-exported. It dry-runs by
+default and stops before readiness; adding `--signal-yes` sends one allowlisted
+Signal smoke message, writes
 `certification/reports/signal-live-smoke-sent.json`, attaches it as
 `--signal-smoke-report`, and then runs final readiness.
 

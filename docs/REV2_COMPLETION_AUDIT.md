@@ -66,8 +66,11 @@ tests alone.
   passed every non-smoke check and failed only because the smoke report does not
   prove a sent message.
 - The final smoke-plus-readiness handoff is consolidated behind
-  `scripts/rev2-readiness-bundle.py --imessage-live-smoke`; it dry-runs and
-  stops before readiness unless `--yes` is supplied.
+  `scripts/rev2-readiness-bundle.py`. It can run iMessage smoke with
+  `--imessage-live-smoke` and Signal smoke with `--signal-live-smoke`; both
+  dry-run and stop before readiness until the matching approval flag is
+  supplied. Signal smoke uses `--signal-env-file deploy/compose/signal/.env` by
+  default so the configured account and tokens stay outside shell history.
 - The current Freyja 2.0 live evidence bundle supersedes the earlier iMessage
   timeout evidence. `certification/reports/freyja-live-evidence-summary.json`
   reports `ok: true`, `all_gates_passed: true`, iMessage runtime synced,

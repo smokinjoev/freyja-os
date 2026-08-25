@@ -115,9 +115,11 @@ def test_rev2_status_document_tracks_current_implementation_candidate() -> None:
     assert "readiness reports can be attached" in status
     assert "status: not-ready" in status
     assert "signal-readiness-report" in status
+    assert "--signal-live-smoke" in status
+    assert "--signal-env-file deploy/compose/signal/.env" in status
     assert "1110 passed, 2 skipped, 1 warning" in status
     assert "Final operator handoff" in status
-    assert "stops before readiness" in status
+    assert "Sent reports" in status
     assert "Do not mark Freyja 2.0 complete from this status file alone" in status
 
 
@@ -158,6 +160,8 @@ def test_rev2_completion_audit_tracks_every_workstream() -> None:
     assert "Signal readiness report" in audit
     assert "20260825T215042.944492Z0000-rev2-readiness.json" in audit
     assert "signal-readiness-report" in audit
+    assert "--signal-live-smoke" in audit
+    assert "--signal-env-file deploy/compose/signal/.env" in audit
     assert "1110 passed, 2 skipped, 1 warning" in audit
     assert "Do not mark the Freyja 2.0 goal complete" in audit
     assert "Signal onboarding/live-smoke" in audit
@@ -193,6 +197,7 @@ def test_certification_docs_describe_rev2_fixture_contract() -> None:
     assert "--connector-report" in docs
     assert "--signal-readiness-report" in docs
     assert "--imessage-live-smoke" in docs
+    assert "--signal-env-file deploy/compose/signal/.env" in docs
     assert "stops before readiness" in docs
     assert "add `--yes`" in docs
     assert "messaging-production-check.py" in docs
