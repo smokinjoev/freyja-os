@@ -37,5 +37,7 @@ Current connector state:
 - Signal submits `CanonicalRequest` to `POST /canonical/route`.
 - iMessage submits `CanonicalRequest` to `POST /canonical/route`.
 - Telegram submits `CanonicalRequest` to `POST /canonical/route`.
+- Shortcuts/HomePod voice ingress builds a voice-channel `CanonicalRequest`
+  before routing.
 - `POST /route` remains for compatibility scripts, local smoke tools, and
   older callers during rollout.

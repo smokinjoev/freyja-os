@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import ipaddress
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -385,8 +386,7 @@ async def route(request: RouteRequest, raw_request: Request) -> dict:
     return response_payload
 
 
-@app.post("/canonical/route")
-async def canonical_route(request: CanonicalRequest, raw_request: Request) -> dict[str, Any]:
+async def _execute_canonical_request(request: CanonicalRequest, raw_request: Request) -> CanonicalResponse:
     try:
         memory_principal = principal_from_headers(raw_request.headers)
     except ValueError:
@@ -429,42 +429,53 @@ async def canonical_route(request: CanonicalRequest, raw_request: Request) -> di
             "trace": result.runtime_evidence.model_dump(mode="json"),
         },
     )
+    return response
+
+
+@app.post("/canonical/route")
+async def canonical_route(request: CanonicalRequest, raw_request: Request) -> dict[str, Any]:
+    response = await _execute_canonical_request(request, raw_request)
     return response.model_dump(mode="json")
 
 
 @app.post("/shortcuts/message")
-async def shortcut_message(request: ShortcutMessageRequest) -> dict[str, Any]:
-    """Protected voice/Shortcut ingress that reuses normal Director routing."""
+async def shortcut_message(request: ShortcutMessageRequest, raw_request: Request) -> dict[str, Any]:
+    """Protected voice/Shortcut ingress through the canonical Director path."""
     prompt = request.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Shortcut prompt is required.")
 
-    route_payload: dict[str, Any] = {
-        "prompt": prompt,
-        "provider": "auto",
-        "tools_required": request.tools_required,
-        "privacy": "private",
-        "conversation_id": f"shortcut-conv:{request.conversation_id.strip() or 'homepod'}",
-    }
-    if request.request_id:
-        route_payload["request_id"] = request.request_id
-    route_request = RouteRequest(**route_payload)
-    result = await router.execute(route_request)
-    if result.decision.provider == "error":
-        raise HTTPException(status_code=400, detail=result.decision.reason)
-    if not result.response:
-        raise HTTPException(
-            status_code=503,
-            detail=result.decision.public_error_message or "No approved provider is currently available.",
-        )
-    response = _voice_friendly_response(result.response)
+    conversation_id = f"shortcut-conv:{request.conversation_id.strip() or 'homepod'}"
+    trace_id = request.request_id or f"shortcut-{uuid.uuid4()}"
+    canonical_request = CanonicalRequest(
+        trace_id=trace_id,
+        message_id=trace_id,
+        channel="voice",
+        conversation_id=conversation_id,
+        sender={
+            "channel_id": request.sender.strip() or "shortcut",
+            "display_name": "Shortcut",
+            "metadata": {"source": "shortcuts"},
+        },
+        text=prompt,
+        channel_metadata={
+            "provider": "auto",
+            "tools_required": request.tools_required,
+            "privacy": "private",
+            "task_type": "voice",
+            "source": "shortcuts",
+        },
+        permissions=["director:route"],
+    )
+    canonical_response = await _execute_canonical_request(canonical_request, raw_request)
+    response = _voice_friendly_response(canonical_response.text)
     return {
         "response": response,
         "spoken": response,
-        "conversation_id": route_request.conversation_id,
-        "request_id": result.decision.request_id,
-        "provider": result.decision.provider,
-        "model": result.decision.model,
+        "conversation_id": canonical_response.conversation_id,
+        "request_id": canonical_response.trace_id,
+        "provider": canonical_response.channel_metadata.get("provider"),
+        "model": canonical_response.channel_metadata.get("model"),
     }
 
 

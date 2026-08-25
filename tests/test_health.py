@@ -100,8 +100,10 @@ def test_shortcut_message_routes_private_voice_request(monkeypatch) -> None:
     assert data["conversation_id"] == "shortcut-conv:kitchen"
     route_request = mock_execute.await_args.args[0]
     assert route_request.prompt == "What is next?"
+    assert route_request.request_id == "shortcut-req"
     assert route_request.provider == "auto"
     assert route_request.privacy == "private"
+    assert route_request.task_type == "voice"
     assert route_request.tools_required is True
     assert route_request.conversation_id == "shortcut-conv:kitchen"
 
