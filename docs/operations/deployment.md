@@ -77,8 +77,8 @@ The JSON reports hash phone numbers and do not include verification codes,
 captcha tokens, PINs, or link URIs. Treat the optional link-output file as
 sensitive and remove it after scanning or using the link.
 
-After registration or linking, set `SIGNAL_ACCOUNT_NUMBER`, review
-`SIGNAL_ALLOWED_SENDERS`, then run:
+After registration or linking, confirm `SIGNAL_ACCOUNT_NUMBER` is configured,
+review `SIGNAL_ALLOWED_SENDERS`, set `SIGNAL_ENABLED=true`, then run:
 
 ```bash
 scripts/signal-operator.py readiness --check-registered
@@ -88,7 +88,10 @@ scripts/signal-operator.py live-smoke --check-registered --yes
 
 ## Current External Actions
 
-Signal live certification remains blocked until the Signal account/service is
-registered or linked, enabled, and reachable with configured allowed senders.
+Signal live certification remains blocked until the dedicated Signal account is
+registered or linked, enabled, and configured with reviewed allowed senders. The
+Atlas Compose Signal REST API is running healthy in the current local evidence;
+the remaining account setup requires a fresh Signal captcha-backed registration
+request or device-link approval.
 iMessage live certification remains blocked on local Apple permissions and
 Messages account state where those prompts are not already approved.

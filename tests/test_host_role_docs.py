@@ -201,16 +201,30 @@ def test_certification_docs_describe_rev2_fixture_contract() -> None:
     assert "cutover artifact" in docs
     assert "scripts/rev2-preflight-status.py" in docs
     assert "freyja-rev2-preflight-status" in docs
-    assert "preferred operator command" in _read("docs/REV2_STATUS.md")
-    assert "the approval-only `--yes` command" in _read("docs/REV2_STATUS.md")
-    assert "`dry_run_command`" in _read("docs/REV2_STATUS.md")
-    assert "`final_command`" in _read("docs/REV2_STATUS.md")
     assert "`dry_run_command`" in docs
     assert "`final_command`" in docs
     assert "equivalent repository wrapper" in docs
     assert "--json" in docs
     assert "Exit code `0`" in docs
     assert "Exit code `0` means" in docs
+
+
+def test_operations_deployment_tracks_current_signal_gate() -> None:
+    docs = _read("docs/operations/deployment.md")
+
+    assert "Atlas Compose Signal REST API is running healthy" in docs
+    assert "fresh Signal captcha-backed registration" in docs
+    assert "device-link approval" in docs
+    assert "Signal account/service is" not in docs
+
+
+def test_rev2_status_documents_preflight_handoff_commands() -> None:
+    docs = _read("docs/REV2_STATUS.md")
+
+    assert "preferred operator command" in docs
+    assert "the approval-only `--yes` command" in docs
+    assert "`dry_run_command`" in docs
+    assert "`final_command`" in docs
     assert "/providers/health" in docs
     assert "/macagent/health" in docs
 
