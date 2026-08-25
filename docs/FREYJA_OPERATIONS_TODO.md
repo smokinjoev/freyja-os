@@ -115,7 +115,9 @@ completion audit names them as final deployment evidence.
   allowlist, and set `SIGNAL_ENABLED=true` outside Git. Use
   `scripts/signal-operator.py onboarding-plan --number <account>` or the
   equivalent Compose `python scripts/signal-operator.py onboarding-plan` command
-  for a redacted setup checklist before changing state. Afterward run
+  for a redacted setup checklist before changing state. Local operator commands
+  should pass `--env-file deploy/compose/signal/.env` so the configured account
+  number and tokens stay outside command history. Afterward run
   `scripts/run-signal-connector.py --once` and
   `scripts/messaging-production-check.py --connector signal`.
 - BLOCKED_BY_USER - Gmail - Atlas - live validation requires Freyja Gmail

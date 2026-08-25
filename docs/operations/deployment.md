@@ -57,11 +57,11 @@ voice, registration-lock, or device-link approval.
 Registration and linking are operator actions:
 
 ```bash
-scripts/signal-operator.py readiness --check-registered
-scripts/signal-operator.py register
-scripts/signal-operator.py register --yes
-scripts/signal-operator.py verify --code 123-456
-scripts/signal-operator.py verify --code 123-456 --yes
+scripts/signal-operator.py --env-file deploy/compose/signal/.env readiness --check-registered
+scripts/signal-operator.py --env-file deploy/compose/signal/.env register
+scripts/signal-operator.py --env-file deploy/compose/signal/.env register --yes
+scripts/signal-operator.py --env-file deploy/compose/signal/.env verify --code 123-456
+scripts/signal-operator.py --env-file deploy/compose/signal/.env verify --code 123-456 --yes
 ```
 
 Use `--voice` on `register` when SMS is unavailable, and `--captcha` when
@@ -72,8 +72,8 @@ existing mobile Signal account, link the REST wrapper as a secondary device
 instead:
 
 ```bash
-scripts/signal-operator.py link-device --device-name freyja-atlas
-scripts/signal-operator.py link-device --device-name freyja-atlas --link-output /tmp/freyja-signal-link.txt --yes
+scripts/signal-operator.py --env-file deploy/compose/signal/.env link-device --device-name freyja-atlas
+scripts/signal-operator.py --env-file deploy/compose/signal/.env link-device --device-name freyja-atlas --link-output /tmp/freyja-signal-link.txt --yes
 ```
 
 The JSON reports hash phone numbers and do not include verification codes,
@@ -84,9 +84,9 @@ After registration or linking, confirm `SIGNAL_ACCOUNT_NUMBER` is configured,
 review `SIGNAL_ALLOWED_SENDERS`, set `SIGNAL_ENABLED=true`, then run:
 
 ```bash
-scripts/signal-operator.py readiness --check-registered
-scripts/signal-operator.py live-smoke --check-registered
-scripts/signal-operator.py live-smoke --check-registered --yes
+scripts/signal-operator.py --env-file deploy/compose/signal/.env readiness --check-registered
+scripts/signal-operator.py --env-file deploy/compose/signal/.env live-smoke --check-registered
+scripts/signal-operator.py --env-file deploy/compose/signal/.env live-smoke --check-registered --yes
 ```
 
 ## Current External Actions

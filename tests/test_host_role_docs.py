@@ -224,6 +224,8 @@ def test_operations_deployment_tracks_current_signal_gate() -> None:
     assert "fresh Signal captcha-backed registration" in docs
     assert "https://signalcaptchas.org/registration/generate.html" in docs
     assert "signalcaptcha://..." in docs
+    assert "--env-file deploy/compose/signal/.env register --yes" in docs
+    assert "--env-file deploy/compose/signal/.env live-smoke --check-registered --yes" in docs
     assert "device-link approval" in docs
     assert "Signal account/service is" not in docs
 
