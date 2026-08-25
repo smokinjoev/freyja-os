@@ -197,6 +197,9 @@ def _remaining_work(checks: list[Any], *, failed_checks: tuple[str, ...]) -> tup
             remaining.append(f"Resolve {VULCAN_CHECK}: {_check_status(checks, VULCAN_CHECK)}")
     for name in failed_checks:
         if name not in SMOKE_CHECKS and name != VULCAN_CHECK:
+            if name == "connector-production-report":
+                remaining.extend(_connector_remaining_work(checks))
+                continue
             remaining.append(f"Resolve {name}.")
     return tuple(remaining)
 
@@ -214,6 +217,32 @@ def _check_status(checks: list[Any], name: str) -> str:
         if isinstance(check, dict) and check.get("name") == name:
             return str(check.get("status", "failed"))
     return "missing check details"
+
+
+def _connector_remaining_work(checks: list[Any]) -> list[str]:
+    check = _failed_check(checks, "connector-production-report")
+    details = check.get("details") if isinstance(check, dict) else {}
+    if not isinstance(details, dict):
+        return ["Resolve connector-production-report."]
+
+    readiness_details = details.get("readiness_details")
+    if isinstance(readiness_details, dict) and readiness_details:
+        rendered: list[str] = []
+        for connector in sorted(str(name) for name in readiness_details):
+            reasons = readiness_details.get(connector)
+            if isinstance(reasons, list):
+                reason_text = ", ".join(str(reason) for reason in reasons if reason)
+            else:
+                reason_text = ""
+            rendered.append(
+                f"Resolve connector-production-report for {connector}: {reason_text or 'ready_for_live_smoke=false'}."
+            )
+        return rendered
+
+    not_ready = details.get("not_ready")
+    if isinstance(not_ready, list) and not_ready:
+        return [f"Resolve connector-production-report for {connector}." for connector in sorted(map(str, not_ready))]
+    return ["Resolve connector-production-report."]
 
 
 def _optional_str(value: object) -> str | None:
@@ -290,6 +319,13 @@ def _check(checks: list[Any], name: str) -> dict[str, Any]:
         if isinstance(check, dict) and check.get("name") == name:
             return check
     return {}
+
+
+def _failed_check(checks: list[Any], name: str) -> dict[str, Any]:
+    for check in checks:
+        if isinstance(check, dict) and check.get("name") == name and check.get("passed") is not True:
+            return check
+    return _check(checks, name)
 
 
 if __name__ == "__main__":

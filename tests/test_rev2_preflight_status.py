@@ -315,6 +315,52 @@ def test_preflight_status_reports_vulcan_missing_vision(tmp_path: Path) -> None:
     assert "Vulcan readiness report: certification/reports/vulcan.json" in rendered
 
 
+def test_preflight_status_reports_connector_readiness_details(tmp_path: Path) -> None:
+    report = tmp_path / "signal-connector-rev2-readiness.json"
+    report.write_text(
+        json.dumps(
+            {
+                "passed": False,
+                "director_url": "http://127.0.0.1:8000",
+                "latency_winner_target": "director:health",
+                "checks": [
+                    {
+                        "name": "connector-production-report",
+                        "passed": True,
+                        "status": "Connector production report supports cutover",
+                        "details": {
+                            "not_ready": [],
+                            "readiness_details": {},
+                        },
+                    },
+                    {
+                        "name": "connector-production-report",
+                        "passed": False,
+                        "status": "Connector production report does not support cutover",
+                        "details": {
+                            "not_ready": ["signal"],
+                            "readiness_details": {
+                                "signal": [
+                                    "enabled=false",
+                                    "allowed sender allowlist empty",
+                                ]
+                            },
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = preflight.summarize_report(report)
+
+    assert summary.status == "not-ready"
+    assert summary.remaining == (
+        "Resolve connector-production-report for signal: enabled=false, allowed sender allowlist empty.",
+    )
+
+
 def test_preflight_status_reports_not_ready_for_other_failures(tmp_path: Path) -> None:
     report = tmp_path / "failed-rev2-readiness.json"
     _write_report(

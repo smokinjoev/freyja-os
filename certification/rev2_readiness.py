@@ -485,6 +485,11 @@ def _check_connector_report(path: Path, director_url: str) -> ReadinessCheck:
         for name, status in connector_statuses.items()
         if status.get("connector_token_configured") is not True
     )
+    readiness_details = {
+        name: _connector_readiness_details(status)
+        for name, status in connector_statuses.items()
+        if status.get("ready_for_live_smoke") is not True
+    }
     passed = bool(connector_statuses) and not not_ready and not director_mismatches and not token_missing
     return ReadinessCheck(
         "connector-production-report",
@@ -498,9 +503,39 @@ def _check_connector_report(path: Path, director_url: str) -> ReadinessCheck:
             "not_ready": not_ready,
             "director_mismatches": director_mismatches,
             "token_missing": token_missing,
+            "readiness_details": readiness_details,
             "expected_director_url": _normalize_url(director_url),
         },
     )
+
+
+def _connector_readiness_details(status: dict[str, object]) -> list[str]:
+    missing: list[str] = []
+    if status.get("enabled") is not True:
+        missing.append("enabled=false")
+    if status.get("connector_token_configured") is not True:
+        missing.append("connector token missing")
+    if status.get("account_number_configured") is False:
+        missing.append("account number missing")
+    if status.get("identity_configured") is False:
+        missing.append("identity missing")
+    if status.get("transport_configured") is False:
+        missing.append("transport credentials missing")
+    if status.get("allowed_sender_count") in (None, 0):
+        missing.append("allowed sender allowlist empty")
+    if status.get("database_exists") is False:
+        missing.append("message database missing")
+    if status.get("imsg_exists") is False:
+        missing.append("imsg binary missing")
+    if isinstance(status.get("director_health"), dict) and status["director_health"].get("ok") is not True:
+        missing.append("Director health unavailable")
+    if isinstance(status.get("director_rev2_health"), dict) and status["director_rev2_health"].get("ok") is not True:
+        missing.append("Director Rev 2 health unavailable")
+    if isinstance(status.get("signal_rest_health"), dict) and status["signal_rest_health"].get("ok") is not True:
+        missing.append("Signal REST health unavailable")
+    if isinstance(status.get("launchagent"), dict) and status["launchagent"].get("ok") is False:
+        missing.append("LaunchAgent not loaded")
+    return missing or ["ready_for_live_smoke=false"]
 
 
 def _check_memory_report(path: Path) -> ReadinessCheck:

@@ -649,6 +649,9 @@ def test_rev2_readiness_connector_report_fails_for_wrong_director_or_missing_tok
                     "ready_for_live_smoke": False,
                     "director_url": "http://atlas.test:8000",
                     "connector_token_configured": False,
+                    "enabled": False,
+                    "allowed_sender_count": 0,
+                    "database_exists": True,
                 },
             }
         ),
@@ -689,6 +692,13 @@ def test_rev2_readiness_connector_report_fails_for_wrong_director_or_missing_tok
     assert connector.details["director_mismatches"] == ["signal"]
     assert connector.details["not_ready"] == ["imessage"]
     assert connector.details["token_missing"] == ["imessage"]
+    assert connector.details["readiness_details"] == {
+        "imessage": [
+            "enabled=false",
+            "connector token missing",
+            "allowed sender allowlist empty",
+        ]
+    }
 
 
 def test_rev2_readiness_probe_checks_sent_imessage_smoke_report(
