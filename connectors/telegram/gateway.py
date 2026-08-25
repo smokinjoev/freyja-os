@@ -9,7 +9,6 @@ import logging
 import os
 import re
 import time
-import uuid
 from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +16,13 @@ from typing import Any
 
 import httpx
 
+from connectors.messaging import (
+    AuthorizedSender,
+    canonical_director_payload,
+    director_headers,
+    director_response_text,
+    post_canonical_to_director,
+)
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalSender
 from freyja.config import settings as freyja_settings
 from freyja.media import ImageInput
@@ -450,8 +456,8 @@ class TelegramGateway:
         if self._settings.telegram_model.strip():
             channel_metadata["model"] = self._settings.telegram_model.strip()
         headers, conversation_id = self._director_identity(message.chat.id)
+        identity = AuthorizedSender(platform="telegram", address=str(message.chat.id), member_id=self._person_name)
         canonical = CanonicalRequest(
-            trace_id=str(uuid.uuid4()),
             message_id=str(message.message_id),
             timestamp=datetime.fromtimestamp(message.date, tz=UTC),
             channel="telegram",
@@ -472,18 +478,28 @@ class TelegramGateway:
             channel_metadata=channel_metadata,
             permissions=["director:route"],
         )
-        payload = canonical.model_dump(mode="json")
+        payload = canonical_director_payload(canonical)
         try:
             client = await self._client()
+            headers = {
+                **headers,
+                **director_headers(
+                    identity=identity,
+                    client_type=headers["x-freyja-client-type"],
+                    client_subject=headers["x-freyja-client-subject"],
+                    conversation_id=headers["x-freyja-conversation-id"],
+                    trace_id=canonical.trace_id,
+                    account_owner=headers["x-freyja-account-owner"],
+                ),
+            }
             headers["x-freyja-trace-id"] = canonical.trace_id
-            response = await client.post(
-                f"{self._director_url}/canonical/route",
-                json=payload,
+            data = await post_canonical_to_director(
+                client=client,
+                director_url=self._director_url,
+                payload=payload,
                 headers=headers,
             )
-            response.raise_for_status()
-            data = response.json()
-            reply = data.get("text") or data.get("response", "")
+            reply = director_response_text(data)
             if not reply:
                 return self._reply(message, self._safe_error_text, success=False)
             return self._reply(message, self._sanitize_reply_for_telegram(reply))
