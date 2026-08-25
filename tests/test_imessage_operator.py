@@ -19,6 +19,17 @@ def _load_operator():
     return module
 
 
+def test_operator_script_is_executable() -> None:
+    assert OPERATOR_PATH.stat().st_mode & 0o111
+
+
+def test_operator_reexecs_under_repo_venv_for_direct_execution() -> None:
+    source = OPERATOR_PATH.read_text(encoding="utf-8")
+
+    assert "os.execv" in source
+    assert ".venv" in source
+
+
 def test_configured_recipients_are_sorted():
     operator = _load_operator()
     settings = IMessageSettings(

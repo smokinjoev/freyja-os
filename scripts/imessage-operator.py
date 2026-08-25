@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -13,6 +14,10 @@ from pathlib import Path
 from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_VENV_PYTHON = _PROJECT_ROOT / ".venv" / "bin" / "python"
+if _VENV_PYTHON.exists() and Path(sys.executable) != _VENV_PYTHON:
+    os.execv(str(_VENV_PYTHON), [str(_VENV_PYTHON), *sys.argv])
+
 _SRC_DIR = str(_PROJECT_ROOT / "src")
 _ROOT_DIR = str(_PROJECT_ROOT)
 if _SRC_DIR not in sys.path:
