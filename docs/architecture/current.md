@@ -52,5 +52,8 @@ must not silently answer as a connector-local brain.
 ## External Gaps
 
 The current completion audit reports iMessage evidence as passing and Signal
-live smoke as externally blocked by account/service setup. Signal code may be
-complete while live certification remains blocked.
+live smoke as externally blocked by account setup. The Atlas Compose Signal
+REST API is healthy and the dedicated account number is configured in private
+env, but Signal registration requires a fresh captcha-backed request or linking
+an existing mobile account, and the reviewed sender allowlist is still empty.
+Signal code may be complete while live certification remains blocked.
