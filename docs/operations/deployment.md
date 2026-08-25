@@ -23,6 +23,24 @@ MODEL_VISION=<configured-vision-model>
 
 The physical model names are deployment choices, not architecture.
 
+Check required profile readiness with:
+
+```bash
+scripts/vulcan-operator.py readiness
+```
+
+Install a missing profile model deliberately:
+
+```bash
+scripts/vulcan-operator.py pull-profile vision
+scripts/vulcan-operator.py pull-profile vision --yes
+```
+
+`pull-profile` defaults to dry-run. The JSON report records the logical
+profile, provider id, base URL, and configured physical model so certification
+can prove Freyja is using the named profile layer instead of scattered model
+names.
+
 ## Iris
 
 Iris runs MacAgent and Apple-native connectors with LaunchAgents/LaunchDaemons

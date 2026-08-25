@@ -21,3 +21,16 @@ Minimum matrix:
 
 For every failure, capture the trace id and follow the boundary chain before
 making a fix.
+
+## Operator Evidence
+
+Before live certification, capture:
+
+```bash
+scripts/vulcan-operator.py readiness --output logs/vulcan-readiness.json
+scripts/signal-operator.py readiness --check-registered --output logs/signal-readiness.json
+```
+
+`vulcan-readiness.json` must show `ready_for_certification: true` before
+vision/profile certification can pass. `signal-readiness.json` must show
+`ready_for_live_smoke: true` before Signal live certification can pass.
