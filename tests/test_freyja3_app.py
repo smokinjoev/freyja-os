@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 import freyja.freyja3_app as freyja3_app
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.freyja3_memory import Freyja3MemoryStore
+from freyja.freyja3_scheduler import Freyja3SchedulerStore
 from freyja.semantic_events import SemanticEventStore
 
 
@@ -78,3 +79,36 @@ def test_freyja3_app_memory_enforces_domain_headers(monkeypatch, tmp_path) -> No
     assert created.status_code == 200
     assert joe_read.json()["count"] == 1
     assert beth_read.json()["count"] == 0
+
+
+def test_freyja3_app_scheduler_dispatches_due_agent_envelopes(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(freyja3_app, "scheduler_store", Freyja3SchedulerStore(tmp_path / "scheduler.db"))
+    monkeypatch.setattr(freyja3_app, "memory_store", Freyja3MemoryStore(tmp_path / "memory.db"))
+    monkeypatch.setattr(freyja3_app, "agent_runtime", AgentRuntimeV3(memory_store=freyja3_app.memory_store))
+    client = TestClient(freyja3_app.app)
+
+    created = client.post(
+        "/freyja3/schedules",
+        headers={"x-freyja-security-domain": "household"},
+        json={
+            "schedule_id": "sched-test",
+            "due_at": "2026-08-26T10:00:00Z",
+            "target_agent_id": "cloyd-gibbler",
+            "resolved_user_id": "joe",
+            "conversation_id": "conv-sched",
+            "text": "Inspect git status.",
+        },
+    )
+    dispatched = client.post(
+        "/freyja3/schedules/dispatch-due?due_before=2026-08-26T10:01:00Z",
+        headers={"x-freyja-security-domain": "system"},
+    )
+    listed = client.get("/freyja3/schedules", headers={"x-freyja-security-domain": "system"})
+
+    assert created.status_code == 200
+    assert dispatched.status_code == 200
+    assert dispatched.json()["count"] == 1
+    response = dispatched.json()["dispatched"][0]["response"]
+    assert response["resolved_agent_id"] == "cloyd-gibbler"
+    assert response["channel_metadata"]["agent_steps"][0]["kind"] == "objective_received"
+    assert listed.json()["count"] == 0

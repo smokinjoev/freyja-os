@@ -13,6 +13,7 @@ Last updated: 2026-08-26.
 - Added the Privacy/Egress Gate. Cloud AI requests must be evaluated there; private/sensitive/restricted data fails closed unless an explicit one-request override is provided.
 - Added a feature flag, `FREYJA3_CANONICAL_ENABLED`, for routing `/canonical/route` through the Freyja 3 gateway/runtime path while leaving legacy `/route` compatibility intact.
 - Added a durable Freyja 3 semantic event store and `/events/semantic` publish/list endpoints for Hera-to-Atlas perception events. The API accepts Hera system events and denies non-Hera publishers or private-domain readers.
+- Added a durable Freyja 3 scheduler store and `/freyja3/schedules` API for deterministic Atlas-owned agent trigger envelopes. Due dispatch calls the existing canonical gateway/runtime path and does not classify intent or select task tools.
 - Added a dedicated `freyja.freyja3_app` ASGI service and side-by-side compose target at `deploy/compose/freyja3`, separate from the legacy Director path.
 - Added a Freyja 3 scoped memory store and `/freyja3/memory` API with explicit owner domain, scope, provenance, classification, allowed readers/writers, and hard paralegal enclave separation.
 - Added Freyja 3 architecture tests covering the 12 required proof points at the contract level.
@@ -53,6 +54,7 @@ Last updated: 2026-08-26.
 ## Remaining Architecture Work
 
 - Extend bounded observe/diagnose iteration into a fuller plan/observe/retry loop with follow-up question handling.
+- Run live Atlas/Mars scheduler dispatch smokes after the scheduler sidecar rebuild.
 - Wire Atlas Freyja 3 sidecar to HA credentials and prove read/control against Home Assistant policy.
 - Extend explicit memory capture beyond conservative `remember ...` requests into model-assisted durable fact/preference candidates with review/audit policy.
 - Enable Freyja 3 canonical mode gradually after integration tests pass.

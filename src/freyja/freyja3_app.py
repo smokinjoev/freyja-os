@@ -9,9 +9,10 @@ from fastapi.responses import JSONResponse
 from freyja.agent_gateway import AgentGateway, GatewayAuthenticationError, GatewayPermissionError, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.config import settings
-from freyja.contracts import CanonicalRequest, CanonicalResponse
+from freyja.contracts import CanonicalRequest, CanonicalResponse, CanonicalSender
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.freyja3_memory import Freyja3MemoryAccessError, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
+from freyja.freyja3_scheduler import Freyja3ScheduleAccessError, Freyja3ScheduleCreate, Freyja3ScheduleQuery, Freyja3SchedulerStore
 from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.ollama_client import OllamaClient
 from freyja.semantic_events import SemanticEventPermissionError, SemanticEventQuery, SemanticEventStore
@@ -28,6 +29,7 @@ app = FastAPI(
 agent_gateway = AgentGateway()
 semantic_event_store = SemanticEventStore()
 memory_store = Freyja3MemoryStore()
+scheduler_store = Freyja3SchedulerStore()
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
 register_smith_read_only_tools(get_registry())
@@ -118,6 +120,63 @@ async def list_freyja3_memory(
     except (Freyja3MemoryAccessError, ValueError) as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None
     return {"ok": True, "memories": [record.model_dump(mode="json") for record in records], "count": len(records)}
+
+
+@app.post("/freyja3/schedules")
+async def create_freyja3_schedule(schedule: Freyja3ScheduleCreate, raw_request: Request) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
+    try:
+        envelope = scheduler_store.create(schedule, writer_domain_id=domain_id)
+    except Freyja3ScheduleAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "schedule": envelope.model_dump(mode="json")}
+
+
+@app.get("/freyja3/schedules")
+async def list_freyja3_schedules(
+    raw_request: Request,
+    due_before: str | None = None,
+    include_dispatched: bool = False,
+    limit: int = 50,
+) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
+    try:
+        query = Freyja3ScheduleQuery(due_before=due_before, include_dispatched=include_dispatched, limit=limit)
+        schedules = scheduler_store.list(query, reader_domain_id=domain_id)
+    except (Freyja3ScheduleAccessError, ValueError) as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "schedules": [schedule.model_dump(mode="json") for schedule in schedules], "count": len(schedules)}
+
+
+@app.post("/freyja3/schedules/dispatch-due")
+async def dispatch_due_freyja3_schedules(raw_request: Request, due_before: str | None = None, limit: int = 10) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.SYSTEM)
+    if domain_id != SecurityDomainId.SYSTEM:
+        raise HTTPException(status_code=403, detail="only system dispatchers may dispatch scheduled agent triggers")
+    try:
+        due = scheduler_store.list(
+            Freyja3ScheduleQuery(due_before=due_before, include_dispatched=False, limit=limit),
+            reader_domain_id=SecurityDomainId.SYSTEM,
+        )
+    except (Freyja3ScheduleAccessError, ValueError) as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+
+    dispatched = []
+    for schedule in due:
+        request = CanonicalRequest(
+            message_id=f"schedule:{schedule.schedule_id}",
+            channel=schedule.channel,
+            conversation_id=schedule.conversation_id,
+            sender=CanonicalSender(channel_id=f"schedule:{schedule.schedule_id}", display_name="Freyja 3 Scheduler"),
+            resolved_user_id=schedule.resolved_user_id,
+            resolved_agent_id=schedule.target_agent_id,
+            text=schedule.text,
+            channel_metadata={"schedule_id": schedule.schedule_id, **schedule.metadata},
+        )
+        response = await _execute_canonical_request(request, raw_request)
+        marked = scheduler_store.mark_dispatched(schedule.schedule_id, dispatcher_domain_id=SecurityDomainId.SYSTEM)
+        dispatched.append({"schedule": marked.model_dump(mode="json"), "response": response.model_dump(mode="json")})
+    return {"ok": True, "dispatched": dispatched, "count": len(dispatched)}
 
 
 @app.post("/canonical/route")
