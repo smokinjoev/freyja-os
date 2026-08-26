@@ -61,3 +61,18 @@ FREYJA_CONNECTOR_TOKEN=...
 FREYJA3_MACHINE_ID=mars
 FREYJA3_MACHINE_ROLE=worker-ingestion-monitoring
 ```
+
+## Worker Runner Timer
+
+`deploy/systemd/user/freyja3-worker-runner.{service,timer}` installs a
+user-level timer for Mars-style worker hosts. Each run claims at most one
+Atlas-owned job envelope and completes implemented worker classes.
+
+Required env keys:
+
+```text
+FREYJA3_WORKER_BASE_URL=http://100.119.235.114:8300
+FREYJA_CONNECTOR_TOKEN=...
+FREYJA3_MACHINE_ID=mars
+FREYJA3_WORKER_CLASS=monitoring
+```

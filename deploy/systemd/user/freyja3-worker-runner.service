@@ -1,0 +1,8 @@
+[Unit]
+Description=Claim and run one Freyja 3 worker job
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/freyja-os-freyja3
+EnvironmentFile=%h/.config/freyja/freyja3-worker-runner.env
+ExecStart=%h/freyja-os-freyja3/.heartbeat-venv/bin/freyja3-worker-runner

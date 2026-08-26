@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Freyja 3 worker runner every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=15s
+Persistent=true
+Unit=freyja3-worker-runner.service
+
+[Install]
+WantedBy=timers.target
