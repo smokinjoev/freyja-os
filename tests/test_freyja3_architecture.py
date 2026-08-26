@@ -6,9 +6,11 @@ from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError
 from freyja.foundation_models import GatewaySender, MemoryClassification, SecurityDomainId, SemanticEvent
 from freyja.inference_registry_v3 import InferenceRegistryV3
+import freyja.main as freyja_main
 from freyja.main import app
 from fastapi.testclient import TestClient
 from freyja.config import settings
+from freyja.tools.models import ToolExecutionRequest, ToolExecutionResult
 
 
 def _sender(person: str = "joe") -> GatewaySender:
@@ -62,6 +64,45 @@ def test_agent_receives_objective_and_independently_selects_tools() -> None:
     assert "git.inspect" in result.selected_tools
     assert "coding.execute" in result.selected_tools
     assert len(result.selected_tools) >= 4
+
+
+class _FakeToolRegistry:
+    def __init__(self) -> None:
+        self.requests: list[ToolExecutionRequest] = []
+
+    async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
+        self.requests.append(request)
+        return ToolExecutionResult(
+            success=True,
+            tool_name=request.tool_name,
+            output={"ok": True, "arguments": request.arguments},
+            request_id=request.request_id,
+            duration_ms=1,
+        )
+
+
+def test_agent_executes_selected_tools_with_agent_owned_arguments() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Search the web, check weather, inspect git status, and remember this context.",
+            conversation_id="conv-tools",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    executed_names = {request.tool_name for request in fake_registry.requests}
+    assert {"web_search", "get_weather", "repository_status", "recall_conversation"}.issubset(executed_names)
+    assert len(result.tool_results) >= 4
+    assert any(step.kind == "tool_executed" for step in result.steps)
+    web_request = next(request for request in fake_registry.requests if request.tool_name == "web_search")
+    assert web_request.arguments["query"] == handoff.prompt
+    assert web_request.actor == "agent:cloyd-gibbler"
 
 
 def test_agents_use_vulcan_inference_and_identity_survives_endpoint_changes() -> None:
@@ -143,6 +184,7 @@ def test_memory_and_paralegal_boundaries_and_cloud_egress() -> None:
 
 def test_canonical_route_can_use_freyja3_gateway_runtime(monkeypatch) -> None:
     monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(freyja_main, "agent_runtime_v3", AgentRuntimeV3())
     client = TestClient(app)
 
     response = client.post(

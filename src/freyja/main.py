@@ -90,7 +90,6 @@ router.register_clients(ollama, openrouter)
 router.register_reasoning_client(reasoning_ollama)
 router.register_iris_router_client(iris_router)
 agent_gateway_v3 = AgentGateway()
-agent_runtime_v3 = AgentRuntimeV3()
 
 app.include_router(memory_router)
 app.include_router(tools_router)
@@ -105,6 +104,8 @@ register_smith_read_only_tools(get_registry())
 if settings.agent_smith_enabled and settings.agent_smith_write_pilot_enabled:
     for _tool_name in ("write_pilot_file_write", "write_pilot_git_add", "write_pilot_git_commit"):
         get_registry().set_enabled(_tool_name, True)
+
+agent_runtime_v3 = AgentRuntimeV3(tool_registry=get_registry(), run_inference=settings.freyja3_inference_enabled)
 
 
 @app.get("/")
@@ -469,7 +470,7 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
 
     if gateway_result.handoff is None:
         raise HTTPException(status_code=500, detail="Gateway did not produce an agent handoff.")
-    result = agent_runtime_v3.run(gateway_result.handoff)
+    result = await agent_runtime_v3.arun(gateway_result.handoff)
     return CanonicalResponse(
         trace_id=request.trace_id,
         request_message_id=request.message_id,
@@ -478,7 +479,11 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
         resolved_user_id=request.resolved_user_id,
         resolved_agent_id=result.agent_id,
         text=result.response_text,
-        tool_results=[{"tool_name": tool_id, "success": True} for tool_id in result.selected_tools],
+        tool_results=(
+            list(result.tool_results)
+            if result.tool_results
+            else [{"tool_name": tool_id, "success": True} for tool_id in result.selected_tools]
+        ),
         channel_metadata={
             "freyja3": True,
             "gateway_audit": gateway_result.audit_event.model_dump(mode="json"),
@@ -486,6 +491,7 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
             "inference_endpoint_id": result.inference_endpoint_id,
             "inference_model": result.inference_model,
             "inference_machine_id": result.inference_machine_id,
+            "inference_status": result.inference_status,
         },
         degraded=result.degraded,
         status="degraded" if result.degraded else "ok",
