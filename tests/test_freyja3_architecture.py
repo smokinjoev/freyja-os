@@ -83,6 +83,22 @@ class _FakeToolRegistry:
         )
 
 
+class _FailingGitThenHealthRegistry:
+    def __init__(self) -> None:
+        self.requests: list[ToolExecutionRequest] = []
+
+    async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
+        self.requests.append(request)
+        output_success = request.tool_name == "system_health"
+        return ToolExecutionResult(
+            success=True,
+            tool_name=request.tool_name,
+            output={"success": output_success, "tool": request.tool_name},
+            request_id=request.request_id,
+            duration_ms=1,
+        )
+
+
 def test_agent_executes_selected_tools_with_agent_owned_arguments() -> None:
     gateway = AgentGateway()
     handoff = gateway.handle(
@@ -124,6 +140,28 @@ def test_agent_tool_execution_respects_structured_tool_failure() -> None:
     assert result.tool_results
     assert result.tool_results[0]["success"] is False
     assert any(step.kind == "tool_executed" and step.success is False for step in result.steps)
+
+
+def test_agent_observes_failed_tool_and_runs_diagnostic_follow_up() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Inspect git status.",
+            conversation_id="conv-tool-iterate",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FailingGitThenHealthRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    assert [request.tool_name for request in fake_registry.requests] == ["repository_status", "system_health"]
+    assert "git.inspect" in result.selected_tools
+    assert result.selected_tools[-1] == "system.health"
+    assert any(step.kind == "observation" and "git.inspect" in step.detail for step in result.steps)
+    assert any(step.kind == "tool_executed" and step.tool_id == "system.health" and step.success is True for step in result.steps)
 
 
 def test_agent_runtime_recalls_and_writes_scoped_memory(tmp_path) -> None:

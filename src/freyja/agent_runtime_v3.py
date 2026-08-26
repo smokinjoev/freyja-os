@@ -99,6 +99,10 @@ class AgentRuntimeV3:
             )
 
         tool_results = await self._execute_selected_tools(agent, handoff, selected_tools, steps, audit_events)
+        follow_up_tools = self._choose_follow_up_tools(agent, selected_tools, handoff.available_tools, tool_results, steps, audit_events)
+        if follow_up_tools:
+            selected_tools.extend(follow_up_tools)
+            tool_results.extend(await self._execute_selected_tools(agent, handoff, follow_up_tools, steps, audit_events))
 
         inference_endpoint_id = None
         inference_model = None
@@ -329,11 +333,67 @@ class AgentRuntimeV3:
             ("scheduling.create", ("remind", "schedule this", "timer")),
             ("memory.private", ("remember", "what do you know")),
             ("memory.shared", ("family", "household")),
+            ("system.health", ("system health", "diagnose", "diagnostic")),
         )
         for tool_id, terms in rules:
             if tool_id in allowed and any(term in lowered for term in terms):
                 candidates.append(tool_id)
         return candidates
+
+    def _choose_follow_up_tools(
+        self,
+        agent: PersistentAgent,
+        selected_tools: list[str],
+        available_tool_ids: Iterable[str],
+        tool_results: list[dict[str, Any]],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> list[str]:
+        failed_results = [result for result in tool_results if result.get("success") is False]
+        if not failed_results:
+            return []
+
+        failed_capabilities = [str(result.get("capability_id")) for result in failed_results if result.get("capability_id")]
+        steps.append(
+            AgentStep(
+                kind="observation",
+                detail=f"{agent.agent_id} observed failed tool result(s): {', '.join(failed_capabilities)}",
+                success=False,
+            )
+        )
+        audit_events.append(
+            AuditEvent(
+                event_type=AuditEventType.AGENT_TOOL_SELECTED,
+                actor_id=f"agent:{agent.agent_id}",
+                domain_id=agent.security_domain_id,
+                target_id="tool-failure-observation",
+                allowed=True,
+                reason="agent observed failed tool results before follow-up selection",
+                metadata={"failed_capabilities": failed_capabilities},
+            )
+        )
+
+        allowed = set(agent.tool_grants).intersection(set(available_tool_ids))
+        if "system.health" not in selected_tools and "system.health" in allowed:
+            steps.append(
+                AgentStep(
+                    kind="tool_selected",
+                    detail=f"{agent.agent_id} selected system.health after observing failed tools",
+                    tool_id="system.health",
+                )
+            )
+            audit_events.append(
+                AuditEvent(
+                    event_type=AuditEventType.AGENT_TOOL_SELECTED,
+                    actor_id=f"agent:{agent.agent_id}",
+                    domain_id=agent.security_domain_id,
+                    target_id="system.health",
+                    allowed=True,
+                    reason="agent selected diagnostic follow-up after failed tool observation",
+                )
+            )
+            return ["system.health"]
+        return []
 
     def choose_inference_capability(self, objective: str, has_attachments: bool = False) -> str:
         lowered = objective.lower()
@@ -515,6 +575,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "weather.current": "get_weather",
     "macagent.apple": "macagent_health",
     "home-assistant.control": "home_assistant_list_states",
+    "system.health": "system_health",
     "git.inspect": "repository_status",
     "memory.private": "recall_conversation",
     "memory.shared": "memory_recall_shared",
