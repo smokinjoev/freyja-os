@@ -20,10 +20,12 @@ from freyja.foundation_models import (
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES, agents_by_key, tools_by_id
 from freyja.freyja3_memory import Freyja3MemoryCandidateWrite, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
+from freyja.media import AttachmentInput, images_from_attachments
 from freyja.ollama_client import OllamaClient
 from freyja.privacy_egress import PrivacyEgressGate
 from freyja.tools.models import ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry
+from freyja.tools.weather import classify_weather_request
 
 
 class MemoryBoundaryError(PermissionError):
@@ -642,7 +644,12 @@ class AgentRuntimeV3:
         if endpoint_provider != "ollama":
             return "unsupported_provider", None
         prompt = self._inference_prompt(agent, handoff, tool_results)
-        response = await OllamaClient(base_url=base_url, model=model).chat(prompt=prompt, model=model)
+        images = _images_from_handoff(handoff) if endpoint_id and "vision" in endpoint_id else []
+        response = await OllamaClient(base_url=base_url, model=model).chat(
+            prompt=prompt,
+            model=model,
+            images=images or None,
+        )
         if "error" in response:
             return "error", None
         return "ok", str(response.get("message", {}).get("content") or "").strip() or None
@@ -712,7 +719,13 @@ class AgentRuntimeV3:
         if capability_id == "web.search":
             return {"query": objective, "max_results": 3}
         if capability_id == "weather.current":
-            return {"location": "Aiken, South Carolina", "request_type": "current"}
+            weather_request = classify_weather_request(objective)
+            return {
+                "location": weather_request.location,
+                "request_type": weather_request.request_type.value,
+                "target_date": weather_request.target_date.isoformat() if weather_request.target_date else None,
+                "target_label": weather_request.target_label,
+            }
         if capability_id == "memory.private":
             return {"conversation_id": handoff.conversation_id, "limit": 10}
         if capability_id == "memory.shared":
@@ -819,6 +832,25 @@ def _tool_effective_success(registry_success: bool, output: dict[str, Any]) -> b
     if output.get("live_data_available") is False:
         return False
     return True
+
+
+def _images_from_handoff(handoff: GatewayHandoff) -> list[Any]:
+    attachments: list[AttachmentInput] = []
+    for attachment in handoff.attachments:
+        if not isinstance(attachment, dict):
+            continue
+        source = attachment.get("source")
+        path = str(source) if source and not str(source).startswith(("http://", "https://")) else None
+        attachments.append(
+            AttachmentInput(
+                filename=attachment.get("filename"),
+                mime_type=attachment.get("media_type"),
+                path=path,
+                data_base64=attachment.get("data_base64"),
+                size_bytes=attachment.get("size"),
+            )
+        )
+    return images_from_attachments(attachments)
 
 
 _EXPLICIT_MEMORY_RE = re.compile(

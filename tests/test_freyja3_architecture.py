@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+import freyja.agent_runtime_v3
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError
 from freyja.foundation_models import GatewaySender, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
@@ -124,6 +125,67 @@ def test_agent_executes_selected_tools_with_agent_owned_arguments() -> None:
     web_request = next(request for request in fake_registry.requests if request.tool_name == "web_search")
     assert web_request.arguments["query"] == handoff.prompt
     assert web_request.actor == "agent:cloyd-gibbler"
+
+
+def test_agent_weather_tool_arguments_follow_objective() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="What is the weather tomorrow in Orlando, Florida?",
+            conversation_id="conv-weather",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    weather_request = next(request for request in fake_registry.requests if request.tool_name == "get_weather")
+    assert weather_request.arguments["location"] == "Orlando, Florida"
+    assert weather_request.arguments["request_type"] == "forecast"
+    assert weather_request.arguments["target_label"] == "tomorrow"
+
+
+def test_agent_vision_inference_receives_canonical_attachment(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    class FakeOllamaClient:
+        def __init__(self, *, base_url: str | None = None, model: str | None = None) -> None:
+            self.base_url = base_url
+            self.model = model
+
+        async def chat(self, **kwargs):
+            calls.append(kwargs)
+            return {"message": {"content": "I can see the attached image."}}
+
+    monkeypatch.setattr(freyja.agent_runtime_v3, "OllamaClient", FakeOllamaClient)
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Look at this photo.",
+            conversation_id="conv-photo",
+            attachments=[
+                {
+                    "filename": "photo.png",
+                    "media_type": "image/png",
+                    "data_base64": "ZmFrZQ==",
+                    "size": 4,
+                }
+            ],
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(run_inference=True).run(handoff)
+
+    assert result.inference_endpoint_id == "vulcan-vision"
+    assert calls
+    assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
+    assert result.response_text == "I can see the attached image."
 
 
 def test_agent_tool_execution_respects_structured_tool_failure() -> None:
