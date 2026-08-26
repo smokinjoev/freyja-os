@@ -168,6 +168,7 @@ def test_configure_imessage_family_agents_rewrites_sender_env(monkeypatch, tmp_p
     module = _load_configure_script()
     env_file = tmp_path / ".env"
     env_file.write_text("IMESSAGE_ENABLED=true\nIMESSAGE_ALLOWED_SENDERS=old\nOTHER=value\n", encoding="utf-8")
+    identity_db = tmp_path / "identity.sqlite3"
     calls = []
 
     def fake_run(command, text, check=False):
@@ -184,6 +185,8 @@ def test_configure_imessage_family_agents_rewrites_sender_env(monkeypatch, tmp_p
         [
             "--env-file",
             str(env_file),
+            "--identity-db",
+            str(identity_db),
             "joe=+1",
             "beth=+2",
             "liam=+3",
@@ -192,9 +195,61 @@ def test_configure_imessage_family_agents_rewrites_sender_env(monkeypatch, tmp_p
     )
 
     assert result == 0
-    assert "IMESSAGE_ALLOWED_SENDERS=joe=+1,beth=+2,liam=+3,jenna=+4" in env_file.read_text(encoding="utf-8")
-    assert "OTHER=value" in env_file.read_text(encoding="utf-8")
+    env_text = env_file.read_text(encoding="utf-8")
+    assert "IMESSAGE_ALLOWED_SENDERS=+1,+2,+3,+4" in env_text
+    assert "IDENTITY_PROVIDER=sqlite" in env_text
+    assert f"IDENTITY_DATABASE_PATH={identity_db}" in env_text
+    assert "IDENTITY_SEED_FALLBACK=true" in env_text
+    assert "OTHER=value" in env_text
     assert "--require-imessage-family-agents" in calls[0]
+
+    people, _relationships = module.SQLiteIdentityProvider(identity_db).load()
+    by_id = {person.person_id: person for person in people}
+    assert sorted(by_id) == ["beth", "jenna", "joe", "liam"]
+    assert any(identity.kind == "imessage" and identity.value == "+1" for identity in by_id["joe"].identities)
+
+
+def test_imessage_family_agent_mapping_accepts_sqlite_identity_sender_resolution(monkeypatch, tmp_path):
+    configure_module = _load_configure_script()
+    module = _load_script()
+    db_path = tmp_path / "chat.db"
+    db_path.touch()
+    imsg_path = tmp_path / "imsg"
+    imsg_path.touch()
+    identity_db = tmp_path / "identity.sqlite3"
+    configure_module._persist_family_identity_db(
+        identity_db,
+        {"joe": "+15550000001", "beth": "+15550000002", "liam": "+15550000003", "jenna": "+15550000004"},
+    )
+    monkeypatch.setenv("IMESSAGE_ENABLED", "true")
+    monkeypatch.setenv("IMESSAGE_IMSG_PATH", str(imsg_path))
+    monkeypatch.setenv("IMESSAGE_DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("IMESSAGE_ALLOWED_SENDERS", "+15550000001,+15550000002,+15550000003,+15550000004")
+    monkeypatch.setenv("IDENTITY_PROVIDER", "sqlite")
+    monkeypatch.setenv("IDENTITY_DATABASE_PATH", str(identity_db))
+    monkeypatch.setenv("IDENTITY_SEED_FALLBACK", "true")
+    monkeypatch.setenv("FREYJA_CONNECTOR_TOKEN", "secret")
+    monkeypatch.setattr(module, "_imsg_whois_local", lambda settings, address, timeout: {"known": True, "service": "imessage"})
+    monkeypatch.setattr(module, "_run_command", lambda command, timeout: {"ok": True, "status_code": 0})
+    monkeypatch.setattr(module, "_messages_applescript_status", lambda timeout: {"ok": True})
+    monkeypatch.setattr(module, "_imessage_runtime_source_drift", lambda: {"ok": True, "drift_count": 0, "files": []})
+    monkeypatch.setattr(module, "_imessage_runtime_import_check", lambda: {"ok": True})
+
+    status = module._imessage_status(
+        check_director=False,
+        check_rev2_director=False,
+        check_route_smoke=False,
+        check_inprocess_route_smoke=False,
+        require_family_agents=True,
+        route_identity=None,
+    )
+
+    assert status["ready_for_live_smoke"] is True
+    assert status["family_agent_mapping"]["ok"] is True
+    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "cloyd-gibbler"
+    assert status["family_agent_mapping"]["people"]["beth"]["agent_id"] == "benedict"
+    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "agent-44"
+    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jenna"
 
 
 def test_signal_status_redacts_sender_values(monkeypatch):

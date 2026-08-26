@@ -1,4 +1,5 @@
 connectors/imessage/gateway.py
+connectors/imessage/config.py
 connectors/messaging.py
 src/freyja/agents/coding_lane.py
 src/freyja/agents/household.py
@@ -7,4 +8,6 @@ src/freyja/inference.py
 src/freyja/media.py
 src/freyja/router.py
 scripts/run-imessage-connector.py
+scripts/configure-imessage-family-agents.py
+scripts/messaging-production-check.py
 scripts/com.freyja-os.imessage-connector.plist

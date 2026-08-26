@@ -6,7 +6,8 @@ from shutil import which
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from connectors.messaging import AuthorizedSender, parse_allowed_senders
-from freyja.identity import default_identity_service
+from freyja.identity import IdentityService, seeded_identity_service
+from freyja.identity.providers import SQLiteIdentityProvider
 
 
 class IMessageSettings(BaseSettings):
@@ -47,6 +48,9 @@ class IMessageSettings(BaseSettings):
         Path.home() / "Library" / "Application Support" / "Freyja" / "imessage-seen.json"
     )
     imessage_seen_state_limit: int = 5000
+    identity_provider: str = "seeded"
+    identity_database_path: str = str(Path.home() / ".local" / "state" / "freyja" / "identity.sqlite3")
+    identity_seed_fallback: bool = True
 
     @property
     def allowed_sender_set(self) -> set[str]:
@@ -57,8 +61,18 @@ class IMessageSettings(BaseSettings):
         return parse_allowed_senders(
             self.imessage_allowed_senders,
             "imessage",
-            identity_service=default_identity_service(),
+            identity_service=self._identity_service(),
         )
+
+    def _identity_service(self) -> IdentityService:
+        if self.identity_provider == "sqlite":
+            provider = SQLiteIdentityProvider(self.identity_database_path)
+            people, relationships = provider.load()
+            if people or not self.identity_seed_fallback:
+                return IdentityService(people=people, relationships=relationships)
+        elif self.identity_provider != "seeded":
+            raise ValueError(f"unsupported identity provider: {self.identity_provider}")
+        return seeded_identity_service()
 
     @property
     def family_chat_identifier_set(self) -> set[str]:
