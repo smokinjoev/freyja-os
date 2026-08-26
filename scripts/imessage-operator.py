@@ -475,6 +475,56 @@ def _load_configure_module() -> Any:
     return module
 
 
+def _production_check_command(env_file: Path) -> list[str]:
+    return [
+        sys.executable,
+        str(_PROJECT_ROOT / "scripts" / "messaging-production-check.py"),
+        "--connector",
+        "imessage",
+        "--env-file",
+        str(env_file),
+        "--check-imessage-family-route-smoke",
+        "--require-imessage-family-agents",
+    ]
+
+
+def _run_production_check(env_file: Path) -> dict[str, object]:
+    completed = subprocess.run(
+        _production_check_command(env_file),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=90,
+    )
+    try:
+        payload = json.loads(completed.stdout) if completed.stdout.strip() else {}
+    except json.JSONDecodeError:
+        payload = {"stdout": completed.stdout.strip()}
+    return {
+        "ok": completed.returncode == 0,
+        "status_code": completed.returncode,
+        "report": payload,
+        "stderr": completed.stderr.strip(),
+    }
+
+
+def _restart_imessage_launchagent() -> dict[str, object]:
+    label = f"gui/{os.getuid()}/com.freyja-os.imessage-connector"
+    completed = subprocess.run(
+        ["launchctl", "kickstart", "-k", label],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=15,
+    )
+    return {
+        "ok": completed.returncode == 0,
+        "status_code": completed.returncode,
+        "label": label,
+        "stderr": completed.stderr.strip(),
+    }
+
+
 def _identity_map(
     settings: IMessageSettings,
     hash_mapping: dict[str, str],
@@ -482,6 +532,7 @@ def _identity_map(
     env_file: Path,
     identity_db: Path | None,
     dry_run: bool,
+    restart: bool = False,
 ) -> dict[str, object]:
     address_mapping = _address_mapping_from_hashes(settings, hash_mapping)
     redacted_mapping = {person: _safe_hash(address) for person, address in address_mapping.items()}
@@ -507,6 +558,12 @@ def _identity_map(
     configure._replace_env_line(env_file, "IDENTITY_SEED_FALLBACK", "true")
     report["status"] = "updated"
     report["identity_db"] = str(resolved_identity_db)
+    report["production_check"] = _run_production_check(env_file)
+    if not bool(report["production_check"].get("ok")):
+        report["status"] = "updated-production-check-failed"
+        return report
+    if restart:
+        report["restart"] = _restart_imessage_launchagent()
     return report
 
 
@@ -623,6 +680,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Actually write the runtime .env and identity DB. Without this flag, the command is a dry-run.",
     )
     identity_map.add_argument(
+        "--restart",
+        action="store_true",
+        help="Restart the iMessage LaunchAgent after a successful approved mapping apply.",
+    )
+    identity_map.add_argument(
         "--output",
         type=Path,
         help="Optional JSON report path.",
@@ -721,6 +783,7 @@ def main(argv: list[str] | None = None) -> int:
                 env_file=args.env_file,
                 identity_db=args.identity_db,
                 dry_run=not args.yes,
+                restart=args.restart,
             )
         except Exception as exc:  # noqa: BLE001 - operator command should return JSON errors
             result = {

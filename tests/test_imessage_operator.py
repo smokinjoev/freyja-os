@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from types import SimpleNamespace
 from pathlib import Path
 
 from connectors.imessage.config import IMessageSettings
@@ -486,3 +487,89 @@ def test_identity_map_rejects_unknown_hash():
         assert "unknown sender hashes" in str(exc)
     else:
         raise AssertionError("expected unknown hash rejection")
+
+
+def test_identity_map_apply_runs_production_check_and_restart(monkeypatch, tmp_path):
+    operator = _load_operator()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_allowed_senders=(
+            "joe=+15550000001,beth=+15550000002,"
+            "liam=+15550000003,jenna=+15550000004"
+        ),
+    )
+    hash_mapping = {
+        "joe": operator._safe_hash("+15550000001"),
+        "beth": operator._safe_hash("+15550000002"),
+        "liam": operator._safe_hash("+15550000003"),
+        "jenna": operator._safe_hash("+15550000004"),
+    }
+    calls: list[tuple[str, object]] = []
+
+    fake_configure = SimpleNamespace(
+        FAMILY=("joe", "beth", "liam", "jenna"),
+        _identity_db_path=lambda env_file, explicit_path: explicit_path,
+        _persist_family_identity_db=lambda identity_db, mapping: calls.append(("persist", mapping)),
+        _replace_env_line=lambda env_file, key, value: calls.append((key, value)),
+    )
+    monkeypatch.setattr(operator, "_load_configure_module", lambda: fake_configure)
+    monkeypatch.setattr(operator, "_run_production_check", lambda env_file: {"ok": True, "status_code": 0})
+    monkeypatch.setattr(operator, "_restart_imessage_launchagent", lambda: {"ok": True, "status_code": 0})
+
+    result = operator._identity_map(
+        settings,
+        hash_mapping,
+        env_file=tmp_path / ".env",
+        identity_db=tmp_path / "identity.sqlite3",
+        dry_run=False,
+        restart=True,
+    )
+
+    assert result["status"] == "updated"
+    assert result["production_check"] == {"ok": True, "status_code": 0}
+    assert result["restart"] == {"ok": True, "status_code": 0}
+    assert calls[0][0] == "persist"
+    assert ("IDENTITY_PROVIDER", "sqlite") in calls
+    assert "+15550000001" not in str(result)
+
+
+def test_identity_map_apply_does_not_restart_when_production_check_fails(monkeypatch, tmp_path):
+    operator = _load_operator()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_allowed_senders=(
+            "joe=+15550000001,beth=+15550000002,"
+            "liam=+15550000003,jenna=+15550000004"
+        ),
+    )
+    hash_mapping = {
+        "joe": operator._safe_hash("+15550000001"),
+        "beth": operator._safe_hash("+15550000002"),
+        "liam": operator._safe_hash("+15550000003"),
+        "jenna": operator._safe_hash("+15550000004"),
+    }
+    fake_configure = SimpleNamespace(
+        FAMILY=("joe", "beth", "liam", "jenna"),
+        _identity_db_path=lambda env_file, explicit_path: explicit_path,
+        _persist_family_identity_db=lambda identity_db, mapping: None,
+        _replace_env_line=lambda env_file, key, value: None,
+    )
+    monkeypatch.setattr(operator, "_load_configure_module", lambda: fake_configure)
+    monkeypatch.setattr(operator, "_run_production_check", lambda env_file: {"ok": False, "status_code": 1})
+
+    def restart() -> dict[str, object]:
+        raise AssertionError("restart should not run")
+
+    monkeypatch.setattr(operator, "_restart_imessage_launchagent", restart)
+
+    result = operator._identity_map(
+        settings,
+        hash_mapping,
+        env_file=tmp_path / ".env",
+        identity_db=tmp_path / "identity.sqlite3",
+        dry_run=False,
+        restart=True,
+    )
+
+    assert result["status"] == "updated-production-check-failed"
+    assert "restart" not in result
