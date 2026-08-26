@@ -11,6 +11,7 @@ from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.config import settings
 from freyja.contracts import CanonicalRequest, CanonicalResponse
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
+from freyja.freyja3_memory import Freyja3MemoryAccessError, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.ollama_client import OllamaClient
 from freyja.semantic_events import SemanticEventPermissionError, SemanticEventQuery, SemanticEventStore
@@ -26,6 +27,7 @@ app = FastAPI(
 
 agent_gateway = AgentGateway()
 semantic_event_store = SemanticEventStore()
+memory_store = Freyja3MemoryStore()
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
 register_smith_read_only_tools(get_registry())
@@ -80,6 +82,38 @@ async def freyja3_inference_health() -> dict[str, Any]:
             }
         )
     return {"ok": any(check["reachable"] and check["model_available"] for check in checks), "endpoints": checks}
+
+
+@app.post("/freyja3/memory")
+async def put_freyja3_memory(write: Freyja3MemoryWrite, raw_request: Request) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
+    try:
+        record = memory_store.put(write, writer_domain_id=domain_id)
+    except Freyja3MemoryAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "memory": record.model_dump(mode="json")}
+
+
+@app.get("/freyja3/memory")
+async def list_freyja3_memory(
+    raw_request: Request,
+    owner_domain_id: SecurityDomainId | None = None,
+    scope: str | None = None,
+    source_agent_id: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
+    try:
+        query = Freyja3MemoryQuery(
+            owner_domain_id=owner_domain_id,
+            scope=scope,
+            source_agent_id=source_agent_id,
+            limit=limit,
+        )
+        records = memory_store.list(query, reader_domain_id=domain_id)
+    except (Freyja3MemoryAccessError, ValueError) as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "memories": [record.model_dump(mode="json") for record in records], "count": len(records)}
 
 
 @app.post("/canonical/route")

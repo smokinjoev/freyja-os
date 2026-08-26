@@ -12,6 +12,7 @@ Last updated: 2026-08-26.
 - Added a feature flag, `FREYJA3_CANONICAL_ENABLED`, for routing `/canonical/route` through the Freyja 3 gateway/runtime path while leaving legacy `/route` compatibility intact.
 - Added a durable Freyja 3 semantic event store and `/events/semantic` publish/list endpoints for Hera-to-Atlas perception events. The API accepts Hera system events and denies non-Hera publishers or private-domain readers.
 - Added a dedicated `freyja.freyja3_app` ASGI service and side-by-side compose target at `deploy/compose/freyja3`, separate from the legacy Director path.
+- Added a Freyja 3 scoped memory store and `/freyja3/memory` API with explicit owner domain, scope, provenance, classification, allowed readers/writers, and hard paralegal enclave separation.
 - Added Freyja 3 architecture tests covering the 12 required proof points at the contract level.
 - Preserved the iMessage photo fix: HEIC/HEIF photos convert to JPEG before model calls, and routine image requests can use approved cloud vision when policy permits.
 
@@ -42,7 +43,7 @@ Last updated: 2026-08-26.
 6. Iris uses Mac Agent/Apple capabilities: MacAgent/iMessage live services are running; Freyja 3 runtime selects Apple/Mac tools in tests.
 7. Freyja controls HA on Atlas: Atlas sidecar selects the HA capability and executes the HA adapter, but live data/control remains blocked by missing HA env credentials.
 8. Hera publishes semantic perception events: verified from Hera to Atlas over Tailscale with bearer auth; Atlas persisted and returned a `voice_activity` event. Real camera-backed publisher pending device access.
-9. Memory privacy boundaries work: covered by runtime boundary tests.
+9. Memory privacy boundaries work: covered by runtime boundary tests and Freyja 3 memory store/API tests for private, shared, and paralegal scopes.
 10. Cloud cannot bypass privacy controls: covered by egress gate tests.
 11. Agents recover from inference outages: covered by runtime fallback test.
 12. Agent identity is independent of model/host: covered by runtime endpoint-change test.
@@ -51,6 +52,7 @@ Last updated: 2026-08-26.
 
 - Extend the first asynchronous tool loop into a full iterative plan/observe/retry loop with memory writes and follow-up question handling.
 - Wire Atlas Freyja 3 sidecar to HA credentials and prove read/control against Home Assistant policy.
+- Connect the Freyja 3 agent runtime to scoped memory writes/recall as part of the iterative loop.
 - Enable Freyja 3 canonical mode gradually after integration tests pass.
 - Deploy the Freyja 3 semantic event receiver on Atlas and add a real Hera camera/perception publisher once devices are visible.
 - Verify Home Assistant control through Freyja 3 permission policy against Atlas.

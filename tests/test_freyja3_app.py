@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import freyja.freyja3_app as freyja3_app
 from freyja.agent_runtime_v3 import AgentRuntimeV3
+from freyja.freyja3_memory import Freyja3MemoryStore
 from freyja.semantic_events import SemanticEventStore
 
 
@@ -51,3 +52,27 @@ def test_freyja3_app_semantic_events_are_available(monkeypatch, tmp_path) -> Non
     assert created.status_code == 200
     assert listed.status_code == 200
     assert listed.json()["count"] == 1
+
+
+def test_freyja3_app_memory_enforces_domain_headers(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(freyja3_app, "memory_store", Freyja3MemoryStore(tmp_path / "memory.db"))
+    client = TestClient(freyja3_app.app)
+
+    created = client.post(
+        "/freyja3/memory",
+        headers={"x-freyja-security-domain": "person.joe"},
+        json={
+            "owner_domain_id": "person.joe",
+            "scope": "personal",
+            "source_agent_id": "cloyd-gibbler",
+            "content": "Private Joe memory.",
+            "provenance": "unit-test",
+            "classification": "private",
+        },
+    )
+    joe_read = client.get("/freyja3/memory", headers={"x-freyja-security-domain": "person.joe"})
+    beth_read = client.get("/freyja3/memory", headers={"x-freyja-security-domain": "person.beth"})
+
+    assert created.status_code == 200
+    assert joe_read.json()["count"] == 1
+    assert beth_read.json()["count"] == 0
