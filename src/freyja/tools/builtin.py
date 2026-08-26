@@ -4,6 +4,7 @@ from pathlib import Path
 
 from freyja.memory.store import get_active_store
 from freyja.config import settings
+from freyja.macagent import MacAgentClient, MacAgentOperationRequest
 from freyja.memory.models import MemoryPrincipal
 from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
@@ -74,6 +75,50 @@ async def _web_fetch_implementation(request: ToolExecutionRequest) -> dict:
         str(args.get("url") or ""),
         max_chars=int(args.get("max_chars") or 12000),
     )
+
+
+async def _macagent_health_implementation(request: ToolExecutionRequest) -> dict:
+    health = await MacAgentClient().health()
+    return health.model_dump(mode="json")
+
+
+async def _apple_contacts_list_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    result = await MacAgentClient().invoke(
+        MacAgentOperationRequest(
+            capability="apple.contacts.read",
+            operation="list_contacts",
+            arguments={
+                "include_identifiers": bool(args.get("include_identifiers") is True),
+                "limit": int(args.get("limit") or 100),
+            },
+            request_id=request.request_id,
+            actor=request.actor or "atlas_director",
+            director_authorized=True,
+            required_permission="apple.contacts.read",
+            principal=request.metadata.get("memory_principal") if isinstance(request.metadata, dict) else None,
+            person=request.metadata.get("person") if isinstance(request.metadata, dict) else None,
+        )
+    )
+    return result.output if result.ok else {"error": result.error or "MacAgent contacts read failed."}
+
+
+async def _apple_messages_recent_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    result = await MacAgentClient().invoke(
+        MacAgentOperationRequest(
+            capability="apple.messages.read",
+            operation="recent_messages",
+            arguments={"limit": int(args.get("limit") or 20)},
+            request_id=request.request_id,
+            actor=request.actor or "atlas_director",
+            director_authorized=True,
+            required_permission="apple.messages.read",
+            principal=request.metadata.get("memory_principal") if isinstance(request.metadata, dict) else None,
+            person=request.metadata.get("person") if isinstance(request.metadata, dict) else None,
+        )
+    )
+    return result.output if result.ok else {"error": result.error or "MacAgent messages read failed."}
 
 
 async def _system_health_implementation(request: ToolExecutionRequest) -> dict:
@@ -152,6 +197,9 @@ _BUILTIN_TOOL_NAMES = (
     "get_weather",
     "web_search",
     "web_fetch",
+    "macagent_health",
+    "apple_contacts_list",
+    "apple_messages_recent",
     "hostname",
     "current_time",
     "disk_usage",
@@ -310,6 +358,65 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             tags=["web", "fetch", "live-data", "openclaw-compatible"],
         ),
         _web_fetch_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="macagent_health",
+            description="Return authenticated Iris MacAgent health and Apple-native capability inventory.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="iris.macagent",
+            required_permission="apple.native.read",
+            enabled=True,
+            timeout_seconds=10,
+            tags=["macagent", "iris", "apple", "health"],
+        ),
+        _macagent_health_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_contacts_list",
+            description="List Apple Contacts through Iris MacAgent. Identifiers are omitted unless explicitly requested.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "include_identifiers": {"type": "boolean"},
+                    "limit": {"type": "integer"},
+                },
+            },
+            output_schema={"type": "object", "properties": {"contacts": {"type": "array"}}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="iris.macagent",
+            required_permission="apple.contacts.read",
+            enabled=True,
+            timeout_seconds=10,
+            tags=["macagent", "iris", "apple", "contacts", "read-only"],
+        ),
+        _apple_contacts_list_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_messages_recent",
+            description="Read recent local Messages through Iris MacAgent for diagnostics and explicitly requested context.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer"},
+                },
+            },
+            output_schema={"type": "object", "properties": {"messages": {"type": "array"}}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="iris.macagent",
+            required_permission="apple.messages.read",
+            enabled=True,
+            timeout_seconds=10,
+            tags=["macagent", "iris", "apple", "messages", "read-only"],
+        ),
+        _apple_messages_recent_implementation,
     )
     registry.register(
         ToolDefinition(
