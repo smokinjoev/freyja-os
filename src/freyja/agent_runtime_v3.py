@@ -377,7 +377,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "web.search": "web_search",
     "weather.current": "get_weather",
     "macagent.apple": "macagent_health",
-    "home-assistant.control": "home_assistant_read_state",
+    "home-assistant.control": "home_assistant_list_states",
     "git.inspect": "repository_status",
     "memory.private": "recall_conversation",
     "memory.shared": "memory_recall_shared",
@@ -403,4 +403,8 @@ def _tool_effective_success(registry_success: bool, output: dict[str, Any]) -> b
         return False
     if isinstance(output.get("success"), bool):
         return bool(output["success"])
+    if output.get("error"):
+        return False
+    if output.get("live_data_available") is False:
+        return False
     return True
