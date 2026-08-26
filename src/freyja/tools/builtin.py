@@ -121,6 +121,52 @@ async def _apple_messages_recent_implementation(request: ToolExecutionRequest) -
     return result.output if result.ok else {"error": result.error or "MacAgent messages read failed."}
 
 
+async def _apple_messages_send_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    metadata = request.metadata if isinstance(request.metadata, dict) else {}
+    result = await MacAgentClient().invoke(
+        MacAgentOperationRequest(
+            capability="apple.messages.send",
+            operation="send_reply",
+            arguments={
+                "chat_id": int(args.get("chat_id") or 0),
+                "text": str(args.get("text") or ""),
+            },
+            request_id=request.request_id,
+            actor=request.actor or "atlas_director",
+            director_authorized=True,
+            required_permission="apple.messages.send",
+            approval_granted=metadata.get("approval_granted") is True,
+            principal=metadata.get("memory_principal"),
+            person=metadata.get("person"),
+        )
+    )
+    return result.output if result.ok else {"error": result.error or "MacAgent Messages send failed."}
+
+
+async def _apple_shortcuts_run_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    metadata = request.metadata if isinstance(request.metadata, dict) else {}
+    operation_args = {"name": str(args.get("name") or "")}
+    if args.get("input") is not None:
+        operation_args["input"] = str(args.get("input") or "")
+    result = await MacAgentClient().invoke(
+        MacAgentOperationRequest(
+            capability="apple.shortcuts.run",
+            operation="run_shortcut",
+            arguments=operation_args,
+            request_id=request.request_id,
+            actor=request.actor or "atlas_director",
+            director_authorized=True,
+            required_permission="apple.shortcuts.run",
+            approval_granted=metadata.get("approval_granted") is True,
+            principal=metadata.get("memory_principal"),
+            person=metadata.get("person"),
+        )
+    )
+    return result.output if result.ok else {"error": result.error or "MacAgent Shortcuts run failed."}
+
+
 async def _system_health_implementation(request: ToolExecutionRequest) -> dict:
     return {
         "director": {"status": "ok"},
@@ -200,6 +246,8 @@ _BUILTIN_TOOL_NAMES = (
     "macagent_health",
     "apple_contacts_list",
     "apple_messages_recent",
+    "apple_messages_send",
+    "apple_shortcuts_run",
     "hostname",
     "current_time",
     "disk_usage",
@@ -417,6 +465,56 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             tags=["macagent", "iris", "apple", "messages", "read-only"],
         ),
         _apple_messages_recent_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_messages_send",
+            description="Send an Apple Messages reply through Iris MacAgent only after explicit operator approval.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["chat_id", "text"],
+                "properties": {
+                    "chat_id": {"type": "integer"},
+                    "text": {"type": "string"},
+                },
+            },
+            output_schema={"type": "object", "properties": {"sent": {"type": "boolean"}, "chat_id": {"type": "integer"}}},
+            risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+            host_service="iris.macagent",
+            required_permission="apple.messages.send",
+            confirmation_policy="operator_approval_required",
+            audit_policy="request_result",
+            enabled=True,
+            timeout_seconds=15,
+            tags=["macagent", "iris", "apple", "messages", "send", "approval-required"],
+        ),
+        _apple_messages_send_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_shortcuts_run",
+            description="Run a macOS Shortcut through Iris MacAgent only after explicit operator approval.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "input": {"type": "string"},
+                },
+            },
+            output_schema={"type": "object", "properties": {"stdout": {"type": "string"}, "shortcut": {"type": "string"}}},
+            risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+            host_service="iris.macagent",
+            required_permission="apple.shortcuts.run",
+            confirmation_policy="operator_approval_required",
+            audit_policy="request_result",
+            enabled=True,
+            timeout_seconds=30,
+            tags=["macagent", "iris", "apple", "shortcuts", "approval-required"],
+        ),
+        _apple_shortcuts_run_implementation,
     )
     registry.register(
         ToolDefinition(

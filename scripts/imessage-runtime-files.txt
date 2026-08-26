@@ -13,6 +13,7 @@ src/freyja/agents/instances/jenna/__init__.py
 src/freyja/agents/instances/jenna/agent.py
 src/freyja/contracts.py
 src/freyja/inference.py
+src/freyja/macagent.py
 src/freyja/media.py
 src/freyja/router.py
 src/freyja/tools/registry.py

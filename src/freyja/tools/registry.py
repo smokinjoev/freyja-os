@@ -217,6 +217,32 @@ class ToolRegistry:
                 required_permission=permission,
             )
 
+        if permission in {"apple.messages.send", "apple.shortcuts.run"}:
+            if not _is_canonical_household_principal(person_id):
+                return ToolAuthorizationDecision(
+                    allowed=False,
+                    reason="canonical household principal required",
+                    required_permission=permission,
+                )
+            if metadata.get("director_authorized") is not True:
+                return ToolAuthorizationDecision(
+                    allowed=False,
+                    reason="Director authorization required",
+                    required_permission=permission,
+                )
+            if metadata.get("approval_granted") is not True:
+                operation = "Messages send" if permission == "apple.messages.send" else "Shortcuts run"
+                return ToolAuthorizationDecision(
+                    allowed=False,
+                    reason=f"explicit approval required for Apple {operation}",
+                    required_permission=permission,
+                )
+            return ToolAuthorizationDecision(
+                allowed=True,
+                reason=f"principal {person_id} may invoke {permission} with approval",
+                required_permission=permission,
+            )
+
         if permission == "personal:memory.read":
             if person_id and not _is_canonical_household_principal(person_id):
                 return ToolAuthorizationDecision(

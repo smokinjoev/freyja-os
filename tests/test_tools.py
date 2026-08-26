@@ -87,6 +87,13 @@ def test_discovery(registry: ToolRegistry) -> None:
         "list_models",
         "recall_conversation",
         "get_weather",
+        "web_search",
+        "web_fetch",
+        "macagent_health",
+        "apple_contacts_list",
+        "apple_messages_recent",
+        "apple_messages_send",
+        "apple_shortcuts_run",
         "hostname",
         "current_time",
         "disk_usage",
@@ -393,7 +400,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 26
+    assert len(tools) == 33
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
@@ -896,6 +903,50 @@ def test_home_assistant_control_requires_explicit_approval(registry: ToolRegistr
                     "memory_principal": {
                         "client_type": "imessage",
                         "client_subject": "family-member:abc",
+                    },
+                    "person": {"person_id": "joe"},
+                },
+            )
+        )
+    )
+    assert result.success is False
+    assert result.error_code == "authorization_denied"
+
+
+def test_apple_messages_send_requires_explicit_approval(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="apple_messages_send",
+                arguments={"chat_id": 123, "text": "hello"},
+                metadata={
+                    "director_authorized": True,
+                    "memory_principal": {
+                        "client_type": "imessage",
+                        "client_subject": "agent:cloyd-gibbler",
+                    },
+                    "person": {"person_id": "joe"},
+                },
+            )
+        )
+    )
+    assert result.success is False
+    assert result.error_code == "authorization_denied"
+
+
+def test_apple_shortcuts_run_requires_explicit_approval(registry: ToolRegistry) -> None:
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="apple_shortcuts_run",
+                arguments={"name": "Example"},
+                metadata={
+                    "director_authorized": True,
+                    "memory_principal": {
+                        "client_type": "imessage",
+                        "client_subject": "agent:cloyd-gibbler",
                     },
                     "person": {"person_id": "joe"},
                 },
