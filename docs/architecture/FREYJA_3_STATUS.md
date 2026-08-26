@@ -9,6 +9,7 @@ Last updated: 2026-08-26.
 - Added the Freyja 3 agent runtime contract. The selected agent receives the raw natural-language objective, chooses permitted tools itself, selects compute capabilities, uses the inference registry only for endpoint lookup, and preserves agent identity across endpoint changes.
 - Extended the Freyja 3 runtime beyond contract selection: when supplied with the existing tool registry, agents execute selected permitted tool capabilities and record tool results/audit steps. Live model calls are separately gated by `FREYJA3_INFERENCE_ENABLED`.
 - Added bounded agent-owned observe/diagnose iteration. After first-pass tool execution, the runtime records failed observations and lets the agent select a permitted `system.health` diagnostic follow-up without adding semantic routing or planning to the gateway.
+- Added bounded agent-owned follow-up question handling. When the selected agent chooses an under-specified mutation capability such as messaging, scheduling, or Home Assistant control, it asks for the missing target/time/device detail before executing mutation tools.
 - Wired the Freyja 3 runtime to scoped memory. Agents recall permitted private/household scopes at run start, write a scoped run summary after execution, and persist explicit `remember ...` user requests as scoped durable memories with basic sensitivity classification.
 - Added Freyja 3-native configurable inference endpoints through `FREYJA3_INFERENCE_ENDPOINTS`, including LM Studio/OpenAI-compatible local providers. The inference registry still performs capability/domain lookup only.
 - Added the Privacy/Egress Gate. Cloud AI requests must be evaluated there; private/sensitive/restricted data fails closed unless an explicit one-request override is provided.
@@ -43,7 +44,7 @@ Last updated: 2026-08-26.
 2. Agent receives the natural-language objective: covered by agent step evidence in tests.
 3. Agent independently chooses tools: covered by runtime tool-selection tests.
 4. Agents use Vulcan inference remotely: repo registry points to Vulcan Tailscale Ollama; remote service and required models verified from Iris, Atlas sidecar, and Mars sidecar.
-5. Multi-step autonomous tool work functions: covered by agent-owned multi-tool execution through the existing tool registry, scoped memory recall/write, explicit durable memory capture, and bounded observe/diagnose follow-up after failed tool results.
+5. Multi-step autonomous tool work functions: covered by agent-owned multi-tool execution through the existing tool registry, scoped memory recall/write, explicit durable memory capture, bounded observe/diagnose follow-up after failed tool results, and bounded follow-up questions before under-specified mutation execution.
 6. Iris uses Mac Agent/Apple capabilities: MacAgent/iMessage live services are running; Freyja 3 runtime selects Apple/Mac tools in tests.
 7. Freyja controls HA on Atlas: Atlas sidecar selects the HA capability and executes the HA adapter, but live data/control remains blocked by missing HA env credentials.
 8. Hera publishes semantic perception events: verified from Hera to Atlas over Tailscale with bearer auth; Atlas persisted and returned a `voice_activity` event. Real camera-backed publisher pending device access.
@@ -54,7 +55,7 @@ Last updated: 2026-08-26.
 
 ## Remaining Architecture Work
 
-- Extend bounded observe/diagnose iteration into a fuller plan/observe/retry loop with follow-up question handling.
+- Extend bounded observe/diagnose and follow-up handling into a fuller plan/observe/retry loop.
 - Wire Atlas Freyja 3 sidecar to HA credentials and prove read/control against Home Assistant policy.
 - Extend explicit memory capture beyond conservative `remember ...` requests into model-assisted durable fact/preference candidates with review/audit policy.
 - Enable Freyja 3 canonical mode gradually after integration tests pass.

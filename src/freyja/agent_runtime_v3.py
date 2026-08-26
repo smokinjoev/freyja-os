@@ -85,6 +85,7 @@ class AgentRuntimeV3:
             )
         ]
         recalled_memories = self._recall_memories(agent, steps, audit_events)
+        follow_up_questions = self._follow_up_questions(agent, handoff.prompt, selected_tools, steps, audit_events)
         for tool_id in selected_tools:
             steps.append(AgentStep(kind="tool_selected", detail=f"{agent.agent_id} selected {tool_id}", tool_id=tool_id))
             audit_events.append(
@@ -98,7 +99,8 @@ class AgentRuntimeV3:
                 )
             )
 
-        tool_results = await self._execute_selected_tools(agent, handoff, selected_tools, steps, audit_events)
+        executable_tools = [tool_id for tool_id in selected_tools if tool_id not in _MUTATION_CAPABILITIES or not follow_up_questions]
+        tool_results = await self._execute_selected_tools(agent, handoff, executable_tools, steps, audit_events)
         follow_up_tools = self._choose_follow_up_tools(agent, selected_tools, handoff.available_tools, tool_results, steps, audit_events)
         if follow_up_tools:
             selected_tools.extend(follow_up_tools)
@@ -110,7 +112,7 @@ class AgentRuntimeV3:
         inference_status = None
         inference_text = None
         degraded = False
-        if endpoint is not None:
+        if endpoint is not None and not follow_up_questions:
             inference_endpoint_id = endpoint.endpoint_id
             inference_model = endpoint.model or None
             inference_machine_id = endpoint.machine_id
@@ -158,7 +160,7 @@ class AgentRuntimeV3:
                     reason=f"inference {inference_status}",
                 )
             )
-        else:
+        elif not follow_up_questions:
             degraded = True
             steps.append(AgentStep(kind="inference_unavailable", detail=f"no healthy endpoint for {capability}", success=False))
 
@@ -169,6 +171,7 @@ class AgentRuntimeV3:
             selected_tools,
             tool_results,
             recalled_memories,
+            follow_up_questions,
             inference_endpoint_id,
             inference_text,
             degraded,
@@ -182,6 +185,7 @@ class AgentRuntimeV3:
             tool_results=tuple(tool_results),
             recalled_memories=tuple(recalled_memories),
             written_memories=tuple(written_memories),
+            follow_up_questions=tuple(follow_up_questions),
             inference_endpoint_id=inference_endpoint_id,
             inference_model=inference_model,
             inference_machine_id=inference_machine_id,
@@ -339,6 +343,37 @@ class AgentRuntimeV3:
             if tool_id in allowed and any(term in lowered for term in terms):
                 candidates.append(tool_id)
         return candidates
+
+    def _follow_up_questions(
+        self,
+        agent: PersistentAgent,
+        objective: str,
+        selected_tools: list[str],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> list[str]:
+        questions: list[str] = []
+        lowered = objective.lower()
+        if "messaging.send" in selected_tools and not _has_message_target(objective):
+            questions.append("Who should I send the message to, and what should it say?")
+        if "scheduling.create" in selected_tools and not _has_time_detail(lowered):
+            questions.append("When should I schedule that?")
+        if "home-assistant.control" in selected_tools and not _has_home_action_detail(lowered):
+            questions.append("Which Home Assistant device or area should I control, and what state should it be set to?")
+
+        for question in questions:
+            steps.append(AgentStep(kind="follow_up_question", detail=question, success=True))
+            audit_events.append(
+                AuditEvent(
+                    event_type=AuditEventType.AGENT_FOLLOW_UP_REQUESTED,
+                    actor_id=f"agent:{agent.agent_id}",
+                    domain_id=agent.security_domain_id,
+                    target_id="follow-up-question",
+                    allowed=True,
+                    reason="agent requested clarification before mutation tool execution",
+                )
+            )
+        return questions
 
     def _choose_follow_up_tools(
         self,
@@ -527,10 +562,13 @@ class AgentRuntimeV3:
         selected_tools: list[str],
         tool_results: list[dict[str, Any]],
         recalled_memories: list[dict[str, Any]],
+        follow_up_questions: list[str],
         endpoint_id: str | None,
         inference_text: str | None,
         degraded: bool,
     ) -> str:
+        if follow_up_questions:
+            return follow_up_questions[0]
         if degraded:
             return f"{agent.display_name} received the objective, but no healthy local inference endpoint is available."
         if inference_text:
@@ -580,6 +618,27 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "memory.private": "recall_conversation",
     "memory.shared": "memory_recall_shared",
 }
+
+_MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control"}
+
+
+def _has_message_target(objective: str) -> bool:
+    lowered = objective.lower()
+    if re.search(r"\b(to|text|message|imessage|sms)\s+([A-Z][A-Za-z]+|\+\d{7,}|[a-z0-9_.+-]+@[a-z0-9-]+\.[a-z0-9-.]+)", objective):
+        return True
+    return any(f" {name} " in f" {lowered} " for name in ("joe", "beth", "liam", "jenna", "mom", "dad"))
+
+
+def _has_time_detail(lowered_objective: str) -> bool:
+    return bool(
+        re.search(r"\b(\d{1,2}(:\d{2})?\s?(am|pm)|today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", lowered_objective)
+    )
+
+
+def _has_home_action_detail(lowered_objective: str) -> bool:
+    has_action = any(term in lowered_objective for term in ("turn on", "turn off", "set ", "lock", "unlock", "open", "close"))
+    has_target = any(term in lowered_objective for term in ("light", "thermostat", "door", "lock", "kitchen", "living room", "bedroom", "garage"))
+    return has_action and has_target
 
 
 def _person_metadata(domain_id) -> dict[str, str]:

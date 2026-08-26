@@ -164,6 +164,29 @@ def test_agent_observes_failed_tool_and_runs_diagnostic_follow_up() -> None:
     assert any(step.kind == "tool_executed" and step.tool_id == "system.health" and step.success is True for step in result.steps)
 
 
+def test_agent_asks_follow_up_before_underspecified_mutation_tool() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Send an iMessage.",
+            conversation_id="conv-follow-up",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    assert result.selected_tools == ("messaging.send",)
+    assert result.follow_up_questions == ("Who should I send the message to, and what should it say?",)
+    assert result.response_text == result.follow_up_questions[0]
+    assert fake_registry.requests == []
+    assert any(step.kind == "follow_up_question" for step in result.steps)
+    assert not any(step.kind == "tool_executed" and step.tool_id == "messaging.send" for step in result.steps)
+
+
 def test_agent_runtime_recalls_and_writes_scoped_memory(tmp_path) -> None:
     memory_store = Freyja3MemoryStore(tmp_path / "memory.db")
     memory_store.put(
