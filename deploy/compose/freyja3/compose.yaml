@@ -1,0 +1,65 @@
+name: freyja3
+
+services:
+  agent-gateway:
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/director.Dockerfile
+    restart: unless-stopped
+    user: "1000:1000"
+    command:
+      - uvicorn
+      - freyja.freyja3_app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8300"
+    environment:
+      FREYJA_ENV: ${FREYJA_ENV:-production}
+      FREYJA_CONNECTOR_TOKEN: ${FREYJA_CONNECTOR_TOKEN:-}
+      FREYJA3_INFERENCE_ENABLED: ${FREYJA3_INFERENCE_ENABLED:-false}
+      FREYJA3_EVENT_DATABASE_PATH: /app/data/freyja3_events.db
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://100.94.80.21:11434}
+      OLLAMA_REASONING_BASE_URL: ${OLLAMA_REASONING_BASE_URL:-http://100.94.80.21:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
+      OLLAMA_REASONING_MODEL: ${OLLAMA_REASONING_MODEL:-qwen3-coder-next:q4_K_M}
+      OLLAMA_CODING_MODEL: ${OLLAMA_CODING_MODEL:-qwen3-coder-next:q4_K_M}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-minicpm-v}
+      TOOLS_ENABLED: ${TOOLS_ENABLED:-true}
+      TOOLS_AUDIT_LOG_ENABLED: ${TOOLS_AUDIT_LOG_ENABLED:-true}
+      WEATHER_TOOL_ENABLED: ${WEATHER_TOOL_ENABLED:-false}
+      MEMORY_DATABASE_PATH: /app/data/freyja.db
+      REPOSITORY_ROOT: /repo
+      MACAGENT_ENABLED: ${MACAGENT_ENABLED:-false}
+      MACAGENT_BASE_URL: ${MACAGENT_BASE_URL:-http://100.115.228.56:8765}
+      MACAGENT_TOKEN: ${MACAGENT_TOKEN:-}
+      HOME_ASSISTANT_URL: ${HOME_ASSISTANT_URL:-}
+      HOME_ASSISTANT_TOKEN: ${HOME_ASSISTANT_TOKEN:-}
+      HOME_ASSISTANT_TIMEOUT_SECONDS: ${HOME_ASSISTANT_TIMEOUT_SECONDS:-10}
+    ports:
+      - "${FREYJA3_BIND_IP:-127.0.0.1}:${FREYJA3_HOST_PORT:-8300}:8300"
+    volumes:
+      - ../../../data:/app/data
+      - ../../../.git:/repo/.git:ro
+      - ../../../README.md:/repo/README.md:ro
+      - ../../../ARCHITECTURE.md:/repo/ARCHITECTURE.md:ro
+      - ../../../docs:/repo/docs:ro
+      - ../../../pyproject.toml:/repo/pyproject.toml:ro
+      - ../../../src:/repo/src:ro
+      - ../../../tests:/repo/tests:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8300/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
