@@ -75,6 +75,7 @@ def test_shortcut_message_routes_private_voice_request(monkeypatch) -> None:
     from freyja import main as director_main
 
     monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", False)
     decision = RoutingDecision(
         request_id="shortcut-req",
         provider="ollama",
@@ -372,6 +373,7 @@ def test_route_trace_includes_provider_profile_metadata(monkeypatch) -> None:
     from freyja.config import settings
 
     monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", False)
     with patch("freyja.ollama_client.OllamaClient.chat", new_callable=AsyncMock) as mock_chat:
         mock_chat.return_value = {
             "model": "qwen2.5:7b",
@@ -401,6 +403,7 @@ def test_canonical_route_preserves_trace_and_returns_canonical_response(monkeypa
     from freyja.config import settings
 
     monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", False)
     payload = {
         "trace_id": "trace-canonical-1",
         "message_id": "message-canonical-1",
@@ -434,7 +437,10 @@ def test_canonical_route_preserves_trace_and_returns_canonical_response(monkeypa
     assert data["tool_results"] == []
 
 
-def test_canonical_route_with_tools_required_returns_sanitized_tool_results() -> None:
+def test_canonical_route_with_tools_required_returns_sanitized_tool_results(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", False)
     first_response = {
         "model": "qwen2.5:1.5b",
         "message": {

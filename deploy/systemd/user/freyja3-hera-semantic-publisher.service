@@ -1,0 +1,8 @@
+[Unit]
+Description=Publish Freyja 3 Hera semantic status event
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/freyja-os-freyja3
+EnvironmentFile=%h/.config/freyja/freyja3-hera-semantic-publisher.env
+ExecStart=%h/freyja-os-freyja3/.heartbeat-venv/bin/freyja-hera-semantic-publisher
