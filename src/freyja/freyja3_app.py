@@ -12,6 +12,7 @@ from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.config import settings
 from freyja.contracts import CanonicalRequest, CanonicalResponse, CanonicalSender
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
+from freyja.freyja3_machines import Freyja3MachineAccessError, Freyja3MachineHeartbeat, Freyja3MachineStatusStore
 from freyja.freyja3_memory import Freyja3MemoryAccessError, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.freyja3_scheduler import Freyja3ScheduleAccessError, Freyja3ScheduleCreate, Freyja3ScheduleQuery, Freyja3SchedulerStore
 from freyja.inference_registry_v3 import InferenceRegistryV3
@@ -31,6 +32,7 @@ agent_gateway = AgentGateway()
 semantic_event_store = SemanticEventStore()
 memory_store = Freyja3MemoryStore()
 scheduler_store = Freyja3SchedulerStore()
+machine_status_store = Freyja3MachineStatusStore()
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
 register_smith_read_only_tools(get_registry())
@@ -137,6 +139,26 @@ async def list_freyja3_memory(
     except (Freyja3MemoryAccessError, ValueError) as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None
     return {"ok": True, "memories": [record.model_dump(mode="json") for record in records], "count": len(records)}
+
+
+@app.post("/freyja3/machines/heartbeat")
+async def record_freyja3_machine_heartbeat(heartbeat: Freyja3MachineHeartbeat, raw_request: Request) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.SYSTEM)
+    try:
+        status = machine_status_store.heartbeat(heartbeat, writer_domain_id=domain_id)
+    except Freyja3MachineAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "machine": status.model_dump(mode="json")}
+
+
+@app.get("/freyja3/machines")
+async def list_freyja3_machines(raw_request: Request) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.HOUSEHOLD)
+    try:
+        statuses = machine_status_store.list(reader_domain_id=domain_id)
+    except Freyja3MachineAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "machines": [status.model_dump(mode="json") for status in statuses], "count": len(statuses)}
 
 
 @app.post("/freyja3/schedules")

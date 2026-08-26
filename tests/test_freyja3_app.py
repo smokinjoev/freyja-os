@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import freyja.freyja3_app as freyja3_app
 from freyja.agent_runtime_v3 import AgentRuntimeV3
+from freyja.freyja3_machines import Freyja3MachineStatusStore
 from freyja.freyja3_memory import Freyja3MemoryStore
 from freyja.freyja3_scheduler import Freyja3SchedulerStore
 from freyja.semantic_events import SemanticEventStore
@@ -79,6 +80,29 @@ def test_freyja3_app_memory_enforces_domain_headers(monkeypatch, tmp_path) -> No
     assert created.status_code == 200
     assert joe_read.json()["count"] == 1
     assert beth_read.json()["count"] == 0
+
+
+def test_freyja3_app_machine_heartbeat_is_household_readable(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(freyja3_app, "machine_status_store", Freyja3MachineStatusStore(tmp_path / "machines.db"))
+    client = TestClient(freyja3_app.app)
+
+    heartbeat = client.post(
+        "/freyja3/machines/heartbeat",
+        headers={"x-freyja-security-domain": "system"},
+        json={
+            "machine_id": "mars",
+            "role": "worker-ingestion-monitoring",
+            "status": "ok",
+            "commit_sha": "abc123",
+            "service": "freyja3-agent-gateway",
+        },
+    )
+    listed = client.get("/freyja3/machines", headers={"x-freyja-security-domain": "household"})
+
+    assert heartbeat.status_code == 200
+    assert listed.status_code == 200
+    assert listed.json()["count"] == 1
+    assert listed.json()["machines"][0]["machine_id"] == "mars"
 
 
 def test_freyja3_app_scheduler_dispatches_due_agent_envelopes(monkeypatch, tmp_path) -> None:

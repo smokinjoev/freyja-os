@@ -26,6 +26,7 @@ freyja-identity-import-vcard = "freyja.cli.identity_import_vcard:main"
 freyja-identity-import-apple = "freyja.cli.identity_import_apple:main"
 freyja-rev2-preflight-status = "certification.rev2_preflight_status:main"
 freyja-hera-semantic-publisher = "freyja.cli.hera_semantic_publisher:main"
+freyja3-machine-heartbeat = "freyja.cli.machine_heartbeat:main"
 
 [tool.setuptools]
 packages = ["certification", "connectors", "connectors.gmail", "connectors.imessage", "connectors.signal", "connectors.telegram", "freyja", "freyja.agents", "freyja.calendar", "freyja.cli", "freyja.identity", "freyja.memory", "freyja.tools"]

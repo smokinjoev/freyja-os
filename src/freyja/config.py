@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     freyja3_event_database_path: str = Field(default="data/freyja3_events.db", alias="FREYJA3_EVENT_DATABASE_PATH")
     freyja3_memory_database_path: str = Field(default="data/freyja3_memory.db", alias="FREYJA3_MEMORY_DATABASE_PATH")
     freyja3_scheduler_database_path: str = Field(default="data/freyja3_scheduler.db", alias="FREYJA3_SCHEDULER_DATABASE_PATH")
+    freyja3_machine_database_path: str = Field(default="data/freyja3_machines.db", alias="FREYJA3_MACHINE_DATABASE_PATH")
     freyja3_inference_endpoints_json: str = Field(default="", alias="FREYJA3_INFERENCE_ENDPOINTS")
 
     ollama_base_url: str = "http://127.0.0.1:11434"
