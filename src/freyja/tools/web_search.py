@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, quote_plus, urlparse
 import httpx
 
 _DUCKDUCKGO_HTML_URL = "https://duckduckgo.com/html/"
-_HTTP_TIMEOUT_SECONDS = 12.0
+_HTTP_TIMEOUT_SECONDS = 25.0
 _MAX_QUERY_CHARS = 300
 _MAX_FETCH_CHARS = 12000
 

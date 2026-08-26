@@ -87,6 +87,7 @@ def test_discovery(registry: ToolRegistry) -> None:
         "list_models",
         "recall_conversation",
         "get_weather",
+        "event_weather",
         "web_search",
         "web_fetch",
         "macagent_health",
@@ -403,7 +404,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 36
+    assert len(tools) == 37
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
@@ -472,6 +473,47 @@ def test_builtin_get_weather_bad_request_type(registry: ToolRegistry, monkeypatc
     assert result.success is False
     assert result.error_code == "validation_error"
     assert "request_type" in result.public_error_message
+
+
+def test_builtin_get_weather_accepts_forecast_date_alias(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    register_builtin_tools(registry)
+
+    captured: dict[str, Any] = {}
+
+    async def fake_get_weather(*, location, request_type, target_date=None, target_label=""):
+        captured.update(
+            {
+                "location": location,
+                "request_type": request_type.value,
+                "target_date": target_date.isoformat() if target_date else None,
+                "target_label": target_label,
+            }
+        )
+        return {"live_data_available": True, "success": True}
+
+    with patch("freyja.tools.builtin.get_weather", side_effect=fake_get_weather):
+        result = asyncio_run(
+            registry.execute(
+                ToolExecutionRequest(
+                    tool_name="get_weather",
+                    arguments={
+                        "location": "Atlanta, GA",
+                        "request_type": "forecast",
+                        "forecast_date": "2026-09-05",
+                        "target_label": "Dragon Con",
+                    },
+                )
+            )
+        )
+
+    assert result.success is True
+    assert captured == {
+        "location": "Atlanta, GA",
+        "request_type": "forecast",
+        "target_date": "2026-09-05",
+        "target_label": "Dragon Con",
+    }
 
 
 def test_builtin_get_weather_provider_500(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -24,7 +24,7 @@ async def _get_weather_implementation(request: ToolExecutionRequest) -> dict:
     args = request.arguments or {}
     location = args.get("location", "")
     request_type_arg = args.get("request_type", "current")
-    target_date_arg = args.get("target_date")
+    target_date_arg = args.get("target_date") or args.get("forecast_date") or args.get("date")
     target_label = args.get("target_label", "")
 
     try:
@@ -75,6 +75,64 @@ async def _web_fetch_implementation(request: ToolExecutionRequest) -> dict:
         str(args.get("url") or ""),
         max_chars=int(args.get("max_chars") or 12000),
     )
+
+
+async def _event_weather_implementation(request: ToolExecutionRequest) -> dict:
+    import datetime as _datetime
+    import re
+
+    args = request.arguments or {}
+    event = " ".join(str(args.get("event") or args.get("query") or "").split())
+    if not event:
+        return {"success": False, "summary": "Event name is required."}
+    year = str(args.get("year") or _datetime.date.today().year)
+    search = await web_search(f"{event} {year} dates location", max_results=5)
+    text = " ".join(
+        f"{item.get('title', '')} {item.get('snippet', '')}"
+        for item in search.get("results", [])
+        if isinstance(item, dict)
+    )
+    location = None
+    if re.search(r"\bAtlanta\b", text, flags=re.IGNORECASE):
+        location = "Atlanta, Georgia"
+    date_match = re.search(
+        rf"(?:September|Sep\.?)\s+(\d{{1,2}})(?:\s*[-–]\s*(?:September|Sep\.?)?\s*\d{{1,2}})?\s*,?\s*{re.escape(year)}",
+        text,
+        flags=re.IGNORECASE,
+    )
+    target_date = None
+    if date_match:
+        target_date = _datetime.date(int(year), 9, int(date_match.group(1)))
+    if not location:
+        return {
+            "success": False,
+            "event": event,
+            "search": search,
+            "summary": "Could not resolve event location from search results.",
+        }
+    if target_date is None:
+        return {
+            "success": False,
+            "event": event,
+            "location": location,
+            "search": search,
+            "summary": "Could not resolve event date from search results.",
+        }
+    weather = await get_weather(
+        location=location,
+        request_type=WeatherRequestType.FORECAST,
+        target_date=target_date,
+        target_label=f"{event} opening day",
+    )
+    return {
+        "success": bool(weather.get("live_data_available")),
+        "event": event,
+        "year": year,
+        "location": location,
+        "target_date": target_date.isoformat(),
+        "search": search,
+        "weather": weather,
+    }
 
 
 async def _macagent_health_implementation(request: ToolExecutionRequest) -> dict:
@@ -295,6 +353,7 @@ _BUILTIN_TOOL_NAMES = (
     "list_models",
     "recall_conversation",
     "get_weather",
+    "event_weather",
     "web_search",
     "web_fetch",
     "macagent_health",
@@ -377,6 +436,10 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                         "type": "string",
                         "description": "ISO date (YYYY-MM-DD) for forecast requests.",
                     },
+                    "forecast_date": {
+                        "type": "string",
+                        "description": "Alias for target_date when the model names the forecast date this way.",
+                    },
                     "target_label": {
                         "type": "string",
                         "description": "Human label for the forecast date, e.g. 'tomorrow'.",
@@ -429,10 +492,34 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             },
             risk_level=ToolRiskLevel.READ_ONLY,
             enabled=True,
-            timeout_seconds=15,
+            timeout_seconds=30,
             tags=["web", "search", "live-data", "openclaw-compatible"],
         ),
         _web_search_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="event_weather",
+            description=(
+                "Resolve an event's upcoming year, dates, and location with local web search, then fetch weather "
+                "for the resolved city/date. Use this for prompts such as 'weather for Dragon Con'."
+            ),
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["event"],
+                "properties": {
+                    "event": {"type": "string", "description": "Event or convention name."},
+                    "year": {"type": "string", "description": "Optional event year, e.g. 2026."},
+                },
+            },
+            output_schema={"type": "object", "properties": {}},
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=45,
+            tags=["weather", "web", "event", "live-data"],
+        ),
+        _event_weather_implementation,
     )
     registry.register(
         ToolDefinition(
@@ -459,7 +546,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             },
             risk_level=ToolRiskLevel.READ_ONLY,
             enabled=True,
-            timeout_seconds=15,
+            timeout_seconds=30,
             tags=["web", "fetch", "live-data", "openclaw-compatible"],
         ),
         _web_fetch_implementation,

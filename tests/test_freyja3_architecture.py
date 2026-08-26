@@ -96,6 +96,12 @@ class _FakeToolRegistry:
                 input_schema={"type": "object", "required": ["query"], "properties": {"query": {"type": "string"}}},
                 risk_level=ToolRiskLevel.READ_ONLY,
             ),
+            ToolDefinition(
+                name="event_weather",
+                description="Resolve event dates/location and fetch weather.",
+                input_schema={"type": "object", "required": ["event"], "properties": {"event": {"type": "string"}}},
+                risk_level=ToolRiskLevel.READ_ONLY,
+            ),
         ]
 
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:

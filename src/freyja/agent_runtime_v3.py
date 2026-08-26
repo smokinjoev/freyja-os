@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as _datetime
 import json
 import re
 from collections.abc import Iterable
@@ -688,9 +689,16 @@ class AgentRuntimeV3:
     ) -> tuple[str, str | None]:
         client = OllamaClient(base_url=base_url, model=model)
         tools = self._tool_definitions_for_agent(agent, handoff.available_tools)
+        available_tool_names = [tool.name for tool in tools]
         images = _images_from_handoff(handoff) if endpoint_id and "vision" in endpoint_id else []
         for iteration in range(self._max_tool_iterations):
-            prompt = self._agent_tool_prompt(agent, handoff, recalled=bool(tool_results), tool_results=tool_results)
+            prompt = self._agent_tool_prompt(
+                agent,
+                handoff,
+                recalled=bool(tool_results),
+                tool_results=tool_results,
+                available_tool_names=available_tool_names,
+            )
             response = await client.chat(
                 prompt=prompt,
                 model=model,
@@ -699,6 +707,8 @@ class AgentRuntimeV3:
                 images=images or None,
             )
             if "error" in response:
+                if tool_results:
+                    break
                 return "error", None
             calls = _ollama_tool_calls(response)
             if not calls:
@@ -716,7 +726,13 @@ class AgentRuntimeV3:
                 )
                 tool_results.append(result)
 
-        final_prompt = self._agent_tool_prompt(agent, handoff, recalled=True, tool_results=tool_results)
+        final_prompt = self._agent_tool_prompt(
+            agent,
+            handoff,
+            recalled=True,
+            tool_results=tool_results,
+            available_tool_names=available_tool_names,
+        )
         final = await client.chat(
             prompt=final_prompt,
             model=model,
@@ -740,6 +756,8 @@ class AgentRuntimeV3:
             for capability_id, tool_name in _CONCRETE_TOOL_BY_CAPABILITY.items()
             if capability_id in allowed_capabilities
         }
+        if {"web.search", "weather.current"}.issubset(allowed_capabilities):
+            allowed_tool_names.add("event_weather")
         return [
             definition
             for definition in self._tool_registry.list_tools()
@@ -919,20 +937,28 @@ class AgentRuntimeV3:
         *,
         recalled: bool,
         tool_results: list[dict[str, Any]],
+        available_tool_names: list[str] | None = None,
     ) -> str:
         observation = ""
         if recalled:
+            tool_list = ", ".join(available_tool_names or [])
             observation = (
                 "\n\nTool observations:\n"
                 f"{json.dumps(_public_tool_results(tool_results), default=str)}\n\n"
-                "Answer directly from these observations. Do not claim unavailable live data is available."
+                f"Still-available local tools: {tool_list}.\n"
+                "Answer directly from these observations. Do not claim unavailable live data is available. "
+                "Do not claim you called or observed a tool unless it appears in Tool observations."
             )
         return (
             f"You are {agent.display_name}, a persistent Freyja 3 agent. "
+            f"Today's date is {_datetime.date.today().isoformat()}. "
             "You decide whether local tools are needed. If the request mentions an event, venue, or vague place, "
             "resolve when and where it occurs with web_search before checking weather or answering. "
+            "For annual events without a year, use the next upcoming occurrence relative to today's date unless the user asks for a past year. "
             "Never pass an event name such as Dragon Con as a weather location; first find the city and dates, "
             "then call get_weather with the city and forecast date. "
+            "If the user asks for weather, do not stop after only resolving the event; call get_weather or explain why the forecast is unavailable. "
+            "If a tool observation reports missing or invalid arguments, call the tool again with corrected arguments before answering. "
             "Use tools when current facts, weather, local state, files, email, calendar, or web evidence are needed.\n\n"
             f"User objective:\n{handoff.prompt}"
             f"{observation}"
