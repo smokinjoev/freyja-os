@@ -155,6 +155,88 @@ def test_worker_runner_email_content_requires_body_text() -> None:
     assert result["error"] == "email_content requires payload.body, payload.text, or payload.raw_rfc822"
 
 
+def test_worker_runner_completes_web_research_observation(monkeypatch) -> None:
+    def fake_research(query: str, *, max_results: int) -> dict:
+        assert query == "Freyja 3 architecture"
+        assert max_results == 5
+        return {
+            "ok": True,
+            "query": query,
+            "provider": "unit_search",
+            "source": "web:unit",
+            "results": [
+                {
+                    "title": "Architecture",
+                    "url": "https://example.invalid/architecture",
+                    "snippet": "Gateway is transport.",
+                },
+                {
+                    "title": "Agents",
+                    "url": "https://example.invalid/agents",
+                    "snippet": "Agents choose tools.",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(worker_runner, "_web_research_results", fake_research)
+
+    result = worker_runner._run_job(
+        {
+            "job_id": "job-web",
+            "worker_class": "web_research",
+            "payload": {"query": "Freyja 3 architecture", "max_results": 99},
+        },
+        machine_id="mars",
+    )
+
+    assert result["status"] == "completed"
+    observation = result["result"]["observation"]
+    assert observation["worker_class"] == "web_research"
+    assert observation["trust_level"] == "untrusted_external_content"
+    assert observation["source"] == "web:unit"
+    assert observation["proposed_capabilities"] == []
+    assert observation["web_metadata"] == {
+        "query": "Freyja 3 architecture",
+        "provider": "unit_search",
+        "result_count": 2,
+    }
+    assert observation["citations"][0]["url"] == "https://example.invalid/architecture"
+
+
+def test_worker_runner_web_research_uses_objective_when_query_missing(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_research(query: str, *, max_results: int) -> dict:
+        captured["query"] = query
+        captured["max_results"] = max_results
+        return {"ok": True, "query": query, "provider": "unit_search", "source": "web:unit", "results": []}
+
+    monkeypatch.setattr(worker_runner, "_web_research_results", fake_research)
+
+    result = worker_runner._run_job(
+        {
+            "job_id": "job-web-objective",
+            "worker_class": "web_research",
+            "objective": "Research safe local inference",
+        },
+        machine_id="mars",
+    )
+
+    assert result["status"] == "completed"
+    assert captured == {"query": "Research safe local inference", "max_results": 5}
+    assert result["result"]["observation"]["proposed_capabilities"] == []
+
+
+def test_worker_runner_web_research_requires_query_or_objective() -> None:
+    result = worker_runner._run_job(
+        {"job_id": "job-empty-web", "worker_class": "web_research", "payload": {}},
+        machine_id="mars",
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"] == "web_research requires payload.query or job.objective"
+
+
 def test_worker_runner_document_ingestion_rejects_path_outside_allowed_roots(tmp_path) -> None:
     outside = tmp_path / "outside.txt"
     outside.write_text("do not read")

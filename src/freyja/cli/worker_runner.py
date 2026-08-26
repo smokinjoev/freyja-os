@@ -12,7 +12,11 @@ from typing import Any
 
 import httpx
 
+from freyja.tools.web_search import _parse_duckduckgo_results
 from freyja.workers import ExternalWorkerClass, WorkerObservation, WorkerTrustLevel
+
+
+_DUCKDUCKGO_HTML_URL = "https://duckduckgo.com/html/"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -73,6 +77,8 @@ def _run_job(job: dict[str, Any], *, machine_id: str, allowed_roots: list[str] |
         return _run_document_ingestion(job, machine_id=machine_id, allowed_roots=allowed_roots or [])
     if worker_class == ExternalWorkerClass.EMAIL_CONTENT.value:
         return _run_email_content_ingestion(job, machine_id=machine_id)
+    if worker_class == ExternalWorkerClass.WEB_RESEARCH.value:
+        return _run_web_research(job, machine_id=machine_id)
     return {
         "status": "failed",
         "result": {"machine_id": machine_id, "worker_class": worker_class},
@@ -170,6 +176,88 @@ def _run_email_content_ingestion(job: dict[str, Any], *, machine_id: str) -> dic
     }
 
 
+def _run_web_research(job: dict[str, Any], *, machine_id: str) -> dict[str, Any]:
+    payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+    query = " ".join(str(payload.get("query") or job.get("objective") or "").split())[:300]
+    if not query:
+        return {
+            "status": "failed",
+            "result": {"machine_id": machine_id, "worker_class": ExternalWorkerClass.WEB_RESEARCH.value},
+            "error": "web_research requires payload.query or job.objective",
+        }
+    max_results = _bounded_int(payload.get("max_results"), default=5, minimum=1, maximum=5)
+    search = _web_research_results(query, max_results=max_results)
+    if not search["ok"]:
+        return {
+            "status": "failed",
+            "result": {
+                "machine_id": machine_id,
+                "worker_class": ExternalWorkerClass.WEB_RESEARCH.value,
+                "query": query,
+            },
+            "error": search["error"],
+        }
+    results = search["results"]
+    summary = _web_research_summary(query, results)
+    observation = WorkerObservation(
+        worker_class=ExternalWorkerClass.WEB_RESEARCH,
+        trust_level=WorkerTrustLevel.UNTRUSTED_EXTERNAL_CONTENT,
+        source=search["source"],
+        summary=summary[:400],
+        facts=[
+            {"claim": f"web search for {query!r} returned {len(results)} result(s)", "confidence": "medium"},
+            {"claim": "web research output is search-result metadata and snippets only", "confidence": "high"},
+        ],
+        citations=[
+            {
+                "label": str(item.get("title") or item.get("url") or f"result-{index + 1}")[:120],
+                "url": str(item.get("url") or "")[:1000],
+                "excerpt": str(item.get("snippet") or "")[:240],
+            }
+            for index, item in enumerate(results)
+        ],
+        uncertainty="Search result snippets are untrusted external content and may be stale or incomplete.",
+    )
+    result = observation.model_dump(mode="json")
+    result["web_metadata"] = {"query": query, "provider": search["provider"], "result_count": len(results)}
+    return {
+        "status": "completed",
+        "result": {
+            "machine_id": machine_id,
+            "worker_class": ExternalWorkerClass.WEB_RESEARCH.value,
+            "observation": result,
+        },
+    }
+
+
+def _web_research_results(query: str, *, max_results: int) -> dict[str, Any]:
+    try:
+        with httpx.Client(timeout=12.0, follow_redirects=True) as client:
+            response = client.get(
+                _DUCKDUCKGO_HTML_URL,
+                params={"q": query},
+                headers={"User-Agent": "Freyja-OS/3.0 (+mars-web-research-worker)"},
+            )
+            response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "query": query, "results": [], "error": type(exc).__name__}
+    results = _parse_duckduckgo_results(response.text)[:max_results]
+    return {
+        "ok": True,
+        "query": query,
+        "provider": "duckduckgo_html",
+        "source": "web:duckduckgo_html",
+        "results": results,
+    }
+
+
+def _web_research_summary(query: str, results: list[dict[str, Any]]) -> str:
+    if not results:
+        return f"Web search for {query!r} returned no normalized results."
+    titles = "; ".join(str(item.get("title") or item.get("url") or "untitled") for item in results[:3])
+    return f"Web search for {query!r} returned {len(results)} result(s): {titles}"
+
+
 def _email_content(payload: dict[str, Any]) -> dict[str, Any]:
     raw = payload.get("raw_rfc822")
     parsed: dict[str, Any] = {}
@@ -240,6 +328,14 @@ def _attachment_metadata(value: dict[str, Any]) -> dict[str, Any]:
         "mime_type": str(value.get("mime_type") or "")[:200],
         "size_bytes": value.get("size_bytes") if isinstance(value.get("size_bytes"), int) else None,
     }
+
+
+def _bounded_int(value: object, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        candidate = int(value) if value is not None else default
+    except (TypeError, ValueError):
+        candidate = default
+    return max(minimum, min(candidate, maximum))
 
 
 def _ingestion_text(payload: dict[str, Any], *, allowed_roots: list[str]) -> str:
