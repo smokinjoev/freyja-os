@@ -2,6 +2,8 @@
 
 Last updated: 2026-08-26.
 
+Current completion audit: `docs/architecture/FREYJA_3_COMPLETION_AUDIT.md`.
+
 ## Completed Repo Work
 
 - Added Freyja 3 canonical models for security domains, persistent agents, machine roles, tool grants, gateway handoffs, inference endpoints, privacy audits, agent steps, execution results, and Hera semantic events.
