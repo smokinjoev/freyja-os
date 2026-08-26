@@ -734,6 +734,76 @@ def test_imessage_route_smoke_supports_custom_identity(monkeypatch):
     assert status["imessage"]["expected_client_subject"] == "agent:benedict"
 
 
+def test_imessage_family_route_smoke_covers_all_four_agents(monkeypatch):
+    module = _load_script()
+    captured = []
+
+    class Settings:
+        freyja_director_url = "http://director"
+        freyja_connector_token = ""
+
+    def fake_post(url, *, payload, timeout=5.0, headers=None):
+        captured.append(headers["X-Freyja-Agent-Id"])
+        return {
+            "ok": True,
+            "status_code": 200,
+            "payload": {
+                "text": "ack",
+                "channel_metadata": {
+                    "provider": "local_reasoning",
+                    "model": "gpt-oss-freyja:20b-analysis-prefill",
+                    "trace": {
+                        "interface": headers["X-Freyja-Client-Type"],
+                        "person": {"person_id": headers["X-Freyja-Person-Id"]},
+                        "principal": {"client_subject": headers["X-Freyja-Client-Subject"]},
+                    },
+                },
+            },
+        }
+
+    status = module._imessage_family_route_smoke(Settings(), timeout=3.0, post_json=fake_post)
+
+    assert status["ok"] is True
+    assert set(status["people"]) == {"joe", "beth", "liam", "jenna"}
+    assert set(captured) == {"cloyd-gibbler", "benedict", "agent-44", "jenna"}
+    assert all(result["terminal_equivalent"] is True for result in status["people"].values())
+
+
+def test_imessage_status_can_require_family_route_smoke(monkeypatch, tmp_path):
+    module = _load_script()
+    db_path = tmp_path / "chat.db"
+    db_path.touch()
+    imsg_path = tmp_path / "imsg"
+    imsg_path.touch()
+    monkeypatch.setenv("IMESSAGE_ENABLED", "true")
+    monkeypatch.setenv("IMESSAGE_IMSG_PATH", str(imsg_path))
+    monkeypatch.setenv("IMESSAGE_DATABASE_PATH", str(db_path))
+    monkeypatch.setenv(
+        "IMESSAGE_ALLOWED_SENDERS",
+        "joe=+15550000001,beth=+15550000002,liam=+15550000003,jenna=+15550000004",
+    )
+    monkeypatch.setenv("FREYJA_CONNECTOR_TOKEN", "secret")
+    monkeypatch.setattr(module, "_imsg_whois_local", lambda settings, address, timeout: {"known": True, "service": "imessage"})
+    monkeypatch.setattr(module, "_run_command", lambda command, timeout: {"ok": True, "status_code": 0})
+    monkeypatch.setattr(module, "_messages_applescript_status", lambda timeout: {"ok": True})
+    monkeypatch.setattr(module, "_imessage_runtime_source_drift", lambda: {"ok": True, "drift_count": 0, "files": []})
+    monkeypatch.setattr(module, "_imessage_runtime_import_check", lambda: {"ok": True})
+    monkeypatch.setattr(module, "_imessage_family_route_smoke", lambda settings, timeout: {"ok": True, "people": {}})
+
+    status = module._imessage_status(
+        check_director=False,
+        check_rev2_director=False,
+        check_route_smoke=False,
+        check_inprocess_route_smoke=False,
+        check_family_route_smoke=True,
+        require_family_agents=True,
+        route_identity=None,
+    )
+
+    assert status["ready_for_live_smoke"] is True
+    assert status["family_route_smoke"]["ok"] is True
+
+
 def test_director_rev2_health_requires_logical_model_profiles_ready(monkeypatch):
     module = _load_script()
 

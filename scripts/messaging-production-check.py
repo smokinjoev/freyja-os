@@ -77,6 +77,38 @@ class SyntheticRouteIdentity:
         return f"person:{self.person_id}"
 
 
+_FAMILY_ROUTE_IDENTITIES: tuple[SyntheticRouteIdentity, ...] = (
+    SyntheticRouteIdentity(
+        person_id="joe",
+        person_display_name="Joe",
+        person_preferred_name="Joe",
+        agent_id="cloyd-gibbler",
+        agent_display_name="Cloyd Gibbler",
+    ),
+    SyntheticRouteIdentity(
+        person_id="beth",
+        person_display_name="Beth",
+        person_preferred_name="Beth",
+        agent_id="benedict",
+        agent_display_name="Benedict",
+    ),
+    SyntheticRouteIdentity(
+        person_id="liam",
+        person_display_name="Liam",
+        person_preferred_name="Liam",
+        agent_id="agent-44",
+        agent_display_name="Agent 44",
+    ),
+    SyntheticRouteIdentity(
+        person_id="jenna",
+        person_display_name="Jenna",
+        person_preferred_name="Jenna",
+        agent_id="jenna",
+        agent_display_name="Jenna",
+    ),
+)
+
+
 def _run_command(command: list[str], *, timeout: float) -> dict[str, object]:
     try:
         completed = subprocess.run(
@@ -392,6 +424,27 @@ def _imessage_route_smoke(
     }
 
 
+def _imessage_family_route_smoke(
+    settings: IMessageSettings,
+    *,
+    timeout: float,
+    post_json: Callable[..., dict[str, object]] = _http_post_json,
+) -> dict[str, object]:
+    results = {
+        identity.person_id: _imessage_route_smoke(
+            settings,
+            timeout=timeout,
+            identity=identity,
+            post_json=post_json,
+        )
+        for identity in _FAMILY_ROUTE_IDENTITIES
+    }
+    return {
+        "ok": all(result.get("ok") is True for result in results.values()),
+        "people": results,
+    }
+
+
 def _imessage_family_agent_mapping(
     settings: IMessageSettings,
     *,
@@ -610,6 +663,7 @@ def _imessage_status(
     check_rev2_director: bool,
     check_route_smoke: bool,
     check_inprocess_route_smoke: bool,
+    check_family_route_smoke: bool = False,
     require_family_agents: bool = False,
     route_identity: SyntheticRouteIdentity | None = None,
     env_file: str | None = None,
@@ -663,6 +717,11 @@ def _imessage_status(
             timeout=settings.imessage_request_timeout_seconds,
             identity=route_identity,
         )
+    if check_family_route_smoke:
+        status["family_route_smoke"] = _imessage_family_route_smoke(
+            settings,
+            timeout=settings.imessage_request_timeout_seconds,
+        )
     if check_inprocess_route_smoke:
         status["inprocess_route_smoke"] = _imessage_inprocess_route_smoke(
             settings,
@@ -683,6 +742,7 @@ def _imessage_status(
             not check_director or status.get("director_health", {}).get("ok") is True,
             not check_rev2_director or status.get("director_rev2_health", {}).get("ok") is True,
             not check_route_smoke or status.get("synthetic_route_smoke", {}).get("ok") is True,
+            not check_family_route_smoke or status.get("family_route_smoke", {}).get("ok") is True,
             not check_inprocess_route_smoke or status.get("inprocess_route_smoke", {}).get("ok") is True,
         ]
     )
@@ -827,6 +887,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Call Director /canonical/route with synthetic iMessage headers and require trace evidence.",
     )
     parser.add_argument(
+        "--check-imessage-family-route-smoke",
+        action="store_true",
+        help="Call Director /canonical/route for all four family agent identities; does not send iMessages.",
+    )
+    parser.add_argument(
         "--check-inprocess-route-smoke",
         action="store_true",
         help="Exercise Director /canonical/route in-process with synthetic iMessage and terminal envelopes; does not prove live transport.",
@@ -873,6 +938,7 @@ def main(argv: list[str] | None = None) -> int:
             check_rev2_director=args.check_rev2_director,
             check_route_smoke=args.check_imessage_route_smoke,
             check_inprocess_route_smoke=args.check_inprocess_route_smoke,
+            check_family_route_smoke=args.check_imessage_family_route_smoke,
             require_family_agents=args.require_imessage_family_agents,
             route_identity=route_identity,
             env_file=args.env_file,
