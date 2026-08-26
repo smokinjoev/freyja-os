@@ -31,7 +31,11 @@ memory_store = Freyja3MemoryStore()
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
 register_smith_read_only_tools(get_registry())
-agent_runtime = AgentRuntimeV3(tool_registry=get_registry(), run_inference=settings.freyja3_inference_enabled)
+agent_runtime = AgentRuntimeV3(
+    tool_registry=get_registry(),
+    memory_store=memory_store,
+    run_inference=settings.freyja3_inference_enabled,
+)
 inference_registry = InferenceRegistryV3()
 
 
@@ -208,6 +212,8 @@ async def _execute_canonical_request(request: CanonicalRequest, raw_request: Req
             "inference_model": result.inference_model,
             "inference_machine_id": result.inference_machine_id,
             "inference_status": result.inference_status,
+            "recalled_memories": list(result.recalled_memories),
+            "written_memories": list(result.written_memories),
         },
         degraded=result.degraded,
         status="degraded" if result.degraded else "ok",

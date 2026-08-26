@@ -531,6 +531,8 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
             "inference_model": result.inference_model,
             "inference_machine_id": result.inference_machine_id,
             "inference_status": result.inference_status,
+            "recalled_memories": list(result.recalled_memories),
+            "written_memories": list(result.written_memories),
         },
         degraded=result.degraded,
         status="degraded" if result.degraded else "ok",

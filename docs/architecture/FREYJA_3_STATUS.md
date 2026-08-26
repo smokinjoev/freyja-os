@@ -8,6 +8,7 @@ Last updated: 2026-08-26.
 - Expanded the deterministic Agent Gateway so it creates full agent handoff envelopes while avoiding intent classification, semantic routing, tool selection, model selection, planning, and answering.
 - Added the Freyja 3 agent runtime contract. The selected agent receives the raw natural-language objective, chooses permitted tools itself, selects compute capabilities, uses the inference registry only for endpoint lookup, and preserves agent identity across endpoint changes.
 - Extended the Freyja 3 runtime beyond contract selection: when supplied with the existing tool registry, agents execute selected permitted tool capabilities and record tool results/audit steps. Live model calls are separately gated by `FREYJA3_INFERENCE_ENABLED`.
+- Wired the Freyja 3 runtime to scoped memory. Agents recall permitted private/household scopes at run start and write a scoped run summary after execution.
 - Added the Privacy/Egress Gate. Cloud AI requests must be evaluated there; private/sensitive/restricted data fails closed unless an explicit one-request override is provided.
 - Added a feature flag, `FREYJA3_CANONICAL_ENABLED`, for routing `/canonical/route` through the Freyja 3 gateway/runtime path while leaving legacy `/route` compatibility intact.
 - Added a durable Freyja 3 semantic event store and `/events/semantic` publish/list endpoints for Hera-to-Atlas perception events. The API accepts Hera system events and denies non-Hera publishers or private-domain readers.
@@ -39,7 +40,7 @@ Last updated: 2026-08-26.
 2. Agent receives the natural-language objective: covered by agent step evidence in tests.
 3. Agent independently chooses tools: covered by runtime tool-selection tests.
 4. Agents use Vulcan inference remotely: repo registry points to Vulcan Tailscale Ollama; remote service and required models verified from Iris, Atlas sidecar, and Mars sidecar.
-5. Multi-step autonomous tool work functions: covered by agent-owned multi-tool execution through the existing tool registry; deeper iterative plan/observe/retry behavior still needs integration.
+5. Multi-step autonomous tool work functions: covered by agent-owned multi-tool execution through the existing tool registry plus runtime memory recall/write; deeper iterative plan/observe/retry behavior still needs integration.
 6. Iris uses Mac Agent/Apple capabilities: MacAgent/iMessage live services are running; Freyja 3 runtime selects Apple/Mac tools in tests.
 7. Freyja controls HA on Atlas: Atlas sidecar selects the HA capability and executes the HA adapter, but live data/control remains blocked by missing HA env credentials.
 8. Hera publishes semantic perception events: verified from Hera to Atlas over Tailscale with bearer auth; Atlas persisted and returned a `voice_activity` event. Real camera-backed publisher pending device access.
@@ -52,7 +53,7 @@ Last updated: 2026-08-26.
 
 - Extend the first asynchronous tool loop into a full iterative plan/observe/retry loop with memory writes and follow-up question handling.
 - Wire Atlas Freyja 3 sidecar to HA credentials and prove read/control against Home Assistant policy.
-- Connect the Freyja 3 agent runtime to scoped memory writes/recall as part of the iterative loop.
+- Extend runtime memory use beyond run summaries into durable facts/preferences extracted by agent-owned iteration.
 - Enable Freyja 3 canonical mode gradually after integration tests pass.
 - Deploy the Freyja 3 semantic event receiver on Atlas and add a real Hera camera/perception publisher once devices are visible.
 - Verify Home Assistant control through Freyja 3 permission policy against Atlas.

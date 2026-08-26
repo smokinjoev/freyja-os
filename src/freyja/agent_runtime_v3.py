@@ -11,10 +11,13 @@ from freyja.foundation_models import (
     AuditEventType,
     GatewayHandoff,
     MemoryClassification,
+    MemoryScope,
     PersistentAgent,
+    SecurityDomainId,
     ToolCapabilityGrant,
 )
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES, agents_by_key, tools_by_id
+from freyja.freyja3_memory import Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.ollama_client import OllamaClient
 from freyja.privacy_egress import PrivacyEgressGate
@@ -42,7 +45,9 @@ class AgentRuntimeV3:
         inference_registry: InferenceRegistryV3 | None = None,
         egress_gate: PrivacyEgressGate | None = None,
         tool_registry: ToolRegistry | None = None,
+        memory_store: Freyja3MemoryStore | None = None,
         execute_tools: bool | None = None,
+        use_memory: bool | None = None,
         run_inference: bool | None = None,
         unhealthy_endpoint_ids: Iterable[str] = (),
     ) -> None:
@@ -51,7 +56,9 @@ class AgentRuntimeV3:
         self._inference_registry = inference_registry or InferenceRegistryV3()
         self._egress_gate = egress_gate or PrivacyEgressGate()
         self._tool_registry = tool_registry
+        self._memory_store = memory_store
         self._execute_tools = tool_registry is not None if execute_tools is None else execute_tools
+        self._use_memory = memory_store is not None if use_memory is None else use_memory
         self._run_inference = run_inference if run_inference is not None else False
         self._unhealthy_endpoint_ids = set(unhealthy_endpoint_ids)
 
@@ -76,6 +83,7 @@ class AgentRuntimeV3:
                 reason="agent received gateway handoff",
             )
         ]
+        recalled_memories = self._recall_memories(agent, steps, audit_events)
         for tool_id in selected_tools:
             steps.append(AgentStep(kind="tool_selected", detail=f"{agent.agent_id} selected {tool_id}", tool_id=tool_id))
             audit_events.append(
@@ -149,7 +157,17 @@ class AgentRuntimeV3:
             degraded = True
             steps.append(AgentStep(kind="inference_unavailable", detail=f"no healthy endpoint for {capability}", success=False))
 
-        response = self._compose_response(agent, handoff, selected_tools, tool_results, inference_endpoint_id, inference_text, degraded)
+        written_memories = self._write_run_memory(agent, handoff, selected_tools, tool_results, steps, audit_events)
+        response = self._compose_response(
+            agent,
+            handoff,
+            selected_tools,
+            tool_results,
+            recalled_memories,
+            inference_endpoint_id,
+            inference_text,
+            degraded,
+        )
         return AgentExecutionResult(
             trace_id=handoff.handoff_id,
             agent_id=agent.agent_id,
@@ -157,6 +175,8 @@ class AgentRuntimeV3:
             response_text=response,
             selected_tools=tuple(selected_tools),
             tool_results=tuple(tool_results),
+            recalled_memories=tuple(recalled_memories),
+            written_memories=tuple(written_memories),
             inference_endpoint_id=inference_endpoint_id,
             inference_model=inference_model,
             inference_machine_id=inference_machine_id,
@@ -165,6 +185,88 @@ class AgentRuntimeV3:
             audit_events=tuple(audit_events),
             degraded=degraded,
         )
+
+    def _recall_memories(
+        self,
+        agent: PersistentAgent,
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> list[dict[str, Any]]:
+        if not self._use_memory or self._memory_store is None:
+            return []
+        records = []
+        for domain_id, scope in self._agent_memory_queries(agent):
+            records.extend(
+                self._memory_store.list(
+                    Freyja3MemoryQuery(owner_domain_id=domain_id, scope=scope, limit=8),
+                    reader_domain_id=agent.security_domain_id,
+                )
+            )
+        public_records = [record.model_dump(mode="json") for record in records]
+        steps.append(AgentStep(kind="memory_recalled", detail=f"recalled {len(public_records)} scoped memory record(s)", success=True))
+        audit_events.append(
+            AuditEvent(
+                event_type=AuditEventType.AGENT_MEMORY_RECALLED,
+                actor_id=f"agent:{agent.agent_id}",
+                domain_id=agent.security_domain_id,
+                target_id=agent.agent_id,
+                allowed=True,
+                reason="agent recalled permitted Freyja 3 memory scopes",
+                metadata={"count": len(public_records)},
+            )
+        )
+        return public_records
+
+    def _write_run_memory(
+        self,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        selected_tools: list[str],
+        tool_results: list[dict[str, Any]],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> list[dict[str, Any]]:
+        if not self._use_memory or self._memory_store is None:
+            return []
+        failed_tools = [result["capability_id"] for result in tool_results if result.get("success") is False]
+        content = (
+            f"Conversation {handoff.conversation_id}: selected {', '.join(selected_tools) if selected_tools else 'no tools'}"
+            f"; failed tools: {', '.join(failed_tools) if failed_tools else 'none'}."
+        )
+        record = self._memory_store.put(
+            Freyja3MemoryWrite(
+                owner_domain_id=agent.security_domain_id,
+                scope=MemoryScope.PERSONAL if agent.security_domain_id != SecurityDomainId.HOUSEHOLD else MemoryScope.HOUSEHOLD,
+                source_agent_id=agent.agent_id,
+                content=content,
+                provenance="agent-runtime-v3",
+                classification=MemoryClassification.ROUTINE,
+                metadata={"conversation_id": handoff.conversation_id, "handoff_id": handoff.handoff_id},
+            ),
+            writer_domain_id=agent.security_domain_id,
+        )
+        public = record.model_dump(mode="json")
+        steps.append(AgentStep(kind="memory_written", detail="wrote Freyja 3 run summary memory", success=True))
+        audit_events.append(
+            AuditEvent(
+                event_type=AuditEventType.AGENT_MEMORY_WRITTEN,
+                actor_id=f"agent:{agent.agent_id}",
+                domain_id=agent.security_domain_id,
+                target_id=record.memory_id,
+                allowed=True,
+                reason="agent wrote Freyja 3 run summary memory",
+            )
+        )
+        return [public]
+
+    @staticmethod
+    def _agent_memory_queries(agent: PersistentAgent) -> list[tuple[SecurityDomainId, MemoryScope]]:
+        queries = [(agent.security_domain_id, MemoryScope.PERSONAL)]
+        if {"family", "household", "household:shared"}.intersection(agent.shared_memory_scopes):
+            queries.append((SecurityDomainId.HOUSEHOLD, MemoryScope.HOUSEHOLD))
+        if agent.security_domain_id == SecurityDomainId.HOUSEHOLD:
+            queries = [(SecurityDomainId.HOUSEHOLD, MemoryScope.HOUSEHOLD)]
+        return queries
 
     def choose_tools(
         self,
@@ -331,6 +433,7 @@ class AgentRuntimeV3:
         handoff: GatewayHandoff,
         selected_tools: list[str],
         tool_results: list[dict[str, Any]],
+        recalled_memories: list[dict[str, Any]],
         endpoint_id: str | None,
         inference_text: str | None,
         degraded: bool,
@@ -342,7 +445,8 @@ class AgentRuntimeV3:
         tool_text = ", ".join(selected_tools) if selected_tools else "no tools"
         executed = [result for result in tool_results if result.get("success") is True]
         execution_text = f" and executed {len(executed)} tool(s)" if tool_results else ""
-        return f"{agent.display_name} received the objective and selected {tool_text}{execution_text} using {endpoint_id}."
+        memory_text = f" with {len(recalled_memories)} recalled memory record(s)" if recalled_memories else ""
+        return f"{agent.display_name} received the objective and selected {tool_text}{execution_text}{memory_text} using {endpoint_id}."
 
     @staticmethod
     def _arguments_for_tool(capability_id: str, objective: str, handoff: GatewayHandoff) -> dict[str, Any]:

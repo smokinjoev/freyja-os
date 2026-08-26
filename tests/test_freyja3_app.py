@@ -9,7 +9,8 @@ from freyja.semantic_events import SemanticEventStore
 
 
 def test_freyja3_app_canonical_route_uses_gateway_runtime(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(freyja3_app, "agent_runtime", AgentRuntimeV3())
+    memory_store = Freyja3MemoryStore(tmp_path / "memory.db")
+    monkeypatch.setattr(freyja3_app, "agent_runtime", AgentRuntimeV3(memory_store=memory_store))
     client = TestClient(freyja3_app.app)
 
     response = client.post(
@@ -30,6 +31,7 @@ def test_freyja3_app_canonical_route_uses_gateway_runtime(monkeypatch, tmp_path)
     assert data["resolved_agent_id"] == "cloyd-gibbler"
     assert data["channel_metadata"]["freyja3"] is True
     assert data["channel_metadata"]["inference_machine_id"] == "vulcan"
+    assert data["channel_metadata"]["written_memories"]
 
 
 def test_freyja3_app_semantic_events_are_available(monkeypatch, tmp_path) -> None:

@@ -4,7 +4,8 @@ import pytest
 
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError
-from freyja.foundation_models import GatewaySender, MemoryClassification, SecurityDomainId, SemanticEvent
+from freyja.foundation_models import GatewaySender, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
+from freyja.freyja3_memory import Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
 import freyja.main as freyja_main
 from freyja.main import app
@@ -123,6 +124,39 @@ def test_agent_tool_execution_respects_structured_tool_failure() -> None:
     assert result.tool_results
     assert result.tool_results[0]["success"] is False
     assert any(step.kind == "tool_executed" and step.success is False for step in result.steps)
+
+
+def test_agent_runtime_recalls_and_writes_scoped_memory(tmp_path) -> None:
+    memory_store = Freyja3MemoryStore(tmp_path / "memory.db")
+    memory_store.put(
+        Freyja3MemoryWrite(
+            owner_domain_id=SecurityDomainId.PERSON_JOE,
+            scope=MemoryScope.PERSONAL,
+            source_agent_id="cloyd-gibbler",
+            content="Joe likes direct engineering status.",
+            provenance="unit-test",
+            classification=MemoryClassification.PRIVATE,
+        ),
+        writer_domain_id=SecurityDomainId.PERSON_JOE,
+    )
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="What do you know and inspect git status.",
+            conversation_id="conv-memory",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(memory_store=memory_store).run(handoff)
+
+    assert any(memory["content"] == "Joe likes direct engineering status." for memory in result.recalled_memories)
+    assert result.written_memories
+    assert result.written_memories[0]["owner_domain_id"] == "person.joe"
+    assert any(step.kind == "memory_recalled" for step in result.steps)
+    assert any(step.kind == "memory_written" for step in result.steps)
 
 
 def test_agents_use_vulcan_inference_and_identity_survives_endpoint_changes() -> None:
