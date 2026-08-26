@@ -22,13 +22,14 @@ Last updated: 2026-08-26.
 | Atlas | Ubuntu 24.04 kernel line, Docker active, Home Assistant container active, Atlas Director externally healthy at Tailscale port `8001`, Signal containers active | Persistent infrastructure role partially active: Home Assistant, messaging/backend, containers, and existing Director-compatible services are running. Freyja 3 semantic event receiver exists in repo; durable Freyja 3 gateway/agent hosting still needs deployment. |
 | Vulcan | Ubuntu kernel line, Ollama active, remote Ollama exposed on Tailscale port `11434`, models include `qwen3-coder-next:q4_K_M`, `qwen2.5:7b`, `minicpm-v`, and `nomic-embed-text` | Primary inference appliance partially active. General/code/vision/embedding compute available through remote Ollama. LM Studio/OpenAI-compatible endpoint still unverified. |
 | Hera | Ubuntu kernel line, Ollama active on Tailscale port `11434`, local vision-capable models present on Hera, no `/dev/video*` visible to `joe` account | Edge inference exists. Semantic event contract/API exists; real camera-backed perception publisher is not deployed because camera device access needs confirmation. |
-| Mars | Ubuntu kernel line, Docker active, Freyja Director container healthy on Tailscale port `8000`, Signal containers active | Worker/secondary host partially active. Existing Freyja services healthy; Freyja 3 worker jobs/monitoring still need deployment. |
+| Mars | Ubuntu kernel line, Docker active, Freyja Director container healthy on Tailscale port `8000`, Signal containers active; isolated `/home/joe/freyja-os-freyja3` checkout is at `origin/main` and passes Freyja 3 tests | Worker/secondary host partially active. Existing Freyja services healthy; Freyja 3 code validated on-host without touching the dirty live deploy checkout. Worker jobs/monitoring still need deployment. |
 
 ## Joe-Required Blockers
 
 - Hera camera/perception hardware access is not visible from the current `joe` SSH session. Need physical/device confirmation or permission changes before deploying real camera-backed semantic events.
 - Home Assistant API is reachable on Atlas but returns auth-required responses. Existing Freyja integrations may already have a token locally; direct Atlas HA verification needs the correct token path or env source confirmed without exposing secrets.
 - LM Studio/OpenAI-compatible local endpoints on Vulcan are not yet verified.
+- Atlas `/home/joe/freyja-os` and Mars live deploy checkout have uncommitted local changes. Live deployment/rebuild should wait for reconciliation or a deliberate separate Freyja 3 service target.
 
 ## Verification Snapshot
 
