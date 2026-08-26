@@ -17,6 +17,8 @@ Default behavior is conservative:
 - leaves live model calls disabled with `FREYJA3_INFERENCE_ENABLED=false`
 - uses Vulcan's Tailscale Ollama endpoint for readiness and future inference
 - stores semantic events in `/app/data/freyja3_events.db`
+- points local read-only diagnostics at `/app`; it does not bind-mount the host
+  Git checkout into the container by default
 
 This target is intended for Atlas or Mars side-by-side validation before any
 existing Director-compatible service is replaced.

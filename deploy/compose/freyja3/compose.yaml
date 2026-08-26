@@ -30,7 +30,7 @@ services:
       TOOLS_AUDIT_LOG_ENABLED: ${TOOLS_AUDIT_LOG_ENABLED:-true}
       WEATHER_TOOL_ENABLED: ${WEATHER_TOOL_ENABLED:-false}
       MEMORY_DATABASE_PATH: /app/data/freyja.db
-      REPOSITORY_ROOT: /repo
+      REPOSITORY_ROOT: /app
       MACAGENT_ENABLED: ${MACAGENT_ENABLED:-false}
       MACAGENT_BASE_URL: ${MACAGENT_BASE_URL:-http://100.115.228.56:8765}
       MACAGENT_TOKEN: ${MACAGENT_TOKEN:-}
@@ -41,13 +41,6 @@ services:
       - "${FREYJA3_BIND_IP:-127.0.0.1}:${FREYJA3_HOST_PORT:-8300}:8300"
     volumes:
       - ../../../data:/app/data
-      - ../../../.git:/repo/.git:ro
-      - ../../../README.md:/repo/README.md:ro
-      - ../../../ARCHITECTURE.md:/repo/ARCHITECTURE.md:ro
-      - ../../../docs:/repo/docs:ro
-      - ../../../pyproject.toml:/repo/pyproject.toml:ro
-      - ../../../src:/repo/src:ro
-      - ../../../tests:/repo/tests:ro
     read_only: true
     tmpfs:
       - /tmp
