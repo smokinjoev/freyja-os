@@ -734,6 +734,52 @@ def test_imessage_route_smoke_supports_custom_identity(monkeypatch):
     assert status["imessage"]["expected_client_subject"] == "agent:benedict"
 
 
+def test_imessage_route_smoke_accepts_freyja3_metadata(monkeypatch):
+    module = _load_script()
+
+    class Settings:
+        freyja_director_url = "http://director"
+        freyja_connector_token = ""
+
+    identity = module.SyntheticRouteIdentity(
+        person_id="beth",
+        person_display_name="Beth",
+        person_preferred_name="Beth",
+        agent_id="benedict",
+        agent_display_name="Benedict",
+    )
+
+    def fake_post(url, *, payload, timeout=5.0, headers=None):
+        return {
+            "ok": True,
+            "status_code": 200,
+            "payload": {
+                "text": "ack",
+                "channel": payload["channel"],
+                "resolved_user_id": "beth",
+                "resolved_agent_id": "benedict",
+                "channel_metadata": {
+                    "freyja3": True,
+                    "inference_endpoint_id": "vulcan-reason",
+                    "inference_model": "qwen3-coder-next:q4_K_M",
+                    "inference_status": "ok",
+                },
+            },
+        }
+
+    status = module._imessage_route_smoke(Settings(), timeout=3.0, identity=identity, post_json=fake_post)
+
+    assert status["ok"] is True
+    assert status["terminal_equivalent"] is True
+    assert status["imessage"]["checks"] == {
+        "response_present": True,
+        "provider_matches": True,
+        "interface_matches": True,
+        "person_matches": True,
+        "principal_matches": True,
+    }
+
+
 def test_imessage_family_route_smoke_covers_all_four_agents(monkeypatch):
     module = _load_script()
     captured = []

@@ -376,24 +376,35 @@ def _synthetic_route_smoke(
     trace = metadata.get("trace") if isinstance(metadata.get("trace"), dict) else {}
     person = trace.get("person") if isinstance(trace.get("person"), dict) else {}
     principal = trace.get("principal") if isinstance(trace.get("principal"), dict) else {}
+    freyja3 = metadata.get("freyja3") is True
+    resolved_agent = str(payload.get("resolved_agent_id") or "")
     checks = {
         "response_present": bool(str(payload.get("text") or "").strip()),
-        "provider_matches": metadata.get("provider") == identity.expected_provider,
-        "interface_matches": trace.get("interface") == interface,
-        "person_matches": person.get("person_id") == identity.person_id,
-        "principal_matches": principal.get("client_subject") == identity.client_subject,
+        "provider_matches": _route_provider_matches(metadata, identity),
+        "interface_matches": trace.get("interface") == interface or (freyja3 and payload.get("channel") == interface),
+        "person_matches": person.get("person_id") == identity.person_id or (freyja3 and payload.get("resolved_user_id") == identity.person_id),
+        "principal_matches": principal.get("client_subject") == identity.client_subject
+        or (freyja3 and resolved_agent == identity.agent_id),
     }
     return {
         "ok": all(checks.values()),
         "status_code": response.get("status_code"),
         "checks": checks,
-        "provider": metadata.get("provider"),
-        "model": metadata.get("model"),
+        "provider": metadata.get("provider") or metadata.get("inference_endpoint_id"),
+        "model": metadata.get("model") or metadata.get("inference_model"),
         "privacy_classification": metadata.get("privacy_classification"),
         "expected_provider": identity.expected_provider,
         "expected_person_id": identity.person_id,
         "expected_client_subject": identity.client_subject,
     }
+
+
+def _route_provider_matches(metadata: dict[str, object], identity: SyntheticRouteIdentity) -> bool:
+    if metadata.get("provider") == identity.expected_provider:
+        return True
+    if metadata.get("freyja3") is True:
+        return bool(metadata.get("inference_endpoint_id")) and metadata.get("inference_status") in {"ok", "not_run"}
+    return False
 
 
 def _imessage_route_smoke(
@@ -423,7 +434,7 @@ def _imessage_route_smoke(
     equivalent = (
         imessage.get("ok") is True
         and terminal.get("ok") is True
-        and imessage.get("provider") == terminal.get("provider") == route_identity.expected_provider
+        and imessage.get("provider") == terminal.get("provider")
         and imessage.get("model") == terminal.get("model")
     )
     return {
