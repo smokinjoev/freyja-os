@@ -12,7 +12,7 @@ import freyja.main as freyja_main
 from freyja.main import app
 from fastapi.testclient import TestClient
 from freyja.config import settings
-from freyja.tools.models import ToolExecutionRequest, ToolExecutionResult
+from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolExecutionResult, ToolRiskLevel
 
 
 def _sender(person: str = "joe") -> GatewaySender:
@@ -72,6 +72,31 @@ class _FakeToolRegistry:
     def __init__(self, *, output_success: bool = True) -> None:
         self.requests: list[ToolExecutionRequest] = []
         self.output_success = output_success
+
+    def list_tools(self) -> list[ToolDefinition]:
+        return [
+            ToolDefinition(
+                name="get_weather",
+                description="Return current weather or a forecast.",
+                input_schema={
+                    "type": "object",
+                    "required": ["location", "request_type"],
+                    "properties": {
+                        "location": {"type": "string"},
+                        "request_type": {"type": "string", "enum": ["current", "forecast"]},
+                        "target_date": {"type": "string"},
+                        "target_label": {"type": "string"},
+                    },
+                },
+                risk_level=ToolRiskLevel.READ_ONLY,
+            ),
+            ToolDefinition(
+                name="web_search",
+                description="Search the public web.",
+                input_schema={"type": "object", "required": ["query"], "properties": {"query": {"type": "string"}}},
+                risk_level=ToolRiskLevel.READ_ONLY,
+            ),
+        ]
 
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         self.requests.append(request)
@@ -186,6 +211,60 @@ def test_agent_vision_inference_receives_canonical_attachment(monkeypatch: pytes
     assert calls
     assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
     assert result.response_text == "I can see the attached image."
+
+
+def test_live_inference_uses_model_tool_calls_without_keyword_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    class FakeOllamaClient:
+        def __init__(self, *, base_url: str | None = None, model: str | None = None) -> None:
+            self.base_url = base_url
+            self.model = model
+
+        async def chat(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return {
+                    "message": {
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "get_weather",
+                                    "arguments": {
+                                        "location": "Atlanta, Georgia",
+                                        "request_type": "forecast",
+                                        "target_date": "2026-09-03",
+                                        "target_label": "Dragon Con opening day",
+                                    },
+                                }
+                            }
+                        ],
+                    }
+                }
+            return {"message": {"content": "Dragon Con weather uses the Atlanta forecast."}}
+
+    monkeypatch.setattr(freyja.agent_runtime_v3, "OllamaClient", FakeOllamaClient)
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="What is the weather for Dragon Con?",
+            conversation_id="conv-dragoncon",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=True).run(handoff)
+
+    assert result.selected_tools == ("weather.current",)
+    assert [request.tool_name for request in fake_registry.requests] == ["get_weather"]
+    assert fake_registry.requests[0].arguments["location"] == "Atlanta, Georgia"
+    assert result.response_text == "Dragon Con weather uses the Atlanta forecast."
+    assert calls[0]["tools_required"] is True
+    assert calls[0]["tools"]
 
 
 def test_agent_tool_execution_respects_structured_tool_failure() -> None:

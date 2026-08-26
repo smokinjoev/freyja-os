@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from collections.abc import Iterable
 from typing import Any
@@ -23,7 +24,7 @@ from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.media import AttachmentInput, images_from_attachments
 from freyja.ollama_client import OllamaClient
 from freyja.privacy_egress import PrivacyEgressGate
-from freyja.tools.models import ToolExecutionRequest
+from freyja.tools.models import ToolDefinition, ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry
 from freyja.tools.weather import classify_weather_request
 
@@ -72,7 +73,7 @@ class AgentRuntimeV3:
 
     async def arun(self, handoff: GatewayHandoff) -> AgentExecutionResult:
         agent = self._agent(handoff.target_agent_id)
-        selected_tools = self.choose_tools(agent, handoff.prompt, handoff.available_tools)
+        selected_tools = [] if self._run_inference else self.choose_tools(agent, handoff.prompt, handoff.available_tools)
         capability = self.choose_inference_capability(handoff.prompt, bool(handoff.attachments))
         endpoint = self._first_healthy_endpoint(agent, capability)
         steps: list[AgentStep] = [
@@ -131,7 +132,10 @@ class AgentRuntimeV3:
                 endpoint_provider=endpoint.provider,
                 base_url=endpoint.base_url,
                 model=endpoint.model,
+                selected_tools=selected_tools,
                 tool_results=tool_results,
+                steps=steps,
+                audit_events=audit_events,
             )
             steps.append(
                 AgentStep(
@@ -637,12 +641,27 @@ class AgentRuntimeV3:
         endpoint_provider: str,
         base_url: str,
         model: str,
+        selected_tools: list[str],
         tool_results: list[dict[str, Any]],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
     ) -> tuple[str, str | None]:
         if not self._run_inference:
             return "not_run", None
         if endpoint_provider != "ollama":
             return "unsupported_provider", None
+        if self._tool_registry is not None:
+            return await self._run_vulcan_tool_calling_inference(
+                agent=agent,
+                handoff=handoff,
+                base_url=base_url,
+                model=model,
+                endpoint_id=endpoint_id,
+                selected_tools=selected_tools,
+                tool_results=tool_results,
+                steps=steps,
+                audit_events=audit_events,
+            )
         prompt = self._inference_prompt(agent, handoff, tool_results)
         images = _images_from_handoff(handoff) if endpoint_id and "vision" in endpoint_id else []
         response = await OllamaClient(base_url=base_url, model=model).chat(
@@ -653,6 +672,156 @@ class AgentRuntimeV3:
         if "error" in response:
             return "error", None
         return "ok", str(response.get("message", {}).get("content") or "").strip() or None
+
+    async def _run_vulcan_tool_calling_inference(
+        self,
+        *,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        base_url: str,
+        model: str,
+        endpoint_id: str,
+        selected_tools: list[str],
+        tool_results: list[dict[str, Any]],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> tuple[str, str | None]:
+        client = OllamaClient(base_url=base_url, model=model)
+        tools = self._tool_definitions_for_agent(agent, handoff.available_tools)
+        images = _images_from_handoff(handoff) if endpoint_id and "vision" in endpoint_id else []
+        for iteration in range(self._max_tool_iterations):
+            prompt = self._agent_tool_prompt(agent, handoff, recalled=bool(tool_results), tool_results=tool_results)
+            response = await client.chat(
+                prompt=prompt,
+                model=model,
+                tools_required=bool(tools),
+                tools=tools,
+                images=images or None,
+            )
+            if "error" in response:
+                return "error", None
+            calls = _ollama_tool_calls(response)
+            if not calls:
+                return "ok", str(response.get("message", {}).get("content") or "").strip() or None
+
+            steps.append(AgentStep(kind="tool_iteration", detail=f"Vulcan tool-call loop iteration {iteration + 1}", success=True))
+            for call in calls:
+                result = await self._execute_model_tool_call(
+                    agent=agent,
+                    handoff=handoff,
+                    call=call,
+                    selected_tools=selected_tools,
+                    steps=steps,
+                    audit_events=audit_events,
+                )
+                tool_results.append(result)
+
+        final_prompt = self._agent_tool_prompt(agent, handoff, recalled=True, tool_results=tool_results)
+        final = await client.chat(
+            prompt=final_prompt,
+            model=model,
+            tools_required=False,
+            images=images or None,
+        )
+        if "error" in final:
+            return "error", None
+        return "ok", str(final.get("message", {}).get("content") or "").strip() or None
+
+    def _tool_definitions_for_agent(
+        self,
+        agent: PersistentAgent,
+        available_tool_ids: Iterable[str],
+    ) -> list[ToolDefinition]:
+        if self._tool_registry is None:
+            return []
+        allowed_capabilities = set(agent.tool_grants).intersection(set(available_tool_ids))
+        allowed_tool_names = {
+            tool_name
+            for capability_id, tool_name in _CONCRETE_TOOL_BY_CAPABILITY.items()
+            if capability_id in allowed_capabilities
+        }
+        return [
+            definition
+            for definition in self._tool_registry.list_tools()
+            if definition.name in allowed_tool_names and definition.risk_level.value == "read_only"
+        ]
+
+    async def _execute_model_tool_call(
+        self,
+        *,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        call: dict[str, Any],
+        selected_tools: list[str],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> dict[str, Any]:
+        tool_name = str(call.get("tool_name") or "")
+        capability_id = _CAPABILITY_BY_CONCRETE_TOOL.get(tool_name, tool_name)
+        if capability_id not in selected_tools:
+            selected_tools.append(capability_id)
+        self._record_tool_selection(
+            agent,
+            capability_id,
+            steps,
+            audit_events,
+            reason="agent model selected permitted tool",
+            detail=f"{agent.agent_id} requested {tool_name}",
+        )
+        request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=call.get("arguments") if isinstance(call.get("arguments"), dict) else {},
+            actor=f"agent:{agent.agent_id}",
+            conversation_id=handoff.conversation_id,
+            metadata={
+                "agent_id": agent.agent_id,
+                "source_domain_id": handoff.source_domain_id.value,
+                "target_domain_id": handoff.target_domain_id.value,
+                "director_authorized": True,
+                "approval_granted": False,
+                "person": _person_metadata(handoff.source_domain_id),
+                "memory_principal": _memory_principal_metadata(handoff),
+            },
+        )
+        result = await self._tool_registry.execute(request) if self._tool_registry else None
+        if result is None:
+            public_result = {
+                "capability_id": capability_id,
+                "tool_name": tool_name,
+                "success": False,
+                "error_code": "tool_registry_unavailable",
+                "public_error_message": "Tool registry unavailable.",
+                "output": {},
+            }
+        else:
+            success = _tool_effective_success(result.success, result.output)
+            public_result = {
+                "capability_id": capability_id,
+                "tool_name": tool_name,
+                "success": success,
+                "error_code": result.error_code,
+                "public_error_message": result.public_error_message,
+                "output": result.output,
+            }
+        steps.append(
+            AgentStep(
+                kind="tool_executed",
+                detail=f"{tool_name} executed for {capability_id}",
+                tool_id=capability_id,
+                success=bool(public_result.get("success")),
+            )
+        )
+        audit_events.append(
+            AuditEvent(
+                event_type=AuditEventType.AGENT_TOOL_EXECUTED,
+                actor_id=f"agent:{agent.agent_id}",
+                domain_id=agent.security_domain_id,
+                target_id=tool_name,
+                allowed=bool(public_result.get("success")),
+                reason=str(public_result.get("public_error_message") or "tool execution completed"),
+            )
+        )
+        return public_result
 
     def evaluate_cloud_request(
         self,
@@ -744,6 +913,32 @@ class AgentRuntimeV3:
         )
 
     @staticmethod
+    def _agent_tool_prompt(
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        *,
+        recalled: bool,
+        tool_results: list[dict[str, Any]],
+    ) -> str:
+        observation = ""
+        if recalled:
+            observation = (
+                "\n\nTool observations:\n"
+                f"{json.dumps(_public_tool_results(tool_results), default=str)}\n\n"
+                "Answer directly from these observations. Do not claim unavailable live data is available."
+            )
+        return (
+            f"You are {agent.display_name}, a persistent Freyja 3 agent. "
+            "You decide whether local tools are needed. If the request mentions an event, venue, or vague place, "
+            "resolve when and where it occurs with web_search before checking weather or answering. "
+            "Never pass an event name such as Dragon Con as a weather location; first find the city and dates, "
+            "then call get_weather with the city and forecast date. "
+            "Use tools when current facts, weather, local state, files, email, calendar, or web evidence are needed.\n\n"
+            f"User objective:\n{handoff.prompt}"
+            f"{observation}"
+        )
+
+    @staticmethod
     def _index_agents(agents: tuple[PersistentAgent, ...]) -> dict[str, PersistentAgent]:
         indexed: dict[str, PersistentAgent] = {}
         for agent in agents:
@@ -765,6 +960,8 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "memory.shared": "memory_recall_shared",
     "music.control": "apple_music_current_track",
 }
+
+_CAPABILITY_BY_CONCRETE_TOOL = {tool_name: capability_id for capability_id, tool_name in _CONCRETE_TOOL_BY_CAPABILITY.items()}
 
 _MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control"}
 
@@ -851,6 +1048,45 @@ def _images_from_handoff(handoff: GatewayHandoff) -> list[Any]:
             )
         )
     return images_from_attachments(attachments)
+
+
+def _ollama_tool_calls(response: dict[str, Any]) -> list[dict[str, Any]]:
+    message = response.get("message") if isinstance(response.get("message"), dict) else {}
+    calls = message.get("tool_calls") if isinstance(message, dict) else []
+    parsed: list[dict[str, Any]] = []
+    if not isinstance(calls, list):
+        return parsed
+    for call in calls:
+        if not isinstance(call, dict):
+            continue
+        function = call.get("function") if isinstance(call.get("function"), dict) else {}
+        name = function.get("name")
+        arguments = function.get("arguments")
+        if isinstance(name, str):
+            parsed.append({"tool_name": name, "arguments": arguments if isinstance(arguments, dict) else {}})
+    return parsed
+
+
+def _public_tool_results(tool_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    public: list[dict[str, Any]] = []
+    for result in tool_results:
+        output = result.get("output") if isinstance(result.get("output"), dict) else {}
+        public.append(
+            {
+                "tool_name": result.get("tool_name"),
+                "success": result.get("success"),
+                "error": result.get("public_error_message") or result.get("error_code"),
+                "output": _trim_tool_output(output),
+            }
+        )
+    return public
+
+
+def _trim_tool_output(output: dict[str, Any], *, max_chars: int = 6000) -> dict[str, Any]:
+    raw = json.dumps(output, default=str)
+    if len(raw) <= max_chars:
+        return output
+    return {"truncated": True, "partial_output": raw[:max_chars]}
 
 
 _EXPLICIT_MEMORY_RE = re.compile(
