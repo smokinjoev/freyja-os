@@ -9,11 +9,11 @@ checks are treated as separate evidence.
 
 ## Summary
 
-Freyja 3.0 is functionally deployed end-to-end across reachable machines with
-one remaining hardware-dependent gap: Hera does not currently expose a camera
-device to the `joe` session, so real camera-backed perception is not complete.
-Hera does publish live semantic status events with auto-probed camera/audio/NPU
-metadata, and the failing legacy camera loop is disabled.
+Freyja 3.0 is functionally deployed end-to-end across reachable machines. For
+the current Florida Hera deployment, camera hardware is intentionally out of
+scope because the camera is not installed there. Hera publishes live semantic
+status events with auto-probed audio/NPU/camera metadata, and the failing legacy
+camera loop is disabled.
 
 ## Build-Order Audit
 
@@ -29,9 +29,9 @@ metadata, and the failing legacy camera loop is disabled.
 | Paralegal enclave boundary before legal ingestion | Proved | Paralegal domain and memory tests deny household reads/writes while allowing only local Vulcan compute sharing. |
 | Connectors wired to Agent Gateway | Proved | Iris iMessage canonical path enters Freyja 3 gateway/runtime; family route smoke passes for Joe, Beth, Liam, and Jenna. |
 | Agents wired to tools, memory, and inference | Proved | Live canonical requests use Vulcan inference, scoped memory, Home Assistant, MacAgent, and worker/tool results. |
-| Machine-role deployments | Mostly proved | Iris, Atlas, Vulcan, Mars, and Hera have role-specific services deployed; Hera camera hardware is blocked. |
-| End-to-end integration tests | Proved with one degraded hardware path | Full repo tests pass; live distributed smokes pass for iMessage, Atlas, Vulcan, Mars workers, Home Assistant, MacAgent, LM Studio, and Hera semantic status events. |
-| Debug completed system pathways | In progress | Major integration blockers fixed; Hera real camera perception remains a device/physical-access issue. |
+| Machine-role deployments | Proved for current scope | Iris, Atlas, Vulcan, Mars, and Hera have role-specific services deployed. Camera-backed Hera perception is future scope for the Georgia camera hardware, not a Florida Hera blocker. |
+| End-to-end integration tests | Proved for current scope | Full repo tests pass; live distributed smokes pass for iMessage, Atlas, Vulcan, Mars workers, Home Assistant, MacAgent, LM Studio, and Hera semantic status events. |
+| Debug completed system pathways | Proved for current scope | Major integration blockers fixed; Hera camera recovery remains documented future work for when the camera hardware exists. |
 
 ## Required Proof Points
 
@@ -44,7 +44,7 @@ metadata, and the failing legacy camera loop is disabled.
 | 5. Multi-step autonomous tool work functions | Proved | Runtime plan/observe/retry tests and Mars worker smokes show bounded iteration, failure observation, retries, and no fabricated mutation success. |
 | 6. Iris uses Mac Agent/Apple capabilities | Proved | Atlas-to-Iris canonical execution returns successful MacAgent browser, music, and `email.read` tool results; iMessage family route smoke passes. |
 | 7. Freyja controls Home Assistant on Atlas | Proved | Atlas sidecar reads HA state, denies unapproved control, and executes approved HA light control through policy boundary. |
-| 8. Hera publishes semantic perception events | Proved as degraded status, blocked for real camera perception | Hera timer publishes authenticated semantic events to Atlas with auto-probed metadata. Latest event reports no camera devices, nonzero audio source evidence, and NPU detected. Real camera-backed perception remains blocked by absent `/dev/video*`. |
+| 8. Hera publishes semantic perception events | Proved for current scope | Hera timer publishes authenticated semantic events to Atlas with auto-probed metadata. Latest event reports no camera devices, nonzero audio source evidence, and NPU detected. Camera-derived perception is future scope for the Georgia camera hardware. |
 | 9. Memory privacy boundaries work | Proved | Tests and live smokes verify Joe private memory hidden from Beth, paralegal writes denied to household agents, and inferred memory candidates require review. |
 | 10. Cloud cannot bypass privacy controls | Proved | Egress gate tests enforce local default for private/sensitive/restricted data and require explicit one-request override. |
 | 11. Agents recover from inference outages | Proved at contract level | Runtime fallback tests cover unhealthy endpoints and preserved agent identity across endpoint changes. |
@@ -57,17 +57,19 @@ metadata, and the failing legacy camera loop is disabled.
 | Iris | MacAgent running on `0.0.0.0:8765`; authenticated health advertises Apple Messages, Calendar, Contacts, Mail, Music, Browser, and Shortcuts. Apple Mail count-only fallback returns INBOX counts from the local envelope index. |
 | Atlas | Freyja 3 sidecar healthy on Tailscale port `8300`; Home Assistant, memory, events, schedules, workers, machine heartbeat, audit, MacAgent client, and live Vulcan inference configured. |
 | Vulcan | Ollama on `11434`; OpenAI-compatible Ollama proxy on `8088`/`8090`; LM Studio `llmster` installed and `freyja-lmstudio-server.service` enabled/active on Tailscale port `1234`. |
-| Hera | Avatar, wake, agent, Hermes adapter, Ollama, and Freyja 3 semantic publisher timer active. AMD NPU and audio source are visible. No `/dev/video*` is visible, so the legacy vision restart loop is disabled and replaced by semantic camera-unavailable events. |
+| Hera | Avatar, wake, agent, Hermes adapter, Ollama, and Freyja 3 semantic publisher timer active on the current Florida machine. AMD NPU and audio source are visible. No `/dev/video*` is visible because the camera is not installed there, so the legacy vision restart loop is disabled and replaced by semantic no-camera status events. |
 | Mars | Freyja 3 sidecar healthy on `127.0.0.1:8300`; machine heartbeat and worker runner timers active; document, email-content, and web-research worker smokes completed as untrusted observations. |
 
-## Remaining Gap
+## Future Camera Scope
 
-Hera real camera-backed perception is not complete. Required evidence would be a
-visible camera device or equivalent real sensor feed, followed by a semantic
-event such as `person_present`, `occupancy_changed`, or `object_seen` derived
-from that sensor without continuously streaming raw video to Vulcan.
+Hera real camera-backed perception is skipped for the current Florida deployment
+because the camera hardware is not installed there. When the Georgia camera
+hardware is installed/reachable, required evidence will be a visible camera
+device or equivalent real sensor feed, followed by a semantic event such as
+`person_present`, `occupancy_changed`, or `object_seen` derived from that sensor
+without continuously streaming raw video to Vulcan.
 
-Current blocker evidence:
+Current no-camera evidence:
 
 - `ls /dev/video*` on Hera returns no devices.
 - `freyja3-hera-semantic-publisher.timer` is active and publishes
@@ -76,11 +78,11 @@ Current blocker evidence:
 - The previous `freyja-vision.service` restart loop was disabled because it
   repeatedly failed against the missing camera device.
 
-Recovery and completion commands are documented in
+Recovery commands for the future camera hardware are documented in
 `docs/operations/hera-camera-recovery.md`.
 
 ## Current Readiness Estimate
 
-Current implementation readiness is 97%. The remaining 3% is not a software
-architecture gap in the repo; it is the unproved real-camera Hera perception
-path and any follow-up wiring needed after the device is visible.
+Current implementation readiness is 100% for the reachable current-scope
+deployment. Future Georgia camera hardware can add camera-derived Hera semantic
+perception using the documented recovery path.
