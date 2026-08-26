@@ -194,6 +194,69 @@ def test_agent_asks_follow_up_before_underspecified_mutation_tool() -> None:
     assert not any(step.kind == "tool_executed" and step.tool_id == "messaging.send" for step in result.steps)
 
 
+def test_agent_home_assistant_control_requires_explicit_approval_marker() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="Turn on Home Assistant light.downstairs.",
+            conversation_id="conv-ha-control-denied",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    assert result.selected_tools == ("home-assistant.control",)
+    assert fake_registry.requests[0].tool_name == "home_assistant_control_state"
+    assert fake_registry.requests[0].arguments == {"entity_id": "light.downstairs", "state": "on"}
+    assert fake_registry.requests[0].metadata["approval_granted"] is False
+
+
+def test_agent_home_assistant_read_uses_non_mutating_state_tool() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="List Home Assistant light states for the house.",
+            conversation_id="conv-ha-read",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    assert result.selected_tools == ("home-assistant.read",)
+    assert fake_registry.requests[0].tool_name == "home_assistant_list_states"
+    assert fake_registry.requests[0].metadata["approval_granted"] is False
+
+
+def test_agent_home_assistant_control_passes_explicit_approval_marker() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="Turn off Home Assistant light.downstairs.",
+            conversation_id="conv-ha-control-approved",
+            permissions=frozenset({"approval:home-assistant.control"}),
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    assert result.selected_tools == ("home-assistant.control",)
+    assert fake_registry.requests[0].tool_name == "home_assistant_control_state"
+    assert fake_registry.requests[0].arguments == {"entity_id": "light.downstairs", "state": "off"}
+    assert fake_registry.requests[0].metadata["approval_granted"] is True
+
+
 def test_agent_runtime_recalls_and_writes_scoped_memory(tmp_path) -> None:
     memory_store = Freyja3MemoryStore(tmp_path / "memory.db")
     memory_store.put(

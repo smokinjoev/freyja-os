@@ -355,7 +355,8 @@ class AgentRuntimeV3:
             ("calendar.read", ("calendar", "schedule", "appointment")),
             ("email.read", ("email", "mail")),
             ("messaging.send", ("message", "imessage", "text ", "sms")),
-            ("home-assistant.control", ("light", "home assistant", "thermostat", "door", "lock")),
+            ("home-assistant.read", ("home assistant state", "home assistant states", "list home assistant", "show home assistant", "house state", "light states")),
+            ("home-assistant.control", ("turn on", "turn off", "switch on", "switch off", "lock", "unlock", "open", "close")),
             ("macagent.apple", ("mac", "finder", "safari", "shortcut", "apple")),
             ("shell.run", ("shell", "command", "terminal")),
             ("filesystem.read", ("file", "folder", "repo", "inspect")),
@@ -588,6 +589,7 @@ class AgentRuntimeV3:
                     "source_domain_id": handoff.source_domain_id.value,
                     "target_domain_id": handoff.target_domain_id.value,
                     "director_authorized": True,
+                    "approval_granted": _approval_granted(capability_id, handoff.permissions),
                     "person": _person_metadata(handoff.source_domain_id),
                     "memory_principal": _memory_principal_metadata(handoff),
                 },
@@ -714,6 +716,8 @@ class AgentRuntimeV3:
             return {"conversation_id": handoff.conversation_id, "limit": 10}
         if capability_id == "memory.shared":
             return {"query": objective, "limit": 5}
+        if capability_id == "home-assistant.control":
+            return _home_assistant_control_arguments(objective)
         return {}
 
     @staticmethod
@@ -737,7 +741,8 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "web.search": "web_search",
     "weather.current": "get_weather",
     "macagent.apple": "macagent_health",
-    "home-assistant.control": "home_assistant_list_states",
+    "home-assistant.read": "home_assistant_list_states",
+    "home-assistant.control": "home_assistant_control_state",
     "system.health": "system_health",
     "git.inspect": "repository_status",
     "memory.private": "recall_conversation",
@@ -764,6 +769,26 @@ def _has_home_action_detail(lowered_objective: str) -> bool:
     has_action = any(term in lowered_objective for term in ("turn on", "turn off", "set ", "lock", "unlock", "open", "close"))
     has_target = any(term in lowered_objective for term in ("light", "thermostat", "door", "lock", "kitchen", "living room", "bedroom", "garage"))
     return has_action and has_target
+
+
+def _approval_granted(capability_id: str, permissions: frozenset[str]) -> bool:
+    return f"approval:{capability_id}" in permissions or f"approve:{capability_id}" in permissions
+
+
+def _home_assistant_control_arguments(objective: str) -> dict[str, Any]:
+    lowered = objective.lower()
+    state = ""
+    if any(term in lowered for term in ("turn on", "switch on", "set on")):
+        state = "on"
+    elif any(term in lowered for term in ("turn off", "switch off", "set off")):
+        state = "off"
+    entity_match = re.search(r"\b((?:light|switch|climate|cover|lock)\.[a-z0-9_]+)\b", lowered)
+    arguments: dict[str, Any] = {}
+    if entity_match:
+        arguments["entity_id"] = entity_match.group(1)
+    if state:
+        arguments["state"] = state
+    return arguments
 
 
 def _person_metadata(domain_id) -> dict[str, str]:
