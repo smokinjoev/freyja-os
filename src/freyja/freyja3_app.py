@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -69,13 +70,8 @@ async def health() -> dict[str, str]:
 @app.get("/freyja3/inference/health")
 async def freyja3_inference_health() -> dict[str, Any]:
     checks = []
-    for endpoint in inference_registry.endpoints_for(capability="general.large", domain_id=SecurityDomainId.HOUSEHOLD):
-        reachable = False
-        models: list[str] = []
-        if endpoint.provider == "ollama":
-            client = OllamaClient(base_url=endpoint.base_url, model=endpoint.model)
-            reachable = await client.healthy()
-            models = await client.list_local_models() if reachable else []
+    for endpoint in inference_registry.all_endpoints(domain_id=SecurityDomainId.HOUSEHOLD):
+        reachable, models = await _inference_endpoint_health(endpoint.provider, endpoint.base_url, endpoint.model)
         checks.append(
             {
                 "endpoint_id": endpoint.endpoint_id,
@@ -88,6 +84,25 @@ async def freyja3_inference_health() -> dict[str, Any]:
             }
         )
     return {"ok": any(check["reachable"] and check["model_available"] for check in checks), "endpoints": checks}
+
+
+async def _inference_endpoint_health(provider: str, base_url: str, model: str) -> tuple[bool, list[str]]:
+    if provider == "ollama":
+        client = OllamaClient(base_url=base_url, model=model)
+        reachable = await client.healthy()
+        return reachable, await client.list_local_models() if reachable else []
+    if provider in {"lmstudio", "openai-compatible"}:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{base_url.rstrip('/')}/v1/models")
+                response.raise_for_status()
+                data = response.json()
+        except Exception:
+            return False, []
+        models = data.get("data") if isinstance(data, dict) else []
+        names = [str(item.get("id")) for item in models if isinstance(item, dict) and item.get("id")]
+        return True, names
+    return False, []
 
 
 @app.post("/freyja3/memory")

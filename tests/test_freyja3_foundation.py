@@ -113,6 +113,30 @@ def test_inference_endpoint_lookup_is_capability_domain_based_only() -> None:
     assert not hasattr(registry, "choose_agent")
 
 
+def test_inference_registry_loads_configured_openai_compatible_endpoints(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "freyja.inference_registry_v3.settings.freyja3_inference_endpoints_json",
+        """[
+          {
+            "endpoint_id": "vulcan-lmstudio",
+            "display_name": "Vulcan LM Studio",
+            "provider": "lmstudio",
+            "machine_id": "vulcan",
+            "base_url": "http://100.94.80.21:1234",
+            "model": "local-model",
+            "capabilities": ["general.large", "chat"],
+            "security_domain_id": "household",
+            "priority": 20
+          }
+        ]""",
+    )
+
+    registry = InferenceRegistryV3()
+    endpoints = registry.endpoints_for(capability="general.large", domain_id=SecurityDomainId.HOUSEHOLD)
+
+    assert [endpoint.endpoint_id for endpoint in endpoints] == ["vulcan-reason", "vulcan-lmstudio"]
+
+
 def test_memory_record_metadata_requires_scope_owner_provenance_confidence_classification() -> None:
     metadata = MemoryRecordMetadata(
         scope=MemoryScope.HOUSEHOLD,
