@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from email import policy
+from email.parser import Parser
 import os
 from pathlib import Path
 import socket
@@ -69,6 +71,8 @@ def _run_job(job: dict[str, Any], *, machine_id: str, allowed_roots: list[str] |
         }
     if worker_class == ExternalWorkerClass.DOCUMENT_INGESTION.value:
         return _run_document_ingestion(job, machine_id=machine_id, allowed_roots=allowed_roots or [])
+    if worker_class == ExternalWorkerClass.EMAIL_CONTENT.value:
+        return _run_email_content_ingestion(job, machine_id=machine_id)
     return {
         "status": "failed",
         "result": {"machine_id": machine_id, "worker_class": worker_class},
@@ -109,6 +113,132 @@ def _run_document_ingestion(job: dict[str, Any], *, machine_id: str, allowed_roo
             "worker_class": ExternalWorkerClass.DOCUMENT_INGESTION.value,
             "observation": observation.model_dump(mode="json"),
         },
+    }
+
+
+def _run_email_content_ingestion(job: dict[str, Any], *, machine_id: str) -> dict[str, Any]:
+    payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+    try:
+        email_content = _email_content(payload)
+    except ValueError as exc:
+        return {
+            "status": "failed",
+            "result": {"machine_id": machine_id, "worker_class": ExternalWorkerClass.EMAIL_CONTENT.value},
+            "error": str(exc),
+        }
+    normalized_body = " ".join(email_content["body"].split())
+    summary_parts = []
+    if email_content["subject"]:
+        summary_parts.append(f"Subject: {email_content['subject']}")
+    if email_content["sender"]:
+        summary_parts.append(f"From: {email_content['sender']}")
+    if normalized_body:
+        summary_parts.append(normalized_body[:240])
+    summary = " | ".join(summary_parts) or "Email content supplied no readable body."
+    attachments = email_content["attachments"]
+    observation = WorkerObservation(
+        worker_class=ExternalWorkerClass.EMAIL_CONTENT,
+        trust_level=WorkerTrustLevel.UNTRUSTED_EXTERNAL_CONTENT,
+        source=email_content["source"],
+        summary=summary[:400],
+        facts=[
+            {"claim": f"email subject is {email_content['subject']!r}", "confidence": "high"}
+            if email_content["subject"]
+            else {"claim": "email subject is empty", "confidence": "high"},
+            {"claim": f"email body contains approximately {len(normalized_body.split())} words", "confidence": "high"},
+            {"claim": f"email has {len(attachments)} attachment metadata record(s)", "confidence": "high"},
+        ],
+        citations=[{"label": "body-prefix", "excerpt": normalized_body[:160]}] if normalized_body else [],
+        uncertainty=None if normalized_body else "No readable email body was supplied.",
+    )
+    result = observation.model_dump(mode="json")
+    result["email_metadata"] = {
+        "message_id": email_content["message_id"],
+        "thread_id": email_content["thread_id"],
+        "sender": email_content["sender"],
+        "recipients": email_content["recipients"],
+        "received_at": email_content["received_at"],
+        "attachments": attachments,
+    }
+    return {
+        "status": "completed",
+        "result": {
+            "machine_id": machine_id,
+            "worker_class": ExternalWorkerClass.EMAIL_CONTENT.value,
+            "observation": result,
+        },
+    }
+
+
+def _email_content(payload: dict[str, Any]) -> dict[str, Any]:
+    raw = payload.get("raw_rfc822")
+    parsed: dict[str, Any] = {}
+    if isinstance(raw, str) and raw.strip():
+        parsed = _parse_raw_email(raw[:20000])
+    body = _coalesce_text(payload.get("body"), payload.get("text"), parsed.get("body"))
+    if not body and not parsed:
+        raise ValueError("email_content requires payload.body, payload.text, or payload.raw_rfc822")
+    attachments = payload.get("attachments")
+    if not isinstance(attachments, list):
+        attachments = parsed.get("attachments") if isinstance(parsed.get("attachments"), list) else []
+    return {
+        "source": str(payload.get("source") or parsed.get("source") or payload.get("message_id") or "email:payload"),
+        "message_id": str(payload.get("message_id") or parsed.get("message_id") or ""),
+        "thread_id": str(payload.get("thread_id") or parsed.get("thread_id") or ""),
+        "subject": str(payload.get("subject") or parsed.get("subject") or "")[:500],
+        "sender": str(payload.get("sender") or parsed.get("sender") or "")[:500],
+        "recipients": _string_list(payload.get("recipients") or parsed.get("recipients") or []),
+        "received_at": str(payload.get("received_at") or parsed.get("received_at") or ""),
+        "body": body[:20000],
+        "attachments": [_attachment_metadata(item) for item in attachments if isinstance(item, dict)],
+    }
+
+
+def _parse_raw_email(raw: str) -> dict[str, Any]:
+    message = Parser(policy=policy.default).parsestr(raw)
+    body = message.get_body(preferencelist=("plain",))
+    attachments = []
+    for part in message.iter_attachments():
+        attachments.append(
+            {
+                "filename": part.get_filename() or "",
+                "mime_type": part.get_content_type(),
+                "size_bytes": len(part.get_payload(decode=True) or b""),
+            }
+        )
+    return {
+        "source": "email:rfc822",
+        "message_id": str(message.get("Message-ID") or ""),
+        "thread_id": str(message.get("Thread-Index") or message.get("References") or ""),
+        "subject": str(message.get("Subject") or ""),
+        "sender": str(message.get("From") or ""),
+        "recipients": [str(message.get("To") or "")] if message.get("To") else [],
+        "received_at": str(message.get("Date") or ""),
+        "body": body.get_content() if body is not None else "",
+        "attachments": attachments,
+    }
+
+
+def _coalesce_text(*values: object) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item)[:500] for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value[:500]]
+    return []
+
+
+def _attachment_metadata(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "filename": str(value.get("filename") or "")[:500],
+        "mime_type": str(value.get("mime_type") or "")[:200],
+        "size_bytes": value.get("size_bytes") if isinstance(value.get("size_bytes"), int) else None,
     }
 
 
