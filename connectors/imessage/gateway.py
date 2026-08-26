@@ -132,7 +132,7 @@ class IMessageGateway:
         if message.is_group:
             return await self._handle_group(message, identity)
 
-        if not self._is_direct_message_routable(message, prompt_text):
+        if not self._is_direct_message_routable(message, prompt_text, identity):
             self._log_rejection(message, RejectionReason.DIRECT_MESSAGE_NOT_ADDRESSED)
             return None
 
@@ -151,7 +151,10 @@ class IMessageGateway:
             return False
         prompt_text = self._message_text_for_limits_and_tools(message)
         if not message.is_group:
-            return self._is_direct_message_routable(message, prompt_text)
+            identity = self._identity_for_sender(message.sender)
+            if identity is None:
+                return False
+            return self._is_direct_message_routable(message, prompt_text, identity)
         return (
             self._family_observer_enabled
             and message.chat_identifier in self._family_chat_identifiers
@@ -214,10 +217,16 @@ class IMessageGateway:
                 return True
         return False
 
-    def _is_direct_message_routable(self, message: IMessage, text: str) -> bool:
-        if not self._direct_requires_addressed or message.sender in self._direct_unaddressed_allowed_senders:
+    def _is_direct_message_routable(self, message: IMessage, text: str, identity: AuthorizedSender) -> bool:
+        if message.sender in self._direct_unaddressed_allowed_senders:
+            return True
+        if not self._direct_requires_addressed and self._has_family_agent_identity(identity):
             return True
         return self._is_explicitly_addressed(text)
+
+    @staticmethod
+    def _has_family_agent_identity(identity: AuthorizedSender) -> bool:
+        return (identity.member_id or "").strip().lower() in {"joe", "beth", "liam", "jenna"}
 
     @staticmethod
     def _family_group_prompt(text: str, chat_identifier: str) -> str:

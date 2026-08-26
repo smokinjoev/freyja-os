@@ -98,6 +98,8 @@ async def test_approved_sender_is_forwarded(enabled_gateway):
 @pytest.mark.asyncio
 async def test_photo_only_message_is_forwarded_in_same_conversation(enabled_gateway):
     enabled_gateway._direct_requires_addressed = False
+    enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567", "imessage")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
     message = make_message(text="", message_id="photo-001").model_copy(
         update={
             "attachments": [
@@ -502,6 +504,8 @@ async def test_direct_imessage_requires_explicit_address_by_default(enabled_gate
 @pytest.mark.asyncio
 async def test_direct_imessage_can_be_configured_for_legacy_auto_reply(enabled_gateway):
     enabled_gateway._direct_requires_addressed = False
+    enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567", "imessage")
+    enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = _ok_response({"response": "Legacy direct reply"})
@@ -509,6 +513,17 @@ async def test_direct_imessage_can_be_configured_for_legacy_auto_reply(enabled_g
 
     assert result is not None
     assert result.text == "Legacy direct reply"
+
+
+@pytest.mark.asyncio
+async def test_direct_imessage_auto_reply_still_rejects_unmapped_sender(enabled_gateway):
+    enabled_gateway._direct_requires_addressed = False
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        result = await enabled_gateway.handle(make_message(text="Can you pick up milk?"))
+
+    assert result is None
+    mock_post.assert_not_called()
 
 
 @pytest.mark.asyncio
