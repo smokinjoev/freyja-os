@@ -13,8 +13,11 @@ from freyja.agents import AgentHierarchy, PersonName
 from freyja.agents.approval_provider import PersistentApprovalProvider
 from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprovals
 from freyja.agents.runtime import SmithRuntime
+from freyja.agent_gateway import AgentGateway, GatewayAuthenticationError, GatewayPermissionError, GatewayRequest
+from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.config import settings
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
+from freyja.foundation_models import GatewaySender, SecurityDomainId
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -86,6 +89,8 @@ macagent = MacAgentClient()
 router.register_clients(ollama, openrouter)
 router.register_reasoning_client(reasoning_ollama)
 router.register_iris_router_client(iris_router)
+agent_gateway_v3 = AgentGateway()
+agent_runtime_v3 = AgentRuntimeV3()
 
 app.include_router(memory_router)
 app.include_router(tools_router)
@@ -380,6 +385,9 @@ async def route(request: RouteRequest, raw_request: Request) -> dict:
 
 
 async def _execute_canonical_request(request: CanonicalRequest, raw_request: Request) -> CanonicalResponse:
+    if settings.freyja3_canonical_enabled:
+        return await _execute_freyja3_canonical_request(request, raw_request)
+
     try:
         memory_principal = principal_from_headers(raw_request.headers)
     except ValueError:
@@ -423,6 +431,88 @@ async def _execute_canonical_request(request: CanonicalRequest, raw_request: Req
         },
     )
     return response
+
+
+async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_request: Request) -> CanonicalResponse:
+    sender = GatewaySender(
+        sender_id=(
+            raw_request.headers.get("x-freyja-client-subject")
+            or request.resolved_user_id
+            or request.sender.channel_id
+            or "unknown"
+        ),
+        display_name=raw_request.headers.get("x-freyja-person-display-name") or request.sender.display_name or request.sender.channel_id,
+        security_domain_id=_security_domain_for_canonical_request(request),
+        authenticated=True,
+    )
+    target_agent = request.resolved_agent_id or _default_agent_for_user(request.resolved_user_id)
+    try:
+        gateway_result = agent_gateway_v3.handle(
+            GatewayRequest(
+                sender=sender,
+                target_agent=target_agent,
+                prompt=request.text,
+                conversation_id=request.conversation_id,
+                channel=request.channel,
+                message_id=request.message_id,
+                attachments=[attachment.model_dump(mode="json") for attachment in request.attachments],
+                reply_context=request.reply_context,
+                permissions=frozenset(request.permissions),
+            )
+        )
+    except GatewayAuthenticationError:
+        raise HTTPException(status_code=403, detail="Sender is not authenticated.") from None
+    except GatewayPermissionError as exc:
+        raise HTTPException(status_code=403, detail=exc.audit_event.reason) from None
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+
+    if gateway_result.handoff is None:
+        raise HTTPException(status_code=500, detail="Gateway did not produce an agent handoff.")
+    result = agent_runtime_v3.run(gateway_result.handoff)
+    return CanonicalResponse(
+        trace_id=request.trace_id,
+        request_message_id=request.message_id,
+        channel=request.channel,
+        conversation_id=result.conversation_id,
+        resolved_user_id=request.resolved_user_id,
+        resolved_agent_id=result.agent_id,
+        text=result.response_text,
+        tool_results=[{"tool_name": tool_id, "success": True} for tool_id in result.selected_tools],
+        channel_metadata={
+            "freyja3": True,
+            "gateway_audit": gateway_result.audit_event.model_dump(mode="json"),
+            "agent_steps": [step.model_dump(mode="json") for step in result.steps],
+            "inference_endpoint_id": result.inference_endpoint_id,
+            "inference_model": result.inference_model,
+            "inference_machine_id": result.inference_machine_id,
+        },
+        degraded=result.degraded,
+        status="degraded" if result.degraded else "ok",
+    )
+
+
+def _security_domain_for_canonical_request(request: CanonicalRequest) -> SecurityDomainId:
+    person = (request.resolved_user_id or "").strip().lower()
+    if person == "joe":
+        return SecurityDomainId.PERSON_JOE
+    if person == "beth":
+        return SecurityDomainId.PERSON_BETH
+    if person == "liam":
+        return SecurityDomainId.PERSON_LIAM
+    if person == "jenna":
+        return SecurityDomainId.PERSON_JENNA
+    return SecurityDomainId.HOUSEHOLD
+
+
+def _default_agent_for_user(resolved_user_id: str | None) -> str:
+    person = (resolved_user_id or "").strip().lower()
+    return {
+        "joe": "cloyd-gibbler",
+        "beth": "benedict",
+        "liam": "agent-44",
+        "jenna": "jenna",
+    }.get(person, "freyja")
 
 
 @app.post("/canonical/route")

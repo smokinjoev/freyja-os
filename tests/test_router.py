@@ -201,12 +201,12 @@ async def test_person_agent_context_is_added_by_director_for_imessage(
     assert prompt.endswith("Current user request:\nWhat is the plan?")
 
 
-async def test_image_request_routes_to_local_vision_with_images(router: Router, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_image_request_routes_to_approved_cloud_vision_with_images(
+    router: Router,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _settings_with_allowlist(monkeypatch)
-    router.ollama_client.chat.return_value = {
-        "model": "moondream",
-        "message": {"content": "The image shows a red square."},
-    }
+    router.openrouter_client.chat.return_value = {"response": "The image shows a red square."}
 
     req = RouteRequest(
         prompt="Identify this image",
@@ -215,12 +215,37 @@ async def test_image_request_routes_to_local_vision_with_images(router: Router, 
     )
     result = await router.execute(req)
 
-    assert result.decision.provider == "local_vision"
-    assert "image request" in result.decision.reason
+    assert result.decision.provider == "openrouter"
+    assert "approved cloud vision" in result.decision.reason
     assert result.response == "The image shows a red square."
-    router.openrouter_client.chat.assert_not_called()
+    router.ollama_client.chat.assert_not_called()
+    router.openrouter_client.chat.assert_awaited_once()
+    assert router.openrouter_client.chat.await_args.kwargs["images"] == req.images
+
+
+async def test_image_request_falls_back_to_cloud_when_local_vision_errors(
+    router: Router,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _settings_with_allowlist(monkeypatch)
+    monkeypatch.setattr(settings, "cloud_enabled", True)
+    router.ollama_client.chat.return_value = {"error": "local vision unavailable"}
+    router.openrouter_client.chat.return_value = {"response": "The image shows a costume."}
+
+    req = RouteRequest(
+        prompt="What do you see in this photo?",
+        provider="local",
+        images=[ImageInput(mime_type="image/heic", data_base64="ZmFrZQ==", filename="photo.heic")],
+    )
+    result = await router.execute(req)
+
+    assert result.decision.provider == "openrouter"
+    assert "cloud vision fallback" in result.decision.reason
+    assert result.response == "The image shows a costume."
+    assert any(attempt["provider"] == "local_vision" for attempt in result.decision.fallback_attempts)
     router.ollama_client.chat.assert_awaited_once()
-    assert router.ollama_client.chat.await_args.kwargs["images"] == req.images
+    router.openrouter_client.chat.assert_awaited_once()
+    assert router.openrouter_client.chat.await_args.kwargs["images"] == req.images
 
 
 async def test_provider_latency_records_warm_and_cold_start_buckets(
@@ -1327,6 +1352,7 @@ async def test_auto_local_chat_avoids_sub_3b_without_cloud_fallback(router: Rout
 
 
 async def test_auto_image_request_routes_to_local_vision_without_cloud(router: Router, reset_settings) -> None:
+    settings.cloud_enabled = False
     router.ollama_client.chat.return_value = {
         "model": "moondream",
         "message": {"content": "red"},

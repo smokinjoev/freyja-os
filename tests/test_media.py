@@ -4,7 +4,7 @@ import base64
 from io import BytesIO
 from zipfile import ZipFile
 
-from freyja.media import AttachmentInput, pdf_texts_from_attachments
+from freyja.media import AttachmentInput, ImageInput, pdf_texts_from_attachments
 
 
 SIMPLE_PDF_BASE64 = (
@@ -88,3 +88,16 @@ def test_docx_texts_extracts_native_word_text() -> None:
     assert len(documents) == 1
     assert documents[0].ok is True
     assert "Family plan Sunday" in documents[0].text
+
+
+def test_heic_image_input_converts_to_jpeg_for_providers(monkeypatch) -> None:
+    monkeypatch.setattr("freyja.media._convert_heic_bytes_to_jpeg", lambda payload: b"jpeg-bytes")
+    image = ImageInput(
+        filename="photo.heic",
+        mime_type="image/heic",
+        data_base64=base64.b64encode(b"heic-bytes").decode("ascii"),
+    )
+
+    assert image.provider_mime_type() == "image/jpeg"
+    assert image.as_data_url() == "data:image/jpeg;base64,anBlZy1ieXRlcw=="
+    assert image.as_ollama_image() == "anBlZy1ieXRlcw=="

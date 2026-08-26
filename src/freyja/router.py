@@ -912,6 +912,21 @@ class Router:
 
         # provider == "auto"
         if _has_images(request):
+            if (
+                not _requires_internal_model(privacy)
+                and settings.cloud_enabled
+                and spent_this_month < settings.openrouter_monthly_hard_limit
+                and estimated_cost <= settings.openrouter_per_request_limit
+            ):
+                model, reason = self._approved_model(request.model)
+                if model:
+                    return RoutingDecision(
+                        provider="openrouter",
+                        model=model,
+                        reason=f"routine image request routed to approved cloud vision; {reason}",
+                        privacy_classification=privacy,
+                        estimated_cost_usd=estimated_cost,
+                    )
             return RoutingDecision(
                 provider="local_vision",
                 model=self._vision_model(request.model),
@@ -1235,6 +1250,66 @@ class Router:
                 raw_error = response["error"]
                 decision.fallback_attempts.append({"provider": decision.provider, "outcome": raw_error})
                 decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
+                if (
+                    decision.provider == "local_vision"
+                    and request.images
+                    and not _requires_internal_model(decision.privacy_classification)
+                    and settings.cloud_enabled
+                    and self.openrouter_client is not None
+                    and spent_this_month < settings.openrouter_monthly_hard_limit
+                ):
+                    model, reason = self._approved_model(request.model)
+                    estimated_cost = max(self._estimate_cost(request.prompt), 0.001)
+                    if model and estimated_cost <= settings.openrouter_per_request_limit:
+                        fallback_decision = RoutingDecision(
+                            request_id=decision.request_id,
+                            provider="openrouter",
+                            model=model,
+                            reason=f"local vision unavailable; cloud vision fallback; {reason}",
+                            privacy_classification=decision.privacy_classification,
+                            fallback_attempts=decision.fallback_attempts,
+                            estimated_cost_usd=estimated_cost,
+                            limitation_notice="Local vision is unavailable; using approved cloud vision.",
+                        )
+                        evidence = RuntimeEvidence.from_decision(fallback_decision)
+                        self._record_connector_origin(evidence, memory_principal)
+                        self._record_principal(evidence, memory_principal, person_context)
+                        prompt = await self._prompt_with_weather_observation(
+                            request,
+                            self._prompt_for_provider(request, "openrouter", memory_principal, evidence),
+                        )
+                        prompt = self._prompt_with_coding_orchestration(request, prompt)
+                        fallback_response = await self.openrouter_client.chat(
+                            prompt=prompt,
+                            model=fallback_decision.model or None,
+                            images=request.images or None,
+                        )
+                        self._record_provider_response(evidence, fallback_response, "openrouter")
+                        if "error" not in fallback_response:
+                            content = fallback_response.get("response", "")
+                            await self._record_memory(request, fallback_decision, content, evidence)
+                            return self._routing_result(
+                                decision=fallback_decision,
+                                response=content,
+                                evidence=evidence,
+                                started=started,
+                            )
+                        fallback_decision.fallback_attempts.append(
+                            {"provider": "openrouter", "outcome": fallback_response["error"]}
+                        )
+                        fallback_decision.fallback_attempts = self._sanitize_fallback_attempts(
+                            fallback_decision.fallback_attempts
+                        )
+                        fallback_decision.public_error_message = self._public_error(
+                            "openrouter",
+                            fallback_decision.fallback_attempts,
+                        )
+                        return self._routing_result(
+                            decision=fallback_decision,
+                            response="",
+                            evidence=evidence,
+                            started=started,
+                        )
                 decision.public_error_message = self._public_error(decision.provider, decision.fallback_attempts)
                 return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -34,13 +36,29 @@ class ImageInput(BaseModel):
         return self._data_base64()
 
     def as_data_url(self) -> str:
-        return f"data:{self.mime_type};base64,{self._data_base64()}"
+        return f"data:{self._provider_mime_type()};base64,{self._data_base64()}"
+
+    def provider_mime_type(self) -> str:
+        return self._provider_mime_type()
 
     def _data_base64(self) -> str:
         if self.data_base64:
+            if _is_heic(self.mime_type, self.filename):
+                converted = _convert_heic_bytes_to_jpeg(base64.b64decode(self.data_base64))
+                if converted is not None:
+                    return base64.b64encode(converted).decode("ascii")
             return self.data_base64
         path = Path(str(self.path)).expanduser()
+        if _is_heic(self.mime_type, self.filename or path.name):
+            converted = _convert_heic_path_to_jpeg(path)
+            if converted is not None:
+                return base64.b64encode(converted).decode("ascii")
         return base64.b64encode(path.read_bytes()).decode("ascii")
+
+    def _provider_mime_type(self) -> str:
+        if _is_heic(self.mime_type, self.filename or self.path):
+            return "image/jpeg"
+        return self.mime_type
 
 
 class AttachmentInput(BaseModel):
@@ -248,3 +266,47 @@ def _mime_from_name(name: str) -> str | None:
     if lowered.endswith(".heic"):
         return "image/heic"
     return None
+
+
+def _is_heic(mime_type: str | None, name: str | None = None) -> bool:
+    mime = (mime_type or "").lower()
+    lowered = (name or "").lower()
+    return mime in {"image/heic", "image/heif"} or lowered.endswith((".heic", ".heif"))
+
+
+def _convert_heic_path_to_jpeg(path: Path) -> bytes | None:
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            output = BytesIO()
+            image.convert("RGB").save(output, format="JPEG", quality=92)
+            return output.getvalue()
+    except Exception:
+        pass
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / f"{path.stem}.jpg"
+            subprocess.run(
+                ["sips", "-s", "format", "jpeg", str(path), "--out", str(output_path)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=20,
+            )
+            return output_path.read_bytes()
+    except Exception:
+        return None
+
+
+def _convert_heic_bytes_to_jpeg(payload: bytes) -> bytes | None:
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(payload)) as image:
+            output = BytesIO()
+            image.convert("RGB").save(output, format="JPEG", quality=92)
+            return output.getvalue()
+    except Exception:
+        return None
