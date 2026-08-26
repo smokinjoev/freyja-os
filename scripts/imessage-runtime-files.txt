@@ -11,5 +11,6 @@ src/freyja/media.py
 src/freyja/router.py
 scripts/run-imessage-connector.py
 scripts/configure-imessage-family-agents.py
+scripts/imessage-operator.py
 scripts/messaging-production-check.py
 scripts/com.freyja-os.imessage-connector.plist

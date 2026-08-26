@@ -194,6 +194,43 @@ def test_live_smoke_sends_only_when_not_dry_run(monkeypatch):
     assert sent == {"recipient": "+15550000001", "text": "hello"}
 
 
+def test_live_smoke_sends_to_resolved_recipient(monkeypatch):
+    import asyncio
+
+    operator = _load_operator()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_allowed_senders="joe=joe@example.com",
+    )
+    sent = {}
+    monkeypatch.setattr(
+        operator,
+        "_resolve_live_smoke_recipient",
+        lambda settings_arg, target, sender: (
+            "+15550000001",
+            {"requested_recipient": target, "recipient_resolution": "apple-contacts-local-imessage"},
+        ),
+    )
+
+    async def fake_send_to(settings_arg, recipient, text):
+        sent["recipient"] = recipient
+        sent["text"] = text
+
+    monkeypatch.setattr(operator, "_send_to", fake_send_to)
+
+    result = asyncio.run(
+        operator._live_smoke(
+            settings,
+            recipient="joe@example.com",
+            text="hello",
+            dry_run=False,
+        )
+    )
+
+    assert result["status"] == "sent"
+    assert sent == {"recipient": "+15550000001", "text": "hello"}
+
+
 def test_send_to_reports_timeout(monkeypatch):
     import asyncio
     import subprocess
@@ -300,3 +337,52 @@ def test_live_smoke_resolves_alias_to_known_contact_imessage_handle(monkeypatch)
         "resolved_from_member": "joe",
         "resolved_contact": "Joseph Verant",
     }
+
+
+def test_identity_audit_reports_family_mapping_without_raw_addresses(monkeypatch):
+    operator = _load_operator()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_allowed_senders="joe=+15550000001,+15550000002",
+    )
+    monkeypatch.setattr(
+        operator,
+        "_imsg_whois_local",
+        lambda settings_arg, address: {"known": True, "service": "imessage"},
+    )
+
+    result = operator._identity_audit(settings)
+
+    assert result["ok"] is False
+    assert result["allowed_sender_count"] == 2
+    assert result["unmapped_sender_count"] == 1
+    assert result["people"]["joe"]["mapped"] is True
+    assert result["people"]["joe"]["agent_id"] == "cloyd-gibbler"
+    assert result["missing_people"] == ["beth", "liam", "jenna"]
+    assert result["raw_addresses_redacted"] is True
+    assert "+15550000001" not in str(result)
+    assert "+15550000002" not in str(result)
+
+
+def test_identity_audit_passes_when_four_people_are_mapped(monkeypatch):
+    operator = _load_operator()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_allowed_senders=(
+            "joe=+15550000001,beth=+15550000002,"
+            "liam=+15550000003,jenna=+15550000004"
+        ),
+    )
+    monkeypatch.setattr(
+        operator,
+        "_imsg_whois_local",
+        lambda settings_arg, address: {"known": True, "service": "imessage"},
+    )
+
+    result = operator._identity_audit(settings)
+
+    assert result["ok"] is True
+    assert result["missing_people"] == []
+    assert result["people"]["beth"]["agent_id"] == "benedict"
+    assert result["people"]["liam"]["agent_id"] == "agent-44"
+    assert result["people"]["jenna"]["agent_id"] == "jenna"

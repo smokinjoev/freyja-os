@@ -28,7 +28,7 @@ if _ROOT_DIR not in sys.path:
 import httpx  # noqa: E402
 from connectors.imessage.config import IMessageSettings  # noqa: E402
 from connectors.imessage.transport import IMessageTransportError  # noqa: E402
-from connectors.messaging import AuthorizedSender  # noqa: E402
+from connectors.messaging import AuthorizedSender, household_agent_for_sender  # noqa: E402
 from freyja.config import settings as freyja_settings  # noqa: E402
 from freyja.identity import default_identity_service  # noqa: E402
 from freyja.identity import person_from_legacy_member  # noqa: E402
@@ -121,6 +121,12 @@ def _imsg_whois_local(settings: IMessageSettings, address: str) -> dict[str, Any
 def _known_imessage_handle(settings: IMessageSettings, address: str) -> bool:
     payload = _imsg_whois_local(settings, address)
     return payload.get("known") is True and str(payload.get("service", "")).lower() == "imessage"
+
+
+def _safe_hash(value: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
 
 def _macagent_contacts(*, include_identifiers: bool = True, limit: int = 1000) -> list[dict[str, Any]]:
@@ -273,6 +279,50 @@ async def _broadcast(
     }
 
 
+def _identity_audit(settings: IMessageSettings) -> dict[str, object]:
+    senders = _configured_senders(settings)
+    people: dict[str, dict[str, object]] = {
+        person_id: {"mapped": False, "sender_count": 0, "agent_id": None}
+        for person_id in ("joe", "beth", "liam", "jenna")
+    }
+    unmapped = 0
+    senders_report = []
+    for address, sender in sorted(senders.items()):
+        agent = household_agent_for_sender(sender)
+        person_id = (sender.member_id or "").strip().lower() or None
+        if person_id in people:
+            people[person_id] = {
+                "mapped": True,
+                "sender_count": int(people[person_id]["sender_count"]) + 1,
+                "agent_id": agent.agent_id,
+            }
+        else:
+            unmapped += 1
+        whois = _imsg_whois_local(settings, address)
+        senders_report.append(
+            {
+                "sender_hash": _safe_hash(address),
+                "person_id": person_id,
+                "agent_id": agent.agent_id,
+                "locally_known_imessage": whois.get("known") is True and str(whois.get("service", "")).lower() == "imessage",
+                "service": whois.get("service", "unknown"),
+            }
+        )
+    missing_people = [person_id for person_id, item in people.items() if not item["mapped"]]
+    return {
+        "schema_version": "1.0",
+        "report_type": "imessage-identity-audit",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "ok": not missing_people,
+        "allowed_sender_count": len(senders),
+        "unmapped_sender_count": unmapped,
+        "missing_people": missing_people,
+        "people": people,
+        "senders": senders_report,
+        "raw_addresses_redacted": True,
+    }
+
+
 async def _live_smoke(
     settings: IMessageSettings,
     *,
@@ -318,7 +368,7 @@ async def _live_smoke(
     if dry_run:
         return _smoke_report({"status": "dry-run", "plan": plan, "sent": 0, "failed": 0}, dry_run=True)
     try:
-        await _send_to(settings, target, text)
+        await _send_to(settings, resolved_target, text)
     except Exception as exc:  # noqa: BLE001 - operator JSON should report the send failure
         return _smoke_report({"status": "failed", "plan": plan, "sent": 0, "failed": 1, "error": str(exc)}, dry_run=False)
     return _smoke_report({"status": "sent", "plan": plan, "sent": 1, "failed": 0}, dry_run=False)
@@ -342,6 +392,16 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("allowlist", help="Print configured allowlist recipients")
+
+    identity_audit = subparsers.add_parser(
+        "identity-audit",
+        help="Print a redacted iMessage family identity routing audit without sending.",
+    )
+    identity_audit.add_argument(
+        "--output",
+        type=Path,
+        help="Optional JSON report path.",
+    )
 
     broadcast = subparsers.add_parser(
         "broadcast",
@@ -408,6 +468,15 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+
+    if args.command == "identity-audit":
+        result = _identity_audit(settings)
+        rendered = json.dumps(result, indent=2, sort_keys=True)
+        print(rendered)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+        return 0 if result["ok"] else 1
 
     if args.command == "broadcast":
         dry_run = args.dry_run or not args.yes
