@@ -23,6 +23,10 @@
         <string>/Users/freyja/freyja-os/src:/Users/freyja/freyja-os</string>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>MACAGENT_HOST</key>
+        <string>0.0.0.0</string>
+        <key>MACAGENT_PORT</key>
+        <string>8765</string>
     </dict>
 
     <key>WorkingDirectory</key>
