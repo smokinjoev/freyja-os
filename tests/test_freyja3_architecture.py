@@ -159,6 +159,49 @@ def test_agent_runtime_recalls_and_writes_scoped_memory(tmp_path) -> None:
     assert any(step.kind == "memory_written" for step in result.steps)
 
 
+def test_agent_runtime_writes_explicit_remember_memory(tmp_path) -> None:
+    memory_store = Freyja3MemoryStore(tmp_path / "memory.db")
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Remember that Joe prefers architecture-first progress reports.",
+            conversation_id="conv-explicit-memory",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(memory_store=memory_store).run(handoff)
+
+    assert any(
+        memory["content"] == "Joe prefers architecture-first progress reports."
+        and memory["provenance"] == "agent-runtime-v3-explicit-remember"
+        for memory in result.written_memories
+    )
+
+
+def test_agent_runtime_marks_secret_memory_restricted(tmp_path) -> None:
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Remember that my api key is not for cloud use.",
+            conversation_id="conv-restricted-memory",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(memory_store=Freyja3MemoryStore(tmp_path / "memory.db")).run(handoff)
+
+    explicit = [
+        memory
+        for memory in result.written_memories
+        if memory["provenance"] == "agent-runtime-v3-explicit-remember"
+    ]
+    assert explicit
+    assert explicit[0]["classification"] == "restricted"
+
+
 def test_agents_use_vulcan_inference_and_identity_survives_endpoint_changes() -> None:
     gateway = AgentGateway()
     handoff = gateway.handle(

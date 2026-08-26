@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Iterable
 from typing import Any
 
@@ -157,7 +158,7 @@ class AgentRuntimeV3:
             degraded = True
             steps.append(AgentStep(kind="inference_unavailable", detail=f"no healthy endpoint for {capability}", success=False))
 
-        written_memories = self._write_run_memory(agent, handoff, selected_tools, tool_results, steps, audit_events)
+        written_memories = self._write_agent_memories(agent, handoff, selected_tools, tool_results, steps, audit_events)
         response = self._compose_response(
             agent,
             handoff,
@@ -217,7 +218,7 @@ class AgentRuntimeV3:
         )
         return public_records
 
-    def _write_run_memory(
+    def _write_agent_memories(
         self,
         agent: PersistentAgent,
         handoff: GatewayHandoff,
@@ -228,6 +229,37 @@ class AgentRuntimeV3:
     ) -> list[dict[str, Any]]:
         if not self._use_memory or self._memory_store is None:
             return []
+        written = []
+        explicit_memory = _explicit_memory_content(handoff.prompt)
+        if explicit_memory:
+            written.append(
+                self._memory_store.put(
+                    Freyja3MemoryWrite(
+                        owner_domain_id=agent.security_domain_id,
+                        scope=MemoryScope.PERSONAL
+                        if agent.security_domain_id != SecurityDomainId.HOUSEHOLD
+                        else MemoryScope.HOUSEHOLD,
+                        source_agent_id=agent.agent_id,
+                        content=explicit_memory,
+                        provenance="agent-runtime-v3-explicit-remember",
+                        classification=_memory_classification_for_text(explicit_memory),
+                        metadata={"conversation_id": handoff.conversation_id, "handoff_id": handoff.handoff_id},
+                    ),
+                    writer_domain_id=agent.security_domain_id,
+                ).model_dump(mode="json")
+            )
+            steps.append(AgentStep(kind="memory_written", detail="wrote explicit Freyja 3 memory", success=True))
+            audit_events.append(
+                AuditEvent(
+                    event_type=AuditEventType.AGENT_MEMORY_WRITTEN,
+                    actor_id=f"agent:{agent.agent_id}",
+                    domain_id=agent.security_domain_id,
+                    target_id=written[-1]["memory_id"],
+                    allowed=True,
+                    reason="agent wrote explicit Freyja 3 memory",
+                )
+            )
+
         failed_tools = [result["capability_id"] for result in tool_results if result.get("success") is False]
         content = (
             f"Conversation {handoff.conversation_id}: selected {', '.join(selected_tools) if selected_tools else 'no tools'}"
@@ -246,6 +278,7 @@ class AgentRuntimeV3:
             writer_domain_id=agent.security_domain_id,
         )
         public = record.model_dump(mode="json")
+        written.append(public)
         steps.append(AgentStep(kind="memory_written", detail="wrote Freyja 3 run summary memory", success=True))
         audit_events.append(
             AuditEvent(
@@ -257,7 +290,7 @@ class AgentRuntimeV3:
                 reason="agent wrote Freyja 3 run summary memory",
             )
         )
-        return [public]
+        return written
 
     @staticmethod
     def _agent_memory_queries(agent: PersistentAgent) -> list[tuple[SecurityDomainId, MemoryScope]]:
@@ -512,3 +545,26 @@ def _tool_effective_success(registry_success: bool, output: dict[str, Any]) -> b
     if output.get("live_data_available") is False:
         return False
     return True
+
+
+_EXPLICIT_MEMORY_RE = re.compile(
+    r"^\s*(?:please\s+)?remember(?:\s+that|\s+this)?\s+(?P<content>.+?)\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _explicit_memory_content(objective: str) -> str | None:
+    match = _EXPLICIT_MEMORY_RE.match(objective)
+    if not match:
+        return None
+    content = " ".join(match.group("content").split())
+    return content[:2000] if content else None
+
+
+def _memory_classification_for_text(content: str) -> MemoryClassification:
+    lowered = content.lower()
+    if any(term in lowered for term in ("password", "api key", "api_key", "token", "ssn", "social security")):
+        return MemoryClassification.RESTRICTED
+    if any(term in lowered for term in ("medical", "health", "bank", "legal", "attorney", "case")):
+        return MemoryClassification.SENSITIVE
+    return MemoryClassification.PRIVATE
