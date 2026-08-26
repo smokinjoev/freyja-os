@@ -44,6 +44,13 @@ _TOOL_REQUEST_TERMS = (
     "what do you know",
     "status",
     "health",
+    "search",
+    "look up",
+    "lookup",
+    "web",
+    "internet",
+    "latest",
+    "current news",
 )
 
 

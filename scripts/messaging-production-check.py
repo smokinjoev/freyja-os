@@ -4,19 +4,24 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import base64
 import hashlib
 import json
 import os
 import platform
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
+from io import BytesIO
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable
 from unittest.mock import patch
+from zipfile import ZipFile
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _VENV_PYTHON = _PROJECT_ROOT / ".venv" / "bin" / "python"
@@ -33,6 +38,8 @@ if _ROOT_DIR not in sys.path:
     sys.path.insert(1, _ROOT_DIR)
 
 from connectors.imessage.config import IMessageSettings  # noqa: E402
+from connectors.imessage.gateway import IMessageGateway  # noqa: E402
+from connectors.imessage.models import IMessage, IMessageAttachment  # noqa: E402
 from connectors.gmail.config import GmailSettings  # noqa: E402
 from connectors.signal.config import SignalSettings  # noqa: E402
 from connectors.messaging import household_agent_for_sender  # noqa: E402
@@ -445,6 +452,147 @@ def _imessage_family_route_smoke(
     }
 
 
+def _simple_docx_bytes(text: str) -> bytes:
+    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>""",
+        )
+        archive.writestr(
+            "word/document.xml",
+            f"""<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>{escaped}</w:t></w:r></w:p></w:body>
+</w:document>""",
+        )
+    return payload.getvalue()
+
+
+def _simple_pdf_bytes() -> bytes:
+    return base64.b64decode(
+        "JVBERi0xLjQKMSAwIG9iaiA8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4gZW5kb2JqCjIg"
+        "MCBvYmogPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4gZW5kb2JqCjMgMCBv"
+        "YmogPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMTQ0XSAvUmVz"
+        "b3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4gZW5kb2Jq"
+        "CjQgMCBvYmogPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNh"
+        "ID4+IGVuZG9iago1IDAgb2JqIDw8IC9MZW5ndGggNTEgPj4gc3RyZWFtCkJUIC9GMSAxMiBUZiA3MiAx"
+        "MDAgVGQgKEZhbWlseSBkaW5uZXIgRnJpZGF5KSBUaiBFVAplbmRzdHJlYW0gZW5kb2JqCnhyZWYKMCA2"
+        "CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4g"
+        "CjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzExIDAwMDAwIG4g"
+        "CnRyYWlsZXIgPDwgL1Jvb3QgMSAwIFIgL1NpemUgNiA+PgpzdGFydHhyZWYKNDEyCiUlRU9GCg=="
+    )
+
+
+async def _run_family_file_gateway_smoke(settings: IMessageSettings) -> dict[str, object]:
+    results: dict[str, object] = {}
+    allowed = settings.allowed_sender_identities
+    addresses_by_person = {
+        (identity.member_id or "").strip().lower(): address
+        for address, identity in allowed.items()
+    }
+
+    with tempfile.TemporaryDirectory(prefix="freyja-imessage-file-smoke-") as temp_dir:
+        base = Path(temp_dir)
+        pdf_path = base / "plan.pdf"
+        docx_path = base / "plan.docx"
+        image_path = base / "photo.png"
+        pdf_path.write_bytes(_simple_pdf_bytes())
+        docx_path.write_bytes(_simple_docx_bytes("Family plan Sunday"))
+        image_path.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="))
+
+        async def fake_post(self, url: str, **kwargs: object):  # noqa: ANN001
+            payload = kwargs.get("json") if isinstance(kwargs.get("json"), dict) else {}
+            self._last_file_smoke_request = {  # noqa: SLF001 - synthetic verifier captures the outbound request.
+                "url": url,
+                "payload": payload,
+                "headers": kwargs.get("headers") if isinstance(kwargs.get("headers"), dict) else {},
+            }
+            return _FakeHTTPResponse(
+                {
+                    "response": "synthetic file acknowledgement",
+                    "channel_metadata": {
+                        "provider": "local_reasoning",
+                        "model": "synthetic-file-smoke",
+                    },
+                    "echo": payload,
+                }
+            )
+
+        with patch("httpx.AsyncClient.post", fake_post):
+            for identity in _FAMILY_ROUTE_IDENTITIES:
+                address = addresses_by_person.get(identity.person_id)
+                if not address:
+                    results[identity.person_id] = {"ok": False, "error": "person has no configured iMessage sender"}
+                    continue
+                gateway = IMessageGateway()
+                gateway._enabled = True
+                gateway._allowed_identities = allowed
+                gateway._allowed_senders = set(allowed)
+                gateway._direct_requires_addressed = True
+                gateway._director_url = settings.freyja_director_url.rstrip("/")
+                gateway._director_token = settings.freyja_connector_token
+                message = IMessage(
+                    sender=address,
+                    text="Freyja, read these files.",
+                    message_id=f"synthetic-file-{identity.person_id}-{uuid.uuid4()}",
+                    chat_id=101,
+                    chat_identifier=address,
+                    timestamp=datetime.now(UTC),
+                    attachments=[
+                        IMessageAttachment(filename="plan.pdf", mime_type="application/pdf", path=str(pdf_path)),
+                        IMessageAttachment(
+                            filename="plan.docx",
+                            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            path=str(docx_path),
+                        ),
+                        IMessageAttachment(filename="photo.png", mime_type="image/png", path=str(image_path)),
+                    ],
+                )
+                try:
+                    reply = await gateway.handle(message)
+                    client = await gateway._client()
+                    await gateway.close()
+                    request = getattr(client, "_last_file_smoke_request", {})
+                except Exception as exc:  # noqa: BLE001 - production verifier should report, not explode
+                    results[identity.person_id] = {"ok": False, **_safe_error(exc)}
+                    continue
+                payload = request.get("payload") if isinstance(request, dict) else {}
+                headers = request.get("headers") if isinstance(request, dict) else {}
+                text = str(payload.get("text") or "") if isinstance(payload, dict) else ""
+                attachments = payload.get("attachments") if isinstance(payload, dict) else []
+                checks = {
+                    "reply_present": reply is not None and bool(reply.text.strip()),
+                    "agent_matches": headers.get("X-Freyja-Agent-Id") == identity.agent_id if isinstance(headers, dict) else False,
+                    "person_matches": headers.get("X-Freyja-Person-Id") == identity.person_id if isinstance(headers, dict) else False,
+                    "pdf_text_extracted": "Family dinner Friday" in text,
+                    "docx_text_extracted": "Family plan Sunday" in text,
+                    "attachments_present": isinstance(attachments, list) and len(attachments) == 3,
+                    "image_reference_present": "photo.png" in text or "photo.png" in json.dumps(attachments),
+                }
+                results[identity.person_id] = {"ok": all(checks.values()), "checks": checks}
+
+    return {"ok": all(isinstance(value, dict) and value.get("ok") is True for value in results.values()), "people": results}
+
+
+class _FakeHTTPResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+        self.status_code = 200
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, object]:
+        return self._payload
+
+
 def _imessage_family_agent_mapping(
     settings: IMessageSettings,
     *,
@@ -664,6 +812,7 @@ def _imessage_status(
     check_route_smoke: bool,
     check_inprocess_route_smoke: bool,
     check_family_route_smoke: bool = False,
+    check_family_file_smoke: bool = False,
     require_family_agents: bool = False,
     route_identity: SyntheticRouteIdentity | None = None,
     env_file: str | None = None,
@@ -722,6 +871,8 @@ def _imessage_status(
             settings,
             timeout=settings.imessage_request_timeout_seconds,
         )
+    if check_family_file_smoke:
+        status["family_file_smoke"] = asyncio.run(_run_family_file_gateway_smoke(settings))
     if check_inprocess_route_smoke:
         status["inprocess_route_smoke"] = _imessage_inprocess_route_smoke(
             settings,
@@ -743,6 +894,7 @@ def _imessage_status(
             not check_rev2_director or status.get("director_rev2_health", {}).get("ok") is True,
             not check_route_smoke or status.get("synthetic_route_smoke", {}).get("ok") is True,
             not check_family_route_smoke or status.get("family_route_smoke", {}).get("ok") is True,
+            not check_family_file_smoke or status.get("family_file_smoke", {}).get("ok") is True,
             not check_inprocess_route_smoke or status.get("inprocess_route_smoke", {}).get("ok") is True,
         ]
     )
@@ -892,6 +1044,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Call Director /canonical/route for all four family agent identities; does not send iMessages.",
     )
     parser.add_argument(
+        "--check-imessage-family-file-smoke",
+        action="store_true",
+        help="Run synthetic PDF/Word/image attachments through the iMessage gateway for all four family identities; does not send iMessages.",
+    )
+    parser.add_argument(
         "--check-inprocess-route-smoke",
         action="store_true",
         help="Exercise Director /canonical/route in-process with synthetic iMessage and terminal envelopes; does not prove live transport.",
@@ -939,6 +1096,7 @@ def main(argv: list[str] | None = None) -> int:
             check_route_smoke=args.check_imessage_route_smoke,
             check_inprocess_route_smoke=args.check_inprocess_route_smoke,
             check_family_route_smoke=args.check_imessage_family_route_smoke,
+            check_family_file_smoke=args.check_imessage_family_file_smoke,
             require_family_agents=args.require_imessage_family_agents,
             route_identity=route_identity,
             env_file=args.env_file,

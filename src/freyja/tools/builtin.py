@@ -14,6 +14,7 @@ from freyja.tools.home_assistant import register_home_assistant_tools
 from freyja.tools.identity import register_identity_tools
 from freyja.tools.local_host import register_local_host_tools
 from freyja.tools.weather import WeatherRequestType, classify_weather_request, get_weather
+from freyja.tools.web_search import web_fetch, web_search
 
 
 async def _get_weather_implementation(request: ToolExecutionRequest) -> dict:
@@ -56,6 +57,22 @@ async def _get_weather_implementation(request: ToolExecutionRequest) -> dict:
         request_type=request_type,
         target_date=target_date,
         target_label=target_label,
+    )
+
+
+async def _web_search_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    return await web_search(
+        str(args.get("query") or ""),
+        max_results=int(args.get("max_results") or 5),
+    )
+
+
+async def _web_fetch_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    return await web_fetch(
+        str(args.get("url") or ""),
+        max_chars=int(args.get("max_chars") or 12000),
     )
 
 
@@ -133,6 +150,8 @@ _BUILTIN_TOOL_NAMES = (
     "list_models",
     "recall_conversation",
     "get_weather",
+    "web_search",
+    "web_fetch",
     "hostname",
     "current_time",
     "disk_usage",
@@ -228,6 +247,69 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             tags=["weather", "live-data"],
         ),
         _get_weather_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="web_search",
+            description=(
+                "Search the public web for current information and return normalized result titles, URLs, and snippets. "
+                "Use this for lookup/search/current-fact questions before answering from model memory."
+            ),
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {"type": "string", "description": "Search query."},
+                    "max_results": {"type": "integer", "description": "Maximum results, 1 through 10."},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "ok": {"type": "boolean"},
+                    "query": {"type": "string"},
+                    "provider": {"type": "string"},
+                    "results": {"type": "array"},
+                    "count": {"type": "integer"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=15,
+            tags=["web", "search", "live-data", "openclaw-compatible"],
+        ),
+        _web_search_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="web_fetch",
+            description="Fetch readable text from an http(s) URL for grounded follow-up reading.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                    "url": {"type": "string", "description": "HTTP or HTTPS URL."},
+                    "max_chars": {"type": "integer", "description": "Maximum text characters to return."},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "ok": {"type": "boolean"},
+                    "url": {"type": "string"},
+                    "content_type": {"type": "string"},
+                    "text": {"type": "string"},
+                    "truncated": {"type": "boolean"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            enabled=True,
+            timeout_seconds=15,
+            tags=["web", "fetch", "live-data", "openclaw-compatible"],
+        ),
+        _web_fetch_implementation,
     )
     registry.register(
         ToolDefinition(

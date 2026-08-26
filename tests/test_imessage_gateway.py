@@ -246,6 +246,19 @@ async def test_auto_tool_mode_preserves_tool_like_requests(enabled_gateway):
 
 
 @pytest.mark.asyncio
+async def test_auto_tool_mode_preserves_web_search_requests(enabled_gateway):
+    enabled_gateway._tools_required_mode = "auto"
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "Search result"})
+        result = await enabled_gateway.handle(make_message(text="Freyja, look up OpenClaw tools"))
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert payload["channel_metadata"]["tools_required"] is True
+
+
+@pytest.mark.asyncio
 async def test_director_token_is_sent_as_bearer_header(enabled_gateway):
     enabled_gateway._director_token = "test-token"
 

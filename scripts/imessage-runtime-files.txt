@@ -17,6 +17,7 @@ src/freyja/media.py
 src/freyja/router.py
 src/freyja/tools/registry.py
 src/freyja/tools/weather.py
+src/freyja/tools/web_search.py
 scripts/run-imessage-connector.py
 scripts/configure-imessage-family-agents.py
 scripts/imessage-operator.py
