@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     freyja3_memory_database_path: str = Field(default="data/freyja3_memory.db", alias="FREYJA3_MEMORY_DATABASE_PATH")
     freyja3_scheduler_database_path: str = Field(default="data/freyja3_scheduler.db", alias="FREYJA3_SCHEDULER_DATABASE_PATH")
     freyja3_machine_database_path: str = Field(default="data/freyja3_machines.db", alias="FREYJA3_MACHINE_DATABASE_PATH")
+    freyja3_worker_database_path: str = Field(default="data/freyja3_workers.db", alias="FREYJA3_WORKER_DATABASE_PATH")
     freyja3_audit_database_path: str = Field(default="data/freyja3_audit.db", alias="FREYJA3_AUDIT_DATABASE_PATH")
     freyja3_inference_endpoints_json: str = Field(default="", alias="FREYJA3_INFERENCE_ENDPOINTS")
 

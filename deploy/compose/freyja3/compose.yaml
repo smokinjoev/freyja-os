@@ -22,6 +22,7 @@ services:
       FREYJA3_MEMORY_DATABASE_PATH: /app/data/freyja3_memory.db
       FREYJA3_SCHEDULER_DATABASE_PATH: /app/data/freyja3_scheduler.db
       FREYJA3_MACHINE_DATABASE_PATH: /app/data/freyja3_machines.db
+      FREYJA3_WORKER_DATABASE_PATH: /app/data/freyja3_workers.db
       FREYJA3_AUDIT_DATABASE_PATH: /app/data/freyja3_audit.db
       FREYJA3_INFERENCE_ENDPOINTS: ${FREYJA3_INFERENCE_ENDPOINTS:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://100.94.80.21:11434}

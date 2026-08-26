@@ -47,6 +47,9 @@ class AuditEventType(StrEnum):
     AGENT_MEMORY_CANDIDATE_PROPOSED = "agent_memory_candidate_proposed"
     AGENT_MEMORY_CANDIDATE_REVIEWED = "agent_memory_candidate_reviewed"
     AGENT_FOLLOW_UP_REQUESTED = "agent_follow_up_requested"
+    WORKER_JOB_CREATED = "worker_job_created"
+    WORKER_JOB_CLAIMED = "worker_job_claimed"
+    WORKER_JOB_COMPLETED = "worker_job_completed"
     PRIVACY_EGRESS_ALLOWED = "privacy_egress_allowed"
     PRIVACY_EGRESS_DENIED = "privacy_egress_denied"
 

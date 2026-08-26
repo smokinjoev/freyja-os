@@ -16,6 +16,10 @@ It exposes:
 - `POST /freyja3/machines/heartbeat`
 - `GET /freyja3/machines`
 - `GET /freyja3/audit`
+- `POST /freyja3/workers/jobs`
+- `GET /freyja3/workers/jobs`
+- `POST /freyja3/workers/jobs/claim`
+- `POST /freyja3/workers/jobs/{job_id}/complete`
 - `POST /freyja3/schedules`
 - `GET /freyja3/schedules`
 - `POST /freyja3/schedules/dispatch-due`
@@ -31,6 +35,7 @@ Default behavior is conservative:
 - stores scoped memory and reviewable memory candidates in `/app/data/freyja3_memory.db`
 - stores scheduler envelopes in `/app/data/freyja3_scheduler.db`
 - stores machine role heartbeats in `/app/data/freyja3_machines.db`
+- stores Mars/worker job envelopes in `/app/data/freyja3_workers.db`
 - stores gateway/runtime audit events in `/app/data/freyja3_audit.db`
 - points local read-only diagnostics at `/app`; it does not bind-mount the host
   Git checkout into the container by default

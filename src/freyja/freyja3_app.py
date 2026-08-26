@@ -24,6 +24,14 @@ from freyja.freyja3_memory import (
     Freyja3MemoryWrite,
 )
 from freyja.freyja3_scheduler import Freyja3ScheduleAccessError, Freyja3ScheduleCreate, Freyja3ScheduleQuery, Freyja3SchedulerStore
+from freyja.freyja3_workers import (
+    Freyja3WorkerAccessError,
+    Freyja3WorkerJobComplete,
+    Freyja3WorkerJobCreate,
+    Freyja3WorkerJobQuery,
+    Freyja3WorkerJobStatus,
+    Freyja3WorkerJobStore,
+)
 from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.ollama_client import OllamaClient
 from freyja.semantic_events import SemanticEventPermissionError, SemanticEventQuery, SemanticEventStore
@@ -43,6 +51,7 @@ memory_store = Freyja3MemoryStore()
 scheduler_store = Freyja3SchedulerStore()
 machine_status_store = Freyja3MachineStatusStore()
 audit_store = Freyja3AuditStore()
+worker_job_store = Freyja3WorkerJobStore()
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
 register_smith_read_only_tools(get_registry())
@@ -291,6 +300,98 @@ async def list_freyja3_audit(
     return {"ok": True, "events": [event.model_dump(mode="json") for event in events], "count": len(events)}
 
 
+@app.post("/freyja3/workers/jobs")
+async def create_freyja3_worker_job(job: Freyja3WorkerJobCreate, raw_request: Request) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
+    try:
+        created = worker_job_store.create(job, writer_domain_id=domain_id)
+    except Freyja3WorkerAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    _record_worker_audit(
+        AuditEventType.WORKER_JOB_CREATED,
+        actor_id=f"domain:{domain_id.value}",
+        domain_id=domain_id,
+        job_id=created.job_id,
+        reason="worker job envelope created",
+        metadata={"worker_class": created.worker_class, "target_machine_id": created.target_machine_id},
+        trace_id=raw_request.headers.get("x-freyja-trace-id"),
+    )
+    return {"ok": True, "job": created.model_dump(mode="json")}
+
+
+@app.get("/freyja3/workers/jobs")
+async def list_freyja3_worker_jobs(
+    raw_request: Request,
+    status: Freyja3WorkerJobStatus | None = None,
+    worker_class: str | None = None,
+    target_machine_id: str | None = None,
+    include_completed: bool = False,
+    limit: int = 50,
+) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.HOUSEHOLD)
+    try:
+        jobs = worker_job_store.list(
+            Freyja3WorkerJobQuery(
+                status=status,
+                worker_class=worker_class,
+                target_machine_id=target_machine_id,
+                include_completed=include_completed,
+                limit=limit,
+            ),
+            reader_domain_id=domain_id,
+        )
+    except Freyja3WorkerAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "jobs": [job.model_dump(mode="json") for job in jobs], "count": len(jobs)}
+
+
+@app.post("/freyja3/workers/jobs/claim")
+async def claim_freyja3_worker_job(raw_request: Request, machine_id: str, worker_class: str | None = None) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.SYSTEM)
+    try:
+        job = worker_job_store.claim_next(machine_id=machine_id, worker_class=worker_class, claimer_domain_id=domain_id)
+    except Freyja3WorkerAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    if job is None:
+        return {"ok": True, "job": None}
+    _record_worker_audit(
+        AuditEventType.WORKER_JOB_CLAIMED,
+        actor_id=f"machine:{machine_id}",
+        domain_id=domain_id,
+        job_id=job.job_id,
+        reason="worker job claimed",
+        metadata={"worker_class": job.worker_class, "claimed_by_machine_id": job.claimed_by_machine_id},
+        trace_id=raw_request.headers.get("x-freyja-trace-id"),
+    )
+    return {"ok": True, "job": job.model_dump(mode="json")}
+
+
+@app.post("/freyja3/workers/jobs/{job_id}/complete")
+async def complete_freyja3_worker_job(
+    job_id: str,
+    completion: Freyja3WorkerJobComplete,
+    raw_request: Request,
+    machine_id: str,
+) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.SYSTEM)
+    try:
+        job = worker_job_store.complete(job_id, completion, machine_id=machine_id, completer_domain_id=domain_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="worker job not claimable by this machine") from None
+    except Freyja3WorkerAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    _record_worker_audit(
+        AuditEventType.WORKER_JOB_COMPLETED,
+        actor_id=f"machine:{machine_id}",
+        domain_id=domain_id,
+        job_id=job.job_id,
+        reason=f"worker job {job.status.value}",
+        metadata={"worker_class": job.worker_class, "status": job.status.value},
+        trace_id=raw_request.headers.get("x-freyja-trace-id"),
+    )
+    return {"ok": True, "job": job.model_dump(mode="json")}
+
+
 @app.post("/freyja3/schedules")
 async def create_freyja3_schedule(schedule: Freyja3ScheduleCreate, raw_request: Request) -> dict[str, Any]:
     domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
@@ -352,6 +453,34 @@ async def dispatch_due_freyja3_schedules(raw_request: Request, due_before: str |
 async def canonical_route(request: CanonicalRequest, raw_request: Request) -> dict[str, Any]:
     response = await _execute_canonical_request(request, raw_request)
     return response.model_dump(mode="json")
+
+
+def _record_worker_audit(
+    event_type: AuditEventType,
+    *,
+    actor_id: str,
+    domain_id: SecurityDomainId,
+    job_id: str,
+    reason: str,
+    metadata: dict[str, Any],
+    trace_id: str | None,
+) -> None:
+    audit_store.record_many(
+        [
+            AuditEvent(
+                event_type=event_type,
+                actor_id=actor_id,
+                domain_id=domain_id,
+                target_id=job_id,
+                allowed=True,
+                reason=reason,
+                metadata=metadata,
+            )
+        ],
+        writer_domain_id=SecurityDomainId.SYSTEM,
+        trace_id=trace_id,
+        conversation_id=job_id,
+    )
 
 
 @app.post("/events/semantic")

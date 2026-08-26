@@ -8,6 +8,7 @@ from freyja.freyja3_audit import Freyja3AuditStore
 from freyja.freyja3_machines import Freyja3MachineStatusStore
 from freyja.freyja3_memory import Freyja3MemoryStore
 from freyja.freyja3_scheduler import Freyja3SchedulerStore
+from freyja.freyja3_workers import Freyja3WorkerJobStore
 from freyja.semantic_events import SemanticEventStore
 
 
@@ -176,6 +177,50 @@ def test_freyja3_app_machine_heartbeat_is_household_readable(monkeypatch, tmp_pa
     assert listed.status_code == 200
     assert listed.json()["count"] == 1
     assert listed.json()["machines"][0]["machine_id"] == "mars"
+
+
+def test_freyja3_app_worker_job_lifecycle_is_audited(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(freyja3_app, "worker_job_store", Freyja3WorkerJobStore(tmp_path / "workers.db"))
+    monkeypatch.setattr(freyja3_app, "audit_store", Freyja3AuditStore(tmp_path / "audit.db"))
+    client = TestClient(freyja3_app.app)
+
+    created = client.post(
+        "/freyja3/workers/jobs",
+        headers={"x-freyja-security-domain": "household", "x-freyja-trace-id": "trace-worker"},
+        json={
+            "job_id": "job-mars-test",
+            "worker_class": "monitoring",
+            "target_machine_id": "mars",
+            "objective": "Check Mars worker health.",
+            "payload": {"check": "health"},
+        },
+    )
+    claim_wrong = client.post(
+        "/freyja3/workers/jobs/claim?machine_id=atlas&worker_class=monitoring",
+        headers={"x-freyja-security-domain": "system", "x-freyja-trace-id": "trace-worker-claim"},
+    )
+    claimed = client.post(
+        "/freyja3/workers/jobs/claim?machine_id=mars&worker_class=monitoring",
+        headers={"x-freyja-security-domain": "system", "x-freyja-trace-id": "trace-worker-claim"},
+    )
+    completed = client.post(
+        "/freyja3/workers/jobs/job-mars-test/complete?machine_id=mars",
+        headers={"x-freyja-security-domain": "system", "x-freyja-trace-id": "trace-worker-complete"},
+        json={"status": "completed", "result": {"ok": True}},
+    )
+    listed = client.get("/freyja3/workers/jobs?include_completed=true", headers={"x-freyja-security-domain": "household"})
+    audit = client.get("/freyja3/audit?conversation_id=job-mars-test", headers={"x-freyja-security-domain": "household"})
+
+    assert created.status_code == 200
+    assert claim_wrong.json()["job"] is None
+    assert claimed.json()["job"]["claimed_by_machine_id"] == "mars"
+    assert completed.json()["job"]["status"] == "completed"
+    assert listed.json()["jobs"][0]["job_id"] == "job-mars-test"
+    assert {event["event_type"] for event in audit.json()["events"]} == {
+        "worker_job_created",
+        "worker_job_claimed",
+        "worker_job_completed",
+    }
 
 
 def test_freyja3_app_scheduler_dispatches_due_agent_envelopes(monkeypatch, tmp_path) -> None:
