@@ -859,6 +859,68 @@ async def test_native_tool_call_validated_and_normalized(monkeypatch: pytest.Mon
     assert first_call["tools"]
 
 
+async def test_tool_required_web_lookup_runs_search_before_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "ollama_model", "qwen2.5:7b")
+    monkeypatch.setattr(settings, "ollama_min_chat_parameters_b", 3)
+    monkeypatch.setattr(settings, "chat_max_tool_output_chars", 2000)
+    registry = ToolRegistry(audit_enabled=False)
+    seen_arguments: list[dict[str, Any]] = []
+
+    async def search(request: ToolExecutionRequest) -> dict:
+        seen_arguments.append(request.arguments)
+        return {
+            "query": request.arguments["query"],
+            "results": [
+                {
+                    "title": "OpenClaw Web Tools",
+                    "url": "https://docs.openclaw.ai/tools/web",
+                    "snippet": "OpenClaw supports web search and fetch tools.",
+                }
+            ],
+        }
+
+    registry.register(
+        ToolDefinition(
+            name="web_search",
+            description="Search the web.",
+            input_schema={
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {"type": "string"},
+                    "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
+                },
+            },
+        ),
+        search,
+    )
+    r = Router(registry=registry)
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.healthy.return_value = True
+    r.ollama_client.chat.return_value = {
+        "model": "qwen2.5:7b",
+        "message": {"content": "OpenClaw documents web tools at https://docs.openclaw.ai/tools/web."},
+    }
+
+    req = RouteRequest(
+        prompt="Freyja, look up OpenClaw tools",
+        provider="local",
+        tools_required=True,
+    )
+    result = await r.execute(req)
+
+    assert seen_arguments == [{"query": "OpenClaw tools", "max_results": 5}]
+    assert result.response == "OpenClaw documents web tools at https://docs.openclaw.ai/tools/web."
+    assert len(result.tool_results) == 1
+    assert result.tool_results[0]["tool_name"] == "web_search"
+    assert result.tool_results[0]["success"] is True
+    chat_kwargs = r.ollama_client.chat.await_args.kwargs
+    assert chat_kwargs["tools_required"] is False
+    assert "BEGIN VERIFIED LIVE WEB SEARCH RESULTS" in chat_kwargs["prompt"]
+    assert "https://docs.openclaw.ai/tools/web" in chat_kwargs["prompt"]
+
+
 async def test_native_tool_call_invalid_arguments_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "chat_max_tool_iterations", 2)
     registry = ToolRegistry(audit_enabled=False)

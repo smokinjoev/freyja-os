@@ -1197,6 +1197,18 @@ class Router:
                 decision.public_error_message = PUBLIC_ERROR_MESSAGES.get(decision.provider, PUBLIC_ERROR_MESSAGES["ollama"])
                 return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
             if request.tools_required:
+                web_search = self._deterministic_web_search_request(request)
+                if web_search is not None:
+                    return await self._execute_deterministic_web_search(
+                        request,
+                        decision,
+                        ollama_client,
+                        web_search,
+                        memory_principal,
+                        person_context,
+                        evidence,
+                        started,
+                    )
                 return await self._execute_with_tools(
                     request,
                     decision,
@@ -1237,6 +1249,18 @@ class Router:
                 decision.public_error_message = PUBLIC_ERROR_MESSAGES["openrouter"]
                 return self._routing_result(decision=decision, response="", evidence=evidence, started=started)
             if request.tools_required:
+                web_search = self._deterministic_web_search_request(request)
+                if web_search is not None:
+                    return await self._execute_deterministic_web_search(
+                        request,
+                        decision,
+                        self.openrouter_client,
+                        web_search,
+                        memory_principal,
+                        person_context,
+                        evidence,
+                        started,
+                    )
                 return await self._execute_with_tools(
                     request,
                     decision,
@@ -1726,6 +1750,42 @@ class Router:
         if not any(marker in prompt for marker in ("what", "what's", "whats", "show", "list", "recall", "read")):
             return None
         return {"limit": 5}
+
+    def _deterministic_web_search_request(self, request: RouteRequest) -> dict[str, Any] | None:
+        if not request.tools_required:
+            return None
+        if request.images:
+            return None
+        if (request.task_type or "").lower() == "coding":
+            return None
+        prompt = request.prompt.strip()
+        lowered = prompt.casefold()
+        if not any(
+            marker in lowered
+            for marker in (
+                "search",
+                "look up",
+                "lookup",
+                "web",
+                "internet",
+                "latest",
+                "current news",
+                "openclaw",
+            )
+        ):
+            return None
+
+        query = re.sub(r"^\s*freyja\s*,?\s*", "", prompt, flags=re.IGNORECASE).strip()
+        query = re.sub(
+            r"^\s*(?:please\s+)?(?:search(?:\s+the\s+web)?(?:\s+for)?|look\s+up|lookup|find)\s+",
+            "",
+            query,
+            flags=re.IGNORECASE,
+        ).strip()
+        query = query.rstrip("?.! ")
+        if not query:
+            query = prompt
+        return {"query": query[:300], "max_results": 5}
 
     async def _execute_deterministic_home_read(
         self,
@@ -2281,6 +2341,124 @@ class Router:
         return self._routing_result(
             decision=decision,
             response=response,
+            tool_results=[entry],
+            evidence=evidence,
+            started=started,
+        )
+
+    async def _execute_deterministic_web_search(
+        self,
+        request: RouteRequest,
+        decision: RoutingDecision,
+        client: Any,
+        arguments: dict[str, Any],
+        memory_principal: MemoryPrincipal | None,
+        person_context: dict[str, str] | None,
+        evidence: RuntimeEvidence,
+        started: float,
+    ) -> RoutingResult:
+        tool_name = "web_search"
+        definition = self._registry.get_tool(tool_name)
+        if definition is None:
+            return self._routing_result(
+                decision=decision,
+                response="Web search capability is not registered.",
+                evidence=evidence,
+                started=started,
+            )
+        execution_request = ToolExecutionRequest(
+            tool_name=tool_name,
+            arguments=arguments,
+            request_id=decision.request_id,
+            actor="atlas_director",
+            metadata={
+                "memory_principal": memory_principal.model_dump(mode="json") if memory_principal else None,
+                "person": dict(person_context) if person_context else None,
+                "director_authorized": True,
+            },
+        )
+        authorization = self._registry.authorize(definition, execution_request)
+        self._record_capability_authorization(
+            evidence,
+            definition=definition,
+            request=execution_request,
+            authorization=authorization,
+        )
+        if not authorization.allowed:
+            entry = self._tool_history_entry(
+                tool_name=tool_name,
+                success=False,
+                arguments=arguments,
+                output={},
+                error_code="authorization_denied",
+                public_error_message="Tool authorization denied.",
+            )
+            self._record_tool_evidence(evidence, entry)
+            return self._routing_result(
+                decision=decision,
+                response="I can't search the web for that principal.",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        result = await self._registry.execute(execution_request)
+        entry = self._tool_history_entry(
+            tool_name=tool_name,
+            success=result.success,
+            arguments=arguments,
+            output=result.output,
+            error_code=result.error_code,
+            public_error_message=result.public_error_message,
+            duration_ms=result.duration_ms,
+        )
+        self._record_tool_evidence(evidence, entry)
+        if not result.success:
+            response_text = result.public_error_message or "Web search failed."
+            await self._record_memory(request, decision, response_text, evidence)
+            return self._routing_result(
+                decision=decision,
+                response=response_text,
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        prompt = self._prompt_for_provider(request, decision.provider, memory_principal, evidence)
+        prompt = (
+            f"{prompt}\n\nBEGIN VERIFIED LIVE WEB SEARCH RESULTS\n"
+            f"{self._serialize_tool_output(result.output, settings.chat_max_tool_output_chars)}\n"
+            "END VERIFIED LIVE WEB SEARCH RESULTS\n\n"
+            "Use the verified live web search results above to answer the user's request directly. "
+            "Do not emit a tool call."
+        )
+        chat_kwargs: dict[str, Any] = {
+            "prompt": prompt,
+            "model": decision.model or None,
+            "tools_required": False,
+            "images": request.images or None,
+        }
+        if decision.provider == "local_reasoning":
+            chat_kwargs["output_tokens"] = settings.ollama_default_output_tokens
+        response = await client.chat(**chat_kwargs)
+        self._record_provider_response(evidence, response, decision.provider)
+        if "error" in response:
+            decision.fallback_attempts.append({"provider": decision.provider, "outcome": response["error"]})
+            decision.fallback_attempts = self._sanitize_fallback_attempts(decision.fallback_attempts)
+            decision.public_error_message = self._public_error(decision.provider, decision.fallback_attempts)
+            return self._routing_result(
+                decision=decision,
+                response="",
+                tool_results=[entry],
+                evidence=evidence,
+                started=started,
+            )
+
+        content = self._strip_tool_markers(self._extract_response_text(response, decision.provider))
+        await self._record_memory(request, decision, content, evidence)
+        return self._routing_result(
+            decision=decision,
+            response=content,
             tool_results=[entry],
             evidence=evidence,
             started=started,

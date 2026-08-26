@@ -43,6 +43,9 @@ from connectors.imessage.models import IMessage, IMessageAttachment  # noqa: E40
 from connectors.gmail.config import GmailSettings  # noqa: E402
 from connectors.signal.config import SignalSettings  # noqa: E402
 from connectors.messaging import household_agent_for_sender  # noqa: E402
+from freyja.agents.hierarchy import AgentHierarchy, PersonName  # noqa: E402
+from freyja.agents.process import create_agent_process  # noqa: E402
+from freyja.memory.store import MemoryStore  # noqa: E402
 
 
 def _imessage_runtime_source_paths(manifest: Path = _IMESSAGE_RUNTIME_MANIFEST) -> tuple[str, ...]:
@@ -624,6 +627,58 @@ def _imessage_family_agent_mapping(
     }
 
 
+def _family_agent_memory_check() -> dict[str, object]:
+    hierarchy = AgentHierarchy()
+    person_by_id = {
+        "joe": PersonName.JOE,
+        "beth": PersonName.BETH,
+        "liam": PersonName.LIAM,
+        "jenna": PersonName.JENNA,
+    }
+    temp_parent = _PROJECT_ROOT / ".tmp"
+    temp_parent.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="freyja-family-memory-check-", dir=temp_parent) as temp_dir:
+        store = MemoryStore(database_path=str(Path(temp_dir) / "family-memory.db"))
+        store.initialize()
+        processes = {
+            person_id: create_agent_process(person, store=store, hierarchy=hierarchy)
+            for person_id, person in person_by_id.items()
+        }
+        shared_scopes = {process.shared_principal.scope_key for process in processes.values()}
+        private_scopes = {process.private_principal.scope_key for process in processes.values()}
+        agents = {
+            person_id: {
+                "agent_id": process.agent_id.value,
+                "owner": process.owner.value,
+                "private_scope_key": process.private_principal.scope_key,
+                "shared_scope_key": process.shared_principal.scope_key,
+                "store_database_path": process.store.database_path,
+            }
+            for person_id, process in processes.items()
+        }
+
+    expected_agents = {
+        "joe": "cloyd-gibbler",
+        "beth": "benedict",
+        "liam": "agent-44",
+        "jenna": "jenna",
+    }
+    agent_ids_ok = all(
+        agents[person_id]["agent_id"] == expected_agent
+        for person_id, expected_agent in expected_agents.items()
+    )
+    owners_ok = all(agents[person_id]["owner"] == person_id for person_id in expected_agents)
+    return {
+        "ok": len(shared_scopes) == 1 and len(private_scopes) == 4 and agent_ids_ok and owners_ok,
+        "shared_scope_count": len(shared_scopes),
+        "private_scope_count": len(private_scopes),
+        "expected_agents": expected_agents,
+        "agent_ids_ok": agent_ids_ok,
+        "owners_ok": owners_ok,
+        "agents": agents,
+    }
+
+
 def _imessage_inprocess_route_smoke(
     settings: IMessageSettings,
     *,
@@ -813,6 +868,7 @@ def _imessage_status(
     check_inprocess_route_smoke: bool,
     check_family_route_smoke: bool = False,
     check_family_file_smoke: bool = False,
+    check_family_agent_memory: bool = False,
     require_family_agents: bool = False,
     route_identity: SyntheticRouteIdentity | None = None,
     env_file: str | None = None,
@@ -873,6 +929,8 @@ def _imessage_status(
         )
     if check_family_file_smoke:
         status["family_file_smoke"] = asyncio.run(_run_family_file_gateway_smoke(settings))
+    if check_family_agent_memory:
+        status["family_agent_memory"] = _family_agent_memory_check()
     if check_inprocess_route_smoke:
         status["inprocess_route_smoke"] = _imessage_inprocess_route_smoke(
             settings,
@@ -895,6 +953,7 @@ def _imessage_status(
             not check_route_smoke or status.get("synthetic_route_smoke", {}).get("ok") is True,
             not check_family_route_smoke or status.get("family_route_smoke", {}).get("ok") is True,
             not check_family_file_smoke or status.get("family_file_smoke", {}).get("ok") is True,
+            not check_family_agent_memory or status.get("family_agent_memory", {}).get("ok") is True,
             not check_inprocess_route_smoke or status.get("inprocess_route_smoke", {}).get("ok") is True,
         ]
     )
@@ -1049,6 +1108,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run synthetic PDF/Word/image attachments through the iMessage gateway for all four family identities; does not send iMessages.",
     )
     parser.add_argument(
+        "--check-family-agent-memory",
+        action="store_true",
+        help="Verify four personal agents use distinct private memory scopes and one shared household scope.",
+    )
+    parser.add_argument(
         "--check-inprocess-route-smoke",
         action="store_true",
         help="Exercise Director /canonical/route in-process with synthetic iMessage and terminal envelopes; does not prove live transport.",
@@ -1097,6 +1161,7 @@ def main(argv: list[str] | None = None) -> int:
             check_inprocess_route_smoke=args.check_inprocess_route_smoke,
             check_family_route_smoke=args.check_imessage_family_route_smoke,
             check_family_file_smoke=args.check_imessage_family_file_smoke,
+            check_family_agent_memory=args.check_family_agent_memory,
             require_family_agents=args.require_imessage_family_agents,
             route_identity=route_identity,
             env_file=args.env_file,
