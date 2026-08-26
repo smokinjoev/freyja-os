@@ -1070,6 +1070,58 @@ async def test_weather_adds_live_observation_for_vulcan_answer(
     assert "Sunny" in first_prompt
 
 
+async def test_next_weekend_weather_adds_live_observation_with_default_location(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "weather_tool_enabled", True)
+    monkeypatch.setattr(settings, "home_assistant_location_name", "Atlanta")
+    observed: dict[str, Any] = {}
+
+    async def weather(
+        location: str,
+        *,
+        request_type: str,
+        target_date: Any = None,
+        target_label: str = "",
+    ) -> dict:
+        observed["location"] = location
+        observed["request_type"] = request_type
+        observed["target_label"] = target_label
+        return {
+            "live_data_available": True,
+            "location": location,
+            "request_type": request_type,
+            "target_label": target_label,
+            "summary": "Warm weekend forecast",
+            "high_f": 84,
+        }
+
+    monkeypatch.setattr("freyja.router.get_weather", weather)
+    r = Router()
+    r.ollama_client = AsyncMock()
+    r.openrouter_client = AsyncMock()
+    r.ollama_client.chat.return_value = {
+        "model": "gpt-oss:20b",
+        "message": {"content": "Next weekend in Atlanta looks warm."},
+    }
+
+    req = RouteRequest(
+        prompt="What's the weather next weekend?",
+        provider="auto",
+        tools_required=False,
+    )
+    result = await r.execute(req)
+
+    assert result.decision.provider == "local_reasoning"
+    assert result.response == "Next weekend in Atlanta looks warm."
+    assert observed["location"] == "Atlanta"
+    assert observed["request_type"] == "forecast"
+    assert observed["target_label"] == "next weekend"
+    first_prompt = r.ollama_client.chat.await_args.kwargs["prompt"]
+    assert "BEGIN VERIFIED LIVE WEATHER OBSERVATION" in first_prompt
+    assert "Warm weekend forecast" in first_prompt
+
+
 async def test_weather_routes_to_local_reasoning_when_tool_disabled(
     router: Router,
     monkeypatch: pytest.MonkeyPatch,

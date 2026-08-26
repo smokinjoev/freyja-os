@@ -135,6 +135,13 @@ class TestTemporalParsing:
         assert decision.target_label == "forecast"
         assert decision.target_date == today + _datetime.timedelta(days=1)
 
+    def test_next_weekend_is_forecast(self):
+        today = _datetime.date(2026, 8, 25)
+        decision = _classify_temporal_intent("What is the weather next weekend?", today=today)
+        assert decision.request_type == WeatherRequestType.FORECAST
+        assert decision.target_label == "next weekend"
+        assert decision.target_date == _datetime.date(2026, 8, 29)
+
 
 class TestLocationExtraction:
     def test_extract_location_basic(self):
@@ -156,6 +163,16 @@ class TestLocationExtraction:
         assert loc.strip() == "Aiken"
         assert "3" not in loc
         assert "days" not in loc.lower()
+
+    def test_extract_location_removes_next_weekend(self):
+        loc = _extract_location("What is the weather next weekend in Aiken?")
+        assert loc.strip() == "Aiken"
+        assert "weekend" not in loc.lower()
+
+    def test_classify_bare_weather_uses_configured_home_location(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(_settings, "home_assistant_location_name", "Atlanta")
+        request = classify_weather_request("What is the weather?")
+        assert request.location == "Atlanta"
 
 
 class TestGetWeatherDisabled:

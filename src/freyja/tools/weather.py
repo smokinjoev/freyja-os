@@ -36,6 +36,7 @@ class WeatherRequestIntent(StrEnum):
     CURRENT = "current"
     TONIGHT = "tonight"
     TOMORROW = "tomorrow"
+    WEEKEND = "weekend"
     WEEKDAY = "weekday"
     EXPLICIT_DATE = "explicit_date"
     FUTURE_DAYS = "future_days"
@@ -140,6 +141,13 @@ def _weekday_from_today(target_weekday: int, today: _datetime.date) -> _datetime
     return today + _datetime.timedelta(days=delta)
 
 
+def _next_weekend_start(today: _datetime.date) -> _datetime.date:
+    days_until_saturday = (calendar.SATURDAY - today.weekday()) % 7
+    if days_until_saturday == 0:
+        days_until_saturday = 7
+    return today + _datetime.timedelta(days=days_until_saturday)
+
+
 def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) -> ForecastDecision:
     """Classify weather temporal intent from a natural-language prompt.
 
@@ -207,7 +215,28 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
             error_message="",
         )
 
-    # 4. Common holiday aliases.
+    # 4. Weekend shorthand.
+    if re.search(r"\b(next\s+weekend|this\s+weekend|weekend)\b", lowered):
+        target_date = _next_weekend_start(today)
+        delta_days = (target_date - today).days
+        if delta_days > _OPENMETEO_MAX_FORECAST_DAYS:
+            return ForecastDecision(
+                request_type=WeatherRequestType.FORECAST,
+                target_date=target_date,
+                target_label="next weekend",
+                error_message=(
+                    f"Forecasts are only available up to {_OPENMETEO_MAX_FORECAST_DAYS} days out; "
+                    f"next weekend ({target_date.isoformat()}) is outside that range."
+                ),
+            )
+        return ForecastDecision(
+            request_type=WeatherRequestType.FORECAST,
+            target_date=target_date,
+            target_label="next weekend",
+            error_message="",
+        )
+
+    # 5. Common holiday aliases.
     if re.search(r"\b(christmas|xmas)\b", lowered):
         year = today.year
         if "next year" in lowered:
@@ -233,7 +262,7 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
             error_message="",
         )
 
-    # 5. Named weekdays (case-insensitive, robust).
+    # 6. Named weekdays (case-insensitive, robust).
     weekday_match = re.search(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", lowered)
     if weekday_match:
         weekday_name = weekday_match.group(1)
@@ -258,7 +287,7 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
                 error_message="",
             )
 
-    # 6. Explicit dates (ISO or slash).
+    # 7. Explicit dates (ISO or slash).
     iso_like = re.search(r"\b(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}|\d{1,2}/\d{1,2}/\d{2})\b", prompt)
     if iso_like:
         date_text = iso_like.group(1)
@@ -302,7 +331,7 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
             error_message="",
         )
 
-    # 7. Phrases containing "forecast" but no date -> assume tomorrow (common expectation).
+    # 8. Phrases containing "forecast" but no date -> assume tomorrow (common expectation).
     if "forecast" in lowered:
         target_date = today + _datetime.timedelta(days=1)
         return ForecastDecision(
@@ -312,7 +341,7 @@ def _classify_temporal_intent(prompt: str, today: _datetime.date | None = None) 
             error_message="",
         )
 
-    # 8. Default fall-through for bare weather requests: current conditions.
+    # 9. Default fall-through for bare weather requests: current conditions.
     return ForecastDecision(
         request_type=WeatherRequestType.CURRENT,
         target_date=today,
@@ -340,7 +369,12 @@ def _extract_location(prompt: str) -> str:
     # Remove helper verbs and question fragments commonly left in front of the location.
     location = re.sub(r"\b(is|will|be|are|does|do|did|can|could|would|should)\b", "", location, flags=re.IGNORECASE)
     # Remove temporal qualifiers and relative-date phrases.
-    location = re.sub(r"\b(today|tonight|tomorrow|now|currently|this\s+week)\b", "", location, flags=re.IGNORECASE)
+    location = re.sub(
+        r"\b(today|tonight|tomorrow|now|currently|this\s+week|this\s+weekend|next\s+weekend|weekend)\b",
+        "",
+        location,
+        flags=re.IGNORECASE,
+    )
     location = re.sub(r"\b(christmas|xmas|this\s+year|next\s+year)\b", "", location, flags=re.IGNORECASE)
     location = re.sub(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", "", location, flags=re.IGNORECASE)
     location = re.sub(r"\bin\s+\d+\s+days?\b|\b\d+\s+days?\b", "", location, flags=re.IGNORECASE)
@@ -359,10 +393,14 @@ def classify_weather_request(prompt: str) -> WeatherRequest:
     """Convert a natural-language weather prompt into an explicit request."""
     decision = _classify_temporal_intent(prompt)
     location = _extract_location(prompt)
+    if not location and not decision.error_message:
+        location = settings.home_assistant_location_name
     intent = WeatherRequestIntent.CURRENT
     if decision.request_type == WeatherRequestType.FORECAST:
         if decision.target_label == "tomorrow":
             intent = WeatherRequestIntent.TOMORROW
+        elif decision.target_label == "next weekend":
+            intent = WeatherRequestIntent.WEEKEND
         elif decision.target_label in {"forecast"}:
             intent = WeatherRequestIntent.FORECAST
         elif re.match(r"\d{4}-\d{2}-\d{2}", decision.target_label):
