@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
@@ -5,6 +6,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+import freyja.macagent_app as macagent_app_module
 from freyja.macagent import MacAgentClient, MacAgentHealth, MacAgentOperationRequest
 from freyja.macagent_app import app as macagent_app
 from freyja.main import app
@@ -469,7 +471,71 @@ def test_macagent_app_reads_mailbox_counts(monkeypatch) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
-    assert data["output"] == {"mailbox": "INBOX", "unread_count": 2, "message_count": 10}
+    assert data["output"] == {
+        "mailbox": "INBOX",
+        "unread_count": 2,
+        "message_count": 10,
+        "source": "apple_mail_automation",
+    }
+
+
+def test_macagent_app_falls_back_to_mail_index_counts(tmp_path, monkeypatch) -> None:
+    from freyja.config import settings
+
+    mail_data = tmp_path / "Library" / "Mail" / "V10" / "MailData"
+    mail_data.mkdir(parents=True)
+    index_path = mail_data / "Envelope Index"
+    connection = sqlite3.connect(index_path)
+    connection.execute(
+        """
+        CREATE TABLE mailboxes (
+          url TEXT NOT NULL,
+          total_count INTEGER NOT NULL DEFAULT 0,
+          unread_count INTEGER NOT NULL DEFAULT 0,
+          unread_count_adjusted_for_duplicates INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    connection.execute(
+        "INSERT INTO mailboxes VALUES ('imap://account/INBOX', 10, 4, 3)"
+    )
+    connection.execute(
+        "INSERT INTO mailboxes VALUES ('imap://other/INBOX', 7, 2, 2)"
+    )
+    connection.execute(
+        "INSERT INTO mailboxes VALUES ('imap://account/Sent', 99, 0, 0)"
+    )
+    connection.commit()
+    connection.close()
+
+    monkeypatch.setattr(settings, "macagent_token", "secret")
+    monkeypatch.setattr(macagent_app_module.Path, "home", lambda: tmp_path)
+    test_client = TestClient(macagent_app)
+    request = MacAgentOperationRequest(
+        capability="apple.mail.read",
+        operation="mailbox_counts",
+        arguments={},
+        request_id="req-mail-fallback",
+        actor="atlas_director",
+        director_authorized=True,
+    )
+
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(side_effect=RuntimeError("osascript timed out"))):
+        response = test_client.post(
+            f"/capabilities/{request.capability}",
+            headers={"Authorization": "Bearer secret"},
+            json=request.model_dump(mode="json"),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["output"] == {
+        "mailbox": "INBOX",
+        "unread_count": 5,
+        "message_count": 17,
+        "source": "apple_mail_envelope_index",
+    }
 
 
 def test_macagent_app_reads_music_current_track(monkeypatch) -> None:

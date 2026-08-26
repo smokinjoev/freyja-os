@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+from pathlib import Path
 import socket
+import sqlite3
 import time
 from typing import Any
 
@@ -182,9 +184,44 @@ tell application "Mail"
   return (unreadCount as text) & tab & (messageCount as text)
 end tell
 """
-    output = await _osascript(script)
-    unread_text, _, total_text = output.partition("\t")
-    return {"mailbox": "INBOX", "unread_count": _int_text(unread_text), "message_count": _int_text(total_text)}
+    try:
+        output = await _osascript(script, timeout=min(2.0, settings.macagent_timeout_seconds))
+        unread_text, _, total_text = output.partition("\t")
+        return {
+            "mailbox": "INBOX",
+            "unread_count": _int_text(unread_text),
+            "message_count": _int_text(total_text),
+            "source": "apple_mail_automation",
+        }
+    except RuntimeError:
+        return await asyncio.to_thread(_mail_index_mailbox_counts)
+
+
+def _mail_index_mailbox_counts(mail_root: Path | None = None) -> dict[str, Any]:
+    root = mail_root or Path.home() / "Library" / "Mail"
+    candidates = sorted(root.glob("V*/MailData/Envelope Index"), key=lambda path: path.parent.parent.name, reverse=True)
+    if not candidates:
+        raise RuntimeError("Apple Mail envelope index not found")
+    index_path = candidates[0]
+    uri = f"file:{index_path.as_posix()}?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=1.0) as connection:
+        row = connection.execute(
+            """
+            SELECT
+              COALESCE(SUM(total_count), 0),
+              COALESCE(SUM(unread_count_adjusted_for_duplicates), SUM(unread_count), 0)
+            FROM mailboxes
+            WHERE lower(url) LIKE '%/inbox'
+            """
+        ).fetchone()
+    total_count = int(row[0] or 0)
+    unread_count = int(row[1] or 0)
+    return {
+        "mailbox": "INBOX",
+        "unread_count": unread_count,
+        "message_count": total_count,
+        "source": "apple_mail_envelope_index",
+    }
 
 
 async def _music_read(request: MacAgentOperationRequest) -> dict[str, Any]:
@@ -252,7 +289,7 @@ async def _shortcuts_run(request: MacAgentOperationRequest) -> dict[str, Any]:
     return {"stdout": stdout.decode("utf-8", errors="replace"), "shortcut": shortcut_name}
 
 
-async def _osascript(script: str) -> str:
+async def _osascript(script: str, *, timeout: float | None = None) -> str:
     process = await asyncio.create_subprocess_exec(
         "/usr/bin/osascript",
         "-e",
@@ -261,7 +298,7 @@ async def _osascript(script: str) -> str:
         stderr=asyncio.subprocess.PIPE,
     )
     try:
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=settings.macagent_timeout_seconds)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout or settings.macagent_timeout_seconds)
     except TimeoutError as exc:
         process.kill()
         await process.communicate()
