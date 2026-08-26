@@ -25,6 +25,16 @@ def test_personal_agents_delegate_to_shared_maintenance_with_separate_scopes() -
         owner=PersonName.BETH,
         objective="Inspect Beth's agent service",
     )
+    liam = hierarchy.maintenance_request(
+        requested_by=AgentName.AGENT_44,
+        owner=PersonName.LIAM,
+        objective="Inspect Liam's agent service",
+    )
+    jenna = hierarchy.maintenance_request(
+        requested_by=AgentName.JENNA,
+        owner=PersonName.JENNA,
+        objective="Inspect Jenna's agent service",
+    )
 
     assert joe.result_recipient is AgentName.CLOYD_GIBBLER
     assert joe.memory_principal.client_subject == "agent:cloyd-gibbler"
@@ -32,7 +42,20 @@ def test_personal_agents_delegate_to_shared_maintenance_with_separate_scopes() -
     assert beth.result_recipient is AgentName.BENEDICT
     assert beth.memory_principal.client_subject == "agent:benedict"
     assert beth.memory_principal.account_owner == "person:beth"
-    assert joe.memory_principal.scope_key != beth.memory_principal.scope_key
+    assert liam.result_recipient is AgentName.AGENT_44
+    assert liam.memory_principal.client_subject == "agent:agent-44"
+    assert liam.memory_principal.account_owner == "person:liam"
+    assert jenna.result_recipient is AgentName.JENNA
+    assert jenna.memory_principal.client_subject == "agent:jenna"
+    assert jenna.memory_principal.account_owner == "person:jenna"
+    assert len(
+        {
+            joe.memory_principal.scope_key,
+            beth.memory_principal.scope_key,
+            liam.memory_principal.scope_key,
+            jenna.memory_principal.scope_key,
+        }
+    ) == 4
 
 
 def test_authenticated_people_message_only_their_primary_agent() -> None:
@@ -41,6 +64,8 @@ def test_authenticated_people_message_only_their_primary_agent() -> None:
     family = hierarchy.route_person_message(person=PersonName.FAMILY, content="Hello Freyja")
     joe = hierarchy.route_person_message(person=PersonName.JOE, content="Hello Cloyd")
     beth = hierarchy.route_person_message(person=PersonName.BETH, content="Hello Benedict")
+    liam = hierarchy.route_person_message(person=PersonName.LIAM, content="Hello Agent 44")
+    jenna = hierarchy.route_person_message(person=PersonName.JENNA, content="Hello Jenna")
 
     assert family.recipient is AgentName.FREYJA
     assert family.memory_principal.account_owner == "person:family"
@@ -48,8 +73,19 @@ def test_authenticated_people_message_only_their_primary_agent() -> None:
     assert joe.memory_principal.account_owner == "person:joe"
     assert beth.recipient is AgentName.BENEDICT
     assert beth.memory_principal.account_owner == "person:beth"
-    assert family.memory_principal.scope_key != joe.memory_principal.scope_key
-    assert joe.memory_principal.scope_key != beth.memory_principal.scope_key
+    assert liam.recipient is AgentName.AGENT_44
+    assert liam.memory_principal.account_owner == "person:liam"
+    assert jenna.recipient is AgentName.JENNA
+    assert jenna.memory_principal.account_owner == "person:jenna"
+    assert len(
+        {
+            family.memory_principal.scope_key,
+            joe.memory_principal.scope_key,
+            beth.memory_principal.scope_key,
+            liam.memory_principal.scope_key,
+            jenna.memory_principal.scope_key,
+        }
+    ) == 5
 
 
 def test_agent_profiles_are_reusable_connector_identity_contracts() -> None:
@@ -57,6 +93,8 @@ def test_agent_profiles_are_reusable_connector_identity_contracts() -> None:
 
     joe = hierarchy.profile_for_member_id("joe")
     beth = hierarchy.profile_for_member_id("beth")
+    liam = hierarchy.profile_for_member_id("liam")
+    jenna = hierarchy.profile_for_member_id("jenna")
     family = hierarchy.profile_for_member_id("family")
 
     assert joe is not None
@@ -67,6 +105,12 @@ def test_agent_profiles_are_reusable_connector_identity_contracts() -> None:
     assert beth is not None
     assert beth.agent_id is AgentName.BENEDICT
     assert beth.account_owner == "person:beth"
+    assert liam is not None
+    assert liam.agent_id is AgentName.AGENT_44
+    assert liam.account_owner == "person:liam"
+    assert jenna is not None
+    assert jenna.agent_id is AgentName.JENNA
+    assert jenna.account_owner == "person:jenna"
     assert "cannot verify it from here" in joe.prompt_role
     assert "cannot verify it from here" in beth.prompt_role
     assert family is not None

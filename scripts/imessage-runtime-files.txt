@@ -4,7 +4,13 @@ connectors/imessage/models.py
 connectors/imessage/transport.py
 connectors/messaging.py
 src/freyja/agents/coding_lane.py
+src/freyja/agents/hierarchy.py
 src/freyja/agents/household.py
+src/freyja/agents/process.py
+src/freyja/agents/instances/agent_44/__init__.py
+src/freyja/agents/instances/agent_44/agent.py
+src/freyja/agents/instances/jenna/__init__.py
+src/freyja/agents/instances/jenna/agent.py
 src/freyja/contracts.py
 src/freyja/inference.py
 src/freyja/media.py

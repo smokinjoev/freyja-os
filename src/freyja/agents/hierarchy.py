@@ -15,6 +15,8 @@ class AgentName(StrEnum):
     FREYJA = "freyja"
     CLOYD_GIBBLER = "cloyd-gibbler"
     BENEDICT = "benedict"
+    AGENT_44 = "agent-44"
+    JENNA = "jenna"
     MAINTENANCE = "maintenance"
 
 
@@ -22,6 +24,8 @@ class PersonName(StrEnum):
     FAMILY = "family"
     JOE = "joe"
     BETH = "beth"
+    LIAM = "liam"
+    JENNA = "jenna"
 
 
 class MaintenanceAuthority(StrEnum):
@@ -99,11 +103,15 @@ class AgentHierarchy:
         PersonName.FAMILY: AgentName.FREYJA,
         PersonName.JOE: AgentName.CLOYD_GIBBLER,
         PersonName.BETH: AgentName.BENEDICT,
+        PersonName.LIAM: AgentName.AGENT_44,
+        PersonName.JENNA: AgentName.JENNA,
     }
     _display_names = {
         AgentName.FREYJA: "Freyja",
         AgentName.CLOYD_GIBBLER: "Cloyd Gibbler",
         AgentName.BENEDICT: "Benedict",
+        AgentName.AGENT_44: "Agent 44",
+        AgentName.JENNA: "Jenna",
         AgentName.MAINTENANCE: "Agent Smith",
     }
 
@@ -141,6 +149,10 @@ class AgentHierarchy:
             return PersonName.JOE
         if normalized in {"beth", "elizabeth"}:
             return PersonName.BETH
+        if normalized == "liam":
+            return PersonName.LIAM
+        if normalized == "jenna":
+            return PersonName.JENNA
         if normalized in {"family", "freyja", "household", "home"}:
             return PersonName.FAMILY
         return None
@@ -190,6 +202,26 @@ class AgentHierarchy:
                 "notes, memories, messages, files, or shared context unless Director "
                 "supplied that data in this request or a tool result. If you do not "
                 "have verified data, say you cannot verify it from here."
+            )
+        if agent is AgentName.AGENT_44 and person is PersonName.LIAM:
+            return (
+                "Your name is Agent 44. Answer as Agent 44, Liam's private "
+                "personal agent. Do not say you are Freyja, do not answer as "
+                "Freyja, and do not describe Freyja as your identity. Freyja is "
+                "only the family/household agent and infrastructure context. "
+                "Protect Liam's private context, keep responses age-appropriate, "
+                "and share only the minimum necessary household information when "
+                "Liam explicitly asks."
+            )
+        if agent is AgentName.JENNA and person is PersonName.JENNA:
+            return (
+                "Your name is Jenna. Answer as Jenna, Jenna's private personal "
+                "agent. Do not say you are Freyja, do not answer as Freyja, and "
+                "do not describe Freyja as your identity. Freyja is only the "
+                "family/household agent and infrastructure context. Protect "
+                "Jenna's private context, keep responses age-appropriate, and "
+                "share only the minimum necessary household information when "
+                "Jenna explicitly asks."
             )
         return (
             "Your name is Freyja. You are the family and household agent for this "
