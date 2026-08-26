@@ -44,6 +44,8 @@ class AuditEventType(StrEnum):
     AGENT_INFERENCE_COMPLETED = "agent_inference_completed"
     AGENT_MEMORY_RECALLED = "agent_memory_recalled"
     AGENT_MEMORY_WRITTEN = "agent_memory_written"
+    AGENT_MEMORY_CANDIDATE_PROPOSED = "agent_memory_candidate_proposed"
+    AGENT_MEMORY_CANDIDATE_REVIEWED = "agent_memory_candidate_reviewed"
     AGENT_FOLLOW_UP_REQUESTED = "agent_follow_up_requested"
     PRIVACY_EGRESS_ALLOWED = "privacy_egress_allowed"
     PRIVACY_EGRESS_DENIED = "privacy_egress_denied"
@@ -174,6 +176,7 @@ class AgentExecutionResult(BaseModel):
     tool_results: tuple[dict[str, Any], ...] = ()
     recalled_memories: tuple[dict[str, Any], ...] = ()
     written_memories: tuple[dict[str, Any], ...] = ()
+    memory_candidates: tuple[dict[str, Any], ...] = ()
     follow_up_questions: tuple[str, ...] = ()
     inference_endpoint_id: str | None = None
     inference_model: str | None = None

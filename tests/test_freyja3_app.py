@@ -88,6 +88,73 @@ def test_freyja3_app_memory_enforces_domain_headers(monkeypatch, tmp_path) -> No
     assert beth_read.json()["count"] == 0
 
 
+def test_freyja3_app_memory_candidate_review_writes_memory_and_audit(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(freyja3_app, "memory_store", Freyja3MemoryStore(tmp_path / "memory.db"))
+    monkeypatch.setattr(freyja3_app, "audit_store", Freyja3AuditStore(tmp_path / "audit.db"))
+    client = TestClient(freyja3_app.app)
+
+    proposed = client.post(
+        "/freyja3/memory/candidates",
+        headers={"x-freyja-security-domain": "person.joe", "x-freyja-trace-id": "trace-candidate"},
+        json={
+            "owner_domain_id": "person.joe",
+            "scope": "personal",
+            "source_agent_id": "cloyd-gibbler",
+            "content": "Joe prefers five-point readiness checks.",
+            "provenance": "model-assisted-candidate",
+            "classification": "private",
+            "metadata": {"conversation_id": "conv-candidate-app"},
+        },
+    )
+    assert proposed.status_code == 200
+    candidate_id = proposed.json()["candidate"]["candidate_id"]
+    assert client.get("/freyja3/memory", headers={"x-freyja-security-domain": "person.joe"}).json()["count"] == 0
+
+    reviewed = client.post(
+        f"/freyja3/memory/candidates/{candidate_id}/review",
+        headers={"x-freyja-security-domain": "person.joe", "x-freyja-trace-id": "trace-candidate-review"},
+        json={"decision": "approve", "reason": "Joe confirmed."},
+    )
+    memories = client.get("/freyja3/memory", headers={"x-freyja-security-domain": "person.joe"})
+    audit = client.get("/freyja3/audit?conversation_id=conv-candidate-app", headers={"x-freyja-security-domain": "household"})
+
+    assert reviewed.status_code == 200
+    assert reviewed.json()["candidate"]["status"] == "approved"
+    assert reviewed.json()["memory"]["content"] == "Joe prefers five-point readiness checks."
+    assert memories.json()["count"] == 1
+    assert {event["event_type"] for event in audit.json()["events"]} == {
+        "agent_memory_candidate_proposed",
+        "agent_memory_candidate_reviewed",
+    }
+
+
+def test_freyja3_app_memory_candidate_review_denies_other_private_domain(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(freyja3_app, "memory_store", Freyja3MemoryStore(tmp_path / "memory.db"))
+    client = TestClient(freyja3_app.app)
+
+    proposed = client.post(
+        "/freyja3/memory/candidates",
+        headers={"x-freyja-security-domain": "person.joe"},
+        json={
+            "owner_domain_id": "person.joe",
+            "scope": "personal",
+            "source_agent_id": "cloyd-gibbler",
+            "content": "Private candidate.",
+            "provenance": "model-assisted-candidate",
+            "classification": "private",
+        },
+    )
+    candidate_id = proposed.json()["candidate"]["candidate_id"]
+
+    reviewed = client.post(
+        f"/freyja3/memory/candidates/{candidate_id}/review",
+        headers={"x-freyja-security-domain": "person.beth"},
+        json={"decision": "approve"},
+    )
+
+    assert reviewed.status_code == 403
+
+
 def test_freyja3_app_machine_heartbeat_is_household_readable(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(freyja3_app, "machine_status_store", Freyja3MachineStatusStore(tmp_path / "machines.db"))
     client = TestClient(freyja3_app.app)

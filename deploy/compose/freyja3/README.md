@@ -8,6 +8,11 @@ It exposes:
 - `GET /health`
 - `POST /canonical/route`
 - `GET /freyja3/inference/health`
+- `POST /freyja3/memory`
+- `GET /freyja3/memory`
+- `POST /freyja3/memory/candidates`
+- `GET /freyja3/memory/candidates`
+- `POST /freyja3/memory/candidates/{candidate_id}/review`
 - `POST /freyja3/machines/heartbeat`
 - `GET /freyja3/machines`
 - `GET /freyja3/audit`
@@ -23,6 +28,7 @@ Default behavior is conservative:
 - leaves live model calls disabled with `FREYJA3_INFERENCE_ENABLED=false`
 - uses Vulcan's Tailscale Ollama endpoint for readiness and future inference
 - stores semantic events in `/app/data/freyja3_events.db`
+- stores scoped memory and reviewable memory candidates in `/app/data/freyja3_memory.db`
 - stores scheduler envelopes in `/app/data/freyja3_scheduler.db`
 - stores machine role heartbeats in `/app/data/freyja3_machines.db`
 - stores gateway/runtime audit events in `/app/data/freyja3_audit.db`

@@ -246,6 +246,31 @@ def test_agent_runtime_writes_explicit_remember_memory(tmp_path) -> None:
         and memory["provenance"] == "agent-runtime-v3-explicit-remember"
         for memory in result.written_memories
     )
+    assert result.memory_candidates == ()
+
+
+def test_agent_runtime_proposes_reviewable_memory_candidate_for_inferred_preference(tmp_path) -> None:
+    memory_store = Freyja3MemoryStore(tmp_path / "memory.db")
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="I prefer five-point readiness checks when we discuss Freyja status.",
+            conversation_id="conv-memory-candidate",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(memory_store=memory_store).run(handoff)
+
+    assert len(result.memory_candidates) == 1
+    assert result.memory_candidates[0]["status"] == "pending"
+    assert result.memory_candidates[0]["provenance"] == "agent-runtime-v3-memory-candidate"
+    assert any(step.kind == "memory_candidate_proposed" for step in result.steps)
+    assert not any(
+        memory.content == result.memory_candidates[0]["content"]
+        for memory in memory_store.list(reader_domain_id=SecurityDomainId.PERSON_JOE)
+    )
 
 
 def test_agent_runtime_marks_secret_memory_restricted(tmp_path) -> None:

@@ -11,10 +11,18 @@ from freyja.agent_gateway import AgentGateway, GatewayAuthenticationError, Gatew
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.config import settings
 from freyja.contracts import CanonicalRequest, CanonicalResponse, CanonicalSender
-from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
+from freyja.foundation_models import AuditEvent, AuditEventType, GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.freyja3_audit import Freyja3AuditAccessError, Freyja3AuditQuery, Freyja3AuditStore
 from freyja.freyja3_machines import Freyja3MachineAccessError, Freyja3MachineHeartbeat, Freyja3MachineStatusStore
-from freyja.freyja3_memory import Freyja3MemoryAccessError, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
+from freyja.freyja3_memory import (
+    Freyja3MemoryAccessError,
+    Freyja3MemoryCandidateQuery,
+    Freyja3MemoryCandidateReview,
+    Freyja3MemoryCandidateWrite,
+    Freyja3MemoryQuery,
+    Freyja3MemoryStore,
+    Freyja3MemoryWrite,
+)
 from freyja.freyja3_scheduler import Freyja3ScheduleAccessError, Freyja3ScheduleCreate, Freyja3ScheduleQuery, Freyja3SchedulerStore
 from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.ollama_client import OllamaClient
@@ -141,6 +149,100 @@ async def list_freyja3_memory(
     except (Freyja3MemoryAccessError, ValueError) as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None
     return {"ok": True, "memories": [record.model_dump(mode="json") for record in records], "count": len(records)}
+
+
+@app.post("/freyja3/memory/candidates")
+async def propose_freyja3_memory_candidate(write: Freyja3MemoryCandidateWrite, raw_request: Request) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
+    try:
+        candidate = memory_store.propose_candidate(write, proposer_domain_id=domain_id)
+    except Freyja3MemoryAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    audit_store.record_many(
+        [
+            AuditEvent(
+                event_type=AuditEventType.AGENT_MEMORY_CANDIDATE_PROPOSED,
+                actor_id=f"agent:{write.source_agent_id}",
+                domain_id=domain_id,
+                target_id=candidate.candidate_id,
+                allowed=True,
+                reason="agent proposed reviewable Freyja 3 memory candidate",
+                metadata={
+                    "owner_domain_id": candidate.owner_domain_id.value,
+                    "classification": candidate.classification.value,
+                    "scope": candidate.scope.value,
+                },
+            )
+        ],
+        writer_domain_id=SecurityDomainId.SYSTEM,
+        trace_id=raw_request.headers.get("x-freyja-trace-id"),
+        conversation_id=str(candidate.metadata.get("conversation_id") or ""),
+    )
+    return {"ok": True, "candidate": candidate.model_dump(mode="json")}
+
+
+@app.get("/freyja3/memory/candidates")
+async def list_freyja3_memory_candidates(
+    raw_request: Request,
+    owner_domain_id: SecurityDomainId | None = None,
+    status: str | None = None,
+    source_agent_id: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
+    try:
+        candidates = memory_store.list_candidates(
+            Freyja3MemoryCandidateQuery(
+                owner_domain_id=owner_domain_id,
+                status=status,
+                source_agent_id=source_agent_id,
+                limit=limit,
+            ),
+            reader_domain_id=domain_id,
+        )
+    except Freyja3MemoryAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "candidates": [candidate.model_dump(mode="json") for candidate in candidates], "count": len(candidates)}
+
+
+@app.post("/freyja3/memory/candidates/{candidate_id}/review")
+async def review_freyja3_memory_candidate(
+    candidate_id: str,
+    review: Freyja3MemoryCandidateReview,
+    raw_request: Request,
+) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"))
+    try:
+        candidate, memory = memory_store.review_candidate(candidate_id, review, reviewer_domain_id=domain_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="memory candidate not found") from None
+    except Freyja3MemoryAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    audit_store.record_many(
+        [
+            AuditEvent(
+                event_type=AuditEventType.AGENT_MEMORY_CANDIDATE_REVIEWED,
+                actor_id=f"domain:{domain_id.value}",
+                domain_id=domain_id,
+                target_id=candidate.candidate_id,
+                allowed=True,
+                reason=f"memory candidate {candidate.status}",
+                metadata={
+                    "approved_memory_id": candidate.approved_memory_id,
+                    "owner_domain_id": candidate.owner_domain_id.value,
+                    "review_reason": candidate.review_reason or "",
+                },
+            )
+        ],
+        writer_domain_id=SecurityDomainId.SYSTEM,
+        trace_id=raw_request.headers.get("x-freyja-trace-id"),
+        conversation_id=str(candidate.metadata.get("conversation_id") or ""),
+    )
+    return {
+        "ok": True,
+        "candidate": candidate.model_dump(mode="json"),
+        "memory": memory.model_dump(mode="json") if memory else None,
+    }
 
 
 @app.post("/freyja3/machines/heartbeat")
@@ -349,6 +451,7 @@ async def _execute_canonical_request(request: CanonicalRequest, raw_request: Req
             "follow_up_questions": list(result.follow_up_questions),
             "recalled_memories": list(result.recalled_memories),
             "written_memories": list(result.written_memories),
+            "memory_candidates": list(result.memory_candidates),
         },
         degraded=result.degraded,
         status="degraded" if result.degraded else "ok",

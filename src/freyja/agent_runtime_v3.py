@@ -18,7 +18,7 @@ from freyja.foundation_models import (
     ToolCapabilityGrant,
 )
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES, agents_by_key, tools_by_id
-from freyja.freyja3_memory import Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
+from freyja.freyja3_memory import Freyja3MemoryCandidateWrite, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.ollama_client import OllamaClient
 from freyja.privacy_egress import PrivacyEgressGate
@@ -153,6 +153,7 @@ class AgentRuntimeV3:
             degraded = True
             steps.append(AgentStep(kind="inference_unavailable", detail=f"no healthy endpoint for {capability}", success=False))
 
+        memory_candidates = self._propose_memory_candidates(agent, handoff, steps, audit_events)
         written_memories = self._write_agent_memories(agent, handoff, selected_tools, tool_results, steps, audit_events)
         response = self._compose_response(
             agent,
@@ -174,6 +175,7 @@ class AgentRuntimeV3:
             tool_results=tuple(tool_results),
             recalled_memories=tuple(recalled_memories),
             written_memories=tuple(written_memories),
+            memory_candidates=tuple(memory_candidates),
             follow_up_questions=tuple(follow_up_questions),
             inference_endpoint_id=inference_endpoint_id,
             inference_model=inference_model,
@@ -183,6 +185,46 @@ class AgentRuntimeV3:
             audit_events=tuple(audit_events),
             degraded=degraded,
         )
+
+    def _propose_memory_candidates(
+        self,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> list[dict[str, Any]]:
+        if not self._use_memory or self._memory_store is None or _explicit_memory_content(handoff.prompt):
+            return []
+        candidate_content = _memory_candidate_content(handoff.prompt)
+        if not candidate_content:
+            return []
+        candidate = self._memory_store.propose_candidate(
+            Freyja3MemoryCandidateWrite(
+                owner_domain_id=agent.security_domain_id,
+                scope=MemoryScope.PERSONAL if agent.security_domain_id != SecurityDomainId.HOUSEHOLD else MemoryScope.HOUSEHOLD,
+                source_agent_id=agent.agent_id,
+                content=candidate_content,
+                provenance="agent-runtime-v3-memory-candidate",
+                confidence=0.65,
+                classification=_memory_classification_for_text(candidate_content),
+                metadata={"conversation_id": handoff.conversation_id, "handoff_id": handoff.handoff_id},
+            ),
+            proposer_domain_id=agent.security_domain_id,
+        )
+        public = candidate.model_dump(mode="json")
+        steps.append(AgentStep(kind="memory_candidate_proposed", detail="proposed reviewable Freyja 3 memory candidate", success=True))
+        audit_events.append(
+            AuditEvent(
+                event_type=AuditEventType.AGENT_MEMORY_CANDIDATE_PROPOSED,
+                actor_id=f"agent:{agent.agent_id}",
+                domain_id=agent.security_domain_id,
+                target_id=candidate.candidate_id,
+                allowed=True,
+                reason="agent proposed inferred memory candidate for review",
+                metadata={"classification": candidate.classification.value, "scope": candidate.scope.value},
+            )
+        )
+        return [public]
 
     def _recall_memories(
         self,
@@ -755,6 +797,12 @@ _EXPLICIT_MEMORY_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+_MEMORY_CANDIDATE_RE = re.compile(
+    r"\b(?P<content>(?:i|we|joe|beth|liam|jenna|the family)\s+"
+    r"(?:prefer|prefers|like|likes|need|needs|use|uses|work|works|want|wants)\b[^.?!]{3,220})",
+    re.IGNORECASE,
+)
+
 
 def _explicit_memory_content(objective: str) -> str | None:
     match = _EXPLICIT_MEMORY_RE.match(objective)
@@ -762,6 +810,14 @@ def _explicit_memory_content(objective: str) -> str | None:
         return None
     content = " ".join(match.group("content").split())
     return content[:2000] if content else None
+
+
+def _memory_candidate_content(objective: str) -> str | None:
+    match = _MEMORY_CANDIDATE_RE.search(objective)
+    if not match:
+        return None
+    content = " ".join(match.group("content").split())
+    return content[:500] if content else None
 
 
 def _memory_classification_for_text(content: str) -> MemoryClassification:
