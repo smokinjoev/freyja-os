@@ -1,0 +1,18 @@
+[Unit]
+Description=Freyja Vulcan LM Studio OpenAI-compatible server
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=LMS_SERVER_HOST=100.94.80.21
+Environment=LMS_SERVER_PORT=1234
+ExecStart=%h/.lmstudio/bin/lms daemon up
+ExecStart=%h/.lmstudio/bin/lms server start --port ${LMS_SERVER_PORT} --bind ${LMS_SERVER_HOST}
+ExecStop=%h/.lmstudio/bin/lms server stop
+ExecStop=%h/.lmstudio/bin/lms daemon down
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
