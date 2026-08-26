@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Freyja 3 machine heartbeat every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=freyja3-machine-heartbeat.service
+
+[Install]
+WantedBy=timers.target
