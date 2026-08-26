@@ -76,6 +76,9 @@ Current blocker evidence:
 - The previous `freyja-vision.service` restart loop was disabled because it
   repeatedly failed against the missing camera device.
 
+Recovery and completion commands are documented in
+`docs/operations/hera-camera-recovery.md`.
+
 ## Current Readiness Estimate
 
 Current implementation readiness is 97%. The remaining 3% is not a software

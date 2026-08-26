@@ -48,7 +48,7 @@ Current completion audit: `docs/architecture/FREYJA_3_COMPLETION_AUDIT.md`.
 
 ## Joe-Required Blockers
 
-- Hera camera/perception hardware access is not visible from the current `joe` SSH session. Typed Hera-to-Atlas event publishing works and now includes auto-probed audio/NPU/camera metadata, but real camera-backed perception needs physical/device confirmation or permission changes.
+- Hera camera/perception hardware access is not visible from the current `joe` SSH session. Typed Hera-to-Atlas event publishing works and now includes auto-probed audio/NPU/camera metadata, but real camera-backed perception needs physical/device confirmation or permission changes. Recovery steps are documented in `docs/operations/hera-camera-recovery.md`.
 - Atlas `/home/joe/freyja-os` and Mars live deploy checkout have uncommitted local changes. Live deployment/rebuild should wait for reconciliation or a deliberate separate Freyja 3 service target.
 
 ## Verification Snapshot
