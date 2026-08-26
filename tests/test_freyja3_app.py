@@ -112,3 +112,10 @@ def test_freyja3_app_scheduler_dispatches_due_agent_envelopes(monkeypatch, tmp_p
     assert response["resolved_agent_id"] == "cloyd-gibbler"
     assert response["channel_metadata"]["agent_steps"][0]["kind"] == "objective_received"
     assert listed.json()["count"] == 0
+
+
+async def test_freyja3_inference_health_does_not_fallback_unconfigured_endpoint() -> None:
+    reachable, models = await freyja3_app._inference_endpoint_health("ollama", "", "")
+
+    assert reachable is False
+    assert models == []

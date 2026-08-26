@@ -87,6 +87,8 @@ async def freyja3_inference_health() -> dict[str, Any]:
 
 
 async def _inference_endpoint_health(provider: str, base_url: str, model: str) -> tuple[bool, list[str]]:
+    if not base_url:
+        return False, []
     if provider == "ollama":
         client = OllamaClient(base_url=base_url, model=model)
         reachable = await client.healthy()
