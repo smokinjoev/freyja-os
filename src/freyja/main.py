@@ -17,7 +17,7 @@ from freyja.agent_gateway import AgentGateway, GatewayAuthenticationError, Gatew
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.config import settings
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
-from freyja.foundation_models import GatewaySender, SecurityDomainId
+from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -33,6 +33,7 @@ from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
 from freyja.router import RouteRequest, router
+from freyja.semantic_events import SemanticEventPermissionError, SemanticEventQuery, SemanticEventStore
 from freyja.tools.api import tools_router
 from freyja.tools.builtin import register_builtin_tools, register_smith_read_only_tools, register_smith_write_pilot_tools
 from freyja.tools.registry import get_registry
@@ -90,6 +91,7 @@ router.register_clients(ollama, openrouter)
 router.register_reasoning_client(reasoning_ollama)
 router.register_iris_router_client(iris_router)
 agent_gateway_v3 = AgentGateway()
+semantic_event_store_v3 = SemanticEventStore()
 
 app.include_router(memory_router)
 app.include_router(tools_router)
@@ -106,6 +108,43 @@ if settings.agent_smith_enabled and settings.agent_smith_write_pilot_enabled:
         get_registry().set_enabled(_tool_name, True)
 
 agent_runtime_v3 = AgentRuntimeV3(tool_registry=get_registry(), run_inference=settings.freyja3_inference_enabled)
+
+
+def _domain_from_header(value: str | None, default: SecurityDomainId = SecurityDomainId.HOUSEHOLD) -> SecurityDomainId:
+    if not value:
+        return default
+    try:
+        return SecurityDomainId(value)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Unknown security domain.") from None
+
+
+@app.post("/events/semantic")
+async def publish_semantic_event(event: SemanticEvent, raw_request: Request) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.SYSTEM)
+    try:
+        stored = semantic_event_store_v3.publish(event, publisher_domain_id=domain_id)
+    except SemanticEventPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "event": stored.model_dump(mode="json")}
+
+
+@app.get("/events/semantic")
+async def list_semantic_events(
+    raw_request: Request,
+    event_type: str | None = None,
+    room: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.HOUSEHOLD)
+    try:
+        events = semantic_event_store_v3.list_events(
+            SemanticEventQuery(event_type=event_type, room=room, limit=limit),
+            reader_domain_id=domain_id,
+        )
+    except SemanticEventPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "events": [event.model_dump(mode="json") for event in events], "count": len(events)}
 
 
 @app.get("/")

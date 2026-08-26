@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     freyja_connector_token: str = ""
     freyja3_canonical_enabled: bool = Field(default=False, alias="FREYJA3_CANONICAL_ENABLED")
     freyja3_inference_enabled: bool = Field(default=False, alias="FREYJA3_INFERENCE_ENABLED")
+    freyja3_event_database_path: str = Field(default="data/freyja3_events.db", alias="FREYJA3_EVENT_DATABASE_PATH")
 
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_reasoning_base_url: str = ""
