@@ -386,3 +386,103 @@ def test_identity_audit_passes_when_four_people_are_mapped(monkeypatch):
     assert result["people"]["beth"]["agent_id"] == "benedict"
     assert result["people"]["liam"]["agent_id"] == "agent-44"
     assert result["people"]["jenna"]["agent_id"] == "jenna"
+
+
+def test_identity_candidates_report_redacted_mapping_evidence(monkeypatch):
+    operator = _load_operator()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_allowed_senders="joe=+15550000001,+15550000002",
+    )
+    monkeypatch.setattr(
+        operator,
+        "_imsg_whois_local",
+        lambda settings_arg, address: {"known": True, "service": "imessage"},
+    )
+    monkeypatch.setattr(
+        operator,
+        "_message_db_candidates",
+        lambda settings_arg: {
+            "+15550000001": {
+                "sender_hash": "hash-joe",
+                "inbound_message_count": 7,
+                "outbound_message_count": 3,
+                "direct_chat_count": 1,
+                "family_chat_member": True,
+                "latest_message_at": "2026-08-26T00:00:00+00:00",
+            },
+            "+15550000002": {
+                "sender_hash": "hash-unmapped",
+                "inbound_message_count": 2,
+                "outbound_message_count": 0,
+                "direct_chat_count": 0,
+                "family_chat_member": True,
+                "latest_message_at": "2026-08-25T00:00:00+00:00",
+            },
+        },
+    )
+
+    result = operator._identity_candidates(settings)
+
+    assert result["ok"] is False
+    assert result["missing_people"] == ["beth", "liam", "jenna"]
+    assert result["candidate_count"] == 2
+    assert result["raw_addresses_redacted"] is True
+    assert result["candidates"][0]["sender_hash"] == "hash-joe"
+    assert result["candidates"][0]["person_id"] == "joe"
+    assert result["candidates"][1]["sender_hash"] == "hash-unmapped"
+    assert result["candidates"][1]["person_id"] is None
+    assert result["candidates"][1]["family_chat_member"] is True
+    assert "+15550000001" not in str(result)
+    assert "+15550000002" not in str(result)
+
+
+def test_identity_map_resolves_hashes_without_reporting_raw_addresses(tmp_path):
+    operator = _load_operator()
+    settings = IMessageSettings(
+        _env_file=None,
+        imessage_allowed_senders=(
+            "joe=+15550000001,beth=+15550000002,"
+            "liam=+15550000003,jenna=+15550000004"
+        ),
+    )
+    hash_mapping = {
+        "joe": operator._safe_hash("+15550000001"),
+        "beth": operator._safe_hash("+15550000002"),
+        "liam": operator._safe_hash("+15550000003"),
+        "jenna": operator._safe_hash("+15550000004"),
+    }
+
+    result = operator._identity_map(
+        settings,
+        hash_mapping,
+        env_file=tmp_path / ".env",
+        identity_db=tmp_path / "identity.sqlite3",
+        dry_run=True,
+    )
+
+    assert result["status"] == "dry-run"
+    assert result["mapping"] == hash_mapping
+    assert result["raw_addresses_redacted"] is True
+    assert "+15550000001" not in str(result)
+    assert "+15550000002" not in str(result)
+
+
+def test_identity_map_rejects_unknown_hash():
+    operator = _load_operator()
+    settings = IMessageSettings(_env_file=None, imessage_allowed_senders="joe=+15550000001")
+
+    try:
+        operator._address_mapping_from_hashes(
+            settings,
+            {
+                "joe": operator._safe_hash("+15550000001"),
+                "beth": "missing",
+                "liam": "also-missing",
+                "jenna": "still-missing",
+            },
+        )
+    except ValueError as exc:
+        assert "unknown sender hashes" in str(exc)
+    else:
+        raise AssertionError("expected unknown hash rejection")

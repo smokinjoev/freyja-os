@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import json
 import os
 import subprocess
@@ -323,6 +324,192 @@ def _identity_audit(settings: IMessageSettings) -> dict[str, object]:
     }
 
 
+def _apple_time_to_iso(value: object) -> str | None:
+    if value is None:
+        return None
+    try:
+        raw = int(value)
+    except (TypeError, ValueError):
+        return None
+    if raw <= 0:
+        return None
+    seconds = raw / 1_000_000_000 + 978_307_200
+    return datetime.fromtimestamp(seconds, UTC).isoformat()
+
+
+def _message_db_candidates(settings: IMessageSettings) -> dict[str, dict[str, object]]:
+    import sqlite3
+
+    addresses = sorted(_configured_senders(settings))
+    if not addresses:
+        return {}
+    placeholders = ",".join("?" for _ in addresses)
+    candidates: dict[str, dict[str, object]] = {
+        address: {
+            "sender_hash": _safe_hash(address),
+            "inbound_message_count": 0,
+            "outbound_message_count": 0,
+            "direct_chat_count": 0,
+            "family_chat_member": False,
+            "latest_message_at": None,
+        }
+        for address in addresses
+    }
+    with sqlite3.connect(settings.imessage_database_path) as conn:
+        for address, inbound, outbound, latest in conn.execute(
+            f"""
+            SELECT h.id,
+                   SUM(CASE WHEN m.is_from_me = 0 THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN m.is_from_me = 1 THEN 1 ELSE 0 END),
+                   MAX(m.date)
+              FROM handle h
+              LEFT JOIN message m ON m.handle_id = h.rowid
+             WHERE h.id IN ({placeholders})
+             GROUP BY h.id
+            """,
+            addresses,
+        ):
+            item = candidates.get(str(address))
+            if item is None:
+                continue
+            item["inbound_message_count"] = int(inbound or 0)
+            item["outbound_message_count"] = int(outbound or 0)
+            item["latest_message_at"] = _apple_time_to_iso(latest)
+        for address, direct_count, family_count in conn.execute(
+            f"""
+            SELECT h.id,
+                   SUM(CASE WHEN c.chat_identifier = h.id THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN c.chat_identifier != h.id THEN 1 ELSE 0 END)
+              FROM handle h
+              JOIN chat_handle_join chj ON chj.handle_id = h.rowid
+              JOIN chat c ON c.rowid = chj.chat_id
+             WHERE h.id IN ({placeholders})
+             GROUP BY h.id
+            """,
+            addresses,
+        ):
+            item = candidates.get(str(address))
+            if item is None:
+                continue
+            item["direct_chat_count"] = int(direct_count or 0)
+            item["family_chat_member"] = int(family_count or 0) > 0
+    return candidates
+
+
+def _identity_candidates(settings: IMessageSettings) -> dict[str, object]:
+    senders = _configured_senders(settings)
+    db_candidates = _message_db_candidates(settings)
+    candidates = []
+    for address, sender in sorted(senders.items()):
+        whois = _imsg_whois_local(settings, address)
+        person_id = (sender.member_id or "").strip().lower() or None
+        candidates.append(
+            {
+                **db_candidates.get(address, {"sender_hash": _safe_hash(address)}),
+                "person_id": person_id,
+                "agent_id": household_agent_for_sender(sender).agent_id,
+                "locally_known_imessage": whois.get("known") is True
+                and str(whois.get("service", "")).lower() == "imessage",
+                "service": whois.get("service", "unknown"),
+                "mapped": person_id in {"joe", "beth", "liam", "jenna"},
+            }
+        )
+    missing_people = [
+        person_id
+        for person_id in ("joe", "beth", "liam", "jenna")
+        if not any(candidate.get("person_id") == person_id for candidate in candidates)
+    ]
+    return {
+        "schema_version": "1.0",
+        "report_type": "imessage-identity-candidates",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "ok": not missing_people,
+        "missing_people": missing_people,
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "raw_addresses_redacted": True,
+        "configure_template": (
+            "python scripts/imessage-operator.py identity-map --yes "
+            "joe=<sender_hash:...> beth=<sender_hash:...> liam=<sender_hash:...> jenna=<sender_hash:...>"
+        ),
+    }
+
+
+def _parse_hash_mapping(values: list[str]) -> dict[str, str]:
+    family = ("joe", "beth", "liam", "jenna")
+    mapping: dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError(f"mapping must be person=sender_hash: {value}")
+        person, sender_hash = value.split("=", 1)
+        person = person.strip().lower()
+        sender_hash = sender_hash.strip().lower()
+        if person not in family:
+            raise ValueError(f"unsupported family member: {person}")
+        if not sender_hash:
+            raise ValueError(f"empty sender hash for {person}")
+        mapping[person] = sender_hash
+    missing = [person for person in family if person not in mapping]
+    if missing:
+        raise ValueError("missing family members: " + ", ".join(missing))
+    if len(set(mapping.values())) != len(mapping):
+        raise ValueError("each family member must map to a different sender hash")
+    return mapping
+
+
+def _address_mapping_from_hashes(settings: IMessageSettings, hash_mapping: dict[str, str]) -> dict[str, str]:
+    by_hash = {_safe_hash(address): address for address in _configured_senders(settings)}
+    missing_hashes = [sender_hash for sender_hash in hash_mapping.values() if sender_hash not in by_hash]
+    if missing_hashes:
+        raise ValueError("unknown sender hashes: " + ", ".join(sorted(missing_hashes)))
+    return {person: by_hash[sender_hash] for person, sender_hash in hash_mapping.items()}
+
+
+def _load_configure_module() -> Any:
+    path = _PROJECT_ROOT / "scripts" / "configure-imessage-family-agents.py"
+    spec = importlib.util.spec_from_file_location("configure_imessage_family_agents", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load configure-imessage-family-agents.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _identity_map(
+    settings: IMessageSettings,
+    hash_mapping: dict[str, str],
+    *,
+    env_file: Path,
+    identity_db: Path | None,
+    dry_run: bool,
+) -> dict[str, object]:
+    address_mapping = _address_mapping_from_hashes(settings, hash_mapping)
+    redacted_mapping = {person: _safe_hash(address) for person, address in address_mapping.items()}
+    report: dict[str, object] = {
+        "schema_version": "1.0",
+        "report_type": "imessage-identity-map",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "dry_run": dry_run,
+        "raw_addresses_redacted": True,
+        "mapping": redacted_mapping,
+    }
+    if dry_run:
+        report["status"] = "dry-run"
+        return report
+
+    configure = _load_configure_module()
+    resolved_identity_db = configure._identity_db_path(env_file, identity_db)
+    configure._persist_family_identity_db(resolved_identity_db, address_mapping)
+    ordered = ",".join(address_mapping[person] for person in configure.FAMILY)
+    configure._replace_env_line(env_file, "IMESSAGE_ALLOWED_SENDERS", ordered)
+    configure._replace_env_line(env_file, "IDENTITY_PROVIDER", "sqlite")
+    configure._replace_env_line(env_file, "IDENTITY_DATABASE_PATH", str(resolved_identity_db))
+    configure._replace_env_line(env_file, "IDENTITY_SEED_FALLBACK", "true")
+    report["status"] = "updated"
+    report["identity_db"] = str(resolved_identity_db)
+    return report
+
+
 async def _live_smoke(
     settings: IMessageSettings,
     *,
@@ -403,6 +590,44 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional JSON report path.",
     )
 
+    identity_candidates = subparsers.add_parser(
+        "identity-candidates",
+        help="Print redacted iMessage sender evidence for family mapping without sending.",
+    )
+    identity_candidates.add_argument(
+        "--output",
+        type=Path,
+        help="Optional JSON report path.",
+    )
+
+    identity_map = subparsers.add_parser(
+        "identity-map",
+        help="Map four family members from redacted sender hashes; dry-run unless --yes is passed.",
+    )
+    identity_map.add_argument("mapping", nargs="+", help="Four mappings: joe=<hash> beth=<hash> liam=<hash> jenna=<hash>")
+    identity_map.add_argument(
+        "--env-file",
+        type=Path,
+        default=Path("/Users/freyja/freyja-os-imessage-runtime/.env"),
+        help="Runtime .env file to update when --yes is passed.",
+    )
+    identity_map.add_argument(
+        "--identity-db",
+        type=Path,
+        default=None,
+        help="Identity SQLite database path. Defaults to env or standard state path.",
+    )
+    identity_map.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually write the runtime .env and identity DB. Without this flag, the command is a dry-run.",
+    )
+    identity_map.add_argument(
+        "--output",
+        type=Path,
+        help="Optional JSON report path.",
+    )
+
     broadcast = subparsers.add_parser(
         "broadcast",
         help="Broadcast an operator-authored iMessage to the configured allowlist",
@@ -477,6 +702,41 @@ def main(argv: list[str] | None = None) -> int:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(rendered + "\n", encoding="utf-8")
         return 0 if result["ok"] else 1
+
+    if args.command == "identity-candidates":
+        result = _identity_candidates(settings)
+        rendered = json.dumps(result, indent=2, sort_keys=True)
+        print(rendered)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+        return 0 if result["ok"] else 1
+
+    if args.command == "identity-map":
+        try:
+            hash_mapping = _parse_hash_mapping(args.mapping)
+            result = _identity_map(
+                settings,
+                hash_mapping,
+                env_file=args.env_file,
+                identity_db=args.identity_db,
+                dry_run=not args.yes,
+            )
+        except Exception as exc:  # noqa: BLE001 - operator command should return JSON errors
+            result = {
+                "schema_version": "1.0",
+                "report_type": "imessage-identity-map",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "status": "error",
+                "error": str(exc),
+                "raw_addresses_redacted": True,
+            }
+        rendered = json.dumps(result, indent=2, sort_keys=True)
+        print(rendered)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+        return 0 if result["status"] in {"dry-run", "updated"} else 1
 
     if args.command == "broadcast":
         dry_run = args.dry_run or not args.yes
