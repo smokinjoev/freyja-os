@@ -352,6 +352,7 @@ class AgentRuntimeV3:
         rules = (
             ("web.search", ("search", "look up", "latest", "current")),
             ("weather.current", ("weather", "forecast", "temperature")),
+            ("browser.control", ("browser", "safari", "front tab", "current tab")),
             ("calendar.read", ("calendar", "schedule", "appointment")),
             ("email.read", ("email", "mail")),
             ("messaging.send", ("message", "imessage", "text ", "sms")),
@@ -740,6 +741,8 @@ class AgentRuntimeV3:
 _CONCRETE_TOOL_BY_CAPABILITY = {
     "web.search": "web_search",
     "weather.current": "get_weather",
+    "browser.control": "apple_browser_front_tab",
+    "email.read": "apple_mailbox_counts",
     "macagent.apple": "macagent_health",
     "home-assistant.read": "home_assistant_list_states",
     "home-assistant.control": "home_assistant_control_state",
@@ -747,6 +750,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "git.inspect": "repository_status",
     "memory.private": "recall_conversation",
     "memory.shared": "memory_recall_shared",
+    "music.control": "apple_music_current_track",
 }
 
 _MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control"}

@@ -377,7 +377,8 @@ def test_agents_use_vulcan_inference_and_identity_survives_endpoint_changes() ->
 
 
 def test_iris_apple_and_atlas_home_assistant_capabilities_are_agent_selected() -> None:
-    runtime = AgentRuntimeV3()
+    tool_registry = _FakeToolRegistry()
+    runtime = AgentRuntimeV3(tool_registry=tool_registry)
     gateway = AgentGateway()
     freyja_handoff = gateway.handle(
         GatewayRequest(
@@ -390,15 +391,34 @@ def test_iris_apple_and_atlas_home_assistant_capabilities_are_agent_selected() -
     cloyd_handoff = gateway.handle(
         GatewayRequest(sender=_sender("joe"), target_agent="cloyd", prompt="Open Safari on the Mac.", conversation_id="mac")
     ).handoff
+    apple_read_handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Check my email, current song, and Safari tab.",
+            conversation_id="apple-read",
+        )
+    ).handoff
     assert freyja_handoff is not None
     assert cloyd_handoff is not None
+    assert apple_read_handoff is not None
 
     freyja_result = runtime.run(freyja_handoff)
     cloyd_result = runtime.run(cloyd_handoff)
+    apple_read_result = runtime.run(apple_read_handoff)
+    executed_tools = {request.tool_name for request in tool_registry.requests}
 
     assert "home-assistant.control" in freyja_result.selected_tools
     assert "messaging.send" in freyja_result.selected_tools
     assert "macagent.apple" in cloyd_result.selected_tools
+    assert "email.read" in apple_read_result.selected_tools
+    assert "browser.control" in apple_read_result.selected_tools
+    assert "music.control" in apple_read_result.selected_tools
+    assert "macagent.apple" in apple_read_result.selected_tools
+    assert "apple_mailbox_counts" in executed_tools
+    assert "apple_browser_front_tab" in executed_tools
+    assert "apple_music_current_track" in executed_tools
+    assert "macagent_health" in executed_tools
 
 
 def test_hera_semantic_perception_event_contract() -> None:

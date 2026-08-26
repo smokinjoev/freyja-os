@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from freyja.macagent import MacAgentClient, MacAgentHealth, MacAgentOperationRequest
@@ -55,7 +56,14 @@ async def test_macagent_health_uses_bearer_token_and_strict_capabilities() -> No
             "reachable": True,
             "authenticated": True,
             "host": "iris",
-            "capabilities": ["apple.messages.read", "apple.calendar.read", "apple.contacts.read"],
+            "capabilities": [
+                "apple.messages.read",
+                "apple.calendar.read",
+                "apple.contacts.read",
+                "apple.mail.read",
+                "apple.music.read",
+                "apple.browser.read",
+            ],
             "error": None,
         }
     )
@@ -66,7 +74,14 @@ async def test_macagent_health_uses_bearer_token_and_strict_capabilities() -> No
 
     assert health.reachable is True
     assert health.authenticated is True
-    assert health.capabilities == ["apple.messages.read", "apple.calendar.read", "apple.contacts.read"]
+    assert health.capabilities == [
+        "apple.messages.read",
+        "apple.calendar.read",
+        "apple.contacts.read",
+        "apple.mail.read",
+        "apple.music.read",
+        "apple.browser.read",
+    ]
     mock_http.get.assert_awaited_once_with(
         "http://iris:8765/health",
         headers={"Authorization": "Bearer secret"},
@@ -428,3 +443,99 @@ def test_macagent_app_reads_contacts_without_identifiers_by_default(monkeypatch)
     assert data["output"]["contacts"][0]["person_id"] == "apple-1"
     assert data["output"]["contacts"][0]["identity_kinds"] == ["email"]
     assert "identities" not in data["output"]["contacts"][0]
+
+
+def test_macagent_app_reads_mailbox_counts(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "macagent_token", "secret")
+    test_client = TestClient(macagent_app)
+    request = MacAgentOperationRequest(
+        capability="apple.mail.read",
+        operation="mailbox_counts",
+        arguments={},
+        request_id="req-mail",
+        actor="atlas_director",
+        director_authorized=True,
+    )
+
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(return_value="2\t10")):
+        response = test_client.post(
+            f"/capabilities/{request.capability}",
+            headers={"Authorization": "Bearer secret"},
+            json=request.model_dump(mode="json"),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["output"] == {"mailbox": "INBOX", "unread_count": 2, "message_count": 10}
+
+
+def test_macagent_app_reads_music_current_track(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "macagent_token", "secret")
+    test_client = TestClient(macagent_app)
+    request = MacAgentOperationRequest(
+        capability="apple.music.read",
+        operation="current_track",
+        arguments={},
+        request_id="req-music",
+        actor="atlas_director",
+        director_authorized=True,
+    )
+
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(return_value="playing\tSong\tArtist\tAlbum")):
+        response = test_client.post(
+            f"/capabilities/{request.capability}",
+            headers={"Authorization": "Bearer secret"},
+            json=request.model_dump(mode="json"),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["output"] == {
+        "player_state": "playing",
+        "track": "Song",
+        "artist": "Artist",
+        "album": "Album",
+    }
+
+
+def test_macagent_app_reads_browser_front_tab(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "macagent_token", "secret")
+    test_client = TestClient(macagent_app)
+    request = MacAgentOperationRequest(
+        capability="apple.browser.read",
+        operation="front_tab",
+        arguments={},
+        request_id="req-browser",
+        actor="atlas_director",
+        director_authorized=True,
+    )
+
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(return_value="Example\thttps://example.invalid")):
+        response = test_client.post(
+            f"/capabilities/{request.capability}",
+            headers={"Authorization": "Bearer secret"},
+            json=request.model_dump(mode="json"),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["output"] == {"browser": "Safari", "title": "Example", "url": "https://example.invalid"}
+
+
+async def test_macagent_osascript_timeout_reports_concrete_error(monkeypatch) -> None:
+    from freyja.config import settings
+    from freyja.macagent_app import _osascript
+
+    monkeypatch.setattr(settings, "macagent_timeout_seconds", 0.01)
+
+    with pytest.raises(RuntimeError, match="osascript timed out"):
+        await _osascript('delay 2\nreturn "done"')

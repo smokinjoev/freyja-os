@@ -23,6 +23,9 @@ MACAGENT_CAPABILITIES = [
     "apple.calendar.read",
     "apple.calendar.write",
     "apple.contacts.read",
+    "apple.mail.read",
+    "apple.music.read",
+    "apple.browser.read",
     "apple.shortcuts.run",
 ]
 
@@ -77,6 +80,12 @@ async def _dispatch_operation(request: MacAgentOperationRequest) -> dict[str, An
         return await _messages_send(request)
     if request.capability == "apple.contacts.read":
         return await _contacts_read(request)
+    if request.capability == "apple.mail.read":
+        return await _mail_read(request)
+    if request.capability == "apple.music.read":
+        return await _music_read(request)
+    if request.capability == "apple.browser.read":
+        return await _browser_read(request)
     if request.capability == "apple.shortcuts.run":
         return await _shortcuts_run(request)
     raise ValueError(f"unsupported capability: {request.capability}")
@@ -163,6 +172,62 @@ async def _contacts_read(request: MacAgentOperationRequest) -> dict[str, Any]:
     return {"contacts": [person.to_dict(include_identifiers=include_identifiers) for person in people[:limit]]}
 
 
+async def _mail_read(request: MacAgentOperationRequest) -> dict[str, Any]:
+    if request.operation != "mailbox_counts":
+        raise ValueError("unsupported apple.mail.read operation")
+    script = """
+tell application "Mail"
+  set unreadCount to unread count of inbox
+  set messageCount to count of messages of inbox
+  return (unreadCount as text) & tab & (messageCount as text)
+end tell
+"""
+    output = await _osascript(script)
+    unread_text, _, total_text = output.partition("\t")
+    return {"mailbox": "INBOX", "unread_count": _int_text(unread_text), "message_count": _int_text(total_text)}
+
+
+async def _music_read(request: MacAgentOperationRequest) -> dict[str, Any]:
+    if request.operation != "current_track":
+        raise ValueError("unsupported apple.music.read operation")
+    script = """
+tell application "Music"
+  if it is running then
+    set stateText to player state as text
+    if stateText is "stopped" then
+      return stateText & "||FREYJA||" & "" & "||FREYJA||" & "" & "||FREYJA||" & ""
+    end if
+    set trackName to name of current track
+    set artistName to artist of current track
+    set albumName to album of current track
+    return stateText & "||FREYJA||" & trackName & "||FREYJA||" & artistName & "||FREYJA||" & albumName
+  else
+    return "not_running" & "||FREYJA||" & "" & "||FREYJA||" & "" & "||FREYJA||" & ""
+  end if
+end tell
+"""
+    state, name, artist, album = _split_fields(await _osascript(script), 4)
+    return {"player_state": state, "track": name, "artist": artist, "album": album}
+
+
+async def _browser_read(request: MacAgentOperationRequest) -> dict[str, Any]:
+    if request.operation != "front_tab":
+        raise ValueError("unsupported apple.browser.read operation")
+    script = """
+tell application "Safari"
+  if it is running and (count of windows) > 0 and (count of tabs of front window) > 0 then
+    set tabTitle to name of current tab of front window
+    set tabUrl to URL of current tab of front window
+    return tabTitle & "||FREYJA||" & tabUrl
+  else
+    return "" & "||FREYJA||" & ""
+  end if
+end tell
+"""
+    title, url = _split_fields(await _osascript(script), 2)
+    return {"browser": "Safari", "title": title, "url": url}
+
+
 async def _shortcuts_run(request: MacAgentOperationRequest) -> dict[str, Any]:
     if request.operation != "run_shortcut":
         raise ValueError("unsupported apple.shortcuts.run operation")
@@ -185,6 +250,40 @@ async def _shortcuts_run(request: MacAgentOperationRequest) -> dict[str, Any]:
         detail = stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(detail or f"shortcuts command failed with status {process.returncode}")
     return {"stdout": stdout.decode("utf-8", errors="replace"), "shortcut": shortcut_name}
+
+
+async def _osascript(script: str) -> str:
+    process = await asyncio.create_subprocess_exec(
+        "/usr/bin/osascript",
+        "-e",
+        script,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=settings.macagent_timeout_seconds)
+    except TimeoutError as exc:
+        process.kill()
+        await process.communicate()
+        raise RuntimeError("osascript timed out") from exc
+    if process.returncode:
+        detail = stderr.decode("utf-8", errors="replace").strip()
+        stdout_detail = stdout.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(detail or stdout_detail or f"osascript failed with status {process.returncode}")
+    return stdout.decode("utf-8", errors="replace").strip()
+
+
+def _split_fields(value: str, count: int) -> list[str]:
+    fields = value.split("||FREYJA||") if "||FREYJA||" in value else value.split("\t")
+    fields.extend([""] * (count - len(fields)))
+    return [field.strip() for field in fields[:count]]
+
+
+def _int_text(value: str) -> int:
+    try:
+        return int(value.strip())
+    except ValueError:
+        return 0
 
 
 def _require_token(authorization: str) -> None:

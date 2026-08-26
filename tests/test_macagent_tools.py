@@ -20,6 +20,9 @@ def test_builtin_registry_exposes_macagent_read_tools(registry: ToolRegistry) ->
     assert registry.get_tool("apple_contacts_list") is not None
     assert registry.get_tool("apple_messages_recent") is not None
     assert registry.get_tool("apple_messages_send") is not None
+    assert registry.get_tool("apple_mailbox_counts") is not None
+    assert registry.get_tool("apple_music_current_track") is not None
+    assert registry.get_tool("apple_browser_front_tab") is not None
     assert registry.get_tool("apple_shortcuts_run") is not None
 
 
@@ -179,6 +182,108 @@ async def test_apple_messages_send_invokes_macagent_after_approval(
     assert captured["request"].approval_granted is True
     assert captured["request"].capability == "apple.messages.send"
     assert captured["request"].arguments == {"chat_id": 123, "text": "hello"}
+
+
+@pytest.mark.asyncio
+async def test_apple_mailbox_counts_invokes_macagent_envelope(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    class Client:
+        async def invoke(self, request):
+            captured["request"] = request
+            return MacAgentOperationResult(
+                ok=True,
+                capability="apple.mail.read",
+                operation="mailbox_counts",
+                output={"mailbox": "INBOX", "unread_count": 2, "message_count": 10},
+            )
+
+    monkeypatch.setattr("freyja.tools.builtin.MacAgentClient", Client)
+
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="apple_mailbox_counts",
+            metadata={"director_authorized": True, "person": {"person_id": "joe"}},
+        )
+    )
+
+    assert result.success is True
+    assert result.output == {"mailbox": "INBOX", "unread_count": 2, "message_count": 10}
+    assert captured["request"].director_authorized is True
+    assert captured["request"].capability == "apple.mail.read"
+    assert captured["request"].operation == "mailbox_counts"
+    assert captured["request"].arguments == {}
+
+
+@pytest.mark.asyncio
+async def test_apple_music_current_track_invokes_macagent_envelope(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    class Client:
+        async def invoke(self, request):
+            captured["request"] = request
+            return MacAgentOperationResult(
+                ok=True,
+                capability="apple.music.read",
+                operation="current_track",
+                output={"player_state": "playing", "track": "Song", "artist": "Artist", "album": "Album"},
+            )
+
+    monkeypatch.setattr("freyja.tools.builtin.MacAgentClient", Client)
+
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="apple_music_current_track",
+            metadata={"director_authorized": True, "person": {"person_id": "joe"}},
+        )
+    )
+
+    assert result.success is True
+    assert result.output["track"] == "Song"
+    assert captured["request"].director_authorized is True
+    assert captured["request"].capability == "apple.music.read"
+    assert captured["request"].operation == "current_track"
+    assert captured["request"].arguments == {}
+
+
+@pytest.mark.asyncio
+async def test_apple_browser_front_tab_invokes_macagent_envelope(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    class Client:
+        async def invoke(self, request):
+            captured["request"] = request
+            return MacAgentOperationResult(
+                ok=True,
+                capability="apple.browser.read",
+                operation="front_tab",
+                output={"browser": "Safari", "title": "Example", "url": "https://example.invalid"},
+            )
+
+    monkeypatch.setattr("freyja.tools.builtin.MacAgentClient", Client)
+
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="apple_browser_front_tab",
+            metadata={"director_authorized": True, "person": {"person_id": "joe"}},
+        )
+    )
+
+    assert result.success is True
+    assert result.output["url"] == "https://example.invalid"
+    assert captured["request"].director_authorized is True
+    assert captured["request"].capability == "apple.browser.read"
+    assert captured["request"].operation == "front_tab"
+    assert captured["request"].arguments == {}
 
 
 @pytest.mark.asyncio

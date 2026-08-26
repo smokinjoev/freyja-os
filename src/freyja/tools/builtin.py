@@ -144,6 +144,60 @@ async def _apple_messages_send_implementation(request: ToolExecutionRequest) -> 
     return result.output if result.ok else {"error": result.error or "MacAgent Messages send failed."}
 
 
+async def _apple_mailbox_counts_implementation(request: ToolExecutionRequest) -> dict:
+    metadata = request.metadata if isinstance(request.metadata, dict) else {}
+    result = await MacAgentClient().invoke(
+        MacAgentOperationRequest(
+            capability="apple.mail.read",
+            operation="mailbox_counts",
+            arguments={},
+            request_id=request.request_id,
+            actor=request.actor or "atlas_director",
+            director_authorized=True,
+            required_permission="apple.mail.read",
+            principal=metadata.get("memory_principal"),
+            person=metadata.get("person"),
+        )
+    )
+    return result.output if result.ok else {"error": result.error or "MacAgent Mail read failed."}
+
+
+async def _apple_music_current_track_implementation(request: ToolExecutionRequest) -> dict:
+    metadata = request.metadata if isinstance(request.metadata, dict) else {}
+    result = await MacAgentClient().invoke(
+        MacAgentOperationRequest(
+            capability="apple.music.read",
+            operation="current_track",
+            arguments={},
+            request_id=request.request_id,
+            actor=request.actor or "atlas_director",
+            director_authorized=True,
+            required_permission="apple.music.read",
+            principal=metadata.get("memory_principal"),
+            person=metadata.get("person"),
+        )
+    )
+    return result.output if result.ok else {"error": result.error or "MacAgent Music read failed."}
+
+
+async def _apple_browser_front_tab_implementation(request: ToolExecutionRequest) -> dict:
+    metadata = request.metadata if isinstance(request.metadata, dict) else {}
+    result = await MacAgentClient().invoke(
+        MacAgentOperationRequest(
+            capability="apple.browser.read",
+            operation="front_tab",
+            arguments={},
+            request_id=request.request_id,
+            actor=request.actor or "atlas_director",
+            director_authorized=True,
+            required_permission="apple.browser.read",
+            principal=metadata.get("memory_principal"),
+            person=metadata.get("person"),
+        )
+    )
+    return result.output if result.ok else {"error": result.error or "MacAgent Browser read failed."}
+
+
 async def _apple_shortcuts_run_implementation(request: ToolExecutionRequest) -> dict:
     args = request.arguments or {}
     metadata = request.metadata if isinstance(request.metadata, dict) else {}
@@ -247,6 +301,9 @@ _BUILTIN_TOOL_NAMES = (
     "apple_contacts_list",
     "apple_messages_recent",
     "apple_messages_send",
+    "apple_mailbox_counts",
+    "apple_music_current_track",
+    "apple_browser_front_tab",
     "apple_shortcuts_run",
     "hostname",
     "current_time",
@@ -490,6 +547,76 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             tags=["macagent", "iris", "apple", "messages", "send", "approval-required"],
         ),
         _apple_messages_send_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_mailbox_counts",
+            description="Read Apple Mail inbox message and unread counts through Iris MacAgent.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "mailbox": {"type": "string"},
+                    "unread_count": {"type": "integer"},
+                    "message_count": {"type": "integer"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="iris.macagent",
+            required_permission="apple.mail.read",
+            enabled=True,
+            timeout_seconds=10,
+            tags=["macagent", "iris", "apple", "mail", "email", "read-only"],
+        ),
+        _apple_mailbox_counts_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_music_current_track",
+            description="Read the current Apple Music player state and track metadata through Iris MacAgent.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "player_state": {"type": "string"},
+                    "track": {"type": "string"},
+                    "artist": {"type": "string"},
+                    "album": {"type": "string"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="iris.macagent",
+            required_permission="apple.music.read",
+            enabled=True,
+            timeout_seconds=10,
+            tags=["macagent", "iris", "apple", "music", "read-only"],
+        ),
+        _apple_music_current_track_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_browser_front_tab",
+            description="Read Safari front-tab title and URL through Iris MacAgent.",
+            version="1.0.0",
+            input_schema={"type": "object", "properties": {}},
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "browser": {"type": "string"},
+                    "title": {"type": "string"},
+                    "url": {"type": "string"},
+                },
+            },
+            risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="iris.macagent",
+            required_permission="apple.browser.read",
+            enabled=True,
+            timeout_seconds=10,
+            tags=["macagent", "iris", "apple", "browser", "safari", "read-only"],
+        ),
+        _apple_browser_front_tab_implementation,
     )
     registry.register(
         ToolDefinition(

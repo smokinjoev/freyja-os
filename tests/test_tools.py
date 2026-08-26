@@ -93,6 +93,9 @@ def test_discovery(registry: ToolRegistry) -> None:
         "apple_contacts_list",
         "apple_messages_recent",
         "apple_messages_send",
+        "apple_mailbox_counts",
+        "apple_music_current_track",
+        "apple_browser_front_tab",
         "apple_shortcuts_run",
         "hostname",
         "current_time",
@@ -400,7 +403,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 33
+    assert len(tools) == 36
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:
