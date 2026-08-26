@@ -238,10 +238,11 @@ class AgentRuntimeV3:
                 },
             )
             result = await self._tool_registry.execute(request)
+            success = _tool_effective_success(result.success, result.output)
             public_result = {
                 "capability_id": capability_id,
                 "tool_name": tool_name,
-                "success": result.success,
+                "success": success,
                 "error_code": result.error_code,
                 "public_error_message": result.public_error_message,
                 "output": result.output,
@@ -252,7 +253,7 @@ class AgentRuntimeV3:
                     kind="tool_executed",
                     detail=f"{tool_name} executed for {capability_id}",
                     tool_id=capability_id,
-                    success=result.success,
+                    success=success,
                 )
             )
             audit_events.append(
@@ -261,7 +262,7 @@ class AgentRuntimeV3:
                     actor_id=f"agent:{agent.agent_id}",
                     domain_id=agent.security_domain_id,
                     target_id=tool_name,
-                    allowed=result.success,
+                    allowed=success,
                     reason=result.public_error_message or "tool execution completed",
                 )
             )
@@ -395,3 +396,11 @@ def _memory_principal_metadata(handoff: GatewayHandoff) -> dict[str, str]:
         "client_type": handoff.channel or "gateway",
         "client_subject": handoff.sender_id,
     }
+
+
+def _tool_effective_success(registry_success: bool, output: dict[str, Any]) -> bool:
+    if not registry_success:
+        return False
+    if isinstance(output.get("success"), bool):
+        return bool(output["success"])
+    return True

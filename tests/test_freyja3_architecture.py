@@ -67,15 +67,16 @@ def test_agent_receives_objective_and_independently_selects_tools() -> None:
 
 
 class _FakeToolRegistry:
-    def __init__(self) -> None:
+    def __init__(self, *, output_success: bool = True) -> None:
         self.requests: list[ToolExecutionRequest] = []
+        self.output_success = output_success
 
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         self.requests.append(request)
         return ToolExecutionResult(
             success=True,
             tool_name=request.tool_name,
-            output={"ok": True, "arguments": request.arguments},
+            output={"ok": self.output_success, "success": self.output_success, "arguments": request.arguments},
             request_id=request.request_id,
             duration_ms=1,
         )
@@ -103,6 +104,25 @@ def test_agent_executes_selected_tools_with_agent_owned_arguments() -> None:
     web_request = next(request for request in fake_registry.requests if request.tool_name == "web_search")
     assert web_request.arguments["query"] == handoff.prompt
     assert web_request.actor == "agent:cloyd-gibbler"
+
+
+def test_agent_tool_execution_respects_structured_tool_failure() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Inspect git status.",
+            conversation_id="conv-tool-failure",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(tool_registry=_FakeToolRegistry(output_success=False)).run(handoff)
+
+    assert result.tool_results
+    assert result.tool_results[0]["success"] is False
+    assert any(step.kind == "tool_executed" and step.success is False for step in result.steps)
 
 
 def test_agents_use_vulcan_inference_and_identity_survives_endpoint_changes() -> None:
