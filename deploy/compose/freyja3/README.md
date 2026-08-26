@@ -66,7 +66,12 @@ FREYJA3_MACHINE_ROLE=worker-ingestion-monitoring
 
 `deploy/systemd/user/freyja3-worker-runner.{service,timer}` installs a
 user-level timer for Mars-style worker hosts. Each run claims at most one
-Atlas-owned job envelope and completes implemented worker classes.
+Atlas-owned job envelope and completes implemented worker classes. Implemented
+classes are:
+
+- `monitoring`: lightweight host/job proof output
+- `document_ingestion`: bounded text/path ingestion that returns a structured
+  untrusted external-content observation, not direct memory or tool actions
 
 Required env keys:
 
@@ -75,4 +80,5 @@ FREYJA3_WORKER_BASE_URL=http://100.119.235.114:8300
 FREYJA_CONNECTOR_TOKEN=...
 FREYJA3_MACHINE_ID=mars
 FREYJA3_WORKER_CLASS=monitoring
+FREYJA3_WORKER_ALLOWED_ROOTS=/home/joe/freyja-os-freyja3/data/ingestion
 ```

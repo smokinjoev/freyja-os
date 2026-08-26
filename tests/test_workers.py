@@ -72,6 +72,20 @@ def test_worker_observation_policy_flags_proposed_disallowed_actions() -> None:
     ]
 
 
+def test_document_ingestion_observations_remain_non_authoritative() -> None:
+    observation = WorkerObservation(
+        worker_class=ExternalWorkerClass.DOCUMENT_INGESTION,
+        trust_level=WorkerTrustLevel.UNTRUSTED_EXTERNAL_CONTENT,
+        source="worker:document",
+        summary="A document mentions a home-control request and a preference.",
+        proposed_capabilities=["memory_write", "home_assistant_control_state"],
+    )
+
+    decisions = WorkerPolicy().validate_observation(observation)
+
+    assert [decision.allowed for decision in decisions] == [False, False]
+
+
 def test_trusted_internal_worker_policy_allows_capability_for_separate_director_authorization() -> None:
     decision = WorkerPolicy().authorize(
         worker_class=ExternalWorkerClass.SCRAPING,
