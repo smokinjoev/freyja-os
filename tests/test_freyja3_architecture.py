@@ -89,7 +89,10 @@ class _FailingGitThenHealthRegistry:
 
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         self.requests.append(request)
-        output_success = request.tool_name == "system_health"
+        output_success = request.tool_name == "system_health" or (
+            request.tool_name == "repository_status"
+            and sum(seen.tool_name == "repository_status" for seen in self.requests) > 1
+        )
         return ToolExecutionResult(
             success=True,
             tool_name=request.tool_name,
@@ -157,11 +160,15 @@ def test_agent_observes_failed_tool_and_runs_diagnostic_follow_up() -> None:
 
     result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
 
-    assert [request.tool_name for request in fake_registry.requests] == ["repository_status", "system_health"]
+    assert [request.tool_name for request in fake_registry.requests] == ["repository_status", "system_health", "repository_status"]
     assert "git.inspect" in result.selected_tools
-    assert result.selected_tools[-1] == "system.health"
+    assert "system.health" in result.selected_tools
+    assert any(step.kind == "plan" and "git.inspect" in step.detail for step in result.steps)
     assert any(step.kind == "observation" and "git.inspect" in step.detail for step in result.steps)
+    assert any(step.kind == "retry" and step.tool_id == "git.inspect" for step in result.steps)
     assert any(step.kind == "tool_executed" and step.tool_id == "system.health" and step.success is True for step in result.steps)
+    assert result.tool_results[-1]["capability_id"] == "git.inspect"
+    assert result.tool_results[-1]["success"] is True
 
 
 def test_agent_asks_follow_up_before_underspecified_mutation_tool() -> None:

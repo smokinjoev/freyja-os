@@ -50,6 +50,7 @@ class AgentRuntimeV3:
         execute_tools: bool | None = None,
         use_memory: bool | None = None,
         run_inference: bool | None = None,
+        max_tool_iterations: int = 3,
         unhealthy_endpoint_ids: Iterable[str] = (),
     ) -> None:
         self._agents = agents_by_key() if agents == PERSISTENT_AGENTS else self._index_agents(agents)
@@ -61,6 +62,7 @@ class AgentRuntimeV3:
         self._execute_tools = tool_registry is not None if execute_tools is None else execute_tools
         self._use_memory = memory_store is not None if use_memory is None else use_memory
         self._run_inference = run_inference if run_inference is not None else False
+        self._max_tool_iterations = max(1, max_tool_iterations)
         self._unhealthy_endpoint_ids = set(unhealthy_endpoint_ids)
 
     def run(self, handoff: GatewayHandoff) -> AgentExecutionResult:
@@ -86,25 +88,12 @@ class AgentRuntimeV3:
         ]
         recalled_memories = self._recall_memories(agent, steps, audit_events)
         follow_up_questions = self._follow_up_questions(agent, handoff.prompt, selected_tools, steps, audit_events)
+        self._record_plan(agent, selected_tools, follow_up_questions, steps, audit_events)
         for tool_id in selected_tools:
-            steps.append(AgentStep(kind="tool_selected", detail=f"{agent.agent_id} selected {tool_id}", tool_id=tool_id))
-            audit_events.append(
-                AuditEvent(
-                    event_type=AuditEventType.AGENT_TOOL_SELECTED,
-                    actor_id=f"agent:{agent.agent_id}",
-                    domain_id=agent.security_domain_id,
-                    target_id=tool_id,
-                    allowed=True,
-                    reason="agent selected permitted tool",
-                )
-            )
+            self._record_tool_selection(agent, tool_id, steps, audit_events, reason="agent selected permitted tool")
 
         executable_tools = [tool_id for tool_id in selected_tools if tool_id not in _MUTATION_CAPABILITIES or not follow_up_questions]
-        tool_results = await self._execute_selected_tools(agent, handoff, executable_tools, steps, audit_events)
-        follow_up_tools = self._choose_follow_up_tools(agent, selected_tools, handoff.available_tools, tool_results, steps, audit_events)
-        if follow_up_tools:
-            selected_tools.extend(follow_up_tools)
-            tool_results.extend(await self._execute_selected_tools(agent, handoff, follow_up_tools, steps, audit_events))
+        tool_results = await self._run_tool_loop(agent, handoff, selected_tools, executable_tools, steps, audit_events)
 
         inference_endpoint_id = None
         inference_model = None
@@ -381,6 +370,7 @@ class AgentRuntimeV3:
         selected_tools: list[str],
         available_tool_ids: Iterable[str],
         tool_results: list[dict[str, Any]],
+        attempted_retries: set[str],
         steps: list[AgentStep],
         audit_events: list[AuditEvent],
     ) -> list[str]:
@@ -409,26 +399,119 @@ class AgentRuntimeV3:
         )
 
         allowed = set(agent.tool_grants).intersection(set(available_tool_ids))
+        failed_capability_set = set(failed_capabilities)
         if "system.health" not in selected_tools and "system.health" in allowed:
-            steps.append(
-                AgentStep(
-                    kind="tool_selected",
-                    detail=f"{agent.agent_id} selected system.health after observing failed tools",
-                    tool_id="system.health",
-                )
-            )
-            audit_events.append(
-                AuditEvent(
-                    event_type=AuditEventType.AGENT_TOOL_SELECTED,
-                    actor_id=f"agent:{agent.agent_id}",
-                    domain_id=agent.security_domain_id,
-                    target_id="system.health",
-                    allowed=True,
-                    reason="agent selected diagnostic follow-up after failed tool observation",
-                )
+            self._record_tool_selection(
+                agent,
+                "system.health",
+                steps,
+                audit_events,
+                reason="agent selected diagnostic follow-up after failed tool observation",
+                detail=f"{agent.agent_id} selected system.health after observing failed tools",
             )
             return ["system.health"]
+        retryable = [
+            capability_id
+            for capability_id in selected_tools
+            if capability_id in failed_capability_set
+            and capability_id not in attempted_retries
+            and capability_id not in _MUTATION_CAPABILITIES
+        ]
+        if retryable:
+            for capability_id in retryable:
+                attempted_retries.add(capability_id)
+                steps.append(
+                    AgentStep(
+                        kind="retry",
+                        detail=f"{agent.agent_id} retrying {capability_id} after observation",
+                        tool_id=capability_id,
+                    )
+                )
+            return retryable
         return []
+
+    async def _run_tool_loop(
+        self,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        selected_tools: list[str],
+        executable_tools: list[str],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> list[dict[str, Any]]:
+        tool_results: list[dict[str, Any]] = []
+        next_tools = list(executable_tools)
+        attempted_retries: set[str] = set()
+        iteration = 0
+        while next_tools and iteration < self._max_tool_iterations:
+            iteration += 1
+            steps.append(AgentStep(kind="tool_iteration", detail=f"agent tool loop iteration {iteration}", success=True))
+            iteration_results = await self._execute_selected_tools(agent, handoff, next_tools, steps, audit_events)
+            tool_results.extend(iteration_results)
+            if iteration >= self._max_tool_iterations:
+                break
+            next_tools = self._choose_follow_up_tools(
+                agent,
+                selected_tools,
+                handoff.available_tools,
+                tool_results,
+                attempted_retries,
+                steps,
+                audit_events,
+            )
+            for tool_id in next_tools:
+                if tool_id not in selected_tools:
+                    selected_tools.append(tool_id)
+        return tool_results
+
+    def _record_plan(
+        self,
+        agent: PersistentAgent,
+        selected_tools: list[str],
+        follow_up_questions: list[str],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> None:
+        if follow_up_questions:
+            detail = "ask for missing details before mutation tool execution"
+        elif selected_tools:
+            detail = f"try permitted tools in order: {', '.join(selected_tools)}"
+        else:
+            detail = "answer with available context and selected inference"
+        steps.append(AgentStep(kind="plan", detail=detail, success=True))
+        audit_events.append(
+            AuditEvent(
+                event_type=AuditEventType.AGENT_TOOL_SELECTED,
+                actor_id=f"agent:{agent.agent_id}",
+                domain_id=agent.security_domain_id,
+                target_id="agent-plan",
+                allowed=True,
+                reason="agent created bounded plan before tool execution",
+                metadata={"selected_tools": list(selected_tools), "follow_up_questions": list(follow_up_questions)},
+            )
+        )
+
+    def _record_tool_selection(
+        self,
+        agent: PersistentAgent,
+        tool_id: str,
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+        *,
+        reason: str,
+        detail: str | None = None,
+    ) -> None:
+        steps.append(AgentStep(kind="tool_selected", detail=detail or f"{agent.agent_id} selected {tool_id}", tool_id=tool_id))
+        audit_events.append(
+            AuditEvent(
+                event_type=AuditEventType.AGENT_TOOL_SELECTED,
+                actor_id=f"agent:{agent.agent_id}",
+                domain_id=agent.security_domain_id,
+                target_id=tool_id,
+                allowed=True,
+                reason=reason,
+            )
+        )
 
     def choose_inference_capability(self, objective: str, has_attachments: bool = False) -> str:
         lowered = objective.lower()
