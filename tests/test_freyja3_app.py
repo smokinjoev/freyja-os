@@ -119,3 +119,27 @@ async def test_freyja3_inference_health_does_not_fallback_unconfigured_endpoint(
 
     assert reachable is False
     assert models == []
+
+
+def test_freyja3_app_follow_up_does_not_fabricate_tool_success(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(freyja3_app, "memory_store", Freyja3MemoryStore(tmp_path / "memory.db"))
+    monkeypatch.setattr(freyja3_app, "agent_runtime", AgentRuntimeV3(memory_store=freyja3_app.memory_store))
+    client = TestClient(freyja3_app.app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "message_id": "msg-follow-up-app",
+            "channel": "imessage",
+            "conversation_id": "conv-follow-up-app",
+            "sender": {"channel_id": "sender", "address": "+1555"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Send an iMessage.",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["tool_results"] == []
+    assert data["channel_metadata"]["follow_up_questions"] == ["Who should I send the message to, and what should it say?"]

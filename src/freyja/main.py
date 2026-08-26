@@ -521,6 +521,8 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
         tool_results=(
             list(result.tool_results)
             if result.tool_results
+            else []
+            if result.follow_up_questions
             else [{"tool_name": tool_id, "success": True} for tool_id in result.selected_tools]
         ),
         channel_metadata={
