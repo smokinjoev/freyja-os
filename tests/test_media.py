@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import base64
+from io import BytesIO
+from zipfile import ZipFile
+
 from freyja.media import AttachmentInput, pdf_texts_from_attachments
 
 
@@ -15,6 +19,33 @@ SIMPLE_PDF_BASE64 = (
     "CjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzExIDAwMDAwIG4g"
     "CnRyYWlsZXIgPDwgL1Jvb3QgMSAwIFIgL1NpemUgNiA+PgpzdGFydHhyZWYKNDEyCiUlRU9GCg=="
 )
+
+
+def simple_docx_base64(text: str = "Family plan Sunday") -> str:
+    escaped = (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    payload = BytesIO()
+    with ZipFile(payload, "w") as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>""",
+        )
+        archive.writestr(
+            "word/document.xml",
+            f"""<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>{escaped}</w:t></w:r></w:p></w:body>
+</w:document>""",
+        )
+    return base64.b64encode(payload.getvalue()).decode("ascii")
 
 
 def test_pdf_texts_extracts_native_pdf_text() -> None:
@@ -41,3 +72,19 @@ def test_pdf_texts_reports_missing_payload() -> None:
 
     assert documents[0].ok is False
     assert documents[0].error == "document payload unavailable"
+
+
+def test_docx_texts_extracts_native_word_text() -> None:
+    documents = pdf_texts_from_attachments(
+        [
+            AttachmentInput(
+                filename="plan.docx",
+                mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data_base64=simple_docx_base64(),
+            )
+        ]
+    )
+
+    assert len(documents) == 1
+    assert documents[0].ok is True
+    assert "Family plan Sunday" in documents[0].text

@@ -13,7 +13,7 @@ from connectors.imessage.models import IMessage, IMessageAttachment
 from connectors.messaging import parse_allowed_senders
 from freyja.identity import Identity, IdentityService, Person
 from freyja.memory.store import MemoryStore
-from tests.test_media import SIMPLE_PDF_BASE64
+from tests.test_media import SIMPLE_PDF_BASE64, simple_docx_base64
 
 
 def _make_request() -> httpx.Request:
@@ -53,8 +53,10 @@ async def enabled_gateway():
     gw._max_message_chars = 4000
     gw._director_url = "http://127.0.0.1:8000"
     gw._timeout = 5.0
+    gw._tools_required_mode = "always"
     gw._provisional_reply_enabled = False
     gw._provisional_reply_text = "Working on it..."
+    gw._direct_requires_addressed = True
     gw._direct_unaddressed_allowed_senders = set()
     yield gw
     await gw.close()
@@ -170,6 +172,32 @@ async def test_imessage_pdf_payload_adds_extracted_document_text(enabled_gateway
     payload = mock_post.await_args.kwargs["json"]
     assert "Extracted PDF/document text" in payload["text"]
     assert "Family dinner Friday" in payload["text"]
+
+
+@pytest.mark.asyncio
+async def test_imessage_docx_payload_adds_extracted_document_text(enabled_gateway, tmp_path):
+    docx_path = tmp_path / "plan.docx"
+    docx_path.write_bytes(base64.b64decode(simple_docx_base64("Family plan Sunday")))
+    message = make_message(text="Freyja, what does this say?", message_id="imsg-docx").model_copy(
+        update={
+            "attachments": [
+                IMessageAttachment(
+                    filename="plan.docx",
+                    mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    path=str(docx_path),
+                )
+            ]
+        }
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = _ok_response({"response": "It mentions Sunday."})
+        result = await enabled_gateway.handle(message)
+
+    assert result is not None
+    payload = mock_post.await_args.kwargs["json"]
+    assert "Extracted PDF/document text" in payload["text"]
+    assert "Family plan Sunday" in payload["text"]
 
 
 @pytest.mark.asyncio

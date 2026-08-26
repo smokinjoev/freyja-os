@@ -76,6 +76,19 @@ class NormalizedAttachment:
         return mime == "application/pdf" or name.endswith(".pdf")
 
     @property
+    def is_docx(self) -> bool:
+        mime = (self.mime_type or "").lower()
+        name = (self.filename or self.path or self.local_ref or "").lower()
+        return (
+            mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            or name.endswith(".docx")
+        )
+
+    @property
+    def is_document(self) -> bool:
+        return self.is_pdf or self.is_docx
+
+    @property
     def display_name(self) -> str:
         return self.filename or self.local_ref or self.path or "unnamed"
 
@@ -86,6 +99,8 @@ class NormalizedAttachment:
         if self.is_image and not self.has_payload:
             parts.append("image payload unavailable")
         if self.is_pdf and not self.has_payload:
+            parts.append("document payload unavailable")
+        if self.is_docx and not self.has_payload:
             parts.append("document payload unavailable")
         return f"{index}. " + ", ".join(parts)
 
@@ -150,7 +165,7 @@ class NormalizedMessage:
         return [
             attachment
             for attachment in self.attachments
-            if (attachment.is_image or attachment.is_pdf) and not attachment.has_payload
+            if (attachment.is_image or attachment.is_document) and not attachment.has_payload
         ]
 
     def prompt_text(self, *, empty_caption: str, metadata_label: str) -> str:

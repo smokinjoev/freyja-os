@@ -4,6 +4,8 @@ import base64
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from xml.etree import ElementTree
+from zipfile import ZipFile
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -62,6 +64,19 @@ class AttachmentInput(BaseModel):
         name = (self.filename or self.path or "").lower()
         return mime == "application/pdf" or name.endswith(".pdf")
 
+    @property
+    def is_docx(self) -> bool:
+        mime = (self.mime_type or "").lower()
+        name = (self.filename or self.path or "").lower()
+        return (
+            mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            or name.endswith(".docx")
+        )
+
+    @property
+    def is_document(self) -> bool:
+        return self.is_pdf or self.is_docx
+
     def to_image_input(self) -> ImageInput | None:
         if not self.is_image:
             return None
@@ -97,7 +112,7 @@ def images_from_attachments(attachments: list[AttachmentInput]) -> list[ImageInp
     return images
 
 
-def pdf_texts_from_attachments(
+def document_texts_from_attachments(
     attachments: list[AttachmentInput],
     *,
     max_chars_per_document: int = 8000,
@@ -105,19 +120,52 @@ def pdf_texts_from_attachments(
 ) -> list[DocumentText]:
     documents: list[DocumentText] = []
     for attachment in attachments:
-        if not attachment.is_pdf:
+        if not attachment.is_document:
             continue
-        name = attachment.filename or (Path(attachment.path).name if attachment.path else "document.pdf")
-        mime_type = attachment.mime_type or "application/pdf"
+        name = attachment.filename or (Path(attachment.path).name if attachment.path else "document")
+        mime_type = attachment.mime_type or (
+            "application/pdf" if attachment.is_pdf else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
         if not (attachment.data_base64 or attachment.path):
             documents.append(DocumentText(filename=name, mime_type=mime_type, error="document payload unavailable"))
             continue
         try:
             payload = _attachment_bytes(attachment)
-            documents.append(_extract_pdf_text(payload, filename=name, mime_type=mime_type, max_chars=max_chars_per_document, max_pages=max_pages))
+            if attachment.is_pdf:
+                documents.append(
+                    _extract_pdf_text(
+                        payload,
+                        filename=name,
+                        mime_type=mime_type,
+                        max_chars=max_chars_per_document,
+                        max_pages=max_pages,
+                    )
+                )
+            else:
+                documents.append(
+                    _extract_docx_text(
+                        payload,
+                        filename=name,
+                        mime_type=mime_type,
+                        max_chars=max_chars_per_document,
+                    )
+                )
         except Exception:
-            documents.append(DocumentText(filename=name, mime_type=mime_type, error="pdf text extraction failed"))
+            documents.append(DocumentText(filename=name, mime_type=mime_type, error="document text extraction failed"))
     return documents
+
+
+def pdf_texts_from_attachments(
+    attachments: list[AttachmentInput],
+    *,
+    max_chars_per_document: int = 8000,
+    max_pages: int = 8,
+) -> list[DocumentText]:
+    return document_texts_from_attachments(
+        attachments,
+        max_chars_per_document=max_chars_per_document,
+        max_pages=max_pages,
+    )
 
 
 def _attachment_bytes(attachment: AttachmentInput) -> bytes:
@@ -154,6 +202,36 @@ def _extract_pdf_text(
         text=text,
         page_count=len(reader.pages),
         error=None if text else "pdf contains no extractable text",
+    )
+
+
+def _extract_docx_text(
+    payload: bytes,
+    *,
+    filename: str,
+    mime_type: str,
+    max_chars: int,
+) -> DocumentText:
+    with ZipFile(BytesIO(payload)) as archive:
+        xml_payload = archive.read("word/document.xml")
+    root = ElementTree.fromstring(xml_payload)
+    namespace = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    paragraphs: list[str] = []
+    for paragraph in root.findall(".//w:p", namespace):
+        text = "".join(node.text or "" for node in paragraph.findall(".//w:t", namespace)).strip()
+        if text:
+            paragraphs.append(text)
+        if sum(len(part) for part in paragraphs) >= max_chars:
+            break
+    text = "\n".join(paragraphs).strip()
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip()
+    return DocumentText(
+        filename=filename,
+        mime_type=mime_type,
+        text=text,
+        page_count=0,
+        error=None if text else "docx contains no extractable text",
     )
 
 
