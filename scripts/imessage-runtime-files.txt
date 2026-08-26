@@ -1,5 +1,7 @@
 connectors/imessage/gateway.py
 connectors/imessage/config.py
+connectors/imessage/models.py
+connectors/imessage/transport.py
 connectors/messaging.py
 src/freyja/agents/coding_lane.py
 src/freyja/agents/household.py

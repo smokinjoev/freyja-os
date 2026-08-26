@@ -26,3 +26,6 @@ class IMessage(BaseModel):
 class IMessageReply(BaseModel):
     chat_id: int
     text: str
+    recipient: str | None = None
+    chat_identifier: str | None = None
+    is_group: bool = False

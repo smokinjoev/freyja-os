@@ -41,19 +41,26 @@ class IMessageTransport:
         return command
 
     def send_command(self, reply: IMessageReply) -> list[str]:
-        return [
+        command = [
             self._settings.resolved_imsg_path,
             "send",
             "--db",
             self._settings.imessage_database_path,
-            "--chat-id",
-            str(reply.chat_id),
-            "--text",
-            reply.text,
-            "--service",
-            "imessage",
-            "--json",
         ]
+        if reply.recipient and not reply.is_group:
+            command.extend(["--to", reply.recipient])
+        else:
+            command.extend(["--chat-id", str(reply.chat_id)])
+        command.extend(
+            [
+                "--text",
+                reply.text,
+                "--service",
+                "imessage",
+                "--json",
+            ]
+        )
+        return command
 
     def chats_command(self, *, limit: int) -> list[str]:
         return [

@@ -93,7 +93,7 @@ class IMessageGateway:
             return None
         if not self._can_send_provisional_reply(message):
             return None
-        return IMessageReply(chat_id=message.chat_id, text=self._provisional_reply_text)
+        return self._reply_for_message(message, self._provisional_reply_text)
 
     async def _client(self) -> httpx.AsyncClient:
         if self._http_client is None or self._http_client.is_closed:
@@ -363,7 +363,7 @@ class IMessageGateway:
                 "reply_length": len(text),
             }
         )
-        return IMessageReply(chat_id=message.chat_id, text=text)
+        return self._reply_for_message(message, text)
 
     def _prompt_for_message(self, message: IMessage) -> str:
         return self._message_text_for_limits_and_tools(message)
@@ -414,7 +414,16 @@ class IMessageGateway:
         return any(term in lowered for term in _TOOL_REQUEST_TERMS)
 
     def _safe_error_response(self, message: IMessage) -> IMessageReply:
-        return IMessageReply(chat_id=message.chat_id, text=_SAFE_ERROR_TEXT)
+        return self._reply_for_message(message, _SAFE_ERROR_TEXT)
+
+    def _reply_for_message(self, message: IMessage, text: str) -> IMessageReply:
+        return IMessageReply(
+            chat_id=message.chat_id,
+            text=text,
+            recipient=message.sender if not message.is_group else None,
+            chat_identifier=message.chat_identifier,
+            is_group=message.is_group,
+        )
 
     @staticmethod
     def _safe_sender_hash(sender: str) -> str:

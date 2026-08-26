@@ -126,6 +126,48 @@ def test_send_command_uses_chat_id_without_a_shell():
     ]
 
 
+def test_send_command_uses_recipient_for_direct_reply_without_a_shell():
+    transport = IMessageTransport(settings())
+    reply = IMessageReply(
+        chat_id=4,
+        text='hello; $(touch /tmp/nope)',
+        recipient="+15551234567",
+        is_group=False,
+    )
+
+    command = transport.send_command(reply)
+
+    assert command == [
+        "/opt/homebrew/bin/imsg",
+        "send",
+        "--db",
+        "/Users/freyja/Library/Messages/chat.db",
+        "--to",
+        "+15551234567",
+        "--text",
+        'hello; $(touch /tmp/nope)',
+        "--service",
+        "imessage",
+        "--json",
+    ]
+
+
+def test_send_command_keeps_chat_id_for_group_reply():
+    transport = IMessageTransport(settings())
+    reply = IMessageReply(
+        chat_id=4,
+        text="hello",
+        recipient="+15551234567",
+        is_group=True,
+    )
+
+    command = transport.send_command(reply)
+
+    assert "--chat-id" in command
+    assert "4" in command
+    assert "--to" not in command
+
+
 def test_chats_command_is_argument_safe():
     transport = IMessageTransport(settings())
 
