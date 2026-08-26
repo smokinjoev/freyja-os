@@ -15,6 +15,7 @@ src/freyja/contracts.py
 src/freyja/inference.py
 src/freyja/media.py
 src/freyja/router.py
+src/freyja/tools/registry.py
 scripts/run-imessage-connector.py
 scripts/configure-imessage-family-agents.py
 scripts/imessage-operator.py

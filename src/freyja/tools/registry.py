@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 _SANITIZED_TERMS = {"api key", "authorization", "bearer", "sk-", "token", "password", "secret"}
 
 
+def _is_canonical_household_principal(person_id: str) -> bool:
+    from freyja.agents.household import household_agents
+
+    return bool(person_id and household_agents.assigned(person_id) is not None)
+
+
 def _sanitize_for_audit(value: Any) -> Any:
     """Recursively redact likely secrets from audit records."""
     if isinstance(value, dict):
@@ -135,7 +141,7 @@ class ToolRegistry:
         has_principal = bool(principal.get("client_type") and principal.get("client_subject"))
 
         if permission in {"household:home.read", "household:calendar.read"}:
-            if person_id in {"joe", "beth", "family"}:
+            if _is_canonical_household_principal(person_id):
                 resource = "household state" if permission == "household:home.read" else "household calendar"
                 return ToolAuthorizationDecision(
                     allowed=True,
@@ -162,7 +168,7 @@ class ToolRegistry:
             )
 
         if permission == "household:home.control":
-            if person_id not in {"joe", "beth", "family"}:
+            if not _is_canonical_household_principal(person_id):
                 return ToolAuthorizationDecision(
                     allowed=False,
                     reason="canonical household principal required",
@@ -187,7 +193,7 @@ class ToolRegistry:
             )
 
         if permission == "household:calendar.write":
-            if person_id not in {"joe", "beth", "family"}:
+            if not _is_canonical_household_principal(person_id):
                 return ToolAuthorizationDecision(
                     allowed=False,
                     reason="canonical household principal required",
@@ -212,7 +218,7 @@ class ToolRegistry:
             )
 
         if permission == "personal:memory.read":
-            if person_id and person_id not in {"joe", "beth", "family"}:
+            if person_id and not _is_canonical_household_principal(person_id):
                 return ToolAuthorizationDecision(
                     allowed=False,
                     reason="canonical memory principal required",

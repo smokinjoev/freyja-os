@@ -718,6 +718,73 @@ def test_home_assistant_read_allows_director_authorized_joe(registry: ToolRegist
     assert result.output["state"] == "on"
 
 
+@pytest.mark.parametrize(
+    ("person_id", "permission"),
+    [
+        ("liam", "household:home.read"),
+        ("jenna", "household:home.read"),
+        ("liam", "household:calendar.read"),
+        ("jenna", "household:calendar.read"),
+        ("liam", "personal:memory.read"),
+        ("jenna", "personal:memory.read"),
+    ],
+)
+def test_household_authorization_uses_configured_family_agents(
+    registry: ToolRegistry,
+    person_id: str,
+    permission: str,
+) -> None:
+    definition = ToolDefinition(name="authorized", description="Authorized", required_permission=permission)
+    request = ToolExecutionRequest(
+        tool_name="authorized",
+        metadata={
+            "director_authorized": True,
+            "memory_principal": {
+                "client_type": "imessage",
+                "client_subject": f"agent:{person_id}",
+            },
+            "person": {"person_id": person_id},
+        },
+    )
+
+    decision = registry.authorize(definition, request)
+
+    assert decision.allowed is True
+
+
+@pytest.mark.parametrize(
+    ("person_id", "permission"),
+    [
+        ("liam", "household:home.control"),
+        ("jenna", "household:home.control"),
+        ("liam", "household:calendar.write"),
+        ("jenna", "household:calendar.write"),
+    ],
+)
+def test_household_write_authorization_accepts_configured_family_agents_with_approval(
+    registry: ToolRegistry,
+    person_id: str,
+    permission: str,
+) -> None:
+    definition = ToolDefinition(name="authorized", description="Authorized", required_permission=permission)
+    request = ToolExecutionRequest(
+        tool_name="authorized",
+        metadata={
+            "director_authorized": True,
+            "approval_granted": True,
+            "memory_principal": {
+                "client_type": "imessage",
+                "client_subject": f"agent:{person_id}",
+            },
+            "person": {"person_id": person_id},
+        },
+    )
+
+    decision = registry.authorize(definition, request)
+
+    assert decision.allowed is True
+
+
 def test_home_assistant_list_states_exposes_fixture_sensors_for_household_principal(
     registry: ToolRegistry,
     monkeypatch: pytest.MonkeyPatch,
