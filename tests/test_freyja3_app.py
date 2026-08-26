@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import freyja.freyja3_app as freyja3_app
 from freyja.agent_runtime_v3 import AgentRuntimeV3
+from freyja.freyja3_audit import Freyja3AuditStore
 from freyja.freyja3_machines import Freyja3MachineStatusStore
 from freyja.freyja3_memory import Freyja3MemoryStore
 from freyja.freyja3_scheduler import Freyja3SchedulerStore
@@ -12,6 +13,7 @@ from freyja.semantic_events import SemanticEventStore
 
 def test_freyja3_app_canonical_route_uses_gateway_runtime(monkeypatch, tmp_path) -> None:
     memory_store = Freyja3MemoryStore(tmp_path / "memory.db")
+    monkeypatch.setattr(freyja3_app, "audit_store", Freyja3AuditStore(tmp_path / "audit.db"))
     monkeypatch.setattr(freyja3_app, "agent_runtime", AgentRuntimeV3(memory_store=memory_store))
     client = TestClient(freyja3_app.app)
 
@@ -34,6 +36,10 @@ def test_freyja3_app_canonical_route_uses_gateway_runtime(monkeypatch, tmp_path)
     assert data["channel_metadata"]["freyja3"] is True
     assert data["channel_metadata"]["inference_machine_id"] == "vulcan"
     assert data["channel_metadata"]["written_memories"]
+    audit = client.get("/freyja3/audit?conversation_id=conv-f3-app", headers={"x-freyja-security-domain": "household"})
+    denied = client.get("/freyja3/audit?conversation_id=conv-f3-app", headers={"x-freyja-security-domain": "person.beth"})
+    assert audit.json()["count"] >= 3
+    assert denied.status_code == 403
 
 
 def test_freyja3_app_semantic_events_are_available(monkeypatch, tmp_path) -> None:

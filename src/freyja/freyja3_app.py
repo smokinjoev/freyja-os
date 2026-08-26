@@ -12,6 +12,7 @@ from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.config import settings
 from freyja.contracts import CanonicalRequest, CanonicalResponse, CanonicalSender
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
+from freyja.freyja3_audit import Freyja3AuditAccessError, Freyja3AuditQuery, Freyja3AuditStore
 from freyja.freyja3_machines import Freyja3MachineAccessError, Freyja3MachineHeartbeat, Freyja3MachineStatusStore
 from freyja.freyja3_memory import Freyja3MemoryAccessError, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.freyja3_scheduler import Freyja3ScheduleAccessError, Freyja3ScheduleCreate, Freyja3ScheduleQuery, Freyja3SchedulerStore
@@ -33,6 +34,7 @@ semantic_event_store = SemanticEventStore()
 memory_store = Freyja3MemoryStore()
 scheduler_store = Freyja3SchedulerStore()
 machine_status_store = Freyja3MachineStatusStore()
+audit_store = Freyja3AuditStore()
 register_builtin_tools(get_registry())
 register_smith_write_pilot_tools(get_registry())
 register_smith_read_only_tools(get_registry())
@@ -159,6 +161,32 @@ async def list_freyja3_machines(raw_request: Request) -> dict[str, Any]:
     except Freyja3MachineAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None
     return {"ok": True, "machines": [status.model_dump(mode="json") for status in statuses], "count": len(statuses)}
+
+
+@app.get("/freyja3/audit")
+async def list_freyja3_audit(
+    raw_request: Request,
+    event_type: str | None = None,
+    actor_id: str | None = None,
+    target_id: str | None = None,
+    trace_id: str | None = None,
+    conversation_id: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    domain_id = _domain_from_header(raw_request.headers.get("x-freyja-security-domain"), SecurityDomainId.HOUSEHOLD)
+    try:
+        query = Freyja3AuditQuery(
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+            trace_id=trace_id,
+            conversation_id=conversation_id,
+            limit=limit,
+        )
+        events = audit_store.list(query, reader_domain_id=domain_id)
+    except (Freyja3AuditAccessError, ValueError) as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    return {"ok": True, "events": [event.model_dump(mode="json") for event in events], "count": len(events)}
 
 
 @app.post("/freyja3/schedules")
@@ -289,6 +317,12 @@ async def _execute_canonical_request(request: CanonicalRequest, raw_request: Req
     if gateway_result.handoff is None:
         raise HTTPException(status_code=500, detail="Gateway did not produce an agent handoff.")
     result = await agent_runtime.arun(gateway_result.handoff)
+    audit_store.record_many(
+        [gateway_result.audit_event, *result.audit_events],
+        writer_domain_id=SecurityDomainId.SYSTEM,
+        trace_id=request.trace_id,
+        conversation_id=result.conversation_id,
+    )
     return CanonicalResponse(
         trace_id=request.trace_id,
         request_message_id=request.message_id,

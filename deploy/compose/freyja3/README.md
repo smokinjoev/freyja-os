@@ -10,6 +10,7 @@ It exposes:
 - `GET /freyja3/inference/health`
 - `POST /freyja3/machines/heartbeat`
 - `GET /freyja3/machines`
+- `GET /freyja3/audit`
 - `POST /freyja3/schedules`
 - `GET /freyja3/schedules`
 - `POST /freyja3/schedules/dispatch-due`
@@ -24,6 +25,7 @@ Default behavior is conservative:
 - stores semantic events in `/app/data/freyja3_events.db`
 - stores scheduler envelopes in `/app/data/freyja3_scheduler.db`
 - stores machine role heartbeats in `/app/data/freyja3_machines.db`
+- stores gateway/runtime audit events in `/app/data/freyja3_audit.db`
 - points local read-only diagnostics at `/app`; it does not bind-mount the host
   Git checkout into the container by default
 
