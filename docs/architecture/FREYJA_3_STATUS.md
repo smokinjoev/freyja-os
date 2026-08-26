@@ -20,14 +20,14 @@ Last updated: 2026-08-26.
 | Machine | Verified State | Freyja 3 Role Status |
 | --- | --- | --- |
 | Iris | `iris.lan`, macOS 26.5.2, Director and iMessage connector running locally | Apple-side runtime active. MacAgent and iMessage path available. Needs Freyja 3 canonical flag rollout after more integration testing. |
-| Atlas | Ubuntu 24.04 kernel line, Docker active, Home Assistant container active, Atlas Director externally healthy at Tailscale port `8001`, Signal containers active; isolated `/home/joe/freyja-os-freyja3` checkout runs `freyja3-agent-gateway-1` healthy on `127.0.0.1:8300` | Persistent infrastructure role partially active: existing Director-compatible services are preserved. Freyja 3 gateway/runtime and semantic event receiver are deployed side-by-side on Atlas and verify Vulcan inference readiness. HA live data/control still needs credentials wired into the sidecar. |
+| Atlas | Ubuntu 24.04 kernel line, Docker active, Home Assistant container active, Atlas Director externally healthy at Tailscale port `8001`, Signal containers active; isolated `/home/joe/freyja-os-freyja3` checkout runs `freyja3-agent-gateway-1` healthy on Tailscale port `8300` with bearer auth | Persistent infrastructure role partially active: existing Director-compatible services are preserved. Freyja 3 gateway/runtime and semantic event receiver are deployed side-by-side on Atlas, verify Vulcan inference readiness, and accept Hera semantic events. HA live data/control still needs credentials wired into the sidecar. |
 | Vulcan | Ubuntu kernel line, Ollama active, remote Ollama exposed on Tailscale port `11434`, models include `qwen3-coder-next:q4_K_M`, `qwen2.5:7b`, `minicpm-v`, and `nomic-embed-text` | Primary inference appliance partially active. General/code/vision/embedding compute available through remote Ollama. LM Studio/OpenAI-compatible endpoint still unverified. |
-| Hera | Ubuntu kernel line, Ollama active on Tailscale port `11434`, local vision-capable models present on Hera, no `/dev/video*` visible to `joe` account | Edge inference exists. Semantic event contract/API exists; real camera-backed perception publisher is not deployed because camera device access needs confirmation. |
+| Hera | Ubuntu kernel line, Ollama active on Tailscale port `11434`, local vision-capable models present on Hera, isolated `/home/joe/freyja-os-freyja3` checkout can publish authenticated semantic events to Atlas; no `/dev/video*` visible to `joe` account | Edge inference exists. Hera can publish typed semantic events to Atlas. Real camera-backed perception publisher is not deployed because camera device access needs confirmation. |
 | Mars | Ubuntu kernel line, Docker active, Freyja Director container healthy on Tailscale port `8000`, Signal containers active; isolated `/home/joe/freyja-os-freyja3` checkout runs `freyja3-agent-gateway-1` healthy on `127.0.0.1:8300` | Worker/secondary host partially active. Existing Freyja services healthy; Freyja 3 sidecar is deployed on-host without touching the dirty live deploy checkout. Worker jobs/monitoring still need deployment. |
 
 ## Joe-Required Blockers
 
-- Hera camera/perception hardware access is not visible from the current `joe` SSH session. Need physical/device confirmation or permission changes before deploying real camera-backed semantic events.
+- Hera camera/perception hardware access is not visible from the current `joe` SSH session. Typed Hera-to-Atlas event publishing works, but real camera-backed perception needs physical/device confirmation or permission changes.
 - Home Assistant API is reachable on Atlas but returns auth-required responses. The Freyja 3 Atlas sidecar selects the HA capability and reports `live_data_available=false` until a token/base URL is wired into its env without exposing secrets.
 - LM Studio/OpenAI-compatible local endpoints on Vulcan are not yet verified.
 - Atlas `/home/joe/freyja-os` and Mars live deploy checkout have uncommitted local changes. Live deployment/rebuild should wait for reconciliation or a deliberate separate Freyja 3 service target.
@@ -41,7 +41,7 @@ Last updated: 2026-08-26.
 5. Multi-step autonomous tool work functions: covered by agent-owned multi-tool execution through the existing tool registry; deeper iterative plan/observe/retry behavior still needs integration.
 6. Iris uses Mac Agent/Apple capabilities: MacAgent/iMessage live services are running; Freyja 3 runtime selects Apple/Mac tools in tests.
 7. Freyja controls HA on Atlas: Atlas sidecar selects the HA capability and executes the HA adapter, but live data/control remains blocked by missing HA env credentials.
-8. Hera publishes semantic perception events: Atlas sidecar accepts and persists Hera semantic events; real Hera camera-backed publisher pending device access.
+8. Hera publishes semantic perception events: verified from Hera to Atlas over Tailscale with bearer auth; Atlas persisted and returned a `voice_activity` event. Real camera-backed publisher pending device access.
 9. Memory privacy boundaries work: covered by runtime boundary tests.
 10. Cloud cannot bypass privacy controls: covered by egress gate tests.
 11. Agents recover from inference outages: covered by runtime fallback test.
