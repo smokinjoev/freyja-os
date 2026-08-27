@@ -33,7 +33,7 @@ class EgressDecision(BaseModel):
 
 
 class PrivacyEgressGate:
-    """Mandatory cloud AI egress policy for Freyja 3 agents."""
+    """Mandatory cloud AI egress policy for Freyja agents."""
 
     def evaluate(
         self,

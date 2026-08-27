@@ -1,5 +1,5 @@
 [Unit]
-Description=Publish Freyja 3 machine heartbeat
+Description=Publish Freyja machine heartbeat
 
 [Service]
 Type=oneshot

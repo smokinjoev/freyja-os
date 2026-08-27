@@ -28,6 +28,7 @@ CERTIFICATION_FIXTURE_KEYS = {
     "certification_provider_health",
     "certification_cloud_enabled",
     "certification_capability_checks",
+    "certification_attachments",
     "worker_observation",
 }
 

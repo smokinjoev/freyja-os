@@ -20,7 +20,7 @@ _DUCKDUCKGO_HTML_URL = "https://duckduckgo.com/html/"
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Claim and run one Freyja 3 worker job.")
+    parser = argparse.ArgumentParser(description="Claim and run one Freyja worker job.")
     parser.add_argument("--base-url", default=os.environ.get("FREYJA3_WORKER_BASE_URL", "http://127.0.0.1:8300"))
     parser.add_argument("--token", default=os.environ.get("FREYJA_CONNECTOR_TOKEN", ""))
     parser.add_argument("--machine-id", default=os.environ.get("FREYJA3_MACHINE_ID", socket.gethostname().lower()))

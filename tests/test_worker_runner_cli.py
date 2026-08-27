@@ -157,7 +157,7 @@ def test_worker_runner_email_content_requires_body_text() -> None:
 
 def test_worker_runner_completes_web_research_observation(monkeypatch) -> None:
     def fake_research(query: str, *, max_results: int) -> dict:
-        assert query == "Freyja 3 architecture"
+        assert query == "Freyja architecture"
         assert max_results == 5
         return {
             "ok": True,
@@ -184,7 +184,7 @@ def test_worker_runner_completes_web_research_observation(monkeypatch) -> None:
         {
             "job_id": "job-web",
             "worker_class": "web_research",
-            "payload": {"query": "Freyja 3 architecture", "max_results": 99},
+            "payload": {"query": "Freyja architecture", "max_results": 99},
         },
         machine_id="mars",
     )
@@ -196,7 +196,7 @@ def test_worker_runner_completes_web_research_observation(monkeypatch) -> None:
     assert observation["source"] == "web:unit"
     assert observation["proposed_capabilities"] == []
     assert observation["web_metadata"] == {
-        "query": "Freyja 3 architecture",
+        "query": "Freyja architecture",
         "provider": "unit_search",
         "result_count": 2,
     }

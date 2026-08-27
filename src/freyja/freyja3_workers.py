@@ -66,7 +66,7 @@ class Freyja3WorkerJobComplete(BaseModel):
 
 
 class Freyja3WorkerJobStore:
-    """Durable Atlas-owned work queue for Mars/Freyja 3 workers."""
+    """Durable Atlas-owned work queue for Mars/Freyja workers."""
 
     def __init__(self, database_path: str | Path | None = None) -> None:
         self.database_path = Path(database_path or settings.freyja3_worker_database_path).expanduser()

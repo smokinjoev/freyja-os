@@ -1379,6 +1379,33 @@ async def test_auto_image_request_routes_to_local_vision_without_cloud(router: R
     assert result.runtime_evidence.provider_locality == "iris"
 
 
+async def test_image_tool_request_passes_tools_to_local_vision(router: Router, reset_settings) -> None:
+    settings.cloud_enabled = False
+    registry = ToolRegistry(audit_enabled=False)
+    register_builtin_tools(registry)
+    router = Router(registry=registry)
+    router.ollama_client = AsyncMock()
+    router.openrouter_client = AsyncMock()
+    router.ollama_client.chat.return_value = {
+        "model": "moondream",
+        "message": {"content": "I need live context, but no tool was used."},
+    }
+
+    req = RouteRequest(
+        prompt="Look at this flyer and tell me the weather for the event.",
+        provider="auto",
+        tools_required=True,
+        images=[ImageInput(mime_type="image/png", data_base64="ZmFrZQ==")],
+    )
+    result = await router.execute(req)
+
+    assert result.decision.provider == "local_vision"
+    _, kwargs = router.ollama_client.chat.call_args
+    assert kwargs["tools_required"] is True
+    assert kwargs["images"] == req.images
+    assert {tool.name for tool in kwargs["tools"]} >= {"web_search", "get_weather", "event_weather"}
+
+
 class TestToolLoop:
     @pytest.fixture
     def registry(self) -> ToolRegistry:

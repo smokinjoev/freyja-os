@@ -1,4 +1,4 @@
-# Freyja 3.0 Architecture
+# Freyja Architecture
 
 **Status:** governing architecture.
 **Architecture rule:** build the complete intended system described here before
@@ -6,7 +6,7 @@ debugging individual pathways, unless a blocker prevents further construction.
 **Supersedes:** Director-centered Freyja 2.x architecture wherever this document
 conflicts with older documentation.
 
-Freyja 3.0 is a distributed household agent platform. Agents, models, tools,
+Freyja is a distributed household agent platform. Agents, models, tools,
 memory, and machines are separate concepts and must not be collapsed into one
 another.
 
@@ -40,7 +40,7 @@ routes tasks by category.
 
 ## 2. No Director
 
-Freyja 3.0 removes the intelligent intent-routing Director.
+Freyja removes the intelligent intent-routing Director.
 
 The system MUST NOT contain a central intelligent component that decides whether
 a request is weather, coding, calendar, home control, document work, general
@@ -554,7 +554,7 @@ does not become a Director.
 
 ## 11. Security Domains
 
-Freyja 3.0 uses explicit security domains:
+Freyja uses explicit security domains:
 
 | Domain | Scope |
 | --- | --- |
@@ -570,7 +570,7 @@ Cross-domain access requires explicit policy. Absence of policy means deny.
 
 ## 12. Implementation Order
 
-Build Freyja 3.0 architecture-first in this order:
+Build Freyja architecture-first in this order:
 
 1. Define canonical data models for agents, machines, tools, inference
    endpoints, memory scopes, security domains, gateway handoffs, and audits.
@@ -599,11 +599,11 @@ Legacy components may remain temporarily only when:
 
 - they are clearly marked as compatibility paths
 - they do not define new architecture
-- they do not make semantic intent-routing decisions for Freyja 3.0
+- they do not make semantic intent-routing decisions for Freyja
 - they are behind migration flags or adapters
 - replacement Agent Gateway and autonomous agent paths are being built first
 
-New Freyja 3.0 work must use this document as the governing architecture.
+New Freyja work must use this document as the governing architecture.
 
 ## 14. Non-Negotiable Requirements
 

@@ -12,7 +12,7 @@ from freyja.freyja3_machines import Freyja3MachineHeartbeat
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Publish a Freyja 3 machine heartbeat.")
+    parser = argparse.ArgumentParser(description="Publish a Freyja machine heartbeat.")
     parser.add_argument("--url", default=os.environ.get("FREYJA3_MACHINE_HEARTBEAT_URL", "http://127.0.0.1:8300/freyja3/machines/heartbeat"))
     parser.add_argument("--token", default=os.environ.get("FREYJA_CONNECTOR_TOKEN", ""))
     parser.add_argument("--machine-id", default=os.environ.get("FREYJA3_MACHINE_ID", socket.gethostname().lower()))

@@ -27,7 +27,7 @@ class Freyja3AuditQuery(BaseModel):
 
 
 class Freyja3AuditStore:
-    """Durable Freyja 3 audit event store for Atlas observability."""
+    """Durable Freyja audit event store for Atlas observability."""
 
     def __init__(self, database_path: str | Path | None = None) -> None:
         self.database_path = Path(database_path or settings.freyja3_audit_database_path).expanduser()

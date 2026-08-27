@@ -1,13 +1,18 @@
 import hashlib
 import hmac
 import ipaddress
+import json
+import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict
 
 from freyja.agents import AgentHierarchy, PersonName
 from freyja.agents.approval_provider import PersistentApprovalProvider
@@ -39,6 +44,9 @@ from freyja.tools.builtin import register_builtin_tools, register_smith_read_onl
 from freyja.tools.registry import get_registry
 
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_iris_warm_monitor()
@@ -59,6 +67,33 @@ app = FastAPI(
 
 
 @app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.monotonic()
+    response = await call_next(request)
+    duration_ms = int((time.monotonic() - start) * 1000)
+    logger.info(
+        "http_request method=%s path=%s status=%s duration_ms=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def log_validation_error(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    logger.warning(
+        "http_validation_error method=%s path=%s status=422 errors=%s",
+        request.method,
+        request.url.path,
+        errors,
+    )
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
+
+
+@app.middleware("http")
 async def require_connector_auth(request: Request, call_next):
     """Require a bearer token for non-public Director endpoints when configured."""
     expected = settings.freyja_connector_token
@@ -71,6 +106,9 @@ async def require_connector_auth(request: Request, call_next):
         and bool(supplied)
         and hmac.compare_digest(supplied, expected)
     )
+    api_key = request.headers.get("x-api-key", "")
+    if not authorized and api_key:
+        authorized = hmac.compare_digest(api_key, expected)
     if not authorized:
         return JSONResponse(
             status_code=401,
@@ -619,6 +657,149 @@ def _voice_friendly_response(text: str, *, limit: int = 700) -> str:
     return cleaned[: limit - 1].rstrip() + "..."
 
 
+def _openai_chat_objective(messages: list["OpenAIChatMessage"]) -> str:
+    parts: list[str] = []
+    for message in messages:
+        role = message.role.strip().lower()
+        if role not in {"system", "user"}:
+            continue
+        content = _openai_message_content_text(message.content)
+        if content:
+            parts.append(f"{role}: {content}")
+    if not parts:
+        return ""
+    return "\n".join(parts)[-8000:]
+
+
+def _openai_message_content_text(content: str | list[dict[str, Any]] | None) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    chunks: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "text" and isinstance(item.get("text"), str):
+            chunks.append(item["text"].strip())
+    return "\n".join(chunk for chunk in chunks if chunk).strip()
+
+
+def _openai_chat_should_use_smith(objective: str) -> bool:
+    lowered = objective.lower()
+    smith_keywords = (
+        "check",
+        "compile",
+        "debug",
+        "diagnose",
+        "diff",
+        "health",
+        "inspect",
+        "pytest",
+        "repo",
+        "repository",
+        "status",
+        "validate",
+    )
+    smith_phrases = ("run test", "run the test", "test suite", "pytest")
+    return any(keyword in lowered for keyword in smith_keywords) or any(phrase in lowered for phrase in smith_phrases)
+
+
+def _smith_openai_response_text(summary: dict[str, Any]) -> str:
+    lines = [
+        f"Agent Smith request: {summary.get('request_id')}",
+        f"Status: {summary.get('status')}",
+        str(summary.get("message") or "").strip(),
+    ]
+    plan = summary.get("plan") if isinstance(summary.get("plan"), dict) else None
+    tasks = plan.get("tasks") if isinstance(plan, dict) and isinstance(plan.get("tasks"), list) else []
+    if tasks:
+        lines.append("")
+        lines.append("Steps:")
+        for index, task in enumerate(tasks[:20], start=1):
+            description = str(task.get("description") or "task").strip()
+            status = str(task.get("status") or "unknown").strip()
+            metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
+            tool = metadata.get("tool")
+            suffix = f" [{tool}]" if tool else ""
+            lines.append(f"{index}. {status}: {description}{suffix}")
+    if summary.get("approval_required_count"):
+        lines.append("")
+        lines.append("Approval required before any write or privileged action.")
+    if summary.get("duration_ms") is not None:
+        lines.append("")
+        lines.append(f"Duration: {summary['duration_ms']} ms")
+    return "\n".join(line for line in lines if line is not None).strip()
+
+
+def _openai_chat_response(
+    *,
+    request_id: str,
+    content: str,
+    duration_ms: int,
+    smith_mode: str,
+    smith_status: str,
+) -> dict[str, Any]:
+    return {
+        "id": f"chatcmpl-{request_id}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": "agent-smith",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
+        "freyja": {
+            "request_id": request_id,
+            "status": smith_status,
+            "duration_ms": duration_ms,
+            "smith_mode": smith_mode,
+        },
+    }
+
+
+def _openai_chat_stream(response: dict[str, Any]) -> StreamingResponse:
+    created = int(response.get("created") or time.time())
+    response_id = str(response.get("id") or f"chatcmpl-{uuid.uuid4()}")
+    content = str(response["choices"][0]["message"].get("content") or "")
+
+    async def events():
+        first_chunk = {
+            "id": response_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": "agent-smith",
+            "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+        }
+        content_chunk = {
+            "id": response_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": "agent-smith",
+            "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
+        }
+        final_chunk = {
+            "id": response_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": "agent-smith",
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        }
+        for chunk in (first_chunk, content_chunk, final_chunk):
+            yield f"data: {json.dumps(jsonable_encoder(chunk), separators=(',', ':'))}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
 class SmithDryRunRequest(BaseModel):
     objective: str
     actor: str = "agent_smith"
@@ -629,6 +810,30 @@ class SmithReadOnlyRequest(BaseModel):
     objective: str
     actor: str = "agent_smith"
     request_id: str | None = None
+
+
+class OpenAIChatMessage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    role: str
+    content: str | list[dict[str, Any]] | None = None
+
+
+class OpenAIChatCompletionRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    messages: list[OpenAIChatMessage]
+    stream: bool = False
+    temperature: float | None = None
+    max_tokens: int | None = None
+    top_p: float | None = None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | dict[str, Any] | None = None
+    stop: str | list[str] | None = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
+    user: str | None = None
 
 
 class FamilyIssueReviewRequest(BaseModel):
@@ -673,6 +878,77 @@ async def smith_read_only(request: SmithReadOnlyRequest) -> dict[str, Any]:
         request_id=request.request_id,
     )
     return summary.model_dump(mode="json")
+
+
+@app.get("/v1/models")
+async def openai_compatible_models() -> dict[str, Any]:
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": "agent-smith",
+                "object": "model",
+                "created": 0,
+                "owned_by": "freyja-os",
+            }
+        ],
+    }
+
+
+@app.post("/v1/chat/completions", response_model=None)
+async def openai_compatible_chat_completions(request: OpenAIChatCompletionRequest) -> dict[str, Any] | StreamingResponse:
+    if request.model != "agent-smith":
+        raise HTTPException(status_code=404, detail="Unknown model.")
+    if not settings.agent_smith_enabled or not settings.agent_smith_read_only_enabled:
+        raise HTTPException(
+            status_code=404 if not settings.agent_smith_enabled else 403,
+            detail="Agent Smith read-only mode is not enabled.",
+        )
+
+    objective = _openai_chat_objective(request.messages)
+    if not objective:
+        raise HTTPException(status_code=400, detail="At least one user message is required.")
+    request_id = f"smith-openai-{uuid.uuid4()}"
+    start = time.monotonic()
+    smith_mode = "chat"
+    smith_status = "completed"
+    if _openai_chat_should_use_smith(objective):
+        runtime = SmithRuntime()
+        summary = await runtime.run_read_only(
+            objective,
+            actor=f"agent_smith:openai-compatible:{request.user or 'gui'}",
+            request_id=request_id,
+        )
+        content = _smith_openai_response_text(summary.model_dump(mode="json"))
+        smith_mode = "read_only"
+        smith_status = summary.status
+    else:
+        client = OllamaClient(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_chat_model or settings.ollama_model,
+        )
+        response = await client.chat(
+            prompt=objective,
+            stream=False,
+            tools_required=False,
+            output_tokens=request.max_tokens,
+        )
+        if "error" in response:
+            raise HTTPException(status_code=502, detail=f"Ollama chat failed: {response['error']}")
+        content = str(response.get("message", {}).get("content") or "").strip()
+        if not content:
+            raise HTTPException(status_code=502, detail="Ollama chat returned empty content.")
+    duration_ms = int((time.monotonic() - start) * 1000)
+    response_body = _openai_chat_response(
+        request_id=request_id,
+        content=content,
+        duration_ms=duration_ms,
+        smith_mode=smith_mode,
+        smith_status=smith_status,
+    )
+    if request.stream:
+        return _openai_chat_stream(response_body)
+    return response_body
 
 
 @app.post("/agents/family/issue-review")

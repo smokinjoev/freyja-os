@@ -122,7 +122,7 @@ class Freyja3MemoryCandidateReview(BaseModel):
 
 
 class Freyja3MemoryStore:
-    """Freyja 3 scoped memory with explicit trust boundaries."""
+    """Freyja scoped memory with explicit trust boundaries."""
 
     def __init__(self, database_path: str | Path | None = None) -> None:
         self.database_path = Path(database_path or settings.freyja3_memory_database_path).expanduser()

@@ -1,6 +1,6 @@
-# Freyja 3 Agent Gateway Compose
+# Freyja Agent Gateway Compose
 
-This compose target runs the Freyja 3 agent gateway/runtime surface separately
+This compose target runs the Freyja agent gateway/runtime surface separately
 from the legacy Director containers.
 
 It exposes:
@@ -47,7 +47,7 @@ existing Director-compatible service is replaced.
 
 `deploy/systemd/user/freyja3-machine-heartbeat.{service,timer}` installs a
 user-level timer for hosts that should publish role/health observations to the
-Atlas Freyja 3 sidecar. The timer expects:
+Atlas Freyja sidecar. The timer expects:
 
 - checkout at `%h/freyja-os-freyja3`
 - CLI installed at `%h/freyja-os-freyja3/.heartbeat-venv/bin/freyja3-machine-heartbeat`

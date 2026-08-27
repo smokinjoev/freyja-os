@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import hashlib
+import time
 from collections import deque
 
 import httpx
@@ -16,9 +17,13 @@ from connectors.messaging import (
     canonical_director_payload,
     director_headers,
     director_response_model,
+    director_response_inference_endpoint,
+    director_response_inference_status,
     director_response_provider,
     director_response_request_id,
+    director_response_step_count,
     director_response_text,
+    director_response_tool_count,
     household_agent_for_sender,
     post_canonical_to_director,
 )
@@ -319,12 +324,14 @@ class IMessageGateway:
                 agent_display_name=agent_context.display_name,
                 person_id=agent_context.person_id,
             )
+            director_started = time.monotonic()
             data = await post_canonical_to_director(
                 client=client,
                 director_url=self._director_url,
                 payload=payload,
                 headers=headers,
             )
+            director_latency_ms = int((time.monotonic() - director_started) * 1000)
         except httpx.TimeoutException:
             logger.warning(
                 {
@@ -374,6 +381,11 @@ class IMessageGateway:
                 "director_request_id": director_response_request_id(data),
                 "provider": director_response_provider(data),
                 "model": director_response_model(data),
+                "inference_endpoint_id": director_response_inference_endpoint(data),
+                "inference_status": director_response_inference_status(data),
+                "director_latency_ms": director_latency_ms,
+                "tool_count": director_response_tool_count(data),
+                "agent_step_count": director_response_step_count(data),
                 "agent_id": agent_context.agent_id,
                 "person_id": agent_context.person_id,
                 "reply_length": len(text),

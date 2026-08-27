@@ -40,9 +40,9 @@ from freyja.tools.registry import get_registry
 
 
 app = FastAPI(
-    title="Freyja 3 Agent Gateway",
+    title="Freyja Agent Gateway",
     version="0.3.0",
-    description="Deterministic Freyja 3 gateway, agent runtime, inference lookup, and semantic events.",
+    description="Deterministic Freyja gateway, agent runtime, inference lookup, and semantic events.",
 )
 
 agent_gateway = AgentGateway()
@@ -175,7 +175,7 @@ async def propose_freyja3_memory_candidate(write: Freyja3MemoryCandidateWrite, r
                 domain_id=domain_id,
                 target_id=candidate.candidate_id,
                 allowed=True,
-                reason="agent proposed reviewable Freyja 3 memory candidate",
+                reason="agent proposed reviewable Freyja memory candidate",
                 metadata={
                     "owner_domain_id": candidate.owner_domain_id.value,
                     "classification": candidate.classification.value,
@@ -437,7 +437,7 @@ async def dispatch_due_freyja3_schedules(raw_request: Request, due_before: str |
             message_id=f"schedule:{schedule.schedule_id}",
             channel=schedule.channel,
             conversation_id=schedule.conversation_id,
-            sender=CanonicalSender(channel_id=f"schedule:{schedule.schedule_id}", display_name="Freyja 3 Scheduler"),
+            sender=CanonicalSender(channel_id=f"schedule:{schedule.schedule_id}", display_name="Freyja Scheduler"),
             resolved_user_id=schedule.resolved_user_id,
             resolved_agent_id=schedule.target_agent_id,
             text=schedule.text,

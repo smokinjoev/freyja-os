@@ -357,11 +357,38 @@ def director_response_model(data: dict[str, object]) -> object:
     metadata = data.get("channel_metadata")
     if isinstance(metadata, dict) and metadata.get("model") is not None:
         return metadata.get("model")
+    if isinstance(metadata, dict) and metadata.get("inference_model") is not None:
+        return metadata.get("inference_model")
     return data.get("model")
 
 
 def director_response_request_id(data: dict[str, object]) -> object:
     return data.get("trace_id") or data.get("request_id")
+
+
+def director_response_inference_status(data: dict[str, object]) -> object:
+    metadata = data.get("channel_metadata")
+    if isinstance(metadata, dict):
+        return metadata.get("inference_status")
+    return None
+
+
+def director_response_inference_endpoint(data: dict[str, object]) -> object:
+    metadata = data.get("channel_metadata")
+    if isinstance(metadata, dict):
+        return metadata.get("inference_endpoint_id")
+    return None
+
+
+def director_response_tool_count(data: dict[str, object]) -> int:
+    tool_results = data.get("tool_results")
+    return len(tool_results) if isinstance(tool_results, list) else 0
+
+
+def director_response_step_count(data: dict[str, object]) -> int:
+    metadata = data.get("channel_metadata")
+    steps = metadata.get("agent_steps") if isinstance(metadata, dict) else None
+    return len(steps) if isinstance(steps, list) else 0
 
 
 def household_agent_for_sender(identity: AuthorizedSender) -> HouseholdAgent:

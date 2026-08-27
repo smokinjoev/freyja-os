@@ -13,7 +13,7 @@ from freyja.foundation_models import SemanticEvent
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Publish a Hera semantic perception event to Freyja 3.")
+    parser = argparse.ArgumentParser(description="Publish a Hera semantic perception event to Freyja.")
     parser.add_argument("--url", default=os.environ.get("FREYJA3_EVENT_URL", "http://127.0.0.1:8300/events/semantic"))
     parser.add_argument("--token", default=os.environ.get("FREYJA_CONNECTOR_TOKEN", ""))
     parser.add_argument("--event-type", default=os.environ.get("FREYJA3_EVENT_TYPE", ""))

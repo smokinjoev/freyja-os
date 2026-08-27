@@ -1,6 +1,6 @@
-# Freyja 3 Foundation Transition
+# Freyja Foundation Transition
 
-This note documents the small Freyja 3 foundation layer added alongside the
+This note documents the small Freyja foundation layer added alongside the
 existing Rev 1 Director-centered system.
 
 ## Scope

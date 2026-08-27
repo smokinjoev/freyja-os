@@ -33,7 +33,7 @@ class Freyja3MachineStatus(Freyja3MachineHeartbeat):
 
 
 class Freyja3MachineStatusStore:
-    """Durable machine-role heartbeat store for Freyja 3 infrastructure."""
+    """Durable machine-role heartbeat store for Freyja infrastructure."""
 
     def __init__(self, database_path: str | Path | None = None) -> None:
         self.database_path = Path(database_path or settings.freyja3_machine_database_path).expanduser()

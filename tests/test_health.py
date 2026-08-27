@@ -61,6 +61,20 @@ def test_protected_endpoint_accepts_connector_token(monkeypatch) -> None:
     assert response.json() == {"models": ["tinyllama:latest"]}
 
 
+def test_protected_endpoint_accepts_connector_x_api_key(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    with patch("freyja.ollama_client.OllamaClient.tags", new_callable=AsyncMock) as mock_tags:
+        mock_tags.return_value = {"models": [{"name": "tinyllama:latest"}]}
+        response = client.get(
+            "/ollama/models",
+            headers={"x-api-key": "test-connector-token"},
+        )
+    assert response.status_code == 200
+    assert response.json() == {"models": ["tinyllama:latest"]}
+
+
 def test_shortcut_message_requires_connector_token(monkeypatch) -> None:
     from freyja.config import settings
 
@@ -107,6 +121,259 @@ def test_shortcut_message_routes_private_voice_request(monkeypatch) -> None:
     assert route_request.task_type == "voice"
     assert route_request.tools_required is True
     assert route_request.conversation_id == "shortcut-conv:kitchen"
+
+
+def test_openai_models_exposes_agent_smith(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get(
+        "/v1/models",
+        headers={"Authorization": "Bearer test-connector-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"][0]["id"] == "agent-smith"
+
+
+def test_openai_chat_completion_runs_agent_smith_read_only(monkeypatch) -> None:
+    from freyja import main as director_main
+    from freyja.agents.models import SmithRunSummary
+    from freyja.config import settings
+
+    class FakeSmithRuntime:
+        async def run_read_only(self, objective, actor=None, request_id=None):
+            assert "system: You are in a coding console." in objective
+            assert "user: Inspect repo status." in objective
+            assert actor == "agent_smith:openai-compatible:open-webui"
+            return SmithRunSummary(
+                request_id=request_id or "smith-test",
+                objective=objective,
+                total_tasks=1,
+                completed_tasks=1,
+                failed_tasks=0,
+                escalated_tasks=0,
+                approval_required_count=0,
+                status="completed",
+                message="Read-only inspection complete.",
+                duration_ms=12,
+            )
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_read_only_enabled", True)
+    monkeypatch.setattr(director_main, "SmithRuntime", FakeSmithRuntime)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent-smith",
+            "user": "open-webui",
+            "messages": [
+                {"role": "system", "content": "You are in a coding console."},
+                {"role": "user", "content": "Inspect repo status."},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["object"] == "chat.completion"
+    assert data["model"] == "agent-smith"
+    assert data["choices"][0]["message"]["role"] == "assistant"
+    assert "Read-only inspection complete." in data["choices"][0]["message"]["content"]
+    assert data["freyja"]["smith_mode"] == "read_only"
+
+
+def test_openai_chat_completion_plain_prompt_uses_configured_ollama(monkeypatch) -> None:
+    from freyja.config import settings
+
+    seen = {}
+
+    async def fake_chat(self, prompt, **kwargs):
+        seen["base_url"] = self.base_url
+        seen["model"] = self.model
+        seen["prompt"] = prompt
+        return {"message": {"role": "assistant", "content": "test"}}
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_read_only_enabled", True)
+    monkeypatch.setattr(settings, "ollama_base_url", "http://100.115.228.56:11434")
+    monkeypatch.setattr(settings, "ollama_chat_model", "qwen2.5:7b")
+    monkeypatch.setattr("freyja.main.OllamaClient.chat", fake_chat)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent-smith",
+            "messages": [{"role": "user", "content": "say test"}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["choices"][0]["message"]["content"] == "test"
+    assert data["freyja"]["smith_mode"] == "chat"
+    assert seen == {
+        "base_url": "http://100.115.228.56:11434",
+        "model": "qwen2.5:7b",
+        "prompt": "user: say test",
+    }
+
+
+def test_openai_chat_completion_website_rebuild_uses_chat_model(monkeypatch) -> None:
+    from freyja.config import settings
+
+    seen = {}
+
+    async def fake_chat(self, prompt, **kwargs):
+        seen["prompt"] = prompt
+        return {"message": {"role": "assistant", "content": "Yes. Tell me what stack and files to use."}}
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_read_only_enabled", True)
+    monkeypatch.setattr("freyja.main.OllamaClient.chat", fake_chat)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent-smith",
+            "messages": [{"role": "user", "content": "can you help me rebuild my website?"}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["choices"][0]["message"]["content"] == "Yes. Tell me what stack and files to use."
+    assert data["freyja"]["smith_mode"] == "chat"
+    assert seen["prompt"] == "user: can you help me rebuild my website?"
+
+
+def test_openai_chat_completion_streams_sse_when_requested(monkeypatch) -> None:
+    from freyja.config import settings
+
+    async def fake_chat(self, prompt, **kwargs):
+        return {"message": {"role": "assistant", "content": "streamed test"}}
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_read_only_enabled", True)
+    monkeypatch.setattr("freyja.main.OllamaClient.chat", fake_chat)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent-smith",
+            "messages": [{"role": "user", "content": "hello"}],
+            "stream": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"object":"chat.completion.chunk"' in response.text
+    assert '"content":"streamed test"' in response.text
+    assert "data: [DONE]" in response.text
+
+
+def test_openai_chat_completion_accepts_common_client_fields(monkeypatch) -> None:
+    from freyja import main as director_main
+    from freyja.agents.models import SmithRunSummary
+    from freyja.config import settings
+
+    class FakeSmithRuntime:
+        async def run_read_only(self, objective, actor=None, request_id=None):
+            return SmithRunSummary(
+                request_id=request_id or "smith-test",
+                objective=objective,
+                total_tasks=1,
+                completed_tasks=1,
+                failed_tasks=0,
+                escalated_tasks=0,
+                approval_required_count=0,
+                status="completed",
+                message="Accepted common client fields.",
+                duration_ms=12,
+            )
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_read_only_enabled", True)
+    monkeypatch.setattr(director_main, "SmithRuntime", FakeSmithRuntime)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent-smith",
+            "stream": True,
+            "temperature": 0.1,
+            "max_tokens": 128,
+            "top_p": 0.9,
+            "tools": [],
+            "tool_choice": "auto",
+            "stop": ["done"],
+            "presence_penalty": 0,
+            "frequency_penalty": 0,
+            "unknown_client_field": "ignored",
+            "messages": [{"role": "user", "content": "Inspect repo status."}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"object":"chat.completion.chunk"' in response.text
+    assert "Accepted common client fields." in response.text
+    assert "data: [DONE]" in response.text
+
+
+def test_openai_chat_completion_accepts_structured_content(monkeypatch) -> None:
+    from freyja.config import settings
+
+    seen = {}
+
+    async def fake_chat(self, prompt, **kwargs):
+        seen["prompt"] = prompt
+        return {"message": {"role": "assistant", "content": "Accepted structured content."}}
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "agent_smith_enabled", True)
+    monkeypatch.setattr(settings, "agent_smith_read_only_enabled", True)
+    monkeypatch.setattr("freyja.main.OllamaClient.chat", fake_chat)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"x-api-key": "test-connector-token"},
+        json={
+            "model": "agent-smith",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hello"}]}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert seen["prompt"] == "user: hello"
+    assert "Accepted structured content." in response.json()["choices"][0]["message"]["content"]
+
+
+def test_openai_chat_completion_rejects_unknown_model(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={"model": "qwen", "messages": [{"role": "user", "content": "hi"}]},
+    )
+
+    assert response.status_code == 404
 
 
 def test_ollama_health_reachable(monkeypatch) -> None:

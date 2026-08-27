@@ -1,5 +1,5 @@
 [Unit]
-Description=Run Freyja 3 machine heartbeat every five minutes
+Description=Run Freyja machine heartbeat every five minutes
 
 [Timer]
 OnBootSec=2min

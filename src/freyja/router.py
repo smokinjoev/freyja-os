@@ -1458,7 +1458,7 @@ class Router:
                 "tools_required": True,
                 "images": request.images or None,
             }
-            if decision.provider in {"ollama", "local_reasoning"}:
+            if decision.provider in {"ollama", "local_reasoning", "local_vision"}:
                 chat_kwargs["tools"] = registry.list_tools()
             if decision.provider == "local_reasoning":
                 chat_kwargs["output_tokens"] = settings.ollama_default_output_tokens

@@ -1,5 +1,5 @@
 [Unit]
-Description=Claim and run one Freyja 3 worker job
+Description=Claim and run one Freyja worker job
 
 [Service]
 Type=oneshot

@@ -10,7 +10,7 @@
         <string>/Users/freyja/freyja-os/.venv/bin/uvicorn</string>
         <string>freyja.atlas_app:app</string>
         <string>--host</string>
-        <string>127.0.0.1</string>
+        <string>0.0.0.0</string>
         <string>--port</string>
         <string>8000</string>
         <string>--log-level</string>
@@ -23,6 +23,10 @@
         <string>/Users/freyja/freyja-os/src</string>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>OLLAMA_BASE_URL</key>
+        <string>http://100.115.228.56:11434</string>
+        <key>OLLAMA_REASONING_BASE_URL</key>
+        <string>http://100.115.228.56:11434</string>
     </dict>
 
     <key>WorkingDirectory</key>

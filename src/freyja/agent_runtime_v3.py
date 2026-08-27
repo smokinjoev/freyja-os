@@ -19,6 +19,7 @@ from freyja.foundation_models import (
     SecurityDomainId,
     ToolCapabilityGrant,
 )
+from freyja.agents.coding_lane import CodingLaneContract, render_coding_lane_contract
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES, agents_by_key, tools_by_id
 from freyja.freyja3_memory import Freyja3MemoryCandidateWrite, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
@@ -35,7 +36,7 @@ class MemoryBoundaryError(PermissionError):
 
 
 class AgentRuntimeV3:
-    """Persistent agent runtime contract for Freyja 3.
+    """Persistent agent runtime contract for Freyja.
 
     The gateway has already selected an agent. This runtime receives the raw
     natural-language objective and makes agent-owned decisions about tools and
@@ -74,8 +75,12 @@ class AgentRuntimeV3:
 
     async def arun(self, handoff: GatewayHandoff) -> AgentExecutionResult:
         agent = self._agent(handoff.target_agent_id)
-        selected_tools = [] if self._run_inference else self.choose_tools(agent, handoff.prompt, handoff.available_tools)
         capability = self.choose_inference_capability(handoff.prompt, bool(handoff.attachments))
+        selected_tools = (
+            self.choose_tools(agent, handoff.prompt, handoff.available_tools)
+            if not self._run_inference or ("coding.execute" in agent.tool_grants and capability == "code.large")
+            else []
+        )
         endpoint = self._first_healthy_endpoint(agent, capability)
         steps: list[AgentStep] = [
             AgentStep(kind="objective_received", detail=handoff.prompt),
@@ -219,7 +224,7 @@ class AgentRuntimeV3:
             proposer_domain_id=agent.security_domain_id,
         )
         public = candidate.model_dump(mode="json")
-        steps.append(AgentStep(kind="memory_candidate_proposed", detail="proposed reviewable Freyja 3 memory candidate", success=True))
+        steps.append(AgentStep(kind="memory_candidate_proposed", detail="proposed reviewable Freyja memory candidate", success=True))
         audit_events.append(
             AuditEvent(
                 event_type=AuditEventType.AGENT_MEMORY_CANDIDATE_PROPOSED,
@@ -258,7 +263,7 @@ class AgentRuntimeV3:
                 domain_id=agent.security_domain_id,
                 target_id=agent.agent_id,
                 allowed=True,
-                reason="agent recalled permitted Freyja 3 memory scopes",
+                reason="agent recalled permitted Freyja memory scopes",
                 metadata={"count": len(public_records)},
             )
         )
@@ -294,7 +299,7 @@ class AgentRuntimeV3:
                     writer_domain_id=agent.security_domain_id,
                 ).model_dump(mode="json")
             )
-            steps.append(AgentStep(kind="memory_written", detail="wrote explicit Freyja 3 memory", success=True))
+            steps.append(AgentStep(kind="memory_written", detail="wrote explicit Freyja memory", success=True))
             audit_events.append(
                 AuditEvent(
                     event_type=AuditEventType.AGENT_MEMORY_WRITTEN,
@@ -302,7 +307,7 @@ class AgentRuntimeV3:
                     domain_id=agent.security_domain_id,
                     target_id=written[-1]["memory_id"],
                     allowed=True,
-                    reason="agent wrote explicit Freyja 3 memory",
+                    reason="agent wrote explicit Freyja memory",
                 )
             )
 
@@ -325,7 +330,7 @@ class AgentRuntimeV3:
         )
         public = record.model_dump(mode="json")
         written.append(public)
-        steps.append(AgentStep(kind="memory_written", detail="wrote Freyja 3 run summary memory", success=True))
+        steps.append(AgentStep(kind="memory_written", detail="wrote Freyja run summary memory", success=True))
         audit_events.append(
             AuditEvent(
                 event_type=AuditEventType.AGENT_MEMORY_WRITTEN,
@@ -333,7 +338,7 @@ class AgentRuntimeV3:
                 domain_id=agent.security_domain_id,
                 target_id=record.memory_id,
                 allowed=True,
-                reason="agent wrote Freyja 3 run summary memory",
+                reason="agent wrote Freyja run summary memory",
             )
         )
         return written
@@ -360,7 +365,7 @@ class AgentRuntimeV3:
             ("web.search", ("search", "look up", "latest", "current")),
             ("weather.current", ("weather", "forecast", "temperature")),
             ("browser.control", ("browser", "safari", "front tab", "current tab")),
-            ("calendar.read", ("calendar", "schedule", "appointment")),
+            ("calendar.read", ("calendar", "calender", "schedule", "appointment")),
             ("email.read", ("email", "mail")),
             ("messaging.send", ("message", "imessage", "text ", "sms")),
             ("home-assistant.read", ("home assistant state", "home assistant states", "list home assistant", "show home assistant", "house state", "light states")),
@@ -565,10 +570,9 @@ class AgentRuntimeV3:
         )
 
     def choose_inference_capability(self, objective: str, has_attachments: bool = False) -> str:
-        lowered = objective.lower()
-        if has_attachments or any(term in lowered for term in ("photo", "image", "picture")):
+        if has_attachments or any(term in objective.lower() for term in ("photo", "image", "picture")):
             return "vision.large"
-        if any(term in lowered for term in ("code", "test", "build", "repo", "git")):
+        if _is_coding_objective(objective):
             return "code.large"
         return "general.large"
 
@@ -691,6 +695,70 @@ class AgentRuntimeV3:
         tools = self._tool_definitions_for_agent(agent, handoff.available_tools)
         available_tool_names = [tool.name for tool in tools]
         images = _images_from_handoff(handoff) if endpoint_id and "vision" in endpoint_id else []
+        if images:
+            vision_response = await client.chat(
+                prompt=self._vision_extraction_prompt(agent, handoff),
+                model=model,
+                tools_required=False,
+                images=images,
+            )
+            if "error" in vision_response:
+                return "error", None
+            vision_text = str(vision_response.get("message", {}).get("content") or "").strip()
+            if not vision_text:
+                return "error", None
+            steps.append(
+                AgentStep(
+                    kind="observation",
+                    detail="Vulcan vision extracted attachment context",
+                    inference_endpoint_id=endpoint_id,
+                    success=True,
+                )
+            )
+            reasoning_endpoint = self._first_healthy_endpoint(agent, "general.large")
+            reasoning_base_url = reasoning_endpoint.base_url if reasoning_endpoint is not None else base_url
+            reasoning_model = reasoning_endpoint.model if reasoning_endpoint is not None else model
+            reasoning_client = OllamaClient(base_url=reasoning_base_url, model=reasoning_model)
+            return await self._run_text_tool_calling_inference(
+                agent=agent,
+                handoff=_handoff_with_vision_context(handoff, vision_text),
+                client=reasoning_client,
+                model=reasoning_model,
+                selected_tools=selected_tools,
+                tool_results=tool_results,
+                tools=tools,
+                available_tool_names=available_tool_names,
+                steps=steps,
+                audit_events=audit_events,
+            )
+
+        return await self._run_text_tool_calling_inference(
+            agent=agent,
+            handoff=handoff,
+            client=client,
+            model=model,
+            selected_tools=selected_tools,
+            tool_results=tool_results,
+            tools=tools,
+            available_tool_names=available_tool_names,
+            steps=steps,
+            audit_events=audit_events,
+        )
+
+    async def _run_text_tool_calling_inference(
+        self,
+        *,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        client: OllamaClient,
+        model: str,
+        selected_tools: list[str],
+        tool_results: list[dict[str, Any]],
+        tools: list[ToolDefinition],
+        available_tool_names: list[str],
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ) -> tuple[str, str | None]:
         for iteration in range(self._max_tool_iterations):
             prompt = self._agent_tool_prompt(
                 agent,
@@ -704,7 +772,7 @@ class AgentRuntimeV3:
                 model=model,
                 tools_required=bool(tools),
                 tools=tools,
-                images=images or None,
+                images=None,
             )
             if "error" in response:
                 if tool_results:
@@ -737,11 +805,18 @@ class AgentRuntimeV3:
             prompt=final_prompt,
             model=model,
             tools_required=False,
-            images=images or None,
+            images=None,
         )
         if "error" in final:
             return "error", None
         return "ok", str(final.get("message", {}).get("content") or "").strip() or None
+
+    def _vision_extraction_prompt(self, agent: PersistentAgent, handoff: GatewayHandoff) -> str:
+        return (
+            self._inference_prompt(agent, handoff, [])
+            + "\n\nInspect the attached image(s). Extract visible text, event names, dates, places, addresses, "
+            "and anything relevant to the user's request. Do not call tools in this step. If a detail is unreadable, say it is unreadable."
+        )
 
     def _tool_definitions_for_agent(
         self,
@@ -924,7 +999,7 @@ class AgentRuntimeV3:
     @staticmethod
     def _inference_prompt(agent: PersistentAgent, handoff: GatewayHandoff, tool_results: list[dict[str, Any]]) -> str:
         return (
-            f"You are {agent.display_name}, a persistent Freyja 3 agent. "
+            f"You are {agent.display_name}, a persistent Freyja agent. "
             "Answer the user's objective using only the supplied context.\n\n"
             f"Objective: {handoff.prompt}\n\n"
             f"Tool results: {tool_results}"
@@ -949,8 +1024,20 @@ class AgentRuntimeV3:
                 "Answer directly from these observations. Do not claim unavailable live data is available. "
                 "Do not claim you called or observed a tool unless it appears in Tool observations."
             )
+        coding_lane = ""
+        if "coding.execute" in agent.tool_grants and _is_coding_objective(handoff.prompt):
+            coding_lane = (
+                "\n\n"
+                + render_coding_lane_contract(
+                    CodingLaneContract(
+                        orchestrator_model="selected Freyja inference model",
+                        worker_model="configured coding worker",
+                        agent_id=agent.agent_id,
+                    )
+                )
+            )
         return (
-            f"You are {agent.display_name}, a persistent Freyja 3 agent. "
+            f"You are {agent.display_name}, a persistent Freyja agent. "
             f"Today's date is {_datetime.date.today().isoformat()}. "
             "You decide whether local tools are needed. If the request mentions an event, venue, or vague place, "
             "resolve when and where it occurs with web_search before checking weather or answering. "
@@ -959,8 +1046,11 @@ class AgentRuntimeV3:
             "then call get_weather with the city and forecast date. "
             "If the user asks for weather, do not stop after only resolving the event; call get_weather or explain why the forecast is unavailable. "
             "If a tool observation reports missing or invalid arguments, call the tool again with corrected arguments before answering. "
-            "Use tools when current facts, weather, local state, files, email, calendar, or web evidence are needed.\n\n"
+            "Use tools when current facts, weather, local state, files, email, calendar, or web evidence are needed. "
+            "Never ask the user to paste or share a raw token, password, API key, bearer value, or other secret; "
+            "ask for a redacted screenshot or a high-level format description instead, and recommend rotation if exposure is possible.\n\n"
             f"User objective:\n{handoff.prompt}"
+            f"{coding_lane}"
             f"{observation}"
         )
 
@@ -976,6 +1066,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "web.search": "web_search",
     "weather.current": "get_weather",
     "browser.control": "apple_browser_front_tab",
+    "calendar.read": "calendar_today_schedule",
     "email.read": "apple_mailbox_counts",
     "macagent.apple": "macagent_health",
     "home-assistant.read": "home_assistant_list_states",
@@ -988,8 +1079,35 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
 }
 
 _CAPABILITY_BY_CONCRETE_TOOL = {tool_name: capability_id for capability_id, tool_name in _CONCRETE_TOOL_BY_CAPABILITY.items()}
+_CAPABILITY_BY_CONCRETE_TOOL["event_weather"] = "weather.current"
 
 _MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control"}
+
+
+def _is_coding_objective(objective: str) -> bool:
+    lowered = objective.lower()
+    coding_patterns = (
+        r"\bcode\b",
+        r"\bcoding\b",
+        r"\bprogramming\b",
+        r"\bsoftware\b",
+        r"\bscript\b",
+        r"\bdebug\b",
+        r"\bbug\b",
+        r"\bbuild\b",
+        r"\bwebsite\b",
+        r"\bsite\b",
+        r"\bapp\b",
+        r"\brepo\b",
+        r"\brepository\b",
+        r"\bgit\b",
+        r"\bpytest\b",
+        r"\bunit tests?\b",
+        r"\bintegration tests?\b",
+        r"\btest suite\b",
+        r"\brun tests?\b",
+    )
+    return any(re.search(pattern, lowered) for pattern in coding_patterns)
 
 
 def _has_message_target(objective: str) -> bool:
@@ -1074,6 +1192,16 @@ def _images_from_handoff(handoff: GatewayHandoff) -> list[Any]:
             )
         )
     return images_from_attachments(attachments)
+
+
+def _handoff_with_vision_context(handoff: GatewayHandoff, vision_text: str) -> GatewayHandoff:
+    prompt = (
+        f"{handoff.prompt}\n\n"
+        "Visible attachment context extracted by Vulcan vision:\n"
+        f"{vision_text}\n\n"
+        "Use this extracted context as evidence. If current facts, event dates, location, weather, or web verification are needed, call tools."
+    )
+    return handoff.model_copy(update={"prompt": prompt})
 
 
 def _ollama_tool_calls(response: dict[str, Any]) -> list[dict[str, Any]]:

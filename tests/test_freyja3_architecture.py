@@ -102,6 +102,12 @@ class _FakeToolRegistry:
                 input_schema={"type": "object", "required": ["event"], "properties": {"event": {"type": "string"}}},
                 risk_level=ToolRiskLevel.READ_ONLY,
             ),
+            ToolDefinition(
+                name="calendar_today_schedule",
+                description="Return today's family schedule.",
+                input_schema={"type": "object", "properties": {"member_ids": {"type": "array"}}},
+                risk_level=ToolRiskLevel.READ_ONLY,
+            ),
         ]
 
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
@@ -158,6 +164,34 @@ def test_agent_executes_selected_tools_with_agent_owned_arguments() -> None:
     assert web_request.actor == "agent:cloyd-gibbler"
 
 
+def test_cloyd_website_build_keeps_coding_lane_in_inference_mode() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Can you help me rebuild my website?",
+            conversation_id="conv-site",
+        )
+    ).handoff
+    assert handoff is not None
+
+    runtime = AgentRuntimeV3(tool_registry=_FakeToolRegistry(), run_inference=True)
+    result = runtime.run(handoff)
+    prompt = runtime._agent_tool_prompt(
+        runtime._agent("cloyd-gibbler"),
+        handoff,
+        recalled=False,
+        tool_results=[],
+        available_tool_names=[],
+    )
+
+    assert result.inference_endpoint_id == "vulcan-code"
+    assert "coding.execute" in result.selected_tools
+    assert "BEGIN AGENT SMITH QWEN CODING LANE" in prompt
+    assert "agent_id=cloyd-gibbler" in prompt
+
+
 def test_agent_weather_tool_arguments_follow_objective() -> None:
     gateway = AgentGateway()
     handoff = gateway.handle(
@@ -177,6 +211,28 @@ def test_agent_weather_tool_arguments_follow_objective() -> None:
     assert weather_request.arguments["location"] == "Orlando, Florida"
     assert weather_request.arguments["request_type"] == "forecast"
     assert weather_request.arguments["target_label"] == "tomorrow"
+
+
+def test_cloyd_calendar_request_executes_calendar_read_tool() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Can you check my calender?",
+            conversation_id="conv-calendar",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    calendar_request = next(request for request in fake_registry.requests if request.tool_name == "calendar_today_schedule")
+    assert "calendar.read" in result.selected_tools
+    assert calendar_request.actor == "agent:cloyd-gibbler"
+    assert calendar_request.metadata["person"] == {"person_id": "joe"}
+    assert calendar_request.metadata["director_authorized"] is True
 
 
 def test_agent_vision_inference_receives_canonical_attachment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -271,6 +327,74 @@ def test_live_inference_uses_model_tool_calls_without_keyword_selection(monkeypa
     assert result.response_text == "Dragon Con weather uses the Atlanta forecast."
     assert calls[0]["tools_required"] is True
     assert calls[0]["tools"]
+
+
+def test_vision_inference_extracts_context_before_reasoning_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+    clients: list[object] = []
+
+    class FakeOllamaClient:
+        def __init__(self, *, base_url: str | None = None, model: str | None = None) -> None:
+            self.base_url = base_url
+            self.model = model
+            clients.append(self)
+
+        async def chat(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                return {"message": {"content": "Flyer text: Dragon Con, Atlanta, September 3-7, 2026."}}
+            if len(calls) == 2:
+                return {
+                    "message": {
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "event_weather",
+                                    "arguments": {"event": "Dragon Con"},
+                                }
+                            }
+                        ],
+                    }
+                }
+            return {"message": {"content": "The flyer says Dragon Con is in Atlanta; weather should be checked for those dates."}}
+
+    monkeypatch.setattr(freyja.agent_runtime_v3, "OllamaClient", FakeOllamaClient)
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="What does this photo say, and if it mentions an event or place, check whether weather matters?",
+            conversation_id="conv-photo-tools",
+            attachments=[
+                {
+                    "filename": "flyer.png",
+                    "media_type": "image/png",
+                    "data_base64": "ZmFrZQ==",
+                    "size": 4,
+                }
+            ],
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=True).run(handoff)
+
+    assert result.inference_endpoint_id == "vulcan-vision"
+    assert result.inference_status == "ok"
+    assert result.selected_tools == ("weather.current",)
+    assert [request.tool_name for request in fake_registry.requests] == ["event_weather"]
+    assert len(calls) == 3
+    assert calls[0]["model"] == "minicpm-v"
+    assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
+    assert calls[0]["tools_required"] is False
+    assert calls[1]["model"] == "qwen3-coder-next:q4_K_M"
+    assert calls[1]["images"] is None
+    assert "Visible attachment context extracted by Vulcan vision" in calls[1]["prompt"]
+    assert calls[1]["tools_required"] is True
+    assert result.response_text == "The flyer says Dragon Con is in Atlanta; weather should be checked for those dates."
 
 
 def test_agent_tool_execution_respects_structured_tool_failure() -> None:
@@ -521,6 +645,66 @@ def test_agents_use_vulcan_inference_and_identity_survives_endpoint_changes() ->
     assert recovered.agent_id == "cloyd-gibbler"
     assert recovered.inference_endpoint_id != "vulcan-code"
     assert recovered.degraded is False
+
+
+def test_family_test_prompt_uses_reasoning_not_code_endpoint() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Test 001: Find when and where Dragon Con happens this year, then tell me if the first full day forecast is available.",
+            conversation_id="conv-family-test",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3().run(handoff)
+
+    assert result.inference_endpoint_id == "vulcan-reason"
+
+
+def test_explicit_programming_test_prompt_still_uses_code_endpoint() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Run tests for the repository and debug the failing Python code.",
+            conversation_id="conv-code-test",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3().run(handoff)
+
+    assert result.inference_endpoint_id == "vulcan-code"
+
+
+def test_agent_prompt_never_asks_for_raw_secret() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="I accidentally pasted a Home Assistant token in a screenshot. Tell me what it is.",
+            conversation_id="conv-secret-screenshot",
+        )
+    ).handoff
+    assert handoff is not None
+
+    runtime = AgentRuntimeV3()
+    prompt = runtime._agent_tool_prompt(
+        runtime._agent("cloyd-gibbler"),
+        handoff,
+        recalled=False,
+        tool_results=[],
+        available_tool_names=[],
+    )
+
+    assert "Never ask the user to paste or share a raw token" in prompt
+    assert "redacted screenshot" in prompt
+    assert "recommend rotation" in prompt
 
 
 def test_iris_apple_and_atlas_home_assistant_capabilities_are_agent_selected() -> None:
