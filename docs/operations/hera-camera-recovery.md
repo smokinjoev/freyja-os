@@ -4,9 +4,9 @@ Use this runbook when Hera is publishing `camera_unavailable` semantic events.
 The goal is to restore real camera-backed semantic perception without making raw
 video streaming to Vulcan the default path.
 
-For the current Florida Hera deployment this is future-scope guidance only: the
-camera hardware is not installed there. Use this runbook when the Georgia camera
-hardware is installed or otherwise reachable.
+Hera now lives in Atlanta as the household IoT/logging and voice/avatar edge
+node. This is future-scope guidance until the Atlanta camera/sensor hardware is
+installed or otherwise reachable.
 
 ## Current Safe State
 

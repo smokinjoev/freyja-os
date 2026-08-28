@@ -20,8 +20,10 @@ need intelligence must enter Atlas Director and reach Vulcan.
 
 ## Hera
 
-Hera is a household voice/avatar/interface node. Hera must use canonical
-Freyja ingress and egress rather than embedding another assistant stack.
+Hera is the Atlanta household IoT/logging and voice/avatar/interface node. Hera
+must use canonical Freyja ingress and egress rather than embedding another
+assistant stack. It publishes typed semantic events to Atlas instead of making
+Atlas bypass the Freyja event/audit path.
 
 ## Cloyd
 

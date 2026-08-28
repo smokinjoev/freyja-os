@@ -15,6 +15,10 @@ Hera must not make independent privileged decisions. Calendar writes, Home
 Assistant changes, messages, and other mutations still go through the normal
 approval gates.
 
+Hera's home placement is Atlanta. Treat it as the household IoT/logging edge:
+local sensors and voice activity become typed semantic events sent to Atlas, and
+Atlas remains the durable log, audit, memory, schedule, and control authority.
+
 ## Minimum Useful Version
 
 For Dragon Con, the useful version is a push-to-talk or wake-word voice loop
@@ -69,6 +73,8 @@ Recommended first pass:
 - Text-to-speech: Piper, system TTS, or the existing Hera avatar voice stack
 - Transport: HTTP POST to Freyja 3 `/shortcuts/message`
 - Logs: transcript length, status code, latency, no raw audio by default
+- IoT/logging: Atlanta-local sensor observations only as typed semantic events;
+  no raw continuous audio/video logs by default
 
 ## Smoke Tests
 

@@ -317,6 +317,18 @@ def test_hera_alexa_replacement_runbook_keeps_atlas_authoritative() -> None:
     assert "Hera speaks only `spoken`" in docs
     assert "Calendar write" in docs
     assert "asks for confirmation" in docs
+    assert "Hera's home placement is Atlanta" in docs
+    assert "household IoT/logging edge" in docs
+    assert "typed semantic events sent to Atlas" in docs
+    assert "no raw continuous audio/video logs by default" in docs
+
+
+def test_machine_roles_document_hera_atlanta_iot_logging() -> None:
+    docs = _read("docs/architecture/machine-roles.md")
+
+    assert "Hera is the Atlanta household IoT/logging" in docs
+    assert "typed semantic events to Atlas" in docs
+    assert "event/audit path" in docs
 
 
 def test_external_worker_boundary_is_documented_as_observations_not_actions() -> None:
