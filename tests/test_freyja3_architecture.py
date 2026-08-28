@@ -4,8 +4,8 @@ import pytest
 
 import freyja.agent_runtime_v3
 from freyja.agent_gateway import AgentGateway, GatewayRequest
-from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError
-from freyja.foundation_models import GatewaySender, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
+from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError, inference_role_alias
+from freyja.foundation_models import GatewaySender, InferenceEndpoint, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
 from freyja.freyja3_memory import Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
 import freyja.main as freyja_main
@@ -107,6 +107,16 @@ class _FakeToolRegistry:
                 description="Return today's family schedule.",
                 input_schema={"type": "object", "properties": {"member_ids": {"type": "array"}}},
                 risk_level=ToolRiskLevel.READ_ONLY,
+            ),
+            ToolDefinition(
+                name="calendar_create_event",
+                description="Create a calendar event.",
+                input_schema={
+                    "type": "object",
+                    "required": ["title", "start", "end"],
+                    "properties": {"title": {"type": "string"}, "start": {"type": "string"}, "end": {"type": "string"}},
+                },
+                risk_level=ToolRiskLevel.CONTROLLED_WRITE,
             ),
         ]
 
@@ -233,6 +243,28 @@ def test_cloyd_calendar_request_executes_calendar_read_tool() -> None:
     assert calendar_request.actor == "agent:cloyd-gibbler"
     assert calendar_request.metadata["person"] == {"person_id": "joe"}
     assert calendar_request.metadata["director_authorized"] is True
+
+
+def test_cloyd_calendar_write_request_asks_for_approval_instead_of_model_guessing() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt="Please add family dinner 6 PM Saturday",
+            conversation_id="conv-calendar-write",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=False).run(handoff)
+
+    assert "calendar.write" in result.selected_tools
+    assert result.follow_up_questions == (
+        "I can create that calendar event. Please confirm the exact date, start time, title, and that you approve adding it.",
+    )
+    assert all(request.tool_name != "calendar_create_event" for request in fake_registry.requests)
 
 
 def test_agent_vision_inference_receives_canonical_attachment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -387,10 +419,10 @@ def test_vision_inference_extracts_context_before_reasoning_tool_calls(monkeypat
     assert result.selected_tools == ("weather.current",)
     assert [request.tool_name for request in fake_registry.requests] == ["event_weather"]
     assert len(calls) == 3
-    assert calls[0]["model"] == "minicpm-v"
+    assert calls[0]["model"] == "qwen2.5vl:72b"
     assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
     assert calls[0]["tools_required"] is False
-    assert calls[1]["model"] == "qwen3-coder-next:q4_K_M"
+    assert calls[1]["model"] == "qwen2.5:32b-instruct"
     assert calls[1]["images"] is None
     assert "Visible attachment context extracted by Vulcan vision" in calls[1]["prompt"]
     assert calls[1]["tools_required"] is True
@@ -642,6 +674,9 @@ def test_agents_use_vulcan_inference_and_identity_survives_endpoint_changes() ->
     assert normal.agent_id == "cloyd-gibbler"
     assert normal.inference_endpoint_id == "vulcan-code"
     assert normal.inference_machine_id == "vulcan"
+    selected_event = next(event for event in normal.audit_events if event.event_type == "agent_inference_selected")
+    assert selected_event.metadata["role_alias"] == "vulcan-coder"
+    assert any("via vulcan-coder" in step.detail for step in normal.steps if step.kind == "inference_selected")
     assert recovered.agent_id == "cloyd-gibbler"
     assert recovered.inference_endpoint_id != "vulcan-code"
     assert recovered.degraded is False
@@ -662,6 +697,36 @@ def test_family_test_prompt_uses_reasoning_not_code_endpoint() -> None:
     result = AgentRuntimeV3().run(handoff)
 
     assert result.inference_endpoint_id == "vulcan-reason"
+    selected_event = next(event for event in result.audit_events if event.event_type == "agent_inference_selected")
+    assert selected_event.metadata["role_alias"] == "vulcan-general"
+
+
+def test_simple_ack_prompt_uses_iris_fast_endpoint() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(sender=_sender("joe"), target_agent="cloyd", prompt="working it", conversation_id="conv-simple")
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3().run(handoff)
+
+    assert result.inference_endpoint_id == "iris-fast"
+    selected_event = next(event for event in result.audit_events if event.event_type == "agent_inference_selected")
+    assert selected_event.metadata == {"capability": "general.local", "role_alias": "iris-fast"}
+
+
+def test_iris_fast_is_fallback_when_vulcan_general_and_code_are_unhealthy() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(sender=_sender("joe"), target_agent="cloyd", prompt="Build and test the repo.", conversation_id="conv-fallback")
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(unhealthy_endpoint_ids={"vulcan-code", "vulcan-reason"}).run(handoff)
+
+    assert result.inference_endpoint_id == "iris-fast"
+    selected_event = next(event for event in result.audit_events if event.event_type == "agent_inference_selected")
+    assert selected_event.metadata["role_alias"] == "iris-fast"
 
 
 def test_explicit_programming_test_prompt_still_uses_code_endpoint() -> None:
@@ -679,6 +744,201 @@ def test_explicit_programming_test_prompt_still_uses_code_endpoint() -> None:
     result = AgentRuntimeV3().run(handoff)
 
     assert result.inference_endpoint_id == "vulcan-code"
+
+
+def test_rev3_1_inference_role_aliases_cover_target_routes() -> None:
+    assert inference_role_alias("general.local") == "iris-fast"
+    assert inference_role_alias("general.large") == "vulcan-general"
+    assert inference_role_alias("code.large") == "vulcan-coder"
+    assert inference_role_alias("vision.large") == "vulcan-vision"
+    assert inference_role_alias("embeddings.local") == "vulcan-embeddings"
+    assert inference_role_alias("general.cloud") == "cloud-frontier"
+
+
+def test_image_attachment_uses_vulcan_vision_role_alias() -> None:
+    handoff = GatewayRequest(
+        sender=_sender("joe"),
+        target_agent="freyja",
+        prompt="What is in this picture?",
+        conversation_id="conv-picture",
+        attachments=[{"filename": "pixel.png", "mime_type": "image/png", "data_base64": "iVBORw0KGgo="}],
+    )
+    result = AgentGateway().handle(handoff).handoff
+    assert result is not None
+
+    runtime_result = AgentRuntimeV3().run(result)
+
+    assert runtime_result.inference_endpoint_id == "vulcan-vision"
+    selected_event = next(event for event in runtime_result.audit_events if event.event_type == "agent_inference_selected")
+    assert selected_event.metadata["role_alias"] == "vulcan-vision"
+
+
+def test_document_attachment_text_is_included_in_inference_prompt(monkeypatch) -> None:
+    class FakeDocument:
+        filename = "notes.pdf"
+        mime_type = "application/pdf"
+        page_count = 1
+        text = "Contract renewal deadline is Friday."
+        ok = True
+
+    monkeypatch.setattr(freyja.agent_runtime_v3, "document_texts_from_attachments", lambda attachments: [FakeDocument()])
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="Summarize this document.",
+            conversation_id="conv-document",
+            attachments=[{"filename": "notes.pdf", "mime_type": "application/pdf", "data_base64": "JVBERi0xLjQK"}],
+        )
+    ).handoff
+    assert handoff is not None
+
+    prompt = AgentRuntimeV3._inference_prompt(AgentRuntimeV3()._agent("freyja"), handoff, [])
+
+    assert "Attachment document context" in prompt
+    assert "Contract renewal deadline is Friday." in prompt
+
+
+def test_embeddings_route_is_registered_for_memory_retrieval() -> None:
+    endpoints = InferenceRegistryV3().endpoints_for(capability="embeddings.local", domain_id=SecurityDomainId.HOUSEHOLD)
+
+    assert [endpoint.endpoint_id for endpoint in endpoints] == ["vulcan-embeddings"]
+    assert endpoints[0].machine_id == "vulcan"
+
+
+def test_cloud_frontier_fallback_requires_allowed_egress() -> None:
+    registry = InferenceRegistryV3(
+        endpoints=(
+            InferenceEndpoint(
+                endpoint_id="cloud-frontier-litellm",
+                display_name="Cloud Frontier LiteLLM",
+                provider="openai-compatible",
+                base_url="http://litellm:4000",
+                model="cloud-frontier",
+                capabilities=frozenset({"general.cloud"}),
+                security_domain_id=SecurityDomainId.SYSTEM,
+                priority=10,
+            ),
+        ),
+        include_configured=False,
+    )
+    handoff = AgentGateway().handle(
+        GatewayRequest(sender=_sender("joe"), target_agent="cloyd", prompt="Public summary of what LLM routing means.", conversation_id="conv-cloud")
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(
+        inference_registry=registry,
+        unhealthy_endpoint_ids={"vulcan-code", "vulcan-reason", "vulcan-vision", "iris-fast"},
+    ).run(handoff)
+
+    assert result.inference_endpoint_id == "cloud-frontier-litellm"
+    selected_event = next(event for event in result.audit_events if event.event_type == "agent_inference_selected")
+    assert selected_event.metadata == {"capability": "general.cloud", "role_alias": "cloud-frontier"}
+    assert any(event.event_type == "privacy_egress_allowed" and event.allowed for event in result.audit_events)
+
+
+def test_cloud_frontier_fallback_is_blocked_for_restricted_data() -> None:
+    registry = InferenceRegistryV3(
+        endpoints=(
+            InferenceEndpoint(
+                endpoint_id="cloud-frontier-litellm",
+                display_name="Cloud Frontier LiteLLM",
+                provider="openai-compatible",
+                base_url="http://litellm:4000",
+                model="cloud-frontier",
+                capabilities=frozenset({"general.cloud"}),
+                security_domain_id=SecurityDomainId.SYSTEM,
+                priority=10,
+            ),
+        ),
+        include_configured=False,
+    )
+    handoff = AgentGateway().handle(
+        GatewayRequest(sender=_sender("joe"), target_agent="cloyd", prompt="api_key=secret summarize this", conversation_id="conv-cloud-deny")
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(
+        inference_registry=registry,
+        unhealthy_endpoint_ids={"vulcan-code", "vulcan-reason", "vulcan-vision", "iris-fast"},
+    ).run(handoff)
+
+    assert result.degraded is True
+    assert result.inference_endpoint_id is None
+    assert any(event.event_type == "privacy_egress_denied" and not event.allowed for event in result.audit_events)
+
+
+def test_openai_compatible_endpoint_calls_chat_completions(monkeypatch) -> None:
+    calls = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"choices": [{"message": {"content": "lite ok"}}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(self, url: str, *, headers: dict, json: dict):
+            calls.append({"url": url, "headers": headers, "json": json})
+            return FakeResponse()
+
+    monkeypatch.setattr(freyja.agent_runtime_v3.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.delenv("LITELLM_MASTER_KEY", raising=False)
+    monkeypatch.setattr(settings, "litellm_master_key", "sk-test-litellm")
+    registry = InferenceRegistryV3(
+        endpoints=(
+            InferenceEndpoint(
+                endpoint_id="vulcan-general-litellm",
+                display_name="Vulcan General LiteLLM",
+                provider="openai-compatible",
+                base_url="http://litellm:4000",
+                model="vulcan-general",
+                capabilities=frozenset({"general.large"}),
+                security_domain_id=SecurityDomainId.HOUSEHOLD,
+                priority=10,
+            ),
+        ),
+        include_configured=False,
+    )
+    runtime = AgentRuntimeV3(inference_registry=registry, run_inference=True)
+    handoff = AgentGateway().handle(
+        GatewayRequest(sender=_sender("joe"), target_agent="freyja", prompt="Explain local model routing.", conversation_id="conv-litellm")
+    ).handoff
+    assert handoff is not None
+
+    result = runtime.run(handoff)
+
+    assert result.inference_status == "ok"
+    assert result.response_text == "lite ok"
+    assert calls[0]["url"].endswith("/v1/chat/completions")
+    assert calls[0]["headers"]["Authorization"] == "Bearer sk-test-litellm"
+    assert calls[0]["json"]["model"] == "vulcan-general"
+
+
+def test_rev3_1_degraded_response_names_vulcan_iris_and_cloud_policy() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(sender=_sender("joe"), target_agent="cloyd", prompt="Build and test the repo.", conversation_id="conv")
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(unhealthy_endpoint_ids={"vulcan-code", "vulcan-reason", "iris-fast", "approved-cloud-premium"}).run(handoff)
+
+    assert result.degraded is True
+    assert "no healthy Vulcan inference endpoint" in result.response_text
+    assert "Iris can handle simple local work" in result.response_text
+    assert "cloud requires policy approval" in result.response_text
 
 
 def test_agent_prompt_never_asks_for_raw_secret() -> None:

@@ -3,10 +3,14 @@ from __future__ import annotations
 import asyncio
 import datetime as _datetime
 import json
+import os
 import re
 from collections.abc import Iterable
 from typing import Any
 
+import httpx
+
+from freyja.config import settings
 from freyja.foundation_models import (
     AgentExecutionResult,
     AgentStep,
@@ -23,7 +27,7 @@ from freyja.agents.coding_lane import CodingLaneContract, render_coding_lane_con
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES, agents_by_key, tools_by_id
 from freyja.freyja3_memory import Freyja3MemoryCandidateWrite, Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
-from freyja.media import AttachmentInput, images_from_attachments
+from freyja.media import AttachmentInput, document_texts_from_attachments, images_from_attachments
 from freyja.ollama_client import OllamaClient
 from freyja.privacy_egress import PrivacyEgressGate
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest
@@ -81,7 +85,6 @@ class AgentRuntimeV3:
             if not self._run_inference or ("coding.execute" in agent.tool_grants and capability == "code.large")
             else []
         )
-        endpoint = self._first_healthy_endpoint(agent, capability)
         steps: list[AgentStep] = [
             AgentStep(kind="objective_received", detail=handoff.prompt),
         ]
@@ -104,6 +107,13 @@ class AgentRuntimeV3:
         executable_tools = [tool_id for tool_id in selected_tools if tool_id not in _MUTATION_CAPABILITIES or not follow_up_questions]
         tool_results = await self._run_tool_loop(agent, handoff, selected_tools, executable_tools, steps, audit_events)
 
+        selected_capability = capability
+        endpoint = self._first_healthy_endpoint(agent, selected_capability)
+        if endpoint is None and not follow_up_questions:
+            endpoint, selected_capability = self._policy_gated_cloud_fallback(agent, handoff, steps, audit_events)
+        elif endpoint is not None:
+            selected_capability = _selected_endpoint_capability(endpoint.capabilities, selected_capability)
+        role_alias = inference_role_alias(selected_capability)
         inference_endpoint_id = None
         inference_model = None
         inference_machine_id = None
@@ -117,7 +127,7 @@ class AgentRuntimeV3:
             steps.append(
                 AgentStep(
                     kind="inference_selected",
-                    detail=f"{agent.agent_id} selected compute capability {capability}",
+                    detail=f"{agent.agent_id} selected compute capability {selected_capability} via {role_alias}",
                     inference_endpoint_id=endpoint.endpoint_id,
                 )
             )
@@ -129,6 +139,7 @@ class AgentRuntimeV3:
                     target_id=endpoint.endpoint_id,
                     allowed=True,
                     reason="agent selected endpoint from compute registry",
+                    metadata={"capability": selected_capability, "role_alias": role_alias},
                 )
             )
             inference_status, inference_text = await self._run_selected_inference(
@@ -163,7 +174,7 @@ class AgentRuntimeV3:
             )
         elif not follow_up_questions:
             degraded = True
-            steps.append(AgentStep(kind="inference_unavailable", detail=f"no healthy endpoint for {capability}", success=False))
+            steps.append(AgentStep(kind="inference_unavailable", detail=f"no healthy endpoint for {selected_capability} via {role_alias}", success=False))
 
         memory_candidates = self._propose_memory_candidates(agent, handoff, steps, audit_events)
         written_memories = self._write_agent_memories(agent, handoff, selected_tools, tool_results, steps, audit_events)
@@ -365,6 +376,22 @@ class AgentRuntimeV3:
             ("web.search", ("search", "look up", "latest", "current")),
             ("weather.current", ("weather", "forecast", "temperature")),
             ("browser.control", ("browser", "safari", "front tab", "current tab")),
+            (
+                "calendar.write",
+                (
+                    "add to calendar",
+                    "add family dinner",
+                    "add dinner",
+                    "add event",
+                    "add appointment",
+                    "create calendar",
+                    "create event",
+                    "schedule dinner",
+                    "schedule family",
+                    "book appointment",
+                    "reserve appointment",
+                ),
+            ),
             ("calendar.read", ("calendar", "calender", "schedule", "appointment")),
             ("email.read", ("email", "mail")),
             ("messaging.send", ("message", "imessage", "text ", "sms")),
@@ -401,6 +428,8 @@ class AgentRuntimeV3:
         lowered = objective.lower()
         if "messaging.send" in selected_tools and not _has_message_target(objective):
             questions.append("Who should I send the message to, and what should it say?")
+        if "calendar.write" in selected_tools and not _approval_granted("calendar.write", frozenset()):
+            questions.append("I can create that calendar event. Please confirm the exact date, start time, title, and that you approve adding it.")
         if "scheduling.create" in selected_tools and not _has_time_detail(lowered):
             questions.append("When should I schedule that?")
         if "home-assistant.control" in selected_tools and not _has_home_action_detail(lowered):
@@ -572,6 +601,8 @@ class AgentRuntimeV3:
     def choose_inference_capability(self, objective: str, has_attachments: bool = False) -> str:
         if has_attachments or any(term in objective.lower() for term in ("photo", "image", "picture")):
             return "vision.large"
+        if _is_simple_local_objective(objective):
+            return "general.local"
         if _is_coding_objective(objective):
             return "code.large"
         return "general.large"
@@ -653,6 +684,15 @@ class AgentRuntimeV3:
     ) -> tuple[str, str | None]:
         if not self._run_inference:
             return "not_run", None
+        if endpoint_provider in {"openai-compatible", "litellm", "openrouter"}:
+            return await self._run_openai_compatible_inference(
+                agent=agent,
+                handoff=handoff,
+                endpoint_provider=endpoint_provider,
+                base_url=base_url,
+                model=model,
+                tool_results=tool_results,
+            )
         if endpoint_provider != "ollama":
             return "unsupported_provider", None
         if self._tool_registry is not None:
@@ -677,6 +717,63 @@ class AgentRuntimeV3:
         if "error" in response:
             return "error", None
         return "ok", str(response.get("message", {}).get("content") or "").strip() or None
+
+    def _policy_gated_cloud_fallback(
+        self,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        steps: list[AgentStep],
+        audit_events: list[AuditEvent],
+    ):
+        decision = self._egress_gate.evaluate(
+            agent=agent,
+            prompt=handoff.prompt,
+            destination_provider="cloud-frontier",
+        )
+        steps.append(AgentStep(kind="cloud_egress_evaluated", detail=decision.reason, success=decision.allowed))
+        audit_events.append(decision.audit_event)
+        if not decision.allowed:
+            return None, "general.large"
+        for endpoint in self._inference_registry.endpoints_for(capability="general.cloud", domain_id=agent.security_domain_id):
+            if endpoint.endpoint_id not in self._unhealthy_endpoint_ids:
+                return endpoint, "general.cloud"
+        return None, "general.cloud"
+
+    async def _run_openai_compatible_inference(
+        self,
+        *,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        endpoint_provider: str,
+        base_url: str,
+        model: str,
+        tool_results: list[dict[str, Any]],
+    ) -> tuple[str, str | None]:
+        target_base_url = (base_url or _openai_compatible_base_url(endpoint_provider)).rstrip("/")
+        if not target_base_url or not model:
+            return "error", None
+        headers = {"Content-Type": "application/json"}
+        api_key = _openai_compatible_api_key(endpoint_provider)
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [{"role": "user", "content": _openai_compatible_content(self._inference_prompt(agent, handoff, tool_results), handoff)}],
+            "temperature": 0.2,
+            "max_tokens": settings.ollama_default_output_tokens,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=240.0) as client:
+                response = await client.post(f"{target_base_url}/v1/chat/completions", headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except Exception:
+            return "error", None
+        choices = data.get("choices") or []
+        if not choices:
+            return "error", None
+        message = choices[0].get("message") or {}
+        return "ok", str(message.get("content") or "").strip() or None
 
     async def _run_vulcan_tool_calling_inference(
         self,
@@ -967,7 +1064,10 @@ class AgentRuntimeV3:
         if follow_up_questions:
             return follow_up_questions[0]
         if degraded:
-            return f"{agent.display_name} received the objective, but no healthy local inference endpoint is available."
+            return (
+                f"{agent.display_name} received the objective, but no healthy Vulcan inference endpoint is available. "
+                "Iris can handle simple local work; cloud requires policy approval."
+            )
         if inference_text:
             return inference_text
         tool_text = ", ".join(selected_tools) if selected_tools else "no tools"
@@ -998,10 +1098,12 @@ class AgentRuntimeV3:
 
     @staticmethod
     def _inference_prompt(agent: PersistentAgent, handoff: GatewayHandoff, tool_results: list[dict[str, Any]]) -> str:
+        document_context = _document_context_from_handoff(handoff)
         return (
             f"You are {agent.display_name}, a persistent Freyja agent. "
             "Answer the user's objective using only the supplied context.\n\n"
             f"Objective: {handoff.prompt}\n\n"
+            f"{document_context}"
             f"Tool results: {tool_results}"
         )
 
@@ -1067,6 +1169,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "weather.current": "get_weather",
     "browser.control": "apple_browser_front_tab",
     "calendar.read": "calendar_today_schedule",
+    "calendar.write": "calendar_create_event",
     "email.read": "apple_mailbox_counts",
     "macagent.apple": "macagent_health",
     "home-assistant.read": "home_assistant_list_states",
@@ -1081,7 +1184,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
 _CAPABILITY_BY_CONCRETE_TOOL = {tool_name: capability_id for capability_id, tool_name in _CONCRETE_TOOL_BY_CAPABILITY.items()}
 _CAPABILITY_BY_CONCRETE_TOOL["event_weather"] = "weather.current"
 
-_MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control"}
+_MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control", "calendar.write"}
 
 
 def _is_coding_objective(objective: str) -> bool:
@@ -1108,6 +1211,67 @@ def _is_coding_objective(objective: str) -> bool:
         r"\brun tests?\b",
     )
     return any(re.search(pattern, lowered) for pattern in coding_patterns)
+
+
+def _is_simple_local_objective(objective: str) -> bool:
+    lowered = objective.strip().lower()
+    if len(lowered) > 160:
+        return False
+    simple_patterns = (
+        r"^(ok|okay|thanks|thank you|got it|roger|ack|acknowledged|working it|ready)$",
+        r"^(are you there|ping|status|hello|hi|hey)[?.! ]*$",
+        r"^(say|reply with) .{1,40}$",
+    )
+    return any(re.search(pattern, lowered) for pattern in simple_patterns)
+
+
+def inference_role_alias(capability: str) -> str:
+    """Public model role surfaced to routing logs and LiteLLM-compatible clients."""
+    if capability in {"code.large", "coding"}:
+        return "vulcan-coder"
+    if capability == "vision.large":
+        return "vulcan-vision"
+    if capability == "embeddings.local":
+        return "vulcan-embeddings"
+    if capability == "general.local":
+        return "iris-fast"
+    if capability in {"general.cloud", "premium", "vision.cloud"}:
+        return "cloud-frontier"
+    return "vulcan-general"
+
+
+def _selected_endpoint_capability(endpoint_capabilities: frozenset[str], requested_capability: str) -> str:
+    if requested_capability in endpoint_capabilities:
+        return requested_capability
+    for capability in ("general.local", "general.large", "code.large", "vision.large", "embeddings.local", "general.cloud"):
+        if capability in endpoint_capabilities:
+            return capability
+    return requested_capability
+
+
+def _openai_compatible_base_url(endpoint_provider: str) -> str:
+    if endpoint_provider in {"openai-compatible", "litellm"}:
+        return settings.litellm_base_url
+    if endpoint_provider == "openrouter":
+        return settings.openrouter_base_url
+    return ""
+
+
+def _openai_compatible_api_key(endpoint_provider: str) -> str:
+    if endpoint_provider in {"openai-compatible", "litellm"}:
+        return os.environ.get("LITELLM_MASTER_KEY") or settings.litellm_master_key
+    if endpoint_provider == "openrouter":
+        return settings.openrouter_api_key
+    return ""
+
+
+def _openai_compatible_content(prompt: str, handoff: GatewayHandoff) -> str | list[dict[str, Any]]:
+    images = _images_from_handoff(handoff)
+    if not images:
+        return prompt
+    content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+    content.extend({"type": "image_url", "image_url": {"url": image.as_data_url()}} for image in images)
+    return content
 
 
 def _has_message_target(objective: str) -> bool:
@@ -1176,22 +1340,42 @@ def _tool_effective_success(registry_success: bool, output: dict[str, Any]) -> b
 
 
 def _images_from_handoff(handoff: GatewayHandoff) -> list[Any]:
+    return images_from_attachments(_attachment_inputs_from_handoff(handoff))
+
+
+def _document_context_from_handoff(handoff: GatewayHandoff) -> str:
+    documents = document_texts_from_attachments(_attachment_inputs_from_handoff(handoff))
+    if not documents:
+        return ""
+    lines = ["Attachment document context:"]
+    for document in documents:
+        if document.ok:
+            lines.append(f"- {document.filename} ({document.mime_type}, {document.page_count or 1} page(s)):\n{document.text}")
+        else:
+            lines.append(f"- {document.filename} ({document.mime_type}): {document.error or 'document text unavailable'}")
+    return "\n".join(lines) + "\n\n"
+
+
+def _attachment_inputs_from_handoff(handoff: GatewayHandoff) -> list[AttachmentInput]:
     attachments: list[AttachmentInput] = []
     for attachment in handoff.attachments:
+        if isinstance(attachment, AttachmentInput):
+            attachments.append(attachment)
+            continue
         if not isinstance(attachment, dict):
             continue
-        source = attachment.get("source")
+        source = attachment.get("source") or attachment.get("path")
         path = str(source) if source and not str(source).startswith(("http://", "https://")) else None
         attachments.append(
             AttachmentInput(
                 filename=attachment.get("filename"),
-                mime_type=attachment.get("media_type"),
+                mime_type=attachment.get("media_type") or attachment.get("mime_type"),
                 path=path,
                 data_base64=attachment.get("data_base64"),
-                size_bytes=attachment.get("size"),
+                size_bytes=attachment.get("size") or attachment.get("size_bytes"),
             )
         )
-    return images_from_attachments(attachments)
+    return attachments
 
 
 def _handoff_with_vision_context(handoff: GatewayHandoff, vision_text: str) -> GatewayHandoff:

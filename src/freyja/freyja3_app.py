@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hmac
+import uuid
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from freyja.agent_gateway import AgentGateway, GatewayAuthenticationError, GatewayPermissionError, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
@@ -61,6 +63,14 @@ agent_runtime = AgentRuntimeV3(
     run_inference=settings.freyja3_inference_enabled,
 )
 inference_registry = InferenceRegistryV3()
+
+
+class ShortcutMessageRequest(BaseModel):
+    prompt: str
+    conversation_id: str = "homepod"
+    sender: str = "shortcut"
+    tools_required: bool = True
+    request_id: str | None = None
 
 
 @app.middleware("http")
@@ -453,6 +463,52 @@ async def dispatch_due_freyja3_schedules(raw_request: Request, due_before: str |
 async def canonical_route(request: CanonicalRequest, raw_request: Request) -> dict[str, Any]:
     response = await _execute_canonical_request(request, raw_request)
     return response.model_dump(mode="json")
+
+
+@app.post("/shortcuts/message")
+async def shortcut_message(request: ShortcutMessageRequest, raw_request: Request) -> dict[str, Any]:
+    prompt = request.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Shortcut prompt is required.")
+
+    trace_id = request.request_id or f"shortcut-{uuid.uuid4()}"
+    canonical_request = CanonicalRequest(
+        trace_id=trace_id,
+        message_id=trace_id,
+        channel="voice",
+        conversation_id=f"shortcut-conv:{request.conversation_id.strip() or 'homepod'}",
+        sender=CanonicalSender(
+            channel_id=request.sender.strip() or "shortcut",
+            display_name="Shortcut",
+            metadata={"source": "shortcuts"},
+        ),
+        text=prompt,
+        channel_metadata={
+            "provider": "auto",
+            "tools_required": request.tools_required,
+            "privacy": "private",
+            "task_type": "voice",
+            "source": "shortcuts",
+        },
+        permissions=["director:route"],
+    )
+    canonical_response = await _execute_canonical_request(canonical_request, raw_request)
+    spoken = _voice_friendly_response(canonical_response.text)
+    return {
+        "response": spoken,
+        "spoken": spoken,
+        "conversation_id": canonical_response.conversation_id,
+        "request_id": canonical_response.trace_id,
+        "provider": canonical_response.channel_metadata.get("provider"),
+        "model": canonical_response.channel_metadata.get("model"),
+    }
+
+
+def _voice_friendly_response(text: str, *, limit: int = 700) -> str:
+    cleaned = " ".join(text.split())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "..."
 
 
 def _record_worker_audit(

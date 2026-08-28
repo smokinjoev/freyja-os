@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     freyja3_worker_database_path: str = Field(default="data/freyja3_workers.db", alias="FREYJA3_WORKER_DATABASE_PATH")
     freyja3_audit_database_path: str = Field(default="data/freyja3_audit.db", alias="FREYJA3_AUDIT_DATABASE_PATH")
     freyja3_inference_endpoints_json: str = Field(default="", alias="FREYJA3_INFERENCE_ENDPOINTS")
+    litellm_base_url: str = Field(default="http://litellm:4000", alias="LITELLM_BASE_URL")
+    litellm_master_key: str = Field(default="sk-freyja-litellm-local", alias="LITELLM_MASTER_KEY")
 
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_reasoning_base_url: str = ""
@@ -61,7 +63,7 @@ class Settings(BaseSettings):
     iris_router_enabled: bool = False
     iris_router_advisory_enabled: bool = False
     iris_router_shadow_enabled: bool = False
-    iris_ollama_base_url: str = "http://iris:11434"
+    iris_ollama_base_url: str = "http://100.115.228.56:11434"
     iris_router_model: str = "qwen2.5:7b"
     iris_router_timeout_seconds: float = 4.0
     iris_router_confidence_threshold: float = 0.80

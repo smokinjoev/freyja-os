@@ -1,0 +1,43 @@
+model_list:
+  - model_name: iris-fast
+    litellm_params:
+      model: ollama_chat/qwen2.5:7b
+      api_base: os.environ/IRIS_OLLAMA_BASE_URL
+  - model_name: vulcan-general
+    litellm_params:
+      model: ollama_chat/qwen2.5:32b-instruct
+      api_base: os.environ/VULCAN_OLLAMA_BASE_URL
+  - model_name: vulcan-coder
+    litellm_params:
+      model: ollama_chat/qwen3-coder-next:q4_K_M
+      api_base: os.environ/VULCAN_OLLAMA_BASE_URL
+  - model_name: vulcan-vision
+    litellm_params:
+      model: ollama_chat/qwen2.5vl:72b
+      api_base: os.environ/VULCAN_OLLAMA_BASE_URL
+      num_ctx: 65536
+  - model_name: vulcan-embeddings
+    litellm_params:
+      model: ollama/nomic-embed-text:latest
+      api_base: os.environ/VULCAN_OLLAMA_BASE_URL
+  - model_name: vulcan
+    litellm_params:
+      model: ollama_chat/qwen2.5:32b-instruct
+      api_base: os.environ/VULCAN_OLLAMA_BASE_URL
+  - model_name: vulcan-deep
+    litellm_params:
+      model: ollama_chat/qwen2.5vl:72b
+      api_base: os.environ/VULCAN_OLLAMA_BASE_URL
+      num_ctx: 65536
+  - model_name: vulcan-lmstudio
+    litellm_params:
+      model: openai/local-model
+      api_base: os.environ/VULCAN_OPENAI_BASE_URL
+      api_key: os.environ/VULCAN_OPENAI_API_KEY
+  - model_name: cloud-frontier
+    litellm_params:
+      model: openrouter/openai/gpt-4o-mini
+      api_key: os.environ/OPENROUTER_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

@@ -292,6 +292,33 @@ def test_macagent_boundary_is_documented_as_authenticated_and_non_authoritative(
     assert "refuses recipients outside `IMESSAGE_ALLOWED_SENDERS`" in docs
 
 
+def test_homepod_shortcuts_voice_runbook_documents_live_shortcut_contract() -> None:
+    docs = _read("docs/operations/homepod-shortcuts-voice.md")
+
+    assert "POST /shortcuts/message" in docs
+    assert "prefer Iris" in docs
+    assert "http://10.1.10.136:8300/shortcuts/message" in docs
+    assert "http://100.115.228.56:8300/shortcuts/message" in docs
+    assert "http://100.119.235.114:8300/shortcuts/message" in docs
+    assert "Authorization: Bearer <FREYJA_CONNECTOR_TOKEN>" in docs
+    assert '"prompt": "Dictated Text"' in docs
+    assert '"conversation_id": "homepod"' in docs
+    assert "spoken" in docs
+    assert "Calendar writes must still ask for confirmation" in docs
+
+
+def test_hera_alexa_replacement_runbook_keeps_atlas_authoritative() -> None:
+    docs = _read("docs/operations/hera-alexa-replacement.md")
+
+    assert "wake word -> record utterance -> speech-to-text -> POST /shortcuts/message" in docs
+    assert "Freyja/Atlas remains" in docs
+    assert '"sender": "hera"' in docs
+    assert '"conversation_id": "hera-kitchen"' in docs
+    assert "Hera speaks only `spoken`" in docs
+    assert "Calendar write" in docs
+    assert "asks for confirmation" in docs
+
+
 def test_external_worker_boundary_is_documented_as_observations_not_actions() -> None:
     docs = _read("deploy/compose/director/README.md")
 

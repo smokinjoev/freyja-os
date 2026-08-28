@@ -6,6 +6,7 @@ from pathlib import Path
 from connectors.imessage.config import IMessageSettings
 from connectors.imessage.gateway import IMessageGateway
 from connectors.imessage.models import IMessage, IMessageReply
+from connectors.imessage.transport import _database_message_text
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -199,6 +200,16 @@ def test_poll_recent_messages_skips_seeded_messages(tmp_path):
 
     assert gateway.messages == [new_message]
     assert seen_store.message_ids == {"msg-old", "msg-new"}
+
+
+def test_database_message_text_falls_back_to_attributed_body() -> None:
+    attributed_body = (
+        b"streamtyped\x00NSMutableAttributedString\x00NSObject\x00"
+        b"Freyja, create family dinner Friday at 6 PM.\x00"
+        b"NSKeyedArchiver\x00__kIMMessagePartAttributeName"
+    )
+
+    assert _database_message_text("", attributed_body) == "Freyja, create family dinner Friday at 6 PM."
 
 
 def test_run_watch_loop_keeps_process_alive_when_watch_fails(tmp_path):

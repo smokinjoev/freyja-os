@@ -159,3 +159,34 @@ def test_memory_record_metadata_requires_scope_owner_provenance_confidence_class
                 "classification": "private",
             }
         )
+
+
+def test_iris_fast_endpoint_has_local_model_defaults() -> None:
+    registry = InferenceRegistryV3()
+    endpoints = registry.endpoints_for(capability="general.local", domain_id=SecurityDomainId.HOUSEHOLD)
+    iris_fast = next(endpoint for endpoint in endpoints if endpoint.endpoint_id == "iris-fast")
+
+    assert iris_fast.base_url == "http://100.115.228.56:11434"
+    assert iris_fast.model == "qwen2.5:7b"
+
+
+def test_vulcan_general_uses_32b_qwen_and_deep_uses_big_multimodal_model() -> None:
+    registry = InferenceRegistryV3()
+    general = registry.endpoints_for(capability="general.large", domain_id=SecurityDomainId.HOUSEHOLD)[0]
+    deep = registry.endpoints_for(capability="general.deep", domain_id=SecurityDomainId.HOUSEHOLD)[0]
+    vision = registry.endpoints_for(capability="vision.large", domain_id=SecurityDomainId.HOUSEHOLD)[0]
+
+    assert general.endpoint_id == "vulcan-reason"
+    assert general.model == "qwen2.5:32b-instruct"
+    assert deep.endpoint_id == "vulcan-deep"
+    assert deep.model == "qwen2.5vl:72b"
+    assert vision.endpoint_id == "vulcan-vision"
+    assert vision.model == "qwen2.5vl:72b"
+
+
+def test_vulcan_coder_keeps_qwen_coder_model() -> None:
+    registry = InferenceRegistryV3()
+    coder = registry.endpoints_for(capability="code.large", domain_id=SecurityDomainId.HOUSEHOLD)[0]
+
+    assert coder.endpoint_id == "vulcan-code"
+    assert coder.model == "qwen3-coder-next:q4_K_M"

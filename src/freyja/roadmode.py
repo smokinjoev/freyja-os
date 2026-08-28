@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,10 @@ PROGRESS_FILE = DATA_DIR / "progress.json"
 class ProgressUpdate(BaseModel):
     chapter_index: int = Field(ge=0)
     paragraph_index: int = Field(ge=0)
+
+
+class RoadChatRequest(BaseModel):
+    prompt: str = Field(min_length=1)
 
 
 def _ensure_dirs() -> None:
@@ -133,3 +137,18 @@ async def update_progress(slug: str, update: ProgressUpdate) -> dict[str, object
     progress[slug] = update.model_dump()
     _save_progress(progress)
     return {"saved": True, "progress": progress[slug]}
+
+
+@roadmode_router.post("/api/chat")
+async def road_chat(request: RoadChatRequest, raw_request: Request) -> dict[str, object]:
+    from freyja.main import ShortcutMessageRequest, shortcut_message
+
+    return await shortcut_message(
+        ShortcutMessageRequest(
+            prompt=request.prompt,
+            conversation_id="road",
+            sender="road-mode",
+            tools_required=True,
+        ),
+        raw_request,
+    )

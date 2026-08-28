@@ -43,6 +43,23 @@ def test_freyja3_app_canonical_route_uses_gateway_runtime(monkeypatch, tmp_path)
     assert denied.status_code == 403
 
 
+def test_freyja3_app_shortcut_message_routes_voice_request(monkeypatch, tmp_path) -> None:
+    memory_store = Freyja3MemoryStore(tmp_path / "memory.db")
+    monkeypatch.setattr(freyja3_app, "audit_store", Freyja3AuditStore(tmp_path / "audit.db"))
+    monkeypatch.setattr(freyja3_app, "agent_runtime", AgentRuntimeV3(memory_store=memory_store))
+    client = TestClient(freyja3_app.app)
+
+    response = client.post(
+        "/shortcuts/message",
+        json={"prompt": "What is on my calendar?", "conversation_id": "kitchen"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["spoken"]
+    assert data["conversation_id"] == "shortcut-conv:kitchen"
+
+
 def test_freyja3_app_semantic_events_are_available(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(freyja3_app, "semantic_event_store", SemanticEventStore(tmp_path / "events.db"))
     client = TestClient(freyja3_app.app)

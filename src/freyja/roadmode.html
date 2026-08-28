@@ -11,22 +11,41 @@
     main { max-width: 720px; margin: auto; padding: 24px 18px 44px; }
     h1 { font-size: 1.7rem; margin: 0 0 8px; }
     .muted { color: #aab1bb; }
-    select, button { width: 100%; min-height: 58px; border-radius: 14px; border: 1px solid #39414c; font-size: 1.08rem; }
+    select, button, textarea { width: 100%; min-height: 58px; border-radius: 14px; border: 1px solid #39414c; font-size: 1.08rem; box-sizing: border-box; }
     select { background: #1a2028; color: white; padding: 0 14px; margin: 18px 0; }
+    textarea { background: #151a21; color: white; padding: 14px; resize: vertical; }
     button { background: #242c36; color: white; font-weight: 700; padding: 10px; }
     button.primary { min-height: 92px; background: #e9edf2; color: #101318; font-size: 1.45rem; }
+    button.voice { background: #2f5d50; }
     button:disabled { opacity: .45; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .triple { grid-template-columns: 1fr 1fr 1fr; }
     .card { background: #171c23; border: 1px solid #2c3440; border-radius: 18px; padding: 18px; margin: 18px 0; }
+    .reply { white-space: pre-wrap; line-height: 1.45; color: #e3e8ee; }
     #chapter { font-size: 1.25rem; font-weight: 700; }
-    #status { min-height: 24px; margin: 10px 0 16px; }
+    #status, #freyjaStatus { min-height: 24px; margin: 10px 0 16px; }
     #excerpt { color: #c8ced6; line-height: 1.45; max-height: 8.5em; overflow: hidden; }
   </style>
 </head>
 <body>
 <main>
   <h1>Freyja Road Mode</h1>
-  <div class="muted">Public-domain audiobook reader</div>
+  <div class="muted">Travel voice bridge and public-domain audiobook reader</div>
+  <div class="card">
+    <div id="freyjaTitle">Talk to Freyja</div>
+    <div id="freyjaStatus" class="muted">Ready</div>
+    <textarea id="freyjaPrompt" rows="3" placeholder="Ask Freyja anything"></textarea>
+    <div class="grid">
+      <button id="talk" class="voice">Talk</button>
+      <button id="send">Send</button>
+    </div>
+    <div class="grid triple">
+      <button id="stopVoice">Stop</button>
+      <button id="repeat" disabled>Repeat</button>
+      <button id="clearReply">Clear</button>
+    </div>
+    <div id="freyjaReply" class="reply"></div>
+  </div>
   <select id="book" aria-label="Choose a book"></select>
   <div class="card">
     <div id="title">Choose a book</div>
@@ -46,15 +65,26 @@ const bookSelect = document.querySelector('#book');
 const playButton = document.querySelector('#play');
 const backButton = document.querySelector('#back');
 const nextButton = document.querySelector('#next');
+const talkButton = document.querySelector('#talk');
+const sendButton = document.querySelector('#send');
+const stopVoiceButton = document.querySelector('#stopVoice');
+const repeatButton = document.querySelector('#repeat');
+const clearReplyButton = document.querySelector('#clearReply');
+const freyjaPrompt = document.querySelector('#freyjaPrompt');
+const freyjaStatusEl = document.querySelector('#freyjaStatus');
+const freyjaReplyEl = document.querySelector('#freyjaReply');
 const titleEl = document.querySelector('#title');
 const chapterEl = document.querySelector('#chapter');
 const statusEl = document.querySelector('#status');
 const excerptEl = document.querySelector('#excerpt');
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let book = null;
 let chapterIndex = 0;
 let paragraphIndex = 0;
 let speaking = false;
 let saveTimer = null;
+let recognizer = null;
+let lastReply = '';
 
 async function api(path, options) {
   const response = await fetch(path, options);
@@ -113,6 +143,63 @@ function chooseVoice() {
          voices.find(v => v.lang === 'en-US') || voices[0];
 }
 
+function speakReply(text) {
+  if (!text) return;
+  synth.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.voice = chooseVoice();
+  utterance.rate = 0.96;
+  synth.speak(utterance);
+}
+
+async function askFreyja(prompt) {
+  const cleanPrompt = prompt.trim();
+  if (!cleanPrompt) return;
+  freyjaStatusEl.textContent = 'Asking Freyja';
+  sendButton.disabled = talkButton.disabled = true;
+  try {
+    const data = await api('/road/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt: cleanPrompt})
+    });
+    lastReply = data.spoken || data.response || '';
+    freyjaReplyEl.textContent = lastReply;
+    repeatButton.disabled = !lastReply;
+    freyjaStatusEl.textContent = 'Freyja answered';
+    speakReply(lastReply);
+  } catch (error) {
+    freyjaStatusEl.textContent = error.message;
+  } finally {
+    sendButton.disabled = false;
+    talkButton.disabled = false;
+  }
+}
+
+function startTalking() {
+  if (!SpeechRecognition) {
+    freyjaStatusEl.textContent = 'Voice input is not available here. Type and send.';
+    freyjaPrompt.focus();
+    return;
+  }
+  synth.cancel();
+  recognizer = new SpeechRecognition();
+  recognizer.lang = 'en-US';
+  recognizer.interimResults = false;
+  recognizer.continuous = false;
+  recognizer.onstart = () => { freyjaStatusEl.textContent = 'Listening'; };
+  recognizer.onerror = () => { freyjaStatusEl.textContent = 'Could not hear that. Type and send.'; };
+  recognizer.onresult = event => {
+    const transcript = Array.from(event.results).map(result => result[0].transcript).join(' ');
+    freyjaPrompt.value = transcript;
+    askFreyja(transcript);
+  };
+  recognizer.onend = () => {
+    if (freyjaStatusEl.textContent === 'Listening') freyjaStatusEl.textContent = 'Ready';
+  };
+  recognizer.start();
+}
+
 function speakCurrent() {
   if (!book || !speaking) return;
   const chapter = book.chapters[chapterIndex];
@@ -166,6 +253,11 @@ backButton.addEventListener('click', () => {
 nextButton.addEventListener('click', () => {
   stop(); chapterIndex = Math.min(book.chapters.length - 1, chapterIndex + 1); paragraphIndex = 0; render(); saveProgress();
 });
+talkButton.addEventListener('click', startTalking);
+sendButton.addEventListener('click', () => askFreyja(freyjaPrompt.value));
+stopVoiceButton.addEventListener('click', () => { if (recognizer) recognizer.abort(); synth.cancel(); freyjaStatusEl.textContent = 'Stopped'; });
+repeatButton.addEventListener('click', () => speakReply(lastReply));
+clearReplyButton.addEventListener('click', () => { freyjaPrompt.value = ''; freyjaReplyEl.textContent = ''; lastReply = ''; repeatButton.disabled = true; freyjaStatusEl.textContent = 'Ready'; });
 document.addEventListener('visibilitychange', () => { if (document.hidden && speaking) saveProgress(); });
 window.addEventListener('beforeunload', saveProgress);
 synth.onvoiceschanged = () => {};

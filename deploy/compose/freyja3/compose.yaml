@@ -1,6 +1,44 @@
 name: freyja3
 
 services:
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    restart: unless-stopped
+    command:
+      - --config
+      - /app/config.yaml
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4000"
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-freyja-litellm-local}
+      LITELLM_LOG: ${LITELLM_LOG:-INFO}
+      IRIS_OLLAMA_BASE_URL: ${IRIS_OLLAMA_BASE_URL:-http://100.115.228.56:11434}
+      VULCAN_OLLAMA_BASE_URL: ${VULCAN_OLLAMA_BASE_URL:-http://100.94.80.21:11434}
+      VULCAN_OPENAI_BASE_URL: ${VULCAN_OPENAI_BASE_URL:-http://100.94.80.21:1234/v1}
+      VULCAN_OPENAI_API_KEY: ${VULCAN_OPENAI_API_KEY:-not-needed}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    ports:
+      - "${LITELLM_BIND_IP:-0.0.0.0}:${LITELLM_HOST_PORT:-4000}:4000"
+    volumes:
+      - ./litellm.config.yaml:/app/config.yaml:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/readiness', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   agent-gateway:
     build:
       context: ../../..
@@ -25,16 +63,23 @@ services:
       FREYJA3_WORKER_DATABASE_PATH: /app/data/freyja3_workers.db
       FREYJA3_AUDIT_DATABASE_PATH: /app/data/freyja3_audit.db
       FREYJA3_INFERENCE_ENDPOINTS: ${FREYJA3_INFERENCE_ENDPOINTS:-}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm:4000}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://100.94.80.21:11434}
       OLLAMA_REASONING_BASE_URL: ${OLLAMA_REASONING_BASE_URL:-http://100.94.80.21:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
-      OLLAMA_REASONING_MODEL: ${OLLAMA_REASONING_MODEL:-qwen3-coder-next:q4_K_M}
+      OLLAMA_REASONING_MODEL: ${OLLAMA_REASONING_MODEL:-qwen2.5:32b-instruct}
       OLLAMA_CODING_MODEL: ${OLLAMA_CODING_MODEL:-qwen3-coder-next:q4_K_M}
-      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-minicpm-v}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-qwen2.5vl:72b}
       TOOLS_ENABLED: ${TOOLS_ENABLED:-true}
       TOOLS_AUDIT_LOG_ENABLED: ${TOOLS_AUDIT_LOG_ENABLED:-true}
       WEATHER_TOOL_ENABLED: ${WEATHER_TOOL_ENABLED:-false}
+      CALENDAR_DEFAULT_PROVIDER: ${CALENDAR_DEFAULT_PROVIDER:-memory}
+      APPLE_CALENDAR_ENABLED: ${APPLE_CALENDAR_ENABLED:-false}
+      APPLE_CALENDAR_BACKEND: ${APPLE_CALENDAR_BACKEND:-macagent}
+      APPLE_CALENDAR_DEFAULT_CALENDAR_NAME: ${APPLE_CALENDAR_DEFAULT_CALENDAR_NAME:-iCloud::Family}
+      APPLE_CALENDAR_CALENDAR_ALIASES: ${APPLE_CALENDAR_CALENDAR_ALIASES:-joe=iCloud::Family,beth=iCloud::Family,family=iCloud::Family}
+      APPLE_CALENDAR_TIMEOUT_SECONDS: ${APPLE_CALENDAR_TIMEOUT_SECONDS:-9.0}
       MEMORY_DATABASE_PATH: /app/data/freyja.db
       REPOSITORY_ROOT: /app
       MACAGENT_ENABLED: ${MACAGENT_ENABLED:-false}
@@ -44,7 +89,7 @@ services:
       HOME_ASSISTANT_ACCESS_TOKEN: ${HOME_ASSISTANT_ACCESS_TOKEN:-}
       HOME_ASSISTANT_TIMEOUT_SECONDS: ${HOME_ASSISTANT_TIMEOUT_SECONDS:-10}
     ports:
-      - "${FREYJA3_BIND_IP:-127.0.0.1}:${FREYJA3_HOST_PORT:-8300}:8300"
+      - "${FREYJA3_BIND_IP:-0.0.0.0}:${FREYJA3_HOST_PORT:-8300}:8300"
     volumes:
       - ../../../data:/app/data
     read_only: true

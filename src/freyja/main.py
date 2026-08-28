@@ -97,7 +97,7 @@ async def log_validation_error(request: Request, exc: RequestValidationError):
 async def require_connector_auth(request: Request, call_next):
     """Require a bearer token for non-public Director endpoints when configured."""
     expected = settings.freyja_connector_token
-    if not expected or request.url.path in {"/", "/health"}:
+    if not expected or request.url.path in {"/", "/health"} or request.url.path == "/road" or request.url.path.startswith("/road/"):
         return await call_next(request)
 
     scheme, _, supplied = request.headers.get("authorization", "").partition(" ")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sqlite3
 import subprocess
 from collections.abc import AsyncIterator
@@ -265,15 +266,16 @@ class IMessageTransport:
                 else ""
             )
             message_filter = (
-                "AND (COALESCE(m.text, '') != '' OR a.ROWID IS NOT NULL)"
+                "AND (COALESCE(m.text, '') != '' OR m.attributedBody IS NOT NULL OR a.ROWID IS NOT NULL)"
                 if has_attachment_tables
-                else "AND COALESCE(m.text, '') != ''"
+                else "AND (COALESCE(m.text, '') != '' OR m.attributedBody IS NOT NULL)"
             )
             rows = connection.execute(
                 f"""
                 SELECT
                     m.guid,
                     COALESCE(m.text, ''),
+                    m.attributedBody,
                     COALESCE(NULLIF(h.id, ''), NULLIF(c.chat_identifier, ''), 'unknown'),
                     c.ROWID,
                     c.chat_identifier,
@@ -300,15 +302,15 @@ class IMessageTransport:
 
         messages = [
             IMessage(
-                sender=str(row[2]),
-                text=str(row[1]),
+                sender=str(row[3]),
+                text=_database_message_text(row[1], row[2]),
                 message_id=str(row[0]),
-                chat_id=int(row[3]),
-                chat_identifier=str(row[4] or row[2]),
-                timestamp=self._parse_apple_timestamp(row[5]),
-                is_group=int(row[6] or 0) != 45,
-                is_from_me=bool(row[7]),
-                attachments=_attachments_from_database_row(row[8], row[9]),
+                chat_id=int(row[4]),
+                chat_identifier=str(row[5] or row[3]),
+                timestamp=self._parse_apple_timestamp(row[6]),
+                is_group=int(row[7] or 0) != 45,
+                is_from_me=bool(row[8]),
+                attachments=_attachments_from_database_row(row[9], row[10]),
             )
             for row in rows
         ]
@@ -414,6 +416,51 @@ def _attachments_from_database_row(filenames: Any, mime_types: Any) -> list[IMes
             )
         )
     return attachments
+
+
+def _database_message_text(text: Any, attributed_body: Any) -> str:
+    if isinstance(text, str) and text.strip():
+        return text
+    if not isinstance(attributed_body, bytes | bytearray | memoryview):
+        return ""
+    return _text_from_attributed_body(bytes(attributed_body))
+
+
+def _text_from_attributed_body(value: bytes) -> str:
+    candidates: list[str] = []
+    for encoding in ("utf-8", "utf-16-le", "utf-16-be"):
+        decoded = value.decode(encoding, errors="ignore")
+        candidates.extend(_human_text_runs(decoded))
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda candidate: (len(candidate), candidate.count(" ")), reverse=True)
+    return candidates[0]
+
+
+def _human_text_runs(value: str) -> list[str]:
+    runs = []
+    for match in re.finditer(r"[A-Za-z0-9][A-Za-z0-9 ,.?!'\"():;$@#%&/+\n\r-]{3,}", value):
+        candidate = " ".join(match.group(0).split())
+        if _looks_like_archiver_token(candidate):
+            continue
+        runs.append(candidate)
+    return runs
+
+
+def _looks_like_archiver_token(value: str) -> bool:
+    lowered = value.lower()
+    blocked = (
+        "nsattributedstring",
+        "nsmutable",
+        "nsobject",
+        "nskeyedarchiver",
+        "bplist",
+        "streamtyped",
+        "ddscannerresult",
+        "__kim",
+        "$classname",
+    )
+    return any(token in lowered for token in blocked)
 
 
 def _database_has_tables(connection: sqlite3.Connection, *table_names: str) -> bool:
