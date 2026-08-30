@@ -9,6 +9,13 @@ Iris at the documented default runtime port, and SSH inspection of Vulcan was
 blocked by host-key verification. Existing non-Nexus Vulcan inference remains
 healthy.
 
+Latest retry on 2026-08-30: `scripts/nexus-smoke.py --base-url
+http://100.94.80.21:3939` still returned `ready: false` with `URLError` for
+health, version, models, chat, bad-token, and bad-model checks. SSH inspection
+still failed with `Host key verification failed`. Existing Vulcan
+OpenAI-compatible proxy chat on `http://100.94.80.21:8088/v1/chat/completions`
+still returned the expected local response from `qwen2.5:32b-instruct`.
+
 ## Official Nexus Reference Points
 
 - Msty's Nexus product page lists Linux AppImage and Linux `.deb` installers for

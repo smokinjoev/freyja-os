@@ -10,6 +10,10 @@ Nexus fits the intended Freyja 4.0 model-gateway boundary on paper, but it was
 not reachable on Vulcan during this run. The current evidence is insufficient to
 adopt or reject it.
 
+Latest retry on 2026-08-30 confirms the same blocker: Nexus is not reachable at
+`http://100.94.80.21:3939`, and Vulcan SSH inspection still fails host-key
+verification. Existing non-Nexus Vulcan inference remains healthy.
+
 ## What Worked
 
 - Official Msty docs describe Nexus as a local Runtime with OpenAI-compatible
