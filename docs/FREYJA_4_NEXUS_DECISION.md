@@ -82,6 +82,12 @@ After fixing SSH trust and installing/running Nexus:
 export NEXUS_BASE_URL=http://100.94.80.21:3939
 export NEXUS_API_KEY='<local Nexus client token>'
 
+scripts/nexus-smoke.py --output logs/nexus-smoke.json
+```
+
+Manual equivalent:
+
+```sh
 curl "$NEXUS_BASE_URL/health"
 curl "$NEXUS_BASE_URL/version"
 curl "$NEXUS_BASE_URL/v1/models" \
@@ -96,5 +102,5 @@ Then configure Freyja:
 
 ```sh
 export FREYJA3_INFERENCE_ENDPOINTS='[{"endpoint_id":"vulcan-nexus-fast","display_name":"Vulcan Nexus fast local preset","provider":"nexus","machine_id":"vulcan","base_url":"http://100.94.80.21:3939","model":"@preset/freyja-fast-local","capabilities":["general.local","chat"],"security_domain_id":"household","priority":12},{"endpoint_id":"vulcan-nexus-strong","display_name":"Vulcan Nexus strong local preset","provider":"nexus","machine_id":"vulcan","base_url":"http://100.94.80.21:3939","model":"@preset/freyja-strong-local","capabilities":["general.large","reasoning"],"security_domain_id":"household","priority":12},{"endpoint_id":"vulcan-nexus-coder","display_name":"Vulcan Nexus coder preset","provider":"nexus","machine_id":"vulcan","base_url":"http://100.94.80.21:3939","model":"@preset/freyja-coder","capabilities":["code.large","coding"],"security_domain_id":"household","priority":12}]'
-pytest tests/test_nexus_provider.py tests/test_freyja3_foundation.py
+.venv/bin/pytest tests/test_nexus_provider.py tests/test_nexus_smoke.py tests/test_freyja3_foundation.py
 ```

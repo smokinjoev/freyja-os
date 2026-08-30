@@ -125,6 +125,14 @@ result: assistant returned "vulcan-chat-ok"
 After Nexus is installed/running on Vulcan and LAN/Tailscale access is enabled:
 
 ```sh
+NEXUS_BASE_URL=http://100.94.80.21:3939 \
+NEXUS_API_KEY='<local Nexus client token>' \
+scripts/nexus-smoke.py --output logs/nexus-smoke.json
+```
+
+Equivalent manual checks:
+
+```sh
 curl http://100.94.80.21:3939/health
 curl http://100.94.80.21:3939/version
 curl http://100.94.80.21:3939/v1/models \
@@ -147,3 +155,6 @@ curl http://100.94.80.21:3939/v1/chat/completions \
 ```
 
 Expected: explicit unauthorized / invalid model errors, no silent cloud fallback.
+
+The smoke script writes a redacted JSON report and omits model responses,
+request bodies, local paths, and token values.
