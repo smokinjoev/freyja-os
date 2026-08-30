@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     freyja3_inference_endpoints_json: str = Field(default="", alias="FREYJA3_INFERENCE_ENDPOINTS")
     litellm_base_url: str = Field(default="http://litellm:4000", alias="LITELLM_BASE_URL")
     litellm_master_key: str = Field(default="sk-freyja-litellm-local", alias="LITELLM_MASTER_KEY")
+    nexus_base_url: str = Field(default="", alias="NEXUS_BASE_URL")
+    nexus_api_key: str = Field(default="", alias="NEXUS_API_KEY")
 
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_reasoning_base_url: str = ""

@@ -684,7 +684,7 @@ class AgentRuntimeV3:
     ) -> tuple[str, str | None]:
         if not self._run_inference:
             return "not_run", None
-        if endpoint_provider in {"openai-compatible", "litellm", "openrouter"}:
+        if endpoint_provider in {"openai-compatible", "litellm", "nexus", "openrouter"}:
             return await self._run_openai_compatible_inference(
                 agent=agent,
                 handoff=handoff,
@@ -1250,6 +1250,8 @@ def _selected_endpoint_capability(endpoint_capabilities: frozenset[str], request
 
 
 def _openai_compatible_base_url(endpoint_provider: str) -> str:
+    if endpoint_provider == "nexus":
+        return settings.nexus_base_url
     if endpoint_provider in {"openai-compatible", "litellm"}:
         return settings.litellm_base_url
     if endpoint_provider == "openrouter":
@@ -1258,6 +1260,8 @@ def _openai_compatible_base_url(endpoint_provider: str) -> str:
 
 
 def _openai_compatible_api_key(endpoint_provider: str) -> str:
+    if endpoint_provider == "nexus":
+        return os.environ.get("NEXUS_API_KEY") or settings.nexus_api_key
     if endpoint_provider in {"openai-compatible", "litellm"}:
         return os.environ.get("LITELLM_MASTER_KEY") or settings.litellm_master_key
     if endpoint_provider == "openrouter":
