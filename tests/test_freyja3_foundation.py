@@ -22,6 +22,7 @@ def test_named_target_agents_resolve_correctly() -> None:
     assert gateway.resolve_target_agent("Benedict").agent_id == "benedict"
     assert gateway.resolve_target_agent("Agent 44").agent_id == "agent-44"
     assert gateway.resolve_target_agent("Jenna").agent_id == "jenna"
+    assert gateway.resolve_target_agent("Legal Benedict").agent_id == "benedict-paralegal"
 
 
 def test_gateway_creates_handoff_and_audit_for_explicit_target() -> None:
@@ -106,9 +107,9 @@ def test_inference_endpoint_lookup_is_capability_domain_based_only() -> None:
         domain_id=SecurityDomainId.PARALEGAL_ENCLAVE,
     )
 
-    assert [endpoint.endpoint_id for endpoint in household_coding] == ["vulcan-code"]
+    assert [endpoint.endpoint_id for endpoint in household_coding] == ["vulcan-nexus-coder", "vulcan-code"]
     assert household_legal == []
-    assert [endpoint.endpoint_id for endpoint in enclave_legal] == ["paralegal-local"]
+    assert [endpoint.endpoint_id for endpoint in enclave_legal] == ["benedict-paralegal-nexus", "paralegal-local"]
     assert not hasattr(registry, "classify_intent")
     assert not hasattr(registry, "choose_agent")
 
@@ -126,7 +127,7 @@ def test_inference_registry_loads_configured_openai_compatible_endpoints(monkeyp
             "model": "local-model",
             "capabilities": ["general.large", "chat"],
             "security_domain_id": "household",
-            "priority": 20
+            "priority": 21
           }
         ]""",
     )
@@ -134,7 +135,7 @@ def test_inference_registry_loads_configured_openai_compatible_endpoints(monkeyp
     registry = InferenceRegistryV3()
     endpoints = registry.endpoints_for(capability="general.large", domain_id=SecurityDomainId.HOUSEHOLD)
 
-    assert [endpoint.endpoint_id for endpoint in endpoints] == ["vulcan-reason", "vulcan-lmstudio"]
+    assert [endpoint.endpoint_id for endpoint in endpoints] == ["vulcan-nexus-strong", "vulcan-reason", "vulcan-lmstudio"]
 
 
 def test_memory_record_metadata_requires_scope_owner_provenance_confidence_classification() -> None:
@@ -176,17 +177,47 @@ def test_vulcan_general_uses_32b_qwen_and_deep_uses_big_multimodal_model() -> No
     deep = registry.endpoints_for(capability="general.deep", domain_id=SecurityDomainId.HOUSEHOLD)[0]
     vision = registry.endpoints_for(capability="vision.large", domain_id=SecurityDomainId.HOUSEHOLD)[0]
 
-    assert general.endpoint_id == "vulcan-reason"
-    assert general.model == "qwen2.5:32b-instruct"
+    assert general.endpoint_id == "vulcan-nexus-strong"
+    assert general.provider == "nexus"
+    assert general.model == "@preset/freyja-strong-local"
     assert deep.endpoint_id == "vulcan-deep"
     assert deep.model == "qwen2.5vl:72b"
-    assert vision.endpoint_id == "vulcan-vision"
-    assert vision.model == "qwen2.5vl:72b"
+    assert vision.endpoint_id == "vulcan-nexus-vision-docs"
+    assert vision.model == "@preset/freyja-vision-docs"
 
 
 def test_vulcan_coder_keeps_qwen_coder_model() -> None:
     registry = InferenceRegistryV3()
     coder = registry.endpoints_for(capability="code.large", domain_id=SecurityDomainId.HOUSEHOLD)[0]
 
-    assert coder.endpoint_id == "vulcan-code"
-    assert coder.model == "qwen3-coder-next:q4_K_M"
+    assert coder.endpoint_id == "vulcan-nexus-coder"
+    assert coder.provider == "nexus"
+    assert coder.model == "@preset/freyja-coder"
+
+
+def test_nexus_presets_are_default_local_gateway_and_direct_ollama_remains_fallback() -> None:
+    registry = InferenceRegistryV3()
+    local = registry.endpoints_for(capability="general.local", domain_id=SecurityDomainId.HOUSEHOLD)
+    strong = registry.endpoints_for(capability="general.large", domain_id=SecurityDomainId.HOUSEHOLD)
+    legal = registry.endpoints_for(capability="legal_research", domain_id=SecurityDomainId.PARALEGAL)
+
+    assert local[0].endpoint_id == "vulcan-nexus-fast"
+    assert local[0].base_url == "http://100.94.80.21:3939"
+    assert local[0].model == "@preset/freyja-fast-local"
+    assert [endpoint.provider for endpoint in strong[:2]] == ["nexus", "ollama"]
+    assert legal[0].endpoint_id == "benedict-paralegal-nexus"
+    assert legal[0].security_domain_id == SecurityDomainId.PARALEGAL
+
+
+def test_benedict_personal_agent_is_separate_from_paralegal_enclave() -> None:
+    gateway = AgentGateway()
+    beth_agent = gateway.resolve_target_agent("Benedict")
+    legal_agent = gateway.resolve_target_agent("Paralegal")
+
+    assert beth_agent.agent_id == "benedict"
+    assert beth_agent.security_domain_id == SecurityDomainId.PERSON_BETH
+    assert beth_agent.private_memory_scope == "person:beth"
+    assert legal_agent.agent_id == "benedict-paralegal"
+    assert legal_agent.security_domain_id == SecurityDomainId.PARALEGAL
+    assert legal_agent.private_memory_scope == "enclave:paralegal"
+    assert "family" not in legal_agent.shared_memory_scopes

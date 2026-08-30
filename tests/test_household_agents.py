@@ -24,6 +24,29 @@ def test_jenna_has_active_personal_agent() -> None:
     assert household_agents.resolve("jenna").agent_id == "jenna"
 
 
+def test_family_agents_have_local_presets_and_no_cloud_routes() -> None:
+    expected_presets = {
+        "family": "@preset/freyja-fast-local",
+        "joe": "@preset/freyja-coder",
+        "beth": "@preset/freyja-private-local",
+        "liam": "@preset/freyja-private-local",
+        "jenna": "@preset/freyja-private-local",
+    }
+
+    for person_id, preset in expected_presets.items():
+        agent = household_agents.resolve(person_id)
+        assert agent.default_model_preset == preset
+        assert agent.cloud_routes_allowed is False
+        assert agent.memory_scope in {"family", f"person:{person_id}"}
+
+
+def test_family_agents_do_not_receive_legal_enclave_scope() -> None:
+    for person_id in ("family", "joe", "beth", "liam", "jenna"):
+        agent = household_agents.resolve(person_id)
+        assert "legal_research" not in agent.capabilities
+        assert agent.memory_scope != "enclave:paralegal"
+
+
 def test_unknown_people_fail_to_household_freyja() -> None:
     assert household_agents.resolve("guest").agent_id == "freyja"
 

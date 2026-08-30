@@ -1,64 +1,76 @@
-# Freyja-OS Handoff
+# Freyja 4.0 Handoff
 
-## Current Milestone
+Last updated: 2026-08-30.
 
-Identity Service: make `Person` the canonical representation for people across
-memory, messaging, calendar, Director tools, and future voice/avatar work.
+## Current State
 
-## Completed Work
+Freyja 4.0 adopts Msty Nexus as the local model gateway on Vulcan and Msty
+Studio as Joe's human-facing workbench for manual testing and inspection.
+Freyja remains the identity, personality, privacy, memory, family-agent, tool,
+channel, audit, Home Assistant, Apple/Iris, and response authority.
 
-- Added `freyja.identity` with `Person`, `Identity`, `Alias`,
-  `Relationship`, and `IdentityService`.
-- Implemented alias, phone, email, Signal, iMessage, and calendar-owner
-  resolution.
-- Added queryable directed relationships such as spouse and child.
-- Added read-only Director tools:
-  - `identity_resolution`
-  - `identity_relationships`
-- Signal and iMessage allowlists now attach canonical Person headers when a
-  sender maps to a known person, while preserving legacy allowlist behavior.
-- Router tool execution now receives sanitized person metadata from trusted
-  connector headers.
-- Calendar service and tools now accept person IDs or aliases and default to
-  the resolved sender when available.
-- Identity certification suites were added under
-  `certification/suites/identity/`.
+Prior Nexus commits are present and pushed at `origin/main`:
 
-## Remaining Work
+- `d0cc058 freyja 4.0: adopt nexus local gateway`
+- `b6e6c7f freyja 4.0: record nexus blocker retry`
+- `40771e9 freyja 4.0: add nexus smoke runner`
+- `db67746 freyja 4.0: evaluate msty nexus gateway`
 
-- Replace the in-code default family seed with a persistent contact source.
-- Add production contact import/sync for Google Contacts, Apple Contacts, or a
-  local encrypted contacts file.
-- Expand relationship coverage beyond the current directed edges.
-- Add future voice/avatar identity adapters when those subsystems are built.
-- Use identity benchmark history for router policy only after benchmark data is
-  collected; no automatic routing changes are implemented yet.
+## Endpoints
 
-## Architectural Decisions
+- Vulcan Tailscale IP: `100.94.80.21`
+- Nexus base URL: `http://100.94.80.21:3939`
+- OpenAI-compatible base URL: `http://100.94.80.21:3939/v1`
+- Token file on Vulcan: `/home/joe/.config/freyja/msty-nexus-token`
+- Freyja token env var: `NEXUS_API_KEY`
 
-- Identity is a shared service, not a parallel Director or messaging path.
-- Connectors perform platform authorization first, then pass sanitized identity
-  headers to the Director.
-- Raw phone numbers, emails, account IDs, and device IDs are not used as memory
-  subjects for known people.
-- Memory remains scoped through `MemoryPrincipal`; known people keep the stable
-  `family-member:<hash>` subject for backward compatibility.
-- Calendar provider account IDs remain provider data. Scheduling logic works in
-  terms of canonical person IDs where practical.
-- Tests use mocked contacts, mocked connectors, and in-memory calendar
-  providers. No live services are required.
+## Adopted Roles
 
-## Completed Foundation
+- Vulcan is the brain and runs Nexus plus local model presets.
+- Iris owns Apple/body services and hot local device integrations.
+- Atlas remains the always-on gateway/infrastructure host.
+- Hera owns avatar, voice, presence, and perception.
+- Studio is Joe's Mac/iPad workbench and does not replace Freyja runtime
+  authority.
 
-- Director, Router, and tool execution path.
-- Memory framework and shared memory APIs.
-- Certification CLI, Gauntlet, runtime behavioral verification, benchmark, and
-  comparison framework.
-- Multi-user Communications through Signal and native iMessage connectors.
-- Family Calendar Personal Intelligence Service.
+## Local Presets
 
-## Next Milestone
+- `@preset/freyja-fast-local`: default household/local chat.
+- `@preset/freyja-strong-local`: heavier private household reasoning.
+- `@preset/freyja-coder`: Joe/Cloyd coding work.
+- `@preset/freyja-vision-docs`: local vision and document understanding.
+- `@preset/freyja-private-local`: personal/private family agents.
+- `@preset/benedict-paralegal-local`: restricted paralegal enclave.
 
-Prepare Identity for persistent household use: configure a durable contact
-store, add import/sync adapters, and migrate production messaging/calendar
-configuration from inline aliases to canonical Person records.
+## Family Agents
+
+The finalized roster is in `docs/FREYJA_4_LOCAL_FAMILY_AGENTS.md`.
+
+Runtime defaults now prefer Nexus endpoints:
+
+- `vulcan-nexus-fast`
+- `vulcan-nexus-strong`
+- `vulcan-nexus-coder`
+- `vulcan-nexus-vision-docs`
+- `benedict-paralegal-nexus`
+
+Direct Ollama endpoints remain available as local fallback. Cloud routes are
+disabled unless Joe explicitly approves provider, model, budget, and privacy
+rules. There is no silent cloud fallback.
+
+## Blockers
+
+- BLOCKER: Cloud research remains disabled until Joe approves provider, model
+  allowlist, budget, and privacy/egress policy.
+- BLOCKER: Nexus token must remain outside git and be supplied from local
+  environment or host secret management.
+
+## Next Commands
+
+```sh
+export NEXUS_BASE_URL=http://100.94.80.21:3939
+export NEXUS_API_KEY="$(ssh vulcan 'cat /home/joe/.config/freyja/msty-nexus-token')"
+
+scripts/nexus-smoke.py --output logs/nexus-smoke.json
+.venv/bin/pytest tests/test_nexus_provider.py tests/test_nexus_smoke.py tests/test_household_agents.py tests/test_freyja3_foundation.py
+```

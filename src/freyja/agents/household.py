@@ -13,6 +13,10 @@ class HouseholdAgent:
     person_id: str
     prompt_role: str
     capabilities: frozenset[str] = frozenset()
+    tool_grants: frozenset[str] = frozenset()
+    memory_scope: str = "family"
+    default_model_preset: str = "@preset/freyja-fast-local"
+    cloud_routes_allowed: bool = False
     active: bool = True
 
     def allows(self, capability: str) -> bool:
@@ -76,6 +80,9 @@ DEFAULT_HOUSEHOLD_AGENTS = (
             "while remaining recognizably warm, direct, capable, and lightly witty. "
             + _NO_CANNED_GREETING
         ),
+        tool_grants=frozenset({"home-assistant.read", "home-assistant.control", "calendar.read", "calendar.write", "messaging.send", "macagent.apple", "memory.shared"}),
+        memory_scope="family",
+        default_model_preset="@preset/freyja-fast-local",
     ),
     HouseholdAgent(
         agent_id="cloyd-gibbler",
@@ -83,6 +90,9 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         owner="person:joe",
         person_id="joe",
         capabilities=frozenset({"code.inspect", "code.edit", "code.test", "code.diff", "code.commit"}),
+        tool_grants=frozenset({"calendar.read", "calendar.write", "messaging.send", "macagent.apple", "shell.run", "filesystem.read", "filesystem.write", "git.inspect", "git.write", "coding.execute", "memory.private", "memory.shared"}),
+        memory_scope="person:joe",
+        default_model_preset="@preset/freyja-coder",
         prompt_role=(
             "Your name is Cloyd Gibbler. You are Joe's personal agent. Be concise, direct, "
             "technically fluent, comfortable with dry humor, and proactive about Joe's "
@@ -96,6 +106,9 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         display_name="Benedict",
         owner="person:beth",
         person_id="beth",
+        tool_grants=frozenset({"calendar.read", "calendar.write", "messaging.send", "macagent.apple", "documents.process", "memory.private", "memory.shared"}),
+        memory_scope="person:beth",
+        default_model_preset="@preset/freyja-private-local",
         prompt_role=(
             "Your name is Benedict. You are Beth's personal agent. Develop your relationship "
             "with Beth from her conversations, preferences, corrections, and ongoing work. "
@@ -109,6 +122,9 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         display_name="Agent 44",
         owner="person:liam",
         person_id="liam",
+        tool_grants=frozenset({"calendar.read", "messaging.send", "vision.inspect", "music.control", "memory.private", "memory.shared"}),
+        memory_scope="person:liam",
+        default_model_preset="@preset/freyja-private-local",
         prompt_role=(
             "Your name is Agent 44. You are Liam's personal agent. Develop a distinct voice "
             "from Liam's preferences and corrections while remaining useful, honest, and "
@@ -121,6 +137,9 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         display_name="Jenna",
         owner="person:jenna",
         person_id="jenna",
+        tool_grants=frozenset({"calendar.read", "messaging.send", "vision.inspect", "music.control", "memory.private", "memory.shared"}),
+        memory_scope="person:jenna",
+        default_model_preset="@preset/freyja-private-local",
         prompt_role=(
             "Your name is Jenna. You are Jenna's personal agent. Develop your relationship "
             "from Jenna's preferences, corrections, and ongoing work while remaining useful, "
@@ -133,6 +152,9 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         display_name="Agent Smith",
         owner="person:system",
         person_id="system",
+        tool_grants=frozenset({"system.health"}),
+        memory_scope="system",
+        default_model_preset="@preset/freyja-private-local",
         prompt_role=(
             "Your name is Agent Smith. You are the bounded infrastructure, diagnostics, "
             "security, certification, and recovery agent. Follow tool policy and approval gates."

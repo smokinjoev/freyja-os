@@ -10,6 +10,11 @@ Continue separate testing for cloud research only. Cloud routing was not enabled
 or tested during this run to avoid burning cloud tokens and to preserve Freyja's
 Privacy/Egress Gate as the authority.
 
+Adopt Msty Studio separately as Joe's operator workbench on Mac/iPad for manual
+model testing, chats, prompts, presets, and inspection. Studio is not a Freyja
+runtime component and must not replace Freyja identity, memory, tools, routing,
+privacy gates, family agents, audit, or response wrapping.
+
 ## What Worked
 
 - Official Msty docs describe Nexus as a local Runtime with OpenAI-compatible
@@ -33,6 +38,8 @@ Privacy/Egress Gate as the authority.
   `@preset/freyja-strong-local`.
 - Bad token returns `401 UNAUTHORIZED`.
 - Bad model returns `404 MODEL_NOT_FOUND`.
+- Freyja talks directly to Nexus through its OpenAI-compatible API at
+  `http://100.94.80.21:3939/v1`.
 - Freyja runtime can call Nexus from Iris and get the intended local response
   from Vulcan.
 
@@ -63,10 +70,16 @@ channel adapter
   -> Freyja wrapper
 ```
 
-Freyja keeps identity, personality, family agents, memory, privacy policy,
+Freyja keeps identity, personality, privacy policy, memory, family agents,
 channel routing, tools, Home Assistant, Apple/body services through Iris, audit,
 and response wrapping. Nexus may own model catalog, provider keys, local/cloud
 runtimes, presets/routes, app tokens, usage, and model lifecycle.
+
+Vulcan is the brain. Iris owns Apple/body services. Atlas remains the always-on
+gateway. Hera owns avatar/presence.
+
+The finalized local family agent roster and boundaries are documented in
+`docs/FREYJA_4_LOCAL_FAMILY_AGENTS.md`.
 
 ## Exact Next Commands For Joe
 
@@ -86,7 +99,8 @@ systemctl --user status msty-nexus-runtime.service
 curl http://100.94.80.21:3939/health
 ```
 
-Configure Freyja:
+Freyja now seeds Nexus preset endpoints by default while keeping direct Ollama
+providers as local fallback. To override from the environment:
 
 ```sh
 export FREYJA3_INFERENCE_ENDPOINTS='[{"endpoint_id":"vulcan-nexus-fast","display_name":"Vulcan Nexus fast local preset","provider":"nexus","machine_id":"vulcan","base_url":"http://100.94.80.21:3939","model":"@preset/freyja-fast-local","capabilities":["general.local","chat"],"security_domain_id":"household","priority":12},{"endpoint_id":"vulcan-nexus-strong","display_name":"Vulcan Nexus strong local preset","provider":"nexus","machine_id":"vulcan","base_url":"http://100.94.80.21:3939","model":"@preset/freyja-strong-local","capabilities":["general.large","reasoning"],"security_domain_id":"household","priority":12},{"endpoint_id":"vulcan-nexus-coder","display_name":"Vulcan Nexus coder preset","provider":"nexus","machine_id":"vulcan","base_url":"http://100.94.80.21:3939","model":"@preset/freyja-coder","capabilities":["code.large","coding"],"security_domain_id":"household","priority":12}]'
