@@ -4,17 +4,14 @@ Last updated: 2026-08-30.
 
 ## Status
 
-Verdict for this run: continue testing. Nexus was not reachable on Vulcan from
-Iris at the documented default runtime port, and SSH inspection of Vulcan was
-blocked by host-key verification. Existing non-Nexus Vulcan inference remains
-healthy.
+Verdict for this run: adopt Nexus for the Freyja 4.0 local Vulcan model-gateway
+path. Keep cloud research disabled until separate cloud egress and budget review.
 
-Latest retry on 2026-08-30: `scripts/nexus-smoke.py --base-url
-http://100.94.80.21:3939` still returned `ready: false` with `URLError` for
-health, version, models, chat, bad-token, and bad-model checks. SSH inspection
-still failed with `Host key verification failed`. Existing Vulcan
-OpenAI-compatible proxy chat on `http://100.94.80.21:8088/v1/chat/completions`
-still returned the expected local response from `qwen2.5:32b-instruct`.
+Nexus Runtime is installed from the official Linux AppImage on Vulcan, runs as a
+Joe user-level systemd service, exposes an OpenAI-compatible API over Tailscale,
+registers Vulcan's existing local Ollama runtime, lists local models/presets,
+returns successful chat completions, and produces explicit bad-token and
+bad-model failures.
 
 ## Official Nexus Reference Points
 
@@ -49,33 +46,44 @@ tailscale status showed:
 100.119.235.114 atlas linux idle
 ```
 
-SSH inspection:
+SSH and install inspection:
 
 ```text
-ssh -o BatchMode=yes -o ConnectTimeout=5 vulcan ...
-Host key verification failed.
+ssh joe@100.94.80.21 -> hostname Vulcan
+official AppImage: /home/joe/Applications/Msty-Nexus_x86_64.AppImage
+extracted runtime: /home/joe/Applications/squashfs-root/usr/bin/msty-nexus
+user service: msty-nexus-runtime.service enabled and active
 ```
 
-BLOCKER: Joe must repair or approve the SSH host key for Vulcan, then rerun the
-Vulcan filesystem/systemd inspection:
-
-```sh
-ssh-keygen -R vulcan
-ssh-keygen -R 100.94.80.21
-ssh vulcan 'hostname; command -v msty-nexus msty-nexusctl msty || true; systemctl --user --no-pager --type=service --all | grep -iE "msty|nexus" || true; systemctl --no-pager --type=service --all | grep -iE "msty|nexus" || true; ss -ltnp | grep -iE "3939|msty|nexus" || true'
-```
-
-Nexus runtime probe from Iris to Vulcan:
+Runtime:
 
 ```text
-http://100.94.80.21:3939/health    -> connection refused
-http://100.94.80.21:3939/v1/models -> connection refused
-TCP scan 3900-3960                 -> no open ports
+GET http://100.94.80.21:3939/health -> {"status":"ok"}
+GET http://100.94.80.21:3939/version -> msty-nexus 0.4.1, linux/amd64
+listen address -> 0.0.0.0:3939 and [::]:3939
 ```
 
-Interpretation: no Nexus Runtime was reachable on the documented default port
-or nearby ports from Iris over Tailscale during this run. This does not prove
-Nexus is absent from disk because SSH inspection was blocked.
+Provider and models:
+
+```text
+provider id: vulcan-ollama
+provider kind: ollama
+provider base URL inside Vulcan: http://127.0.0.1:11434/v1
+autoProxyModels: true
+models listed through Nexus: 16 including presets and local Ollama models
+```
+
+Configured local presets:
+
+- `@preset/freyja-fast-local` -> `vulcan-ollama/qwen2.5:7b`
+- `@preset/freyja-strong-local` -> `vulcan-ollama/qwen2.5:32b-instruct`
+- `@preset/freyja-coder` -> `vulcan-ollama/qwen3-coder-next:q4_K_M`
+- `@preset/freyja-vision-docs` -> `vulcan-ollama/qwen2.5vl:72b`
+- `@preset/freyja-private-local` -> `vulcan-ollama/qwen2.5:32b-instruct`
+- `@preset/benedict-paralegal-local` -> `vulcan-ollama/qwen2.5:32b-instruct`
+
+All configured local presets use `routing.preferLocal=true`,
+`allowFallbacks=false`, and `allowPaidFallback=false`.
 
 ## Existing Vulcan Runtime Evidence
 
@@ -122,14 +130,17 @@ result: assistant returned "vulcan-chat-ok"
 
 ## Token Notes
 
-- No Nexus token was found or committed.
-- Freyja config now uses `NEXUS_API_KEY` for provider `nexus`; it does not reuse
+- Runtime token is stored on Vulcan at
+  `/home/joe/.config/freyja/msty-nexus-token` and injected into the user service
+  through `/home/joe/.config/freyja/msty-nexus-runtime.env`.
+- Freyja config uses `NEXUS_API_KEY` for provider `nexus`; it does not reuse
   `LITELLM_MASTER_KEY`.
-- Any real Nexus local client token must be stored outside git.
+- No Nexus token was committed. Smoke output reports only `token_configured`
+  and `token_value: <redacted>`.
 
-## Required Remaining Nexus Tests
+## Nexus Smoke Results
 
-After Nexus is installed/running on Vulcan and LAN/Tailscale access is enabled:
+From Iris:
 
 ```sh
 NEXUS_BASE_URL=http://100.94.80.21:3939 \
@@ -137,31 +148,44 @@ NEXUS_API_KEY='<local Nexus client token>' \
 scripts/nexus-smoke.py --output logs/nexus-smoke.json
 ```
 
-Equivalent manual checks:
+Result:
 
-```sh
-curl http://100.94.80.21:3939/health
-curl http://100.94.80.21:3939/version
-curl http://100.94.80.21:3939/v1/models \
-  -H "Authorization: Bearer $NEXUS_API_KEY"
-curl http://100.94.80.21:3939/v1/chat/completions \
-  -H "Authorization: Bearer $NEXUS_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"@preset/freyja-fast-local","messages":[{"role":"user","content":"Reply exactly: nexus-ok"}],"stream":false}'
+```text
+ready: true
+health: 200
+version: 200, msty-nexus 0.4.1
+models: 200, 16 visible model entries
+chat: 200, resolved_model qwen2.5:7b, response_matched true
+bad_token: 401 UNAUTHORIZED
+bad_model: 404 MODEL_NOT_FOUND
 ```
 
-Also verify bad-token and bad-model behavior:
+Freyja runtime smoke from Iris:
 
-```sh
-curl http://100.94.80.21:3939/v1/models \
-  -H "Authorization: Bearer bad-token"
-curl http://100.94.80.21:3939/v1/chat/completions \
-  -H "Authorization: Bearer $NEXUS_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"@preset/not-a-real-preset","messages":[{"role":"user","content":"test"}],"stream":false}'
+```text
+endpoint: vulcan-nexus-fast
+machine: vulcan
+model: @preset/freyja-fast-local
+status: ok
+response: freyja-nexus-ok
 ```
 
-Expected: explicit unauthorized / invalid model errors, no silent cloud fallback.
+Strong/local route smoke:
 
-The smoke script writes a redacted JSON report and omits model responses,
-request bodies, local paths, and token values.
+```text
+endpoint: vulcan-nexus-strong
+machine: vulcan
+model: @preset/freyja-strong-local
+status: ok
+response: freyja-nexus-strong-ok
+```
+
+Bad Freyja-side Nexus token/model tests returned `inference_status=error` and
+did not silently fall back to cloud.
+
+## Remaining Follow-Up
+
+- `freyja-cloud-research` was intentionally not configured or tested because
+  the evaluation rule says not to burn cloud tokens.
+- If cloud research is added later, configure it only after Freyja's
+  Privacy/Egress Gate and budget policy approve the route.

@@ -69,6 +69,7 @@ def _request(
             key.lower() in {"x-msty-nexus-request-id", "x-request-id", "request-id"}
             for key in response_headers
         ),
+        "raw_body": parsed,
         "body": _safe_body(parsed),
     }
 
@@ -115,6 +116,27 @@ def _chat_payload(model: str, content: str) -> dict[str, Any]:
     }
 
 
+def _chat_response_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    choices = value.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first = choices[0]
+    if not isinstance(first, dict):
+        return ""
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return ""
+    return str(message.get("content") or "").strip()
+
+
+def _chat_response_model(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    return str(value.get("model") or "")
+
+
 def run_smoke(base_url: str, token: str, model: str) -> dict[str, Any]:
     base = base_url.rstrip("/")
     report = {
@@ -138,6 +160,9 @@ def run_smoke(base_url: str, token: str, model: str) -> dict[str, Any]:
         payload=_chat_payload(model, "Reply exactly: nexus-ok"),
         timeout=60.0,
     )
+    checks["chat"]["response_matched"] = _chat_response_text(checks["chat"].get("raw_body")) == "nexus-ok"
+    checks["chat"]["resolved_model"] = _chat_response_model(checks["chat"].get("raw_body"))
+    checks["chat"].pop("raw_body", None)
     checks["bad_token"] = _request("GET", f"{base}/v1/models", token="bad-token", timeout=10.0)
     checks["bad_model"] = _request(
         "POST",
@@ -146,10 +171,13 @@ def run_smoke(base_url: str, token: str, model: str) -> dict[str, Any]:
         payload=_chat_payload(BAD_MODEL, "test"),
         timeout=20.0,
     )
+    for check in checks.values():
+        check.pop("raw_body", None)
     report["ready"] = (
         checks["health"].get("ok") is True
         and checks["models"].get("ok") is True
         and checks["chat"].get("ok") is True
+        and checks["chat"].get("response_matched") is True
         and checks["bad_token"].get("ok") is False
         and checks["bad_model"].get("ok") is False
     )

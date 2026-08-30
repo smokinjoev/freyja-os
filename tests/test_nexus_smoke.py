@@ -45,7 +45,10 @@ def test_run_smoke_reports_ready_only_with_successful_gateway_and_expected_failu
         calls.append((method, url, token, payload, timeout))
         if "not-a-real-preset" in str(payload) or token == "bad-token":
             return {"ok": False, "status": 401 if token == "bad-token" else 404}
-        return {"ok": True, "status": 200, "body": {"data": [{"id": "model"}]}}
+        body = {"data": [{"id": "model"}]}
+        if payload and payload.get("messages"):
+            body = {"model": "qwen", "choices": [{"message": {"content": "nexus-ok"}}]}
+        return {"ok": True, "status": 200, "body": smoke._safe_body(body), "raw_body": body}
 
     monkeypatch.setattr(smoke, "_request", fake_request)
 
@@ -54,5 +57,25 @@ def test_run_smoke_reports_ready_only_with_successful_gateway_and_expected_failu
     assert report["ready"] is True
     assert report["base_url"] == "http://nexus.test:3939"
     assert report["token_value"] == "<redacted>"
+    assert report["checks"]["chat"]["response_matched"] is True
+    assert report["checks"]["chat"]["resolved_model"] == "qwen"
+    assert all("raw_body" not in check for check in report["checks"].values())
     assert calls[2][1] == "http://nexus.test:3939/v1/models"
     assert calls[3][3]["model"] == "@preset/freyja-fast-local"
+
+
+def test_run_smoke_not_ready_when_chat_text_does_not_match(monkeypatch) -> None:
+    smoke = _load_smoke()
+
+    def fake_request(method, url, *, token="", payload=None, timeout=20.0):
+        if "not-a-real-preset" in str(payload) or token == "bad-token":
+            return {"ok": False, "status": 404}
+        body = {"choices": [{"message": {"content": "wrong"}}]} if payload else {}
+        return {"ok": True, "status": 200, "body": smoke._safe_body(body), "raw_body": body}
+
+    monkeypatch.setattr(smoke, "_request", fake_request)
+
+    report = smoke.run_smoke("http://nexus.test:3939", "real-token", "@preset/freyja-fast-local")
+
+    assert report["ready"] is False
+    assert report["checks"]["chat"]["response_matched"] is False
