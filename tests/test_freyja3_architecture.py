@@ -12,7 +12,7 @@ from freyja.inference_registry_v3 import InferenceRegistryV3
 import freyja.main as freyja_main
 from freyja.main import app
 from fastapi.testclient import TestClient
-from freyja.config import settings
+from freyja.config import Settings, settings
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolExecutionResult, ToolRiskLevel
 
 
@@ -908,6 +908,47 @@ focuses:
     assert result.selected_tools == ("home-assistant.read",)
     assert fake_registry.requests[0].arguments == {"domain": "sensor"}
     assert result.response_text == "CO2 sensors: Basement CO2: 612ppm."
+
+
+def test_home_assistant_token_accepts_legacy_env_alias(monkeypatch) -> None:
+    monkeypatch.delenv("HOME_ASSISTANT_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "legacy-ha-token")
+
+    configured = Settings(_env_file=None)
+
+    assert configured.home_assistant_access_token == "legacy-ha-token"
+
+
+def test_home_assistant_access_token_takes_precedence_over_legacy_alias(monkeypatch) -> None:
+    monkeypatch.setenv("HOME_ASSISTANT_ACCESS_TOKEN", "current-ha-token")
+    monkeypatch.setenv("HOME_ASSISTANT_TOKEN", "legacy-ha-token")
+
+    configured = Settings(_env_file=None)
+
+    assert configured.home_assistant_access_token == "current-ha-token"
+
+
+def test_home_assistant_default_focus_overlay_is_valid() -> None:
+    freyja.agent_runtime_v3._home_assistant_focuses.cache_clear()
+    try:
+        focuses = freyja.agent_runtime_v3._home_assistant_focuses()
+    finally:
+        freyja.agent_runtime_v3._home_assistant_focuses.cache_clear()
+
+    assert focuses["temperature"]["label"] == "Temperature sensors"
+    assert "co2" not in focuses
+
+
+def test_home_assistant_invalid_focus_overlay_falls_back_to_defaults(monkeypatch, tmp_path) -> None:
+    focus_path = tmp_path / "home-assistant-focuses.yaml"
+    focus_path.write_text("focuses: [not-a-mapping\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "home_assistant_focus_config_path", str(focus_path))
+    freyja.agent_runtime_v3._home_assistant_focuses.cache_clear()
+
+    try:
+        assert freyja.agent_runtime_v3.home_assistant_focus_for_text("temperature in my home") == "temperature"
+    finally:
+        freyja.agent_runtime_v3._home_assistant_focuses.cache_clear()
 
 
 def test_home_assistant_focus_overlay_retargets_to_household_agent(monkeypatch, tmp_path) -> None:

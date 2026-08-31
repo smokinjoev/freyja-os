@@ -37,6 +37,8 @@ async def test_home_assistant_inventory_monitor_executes_inventory_tool(
 ) -> None:
     monkeypatch.setattr(settings, "home_assistant_inventory_snapshot_path", str(tmp_path / "ha-inventory.json"))
     monkeypatch.setattr(settings, "home_assistant_state_fixture", '{"sensor.kitchen_temperature":"72"}')
+    monkeypatch.setattr(settings, "home_assistant_base_url", "")
+    monkeypatch.setattr(settings, "home_assistant_access_token", "")
 
     result = await poll_home_assistant_inventory_once(registry)
 

@@ -1538,6 +1538,8 @@ class TestToolLoop:
             "home_assistant_state_fixture",
             '{"sensor.kitchen_temperature":"72","sensor.front_door_battery":"88","light.downstairs":"on"}',
         )
+        monkeypatch.setattr(settings, "home_assistant_base_url", "")
+        monkeypatch.setattr(settings, "home_assistant_access_token", "")
         router.ollama_client.chat.return_value = {
             "model": "qwen2.5:7b",
             "message": {"content": "model should not run"},
@@ -1589,6 +1591,8 @@ class TestToolLoop:
     ) -> None:
         monkeypatch.setattr(settings, "home_assistant_inventory_snapshot_path", str(tmp_path / "ha-inventory.json"))
         monkeypatch.setattr(settings, "home_assistant_state_fixture", '{"light.downstairs":"on"}')
+        monkeypatch.setattr(settings, "home_assistant_base_url", "")
+        monkeypatch.setattr(settings, "home_assistant_access_token", "")
         principal = MemoryPrincipal(client_type="imessage", client_subject="family-member:abc")
         await router.execute(
             RouteRequest(

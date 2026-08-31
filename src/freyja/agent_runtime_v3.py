@@ -6,9 +6,12 @@ import json
 import os
 import re
 from collections.abc import Iterable
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import httpx
+import yaml
 
 from freyja.config import settings
 from freyja.foundation_models import (
@@ -33,6 +36,78 @@ from freyja.privacy_egress import PrivacyEgressGate
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry
 from freyja.tools.weather import classify_weather_request
+
+
+_HOME_ASSISTANT_FOCUS_DEFAULTS: dict[str, dict[str, Any]] = {
+    "temperature": {
+        "label": "Temperature sensors",
+        "domains": {"sensor"},
+        "keywords": {"temperature", "temp"},
+        "device_classes": {"temperature"},
+        "units": {"f", "c", "°f", "°c"},
+        "entity_keywords": {"temperature"},
+    },
+    "humidity": {
+        "label": "Humidity sensors",
+        "domains": {"sensor"},
+        "keywords": {"humidity"},
+        "device_classes": {"humidity"},
+        "units": {"%"},
+        "entity_keywords": {"humidity"},
+    },
+    "power": {
+        "label": "Power sensors",
+        "domains": {"sensor"},
+        "keywords": {"power", "usage", "watts"},
+        "device_classes": {"power"},
+        "units": {"w", "kw"},
+        "entity_keywords": {"power"},
+    },
+    "energy": {
+        "label": "Energy sensors",
+        "domains": {"sensor"},
+        "keywords": {"energy", "kwh"},
+        "device_classes": {"energy"},
+        "units": {"wh", "kwh", "mwh"},
+        "entity_keywords": {"energy"},
+    },
+    "electric": {
+        "label": "Electric sensors",
+        "domains": {"sensor"},
+        "keywords": {"electric", "electricity"},
+        "device_classes": {"power", "energy", "voltage", "current"},
+        "units": {"w", "kw", "wh", "kwh", "v", "a"},
+        "entity_keywords": {"electric"},
+    },
+    "battery": {
+        "label": "Battery sensors",
+        "domains": {"sensor"},
+        "keywords": {"battery"},
+        "device_classes": {"battery"},
+        "units": {"%"},
+        "entity_keywords": {"battery"},
+    },
+    "voltage": {
+        "label": "Voltage sensors",
+        "domains": {"sensor"},
+        "keywords": {"voltage"},
+        "device_classes": {"voltage"},
+        "units": {"v"},
+        "entity_keywords": {"voltage"},
+    },
+    "current": {
+        "label": "Current sensors",
+        "domains": {"sensor"},
+        "keywords": {"current", "amps", "amperage"},
+        "device_classes": {"current"},
+        "units": {"a"},
+        "entity_keywords": {"current"},
+    },
+}
+
+
+def home_assistant_focus_for_text(text: str) -> str | None:
+    return _home_assistant_sensor_focus(text.lower())
 
 
 class MemoryBoundaryError(PermissionError):
@@ -80,11 +155,7 @@ class AgentRuntimeV3:
     async def arun(self, handoff: GatewayHandoff) -> AgentExecutionResult:
         agent = self._agent(handoff.target_agent_id)
         capability = self.choose_inference_capability(handoff.prompt, bool(handoff.attachments))
-        selected_tools = (
-            self.choose_tools(agent, handoff.prompt, handoff.available_tools)
-            if not self._run_inference or ("coding.execute" in agent.tool_grants and capability == "code.large")
-            else []
-        )
+        selected_tools = self.choose_tools(agent, handoff.prompt, handoff.available_tools)
         steps: list[AgentStep] = [
             AgentStep(kind="objective_received", detail=handoff.prompt),
         ]
@@ -106,6 +177,30 @@ class AgentRuntimeV3:
 
         executable_tools = [tool_id for tool_id in selected_tools if tool_id not in _MUTATION_CAPABILITIES or not follow_up_questions]
         tool_results = await self._run_tool_loop(agent, handoff, selected_tools, executable_tools, steps, audit_events)
+
+        deterministic_response = None if follow_up_questions else _home_assistant_response(handoff.prompt, tool_results)
+        if deterministic_response:
+            memory_candidates = self._propose_memory_candidates(agent, handoff, steps, audit_events)
+            written_memories = self._write_agent_memories(agent, handoff, selected_tools, tool_results, steps, audit_events)
+            return AgentExecutionResult(
+                trace_id=handoff.handoff_id,
+                agent_id=agent.agent_id,
+                conversation_id=handoff.conversation_id,
+                response_text=deterministic_response,
+                selected_tools=tuple(selected_tools),
+                tool_results=tuple(tool_results),
+                recalled_memories=tuple(recalled_memories),
+                written_memories=tuple(written_memories),
+                memory_candidates=tuple(memory_candidates),
+                follow_up_questions=tuple(follow_up_questions),
+                inference_endpoint_id=None,
+                inference_model=None,
+                inference_machine_id=None,
+                inference_status=None,
+                steps=tuple(steps),
+                audit_events=tuple(audit_events),
+                degraded=False,
+            )
 
         selected_capability = capability
         endpoint = self._first_healthy_endpoint(agent, selected_capability)
@@ -395,7 +490,33 @@ class AgentRuntimeV3:
             ("calendar.read", ("calendar", "calender", "schedule", "appointment")),
             ("email.read", ("email", "mail")),
             ("messaging.send", ("message", "imessage", "text ", "sms")),
-            ("home-assistant.read", ("home assistant state", "home assistant states", "list home assistant", "show home assistant", "house state", "light states")),
+            (
+                "home-assistant.read",
+                (
+                    "home assistant",
+                    "house state",
+                    "home state",
+                    "in my home",
+                    "at home",
+                    "lights",
+                    "sensors",
+                    "devices",
+                    "thermostat",
+                    "humidity",
+                    "power",
+                    "energy",
+                    "battery",
+                    "voltage",
+                    "current",
+                    "electric",
+                    "electricity",
+                    "outlet",
+                    "temperature",
+                    "door",
+                    "lock",
+                    "garage",
+                ),
+            ),
             ("home-assistant.control", ("turn on", "turn off", "switch on", "switch off", "lock", "unlock", "open", "close")),
             ("macagent.apple", ("mac", "finder", "safari", "shortcut", "apple")),
             ("shell.run", ("shell", "command", "terminal")),
@@ -414,6 +535,16 @@ class AgentRuntimeV3:
         for tool_id, terms in rules:
             if tool_id in allowed and any(term in lowered for term in terms):
                 candidates.append(tool_id)
+        if "home-assistant.read" in allowed and "home-assistant.read" not in candidates and home_assistant_focus_for_text(lowered):
+            candidates.append("home-assistant.read")
+        if "home-assistant.control" in candidates and "home-assistant.read" in candidates:
+            candidates.remove("home-assistant.read")
+        if (
+            "weather.current" in candidates
+            and "home-assistant.read" in candidates
+            and not any(term in lowered for term in ("weather", "forecast", "outside", "outdoor"))
+        ):
+            candidates.remove("weather.current")
         return candidates
 
     def _follow_up_questions(
@@ -1068,6 +1199,9 @@ class AgentRuntimeV3:
                 f"{agent.display_name} received the objective, but no healthy Vulcan inference endpoint is available. "
                 "Iris can handle simple local work; cloud requires policy approval."
             )
+        home_response = _home_assistant_response(handoff.prompt, tool_results)
+        if home_response:
+            return home_response
         if inference_text:
             return inference_text
         tool_text = ", ".join(selected_tools) if selected_tools else "no tools"
@@ -1092,6 +1226,8 @@ class AgentRuntimeV3:
             return {"conversation_id": handoff.conversation_id, "limit": 10}
         if capability_id == "memory.shared":
             return {"query": objective, "limit": 5}
+        if capability_id == "home-assistant.read":
+            return _home_assistant_read_arguments(objective)
         if capability_id == "home-assistant.control":
             return _home_assistant_control_arguments(objective)
         return {}
@@ -1295,6 +1431,188 @@ def _has_home_action_detail(lowered_objective: str) -> bool:
     has_action = any(term in lowered_objective for term in ("turn on", "turn off", "set ", "lock", "unlock", "open", "close"))
     has_target = any(term in lowered_objective for term in ("light", "thermostat", "door", "lock", "kitchen", "living room", "bedroom", "garage"))
     return has_action and has_target
+
+
+def _home_assistant_read_arguments(objective: str) -> dict[str, Any]:
+    lowered = objective.lower()
+    if "light" in lowered:
+        return {"domain": "light"}
+    if "lock" in lowered or "door" in lowered:
+        return {"domain": "lock"}
+    if "thermostat" in lowered or "climate" in lowered:
+        return {"domain": "climate"}
+    if "cover" in lowered or "garage" in lowered:
+        return {"domain": "cover"}
+    if "switch" in lowered:
+        return {"domain": "switch"}
+    focus = _home_assistant_sensor_focus(lowered)
+    if focus:
+        domains = _home_assistant_focuses()[focus].get("domains") or set()
+        if len(domains) == 1:
+            return {"domain": next(iter(domains))}
+        return {"domain": "sensor"}
+    if "sensor" in lowered:
+        return {"domain": "sensor"}
+    return {}
+
+
+def _home_assistant_response(objective: str, tool_results: list[dict[str, Any]]) -> str | None:
+    for result in tool_results:
+        if result.get("capability_id") != "home-assistant.read" or result.get("success") is not True:
+            continue
+        output = result.get("output")
+        if not isinstance(output, dict):
+            continue
+        entities = output.get("entities")
+        if not isinstance(entities, list):
+            continue
+        lowered = objective.lower()
+        matching_entities = _home_assistant_matching_entities(lowered, entities)
+        if any(term in lowered for term in ("how many", "count", "number of")):
+            countable_entities = matching_entities or entities
+            on_entities = [
+                entity
+                for entity in countable_entities
+                if isinstance(entity, dict) and str(entity.get("state") or "").lower() == "on"
+            ]
+            domain = _home_assistant_domain_label(output, countable_entities)
+            return f"{len(on_entities)} {domain} are on."
+        if matching_entities:
+            samples = [_home_assistant_state_line(entity) for entity in matching_entities[:8] if isinstance(entity, dict)]
+            label = _home_assistant_focus_label(lowered) or _home_assistant_domain_label(output, matching_entities)
+            return f"{label}: " + "; ".join(samples) + "."
+        samples = []
+        for entity in entities[:8]:
+            if not isinstance(entity, dict):
+                continue
+            samples.append(_home_assistant_state_line(entity))
+        if samples:
+            domain = _home_assistant_domain_label(output, entities)
+            total = int(output.get("count") or len(entities))
+            return f"I can see {total} {domain}: " + "; ".join(samples) + "."
+    return None
+
+
+def _home_assistant_matching_entities(lowered_objective: str, entities: list[Any]) -> list[dict[str, Any]]:
+    focus = _home_assistant_sensor_focus(lowered_objective)
+    if not focus:
+        return []
+    matches: list[dict[str, Any]] = []
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+        if _home_assistant_entity_matches_focus(entity, focus):
+            matches.append(entity)
+    available_matches = [entity for entity in matches if _home_assistant_entity_available(entity)]
+    return available_matches or matches
+
+
+def _home_assistant_entity_matches_focus(entity: dict[str, Any], focus: str) -> bool:
+    focus_config = _home_assistant_focuses().get(focus)
+    if not focus_config:
+        return False
+    device_class = str(entity.get("device_class") or "").lower()
+    unit = str(entity.get("unit_of_measurement") or "").lower()
+    name = " ".join(str(entity.get(key) or "").lower() for key in ("entity_id", "friendly_name"))
+    device_classes = focus_config.get("device_classes") or set()
+    units = focus_config.get("units") or set()
+    entity_keywords = focus_config.get("entity_keywords") or set()
+    return (
+        bool(device_class and device_class in device_classes)
+        or bool(unit and unit in units)
+        or any(keyword in name for keyword in entity_keywords)
+    )
+
+
+def _home_assistant_entity_available(entity: dict[str, Any]) -> bool:
+    return str(entity.get("state") or "").lower() not in {"unknown", "unavailable", ""}
+
+
+def _home_assistant_sensor_focus(lowered_objective: str) -> str | None:
+    for focus_id, focus_config in _home_assistant_focuses().items():
+        keywords = focus_config.get("keywords") or set()
+        if any(keyword in lowered_objective for keyword in keywords):
+            return focus_id
+    return None
+
+
+def _home_assistant_focus_label(lowered_objective: str) -> str | None:
+    focus = _home_assistant_sensor_focus(lowered_objective)
+    if not focus:
+        return None
+    return str(_home_assistant_focuses()[focus].get("label") or focus.replace("_", " ").title())
+
+
+def _home_assistant_state_line(entity: dict[str, Any]) -> str:
+    name = str(entity.get("friendly_name") or entity.get("entity_id") or "unknown")
+    state = str(entity.get("state") or "unknown")
+    unit = str(entity.get("unit_of_measurement") or "")
+    return f"{name}: {state}{unit}"
+
+
+def _home_assistant_domain_label(output: dict[str, Any], entities: list[Any]) -> str:
+    domains = {
+        str(entity.get("domain") or "")
+        for entity in entities
+        if isinstance(entity, dict) and str(entity.get("domain") or "")
+    }
+    if len(domains) == 1:
+        domain = next(iter(domains)).replace("_", " ")
+        return "lights" if domain == "light" else f"{domain} states"
+    return "Home Assistant states"
+
+
+@lru_cache(maxsize=1)
+def _home_assistant_focuses() -> dict[str, dict[str, Any]]:
+    focuses = {
+        focus_id: {
+            key: set(value) if isinstance(value, set) else value
+            for key, value in focus.items()
+        }
+        for focus_id, focus in _HOME_ASSISTANT_FOCUS_DEFAULTS.items()
+    }
+    overlay_path = Path(settings.home_assistant_focus_config_path).expanduser()
+    if not overlay_path.is_absolute():
+        overlay_path = Path.cwd() / overlay_path
+    try:
+        data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, yaml.YAMLError):
+        return focuses
+    raw_focuses = data.get("focuses") if isinstance(data, dict) else None
+    if not isinstance(raw_focuses, dict):
+        return focuses
+    for raw_focus_id, raw_focus in raw_focuses.items():
+        focus_id = _home_assistant_safe_focus_id(raw_focus_id)
+        if not focus_id or not isinstance(raw_focus, dict):
+            continue
+        merged = dict(focuses.get(focus_id, {}))
+        merged["label"] = str(raw_focus.get("label") or merged.get("label") or focus_id.replace("_", " ").title())
+        for key in ("domains", "keywords", "device_classes", "units", "entity_keywords"):
+            values = _home_assistant_string_set(raw_focus.get(key))
+            if values:
+                merged[key] = values
+            elif key not in merged:
+                merged[key] = set()
+        if merged.get("keywords") or merged.get("device_classes") or merged.get("entity_keywords"):
+            focuses[focus_id] = merged
+    return focuses
+
+
+def _home_assistant_safe_focus_id(value: Any) -> str:
+    focus_id = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not re.fullmatch(r"[a-z0-9_]{1,64}", focus_id):
+        return ""
+    return focus_id
+
+
+def _home_assistant_string_set(value: Any) -> set[str]:
+    if isinstance(value, str):
+        items = [value]
+    elif isinstance(value, list | tuple | set):
+        items = list(value)
+    else:
+        return set()
+    return {str(item).strip().lower() for item in items if str(item).strip()}
 
 
 def _approval_granted(capability_id: str, permissions: frozenset[str]) -> bool:

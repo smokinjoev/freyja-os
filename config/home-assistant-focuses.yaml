@@ -1,0 +1,15 @@
+# Home Assistant focus overlays for Freyja.
+#
+# Smith can add entries here when a new household sensor type appears.
+# Each key is an internal focus id. Keep ids lowercase with underscores.
+#
+# Example:
+# freezer_temperature:
+#   label: Freezer temperature
+#   domains: [sensor]
+#   keywords: [freezer temp, freezer temperature]
+#   device_classes: [temperature]
+#   entity_keywords: [freezer]
+#   units: ["°F", "°C"]
+
+focuses: {}

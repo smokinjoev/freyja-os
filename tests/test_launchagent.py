@@ -25,12 +25,12 @@ def test_plist_exists_and_has_expected_label() -> None:
     assert data["UserName"] == "freyja"
 
 
-def test_plist_arguments_bind_localhost_only() -> None:
+def test_plist_arguments_bind_atlas_gateway_port() -> None:
     with open(PLIST_SRC, "rb") as f:
         data = plistlib.load(f)
 
     args = data.get("ProgramArguments", [])
-    assert "127.0.0.1" in args, "Director must bind to 127.0.0.1"
+    assert "0.0.0.0" in args, "Atlas gateway must accept LAN/tailnet clients"
     assert "8000" in args, "Director port must be 8000"
 
 

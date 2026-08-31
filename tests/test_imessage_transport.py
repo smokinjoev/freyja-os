@@ -238,6 +238,7 @@ async def test_recent_messages_reads_messages_database(tmp_path):
             ROWID INTEGER PRIMARY KEY,
             guid TEXT,
             text TEXT,
+            attributedBody BLOB,
             handle_id INTEGER,
             date INTEGER,
             is_from_me INTEGER,
@@ -261,11 +262,11 @@ async def test_recent_messages_reads_messages_database(tmp_path):
     connection.execute("INSERT INTO handle VALUES (1, '+15551234567')")
     connection.execute("INSERT INTO chat VALUES (4, '+15551234567', 45)")
     connection.execute(
-        "INSERT INTO message VALUES (1, 'msg-1', 'first', 1, ?, 0, 0)",
+        "INSERT INTO message VALUES (1, 'msg-1', 'first', NULL, 1, ?, 0, 0)",
         (1_000_000_000,),
     )
     connection.execute(
-        "INSERT INTO message VALUES (2, 'msg-2', 'second', 1, ?, 0, 0)",
+        "INSERT INTO message VALUES (2, 'msg-2', 'second', NULL, 1, ?, 0, 0)",
         (2_000_000_000,),
     )
     connection.execute("INSERT INTO chat_message_join VALUES (4, 1)")
@@ -301,6 +302,7 @@ async def test_recent_messages_reads_photo_only_database_messages(tmp_path):
             ROWID INTEGER PRIMARY KEY,
             guid TEXT,
             text TEXT,
+            attributedBody BLOB,
             handle_id INTEGER,
             date INTEGER,
             is_from_me INTEGER,
@@ -333,7 +335,7 @@ async def test_recent_messages_reads_photo_only_database_messages(tmp_path):
     connection.execute("INSERT INTO handle VALUES (1, '+15551234567')")
     connection.execute("INSERT INTO chat VALUES (4, '+15551234567', 45)")
     connection.execute(
-        "INSERT INTO message VALUES (1, 'photo-1', NULL, 1, ?, 0, 0)",
+        "INSERT INTO message VALUES (1, 'photo-1', NULL, NULL, 1, ?, 0, 0)",
         (1_000_000_000,),
     )
     connection.execute(

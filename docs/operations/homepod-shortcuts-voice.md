@@ -19,15 +19,19 @@ and is already part of the household Apple setup.
 Current Iris options:
 
 ```text
-http://10.1.10.136:8300/shortcuts/message
-http://100.115.228.56:8300/shortcuts/message
+http://10.1.10.136:8000/shortcuts/message
+http://100.115.228.56:8000/shortcuts/message
 ```
 
 Server-side Atlas option:
 
 ```text
-http://100.119.235.114:8300/shortcuts/message
+http://100.119.235.114:8000/shortcuts/message
 ```
+
+Atlas also answered health checks on legacy port `8300` during the 2026-08-30
+verification pass, but new Shortcuts should use `8000` unless the deployed
+service mapping is deliberately changed.
 
 If `FREYJA_CONNECTOR_TOKEN` is set on the selected server, include:
 
@@ -90,7 +94,7 @@ Calendar writes must still ask for confirmation before changing anything.
 From a shell on the same network:
 
 ```bash
-curl -fsS -X POST "http://100.119.235.114:8300/shortcuts/message" \
+curl -fsS -X POST "http://100.119.235.114:8000/shortcuts/message" \
   -H "Content-Type: application/json" \
   -d '{"prompt":"What is on my calendar?","conversation_id":"homepod-smoke","sender":"homepod","tools_required":true}'
 ```

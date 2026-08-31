@@ -297,9 +297,10 @@ def test_homepod_shortcuts_voice_runbook_documents_live_shortcut_contract() -> N
 
     assert "POST /shortcuts/message" in docs
     assert "prefer Iris" in docs
-    assert "http://10.1.10.136:8300/shortcuts/message" in docs
-    assert "http://100.115.228.56:8300/shortcuts/message" in docs
-    assert "http://100.119.235.114:8300/shortcuts/message" in docs
+    assert "http://10.1.10.136:8000/shortcuts/message" in docs
+    assert "http://100.115.228.56:8000/shortcuts/message" in docs
+    assert "http://100.119.235.114:8000/shortcuts/message" in docs
+    assert "legacy port `8300`" in docs
     assert "Authorization: Bearer <FREYJA_CONNECTOR_TOKEN>" in docs
     assert '"prompt": "Dictated Text"' in docs
     assert '"conversation_id": "homepod"' in docs

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -160,10 +160,14 @@ class Settings(BaseSettings):
 
     weather_tool_enabled: bool = False
     home_assistant_base_url: str = ""
-    home_assistant_access_token: str = ""
+    home_assistant_access_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("HOME_ASSISTANT_ACCESS_TOKEN", "HOME_ASSISTANT_TOKEN"),
+    )
     home_assistant_location_name: str = "Atlanta"
     home_assistant_allowed_control_domains: str = "light"
     home_assistant_state_fixture: str = '{"light.downstairs":"on"}'
+    home_assistant_focus_config_path: str = "config/home-assistant-focuses.yaml"
     home_assistant_inventory_snapshot_path: str = str(_default_state_dir() / "home-assistant-inventory.json")
     home_assistant_inventory_poll_enabled: bool = True
     home_assistant_inventory_poll_interval_seconds: int = 600

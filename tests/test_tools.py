@@ -846,6 +846,8 @@ def test_home_assistant_list_states_exposes_fixture_sensors_for_household_princi
         "home_assistant_state_fixture",
         '{"sensor.kitchen_temperature":"72","light.downstairs":"on"}',
     )
+    monkeypatch.setattr(settings, "home_assistant_base_url", "")
+    monkeypatch.setattr(settings, "home_assistant_access_token", "")
     register_builtin_tools(registry)
     result = asyncio_run(
         registry.execute(
@@ -875,6 +877,8 @@ def test_home_assistant_inventory_changes_detects_added_and_removed_entities(
     tmp_path,
 ) -> None:
     monkeypatch.setattr(settings, "home_assistant_inventory_snapshot_path", str(tmp_path / "ha-inventory.json"))
+    monkeypatch.setattr(settings, "home_assistant_base_url", "")
+    monkeypatch.setattr(settings, "home_assistant_access_token", "")
     monkeypatch.setattr(
         settings,
         "home_assistant_state_fixture",
