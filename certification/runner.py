@@ -367,6 +367,16 @@ class Freyja5CertificationProvider:
             return CertificationExecution(response="", error=str(exc), context=context)
 
         context = _context_from_freyja5_result(result, principal_data, person_context, elapsed_ms(start))
+        channels = request_data.get("freyja5_identity_channels")
+        if isinstance(channels, list):
+            context.rev2_evidence["freyja5_identity_channels"] = _freyja5_identity_channel_evidence(
+                channels=channels,
+                target_agent=target_agent,
+                sender_domain=sender_domain,
+                person_context=person_context,
+                prompt=case.prompt,
+                conversation_id=str(request_data.get("request_id") or case.name),
+            )
         _apply_certification_fixtures(context, fixtures)
         return CertificationExecution(response=result.response_text, context=context)
 
@@ -896,6 +906,54 @@ def _sender_id_for_domain(domain: Any, person_context: dict[str, str] | None) ->
     if person_id:
         return f"person:{person_id}"
     return str(getattr(domain, "value", domain))
+
+
+def _freyja5_identity_channel_evidence(
+    *,
+    channels: list[Any],
+    target_agent: str,
+    sender_domain: Any,
+    person_context: dict[str, str] | None,
+    prompt: str,
+    conversation_id: str,
+) -> list[dict[str, Any]]:
+    from freyja.agent_gateway import AgentGateway, GatewayRequest
+    from freyja.foundation_models import GatewaySender
+
+    sender_id = _sender_id_for_domain(sender_domain, person_context)
+    display_name = (person_context or {}).get("display_name") or sender_id
+    gateway = AgentGateway()
+    evidence: list[dict[str, Any]] = []
+    for channel in channels:
+        channel_name = str(channel)
+        handoff = gateway.handle(
+            GatewayRequest(
+                sender=GatewaySender(
+                    sender_id=sender_id,
+                    display_name=display_name,
+                    security_domain_id=sender_domain,
+                ),
+                target_agent=target_agent,
+                prompt=prompt,
+                conversation_id=conversation_id,
+                channel=channel_name,
+            )
+        ).handoff
+        if handoff is None:
+            evidence.append({"channel": channel_name, "handoff": False})
+            continue
+        evidence.append(
+            {
+                "channel": channel_name,
+                "handoff": True,
+                "sender_id": handoff.sender_id,
+                "authenticated_subject": handoff.authenticated_subject,
+                "actor_principal": handoff.actor_principal,
+                "target_agent": handoff.target_agent_id,
+                "memory_scopes": sorted(handoff.memory_scopes),
+            }
+        )
+    return evidence
 
 
 def _freyja5_attachments(request_data: dict[str, Any], fixtures: dict[str, Any]) -> list[dict[str, Any]]:

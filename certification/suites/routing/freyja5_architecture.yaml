@@ -58,6 +58,7 @@ cases:
     prompt: "Joe asks from a second channel what Freyja remembers about his household policy."
     route_request:
       freyja5_target_agent: freyja
+      freyja5_identity_channels: [signal, open-webui]
       provider: auto
       tools_required: true
       certification_memory_principal:

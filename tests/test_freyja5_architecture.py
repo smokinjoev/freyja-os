@@ -147,6 +147,12 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         }
         for case in report.cases
     )
+    identity_case = next(case for case in report.cases if case.name == "e-multi-channel-household-identity")
+    identity_channels = identity_case.runtime_context["rev2_evidence"]["freyja5_identity_channels"]
+    assert [entry["channel"] for entry in identity_channels] == ["signal", "open-webui"]
+    assert {entry["sender_id"] for entry in identity_channels} == {"person:joe"}
+    assert {entry["authenticated_subject"] for entry in identity_channels} == {"person:joe"}
+    assert all("agent:freyja" in entry["memory_scopes"] for entry in identity_channels)
 
 
 def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
