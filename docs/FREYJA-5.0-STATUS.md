@@ -10,6 +10,8 @@
   `vision`, `embedding`, and `private`.
 - Extended runtime results with requested route, provider, egress state, and
   trace summary fields.
+- Added `routing/freyja5_architecture` certification suite coverage for target
+  cases A-G.
 
 ## Partial
 
@@ -36,5 +38,7 @@ tasks.
 
 - Run unit tests: `pytest tests/test_freyja5_architecture.py tests/test_nexus_provider.py`
 - Run the broader architecture spine: `pytest tests/test_freyja3_architecture.py`
+- Run the 5.0 certification suite when live services are available:
+  `freyja-certify routing/freyja5_architecture`
 - Start Atlas/Freyja sidecar using the existing deployment docs in
   `docs/operations/deployment.md`.

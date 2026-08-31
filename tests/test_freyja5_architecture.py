@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
+from certification.runner import load_suite
 from freyja.foundation_models import GatewaySender, SecurityDomainId
 from freyja.semantic_routes import SemanticRoute, capability_for_route
 
@@ -71,3 +72,10 @@ def test_benedict_paralegal_uses_private_local_only_route() -> None:
     assert result.inference_provider == "nexus"
     assert result.inference_endpoint_id == "benedict-paralegal-nexus"
     assert result.egress_state == "local-only"
+
+
+def test_freyja5_certification_suite_tracks_architecture_cases_a_through_g() -> None:
+    suite = load_suite("routing/freyja5_architecture")
+
+    assert suite.name == "freyja5-architecture"
+    assert [case.name[0] for case in suite.cases] == ["a", "b", "c", "d", "e", "f", "g"]
