@@ -119,6 +119,26 @@ requests. Each case stores a `runtime_context` object in JSON reports with:
 The JSON report has a `schema_version` field so future dashboard code can
 version migrations deliberately.
 
+## Freyja 5.0 Architecture Suite
+
+Run the Freyja 5.0 architecture skeleton directly through the Gateway and
+`AgentRuntimeV3` provider:
+
+```bash
+freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports
+```
+
+This provider does not use the legacy Director/router path and does not run live
+model inference by default. It verifies the A-G architecture skeleton from
+Gateway handoff through persistent agent selection, semantic Nexus route
+selection, MCP tool-boundary evidence, multi-channel household identity,
+Benedict local-only enclave policy, and optional-service degradation.
+
+Live completion still requires host-local validation for Vulcan/Nexus semantic
+presets, Iris Apple/macOS sessions, and Hera voice/avatar hardware. Record
+missing physical/session work in `FREYJA-5.0-BLOCKERS.md` rather than weakening
+the suite or enabling implicit cloud fallback.
+
 ## Benchmark Workflow
 
 Run identical certification suites across provider/model targets:
