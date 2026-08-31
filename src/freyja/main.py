@@ -924,6 +924,19 @@ def _openai_chat_should_use_smith(objective: str) -> bool:
 
 
 def _openai_sender_for_freyja5(request: "OpenAIChatCompletionRequest") -> GatewaySender:
+    user = (request.user or "").strip().lower()
+    person_domain = {
+        "joe": SecurityDomainId.PERSON_JOE,
+        "beth": SecurityDomainId.PERSON_BETH,
+        "liam": SecurityDomainId.PERSON_LIAM,
+        "jenna": SecurityDomainId.PERSON_JENNA,
+    }.get(user)
+    if person_domain is not None:
+        return GatewaySender(
+            sender_id=f"person:{user}",
+            display_name=request.user or user,
+            security_domain_id=person_domain,
+        )
     return GatewaySender(
         sender_id=f"open-webui:{request.user or 'gui'}",
         display_name=request.user or "Open WebUI",

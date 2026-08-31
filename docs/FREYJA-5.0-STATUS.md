@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260831T233757Z0000-freyja5-architecture.md`.
+  `certification/reports/20260831T234020Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -88,6 +88,10 @@ tasks.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.
+- Freyja 5 OpenAI-compatible requests now resolve known household `user` values
+  such as `joe`, `beth`, `liam`, and `jenna` to stable `person:<id>` principals
+  so the WebGUI channel uses the same identity/memory policy shape as other
+  channels. Unknown UI users remain channel-scoped.
 
 ## Start And Test
 

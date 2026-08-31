@@ -235,6 +235,29 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_skeleton(monkeypatc
     assert data["freyja"]["trace"]["inference_status"] == "not_run"
 
 
+def test_openai_chat_completion_freyja5_known_user_gets_stable_household_identity(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "freyja-5",
+            "user": "joe",
+            "messages": [{"role": "user", "content": "What do you remember about my household policy?"}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    trace = response.json()["freyja"]["trace"]
+    assert trace["channel"] == "open-webui"
+    assert trace["resolved_user"] == "person:joe"
+    assert trace["authenticated_subject"] == "person:joe"
+    assert response.json()["freyja"]["egress_state"] == "local-only"
+
+
 def test_openai_chat_completion_freyja5_live_inference_flag_is_explicit(monkeypatch) -> None:
     from freyja import main as director_main
     from freyja.config import settings
