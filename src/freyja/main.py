@@ -6,6 +6,7 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -13,6 +14,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
+import yaml
 
 from freyja.agents import AgentHierarchy, PersonName
 from freyja.agents.approval_provider import PersistentApprovalProvider
@@ -24,6 +26,7 @@ from freyja.config import settings
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
+from freyja.foundation_seed import PERSISTENT_AGENTS
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -208,6 +211,69 @@ async def root() -> dict[str, str]:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "healthy"}
+
+
+@app.get("/freyja5/readiness")
+async def freyja5_readiness() -> dict[str, Any]:
+    route_config = _load_source_yaml("config/freyja-5.0-semantic-routes.yaml")
+    mcp_topology = _load_source_yaml("config/freyja-5.0-mcp-topology.yaml")
+    routes = route_config.get("routes") if isinstance(route_config.get("routes"), dict) else {}
+    servers = mcp_topology.get("servers") if isinstance(mcp_topology.get("servers"), list) else []
+    non_mcp = mcp_topology.get("non_mcp_boundaries") if isinstance(mcp_topology.get("non_mcp_boundaries"), list) else []
+    live_inference_enabled = bool(settings.freyja5_openai_live_inference_enabled)
+    nexus_configured = bool(settings.nexus_base_url)
+    return {
+        "ok": bool(routes) and bool(servers),
+        "version": "freyja-5.0",
+        "fallback_preserved": True,
+        "openai_model": "freyja-5",
+        "live_inference": {
+            "enabled": live_inference_enabled,
+            "nexus_base_url_configured": nexus_configured,
+            "nexus_api_key_configured": bool(settings.nexus_api_key),
+            "cloud_fallback": False,
+            "ready": live_inference_enabled and nexus_configured,
+        },
+        "semantic_routes": {
+            "owner": route_config.get("owner"),
+            "cloud_fallback": route_config.get("cloud_fallback"),
+            "routes": sorted(str(route) for route in routes),
+        },
+        "agents": [
+            {
+                "id": agent.agent_id,
+                "logical_display_name": agent.logical_display_name or agent.display_name,
+                "home_machine": agent.home_machine_id,
+            }
+            for agent in PERSISTENT_AGENTS
+        ],
+        "mcp": {
+            "default_agent_mcp_servers": bool(mcp_topology.get("default_agent_mcp_servers")),
+            "hosts": sorted({str(server.get("host")) for server in servers if isinstance(server, dict) and server.get("host")}),
+            "tool_count": sum(
+                len(server.get("exposes") or ())
+                for server in servers
+                if isinstance(server, dict) and isinstance(server.get("exposes"), list)
+            ),
+        },
+        "vulcan": next(
+            (
+                {"host": boundary.get("host"), "protocol": boundary.get("protocol"), "role": boundary.get("role")}
+                for boundary in non_mcp
+                if isinstance(boundary, dict) and boundary.get("id") == "vulcan-nexus"
+            ),
+            None,
+        ),
+    }
+
+
+def _load_source_yaml(relative_path: str) -> dict[str, Any]:
+    path = Path(settings.repository_root) / relative_path
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except OSError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 @app.get("/ollama/health")

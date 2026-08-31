@@ -27,6 +27,73 @@ def test_health_remains_public_when_connector_auth_is_enabled(monkeypatch) -> No
     assert response.status_code == 200
 
 
+def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", False)
+    monkeypatch.setattr(settings, "nexus_base_url", "")
+    monkeypatch.setattr(settings, "nexus_api_key", "")
+    response = client.get(
+        "/freyja5/readiness",
+        headers={"Authorization": "Bearer test-connector-token"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["version"] == "freyja-5.0"
+    assert data["fallback_preserved"] is True
+    assert data["openai_model"] == "freyja-5"
+    assert data["live_inference"] == {
+        "enabled": False,
+        "nexus_base_url_configured": False,
+        "nexus_api_key_configured": False,
+        "cloud_fallback": False,
+        "ready": False,
+    }
+    assert data["semantic_routes"] == {
+        "owner": "nexus",
+        "cloud_fallback": "explicit_only",
+        "routes": ["code", "deep", "embedding", "fast", "general", "private", "vision"],
+    }
+    assert data["mcp"] == {
+        "default_agent_mcp_servers": False,
+        "hosts": ["atlas", "iris"],
+        "tool_count": 12,
+    }
+    assert data["vulcan"] == {
+        "host": "vulcan",
+        "protocol": "openai-compatible",
+        "role": "semantic-inference-plane",
+    }
+    assert {agent["id"] for agent in data["agents"]} >= {"freyja", "cloyd-gibbler", "benedict-paralegal"}
+
+
+def test_freyja5_readiness_requires_explicit_live_inference_and_nexus_url(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://vulcan.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "secret-test-token")
+    response = client.get(
+        "/freyja5/readiness",
+        headers={"Authorization": "Bearer test-connector-token"},
+    )
+
+    assert response.status_code == 200
+    live = response.json()["live_inference"]
+    assert live == {
+        "enabled": True,
+        "nexus_base_url_configured": True,
+        "nexus_api_key_configured": True,
+        "cloud_fallback": False,
+        "ready": True,
+    }
+    assert "secret-test-token" not in response.text
+
+
 def test_protected_endpoint_requires_connector_token(monkeypatch) -> None:
     from freyja.config import settings
 

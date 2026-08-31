@@ -6,6 +6,7 @@ skeleton on Atlas without replacing Freyja 4.1, Freyja 3, or Open WebUI.
 It exposes:
 
 - `GET /health`
+- `GET /freyja5/readiness`
 - `GET /v1/models`
 - `POST /v1/chat/completions` with model `freyja-5`
 - existing authenticated Freyja compatibility endpoints from `freyja.main`
@@ -29,6 +30,7 @@ chmod 600 deploy/compose/freyja5/.env
 docker compose --env-file deploy/compose/freyja5/.env \
   -f deploy/compose/freyja5/compose.yaml up -d --build
 curl http://${HOST}:8500/health
+curl http://${HOST}:8500/freyja5/readiness -H "Authorization: Bearer $FREYJA_CONNECTOR_TOKEN"
 curl http://${HOST}:8500/v1/models -H "Authorization: Bearer $FREYJA_CONNECTOR_TOKEN"
 ```
 

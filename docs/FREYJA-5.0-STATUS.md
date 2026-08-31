@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260831T233459Z0000-freyja5-architecture.md`.
+  `certification/reports/20260831T233757Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -85,6 +85,9 @@ tasks.
 - Added a side-by-side Freyja 5 compose target at `deploy/compose/freyja5` for
   Atlas testing on port `8500`. It preserves existing 4.1/Freyja3/Open WebUI
   deployments and keeps live inference/cloud egress disabled by default.
+- Added `GET /freyja5/readiness` for source-controlled architecture posture:
+  semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
+  explicit live-local Nexus readiness without exposing secrets.
 
 ## Start And Test
 
@@ -100,5 +103,6 @@ tasks.
   and local host secrets configured outside source control.
 - Start the side-by-side Freyja 5 gateway with
   `docker compose --env-file deploy/compose/freyja5/.env -f deploy/compose/freyja5/compose.yaml up -d --build`.
+- Check Freyja 5 architecture posture with `GET /freyja5/readiness`.
 - Start Atlas/Freyja sidecar using the existing deployment docs in
   `docs/operations/deployment.md`.
