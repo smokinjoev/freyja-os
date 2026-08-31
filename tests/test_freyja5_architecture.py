@@ -178,6 +178,55 @@ def test_freyja5_mcp_preferred_tool_boundary_is_explicit() -> None:
     assert protocols["filesystem.read"] == "internal"
 
 
+def test_freyja5_mcp_topology_places_servers_by_capability_host() -> None:
+    config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-mcp-topology.yaml").read_text(encoding="utf-8"))
+    servers = {server["id"]: server for server in config["servers"]}
+    non_mcp = {boundary["id"]: boundary for boundary in config["non_mcp_boundaries"]}
+
+    assert config["default_agent_mcp_servers"] is False
+    assert config["policy"]["ownership"] == "capability_host"
+    assert config["policy"]["consumption"] == "scoped_agent_tool_grants"
+    assert servers["iris-apple-mcp"]["host"] == "iris"
+    assert servers["atlas-household-mcp"]["host"] == "atlas"
+    assert servers["atlas-media-mcp"]["host"] == "atlas"
+    assert non_mcp["vulcan-nexus"]["host"] == "vulcan"
+    assert non_mcp["vulcan-nexus"]["protocol"] == "openai-compatible"
+    assert all(server["host"] != "vulcan" for server in config["servers"])
+
+
+def test_freyja5_mcp_topology_matches_seeded_tool_affinity() -> None:
+    config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-mcp-topology.yaml").read_text(encoding="utf-8"))
+    tools = {tool.tool_id: tool for tool in TOOL_CAPABILITIES}
+
+    exposed_by_host = {
+        tool_id: server["host"]
+        for server in config["servers"]
+        for tool_id in server["exposes"]
+    }
+
+    for tool_id, host in exposed_by_host.items():
+        assert tool_id in tools
+        assert tools[tool_id].protocol == "mcp"
+        if tools[tool_id].machine_affinity is not None:
+            assert tools[tool_id].machine_affinity == host
+
+    seeded_mcp_tools = {tool.tool_id for tool in TOOL_CAPABILITIES if tool.protocol == "mcp"}
+    assert seeded_mcp_tools == set(exposed_by_host)
+
+
+def test_freyja5_agents_consume_mcp_through_scoped_grants() -> None:
+    config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-mcp-topology.yaml").read_text(encoding="utf-8"))
+    exposed_tools = {tool_id for server in config["servers"] for tool_id in server["exposes"]}
+    agents = {agent.agent_id: agent for agent in PERSISTENT_AGENTS}
+
+    assert set(config["agent_consumption"]) == set(agents)
+    assert set(config["agent_consumption"].values()) == {"scoped_agent_tool_grants"}
+    for agent in agents.values():
+        granted_mcp_tools = exposed_tools.intersection(agent.tool_grants)
+        assert granted_mcp_tools
+        assert granted_mcp_tools <= exposed_tools
+
+
 def test_freyja5_mode_does_not_use_implicit_cloud_fallback() -> None:
     registry = InferenceRegistryV3(
         endpoints=(

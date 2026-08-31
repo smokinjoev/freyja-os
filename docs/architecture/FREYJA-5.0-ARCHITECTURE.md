@@ -31,6 +31,26 @@ Canonical agent configuration is kept in source control via
 Paralegal, Agent 44, and Jenna agent are persistent logical agents with scoped
 memory/tool grants.
 
+## MCP Topology
+
+MCP servers run by capability location, not per logical agent. The canonical
+topology is source controlled in `config/freyja-5.0-mcp-topology.yaml`.
+
+Iris hosts the Apple/macOS MCP boundary for Browser, Calendar, Mail, Messages,
+Music, and MacAgent capabilities because those APIs require a macOS session and
+local Apple permissions. Atlas hosts persistent household/service MCP boundaries
+for Home Assistant, scheduling, document processing, and vision inspection.
+Vulcan does not host agent MCP servers by default; it remains the inference
+plane behind Nexus semantic routes. Hera is a voice/avatar channel edge and
+publishes semantic events into the Gateway rather than becoming a general tool
+server.
+
+Freyja, Cloyd, Benedict, Benedict Paralegal, Agent 44, and Jenna agent consume
+MCP tools through scoped grants in `src/freyja/foundation_seed.py`. They do not
+each run duplicated MCP servers unless a future capability requires an
+agent-owned service boundary. This keeps policy, audit, and host-specific
+permissions deterministic while preserving independent logical agents.
+
 ## Traceability
 
 Important requests carry `trace_id`, channel, resolved user, agent, requested

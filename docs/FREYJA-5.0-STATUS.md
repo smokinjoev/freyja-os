@@ -6,6 +6,8 @@
 - Added source-controlled Freyja 5.0 architecture documentation.
 - Added source-controlled canonical summaries for persistent agents and semantic
   Nexus routes.
+- Added source-controlled MCP topology for Iris, Atlas, Vulcan, Hera, and
+  logical-agent MCP consumption boundaries.
 - Added semantic route selection for `fast`, `general`, `deep`, `code`,
   `vision`, `embedding`, and `private`.
 - Extended runtime results with requested route, provider, egress state, and
@@ -54,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260831T231233Z0000-freyja5-architecture.md`.
+  `certification/reports/20260831T232312Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -66,6 +68,10 @@ tasks.
 - MCP-preferred tool boundaries are explicit in source tool grants and runtime
   traces record each selected tool's protocol, machine affinity, and mutation
   status.
+- MCP servers are assigned by capability host, not duplicated per agent: Iris
+  owns Apple/macOS MCP capabilities, Atlas owns household/service MCP
+  capabilities, Vulcan remains Nexus inference, and agents consume MCP through
+  source-controlled scoped grants.
 
 ## Start And Test
 

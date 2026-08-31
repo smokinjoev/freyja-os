@@ -1,0 +1,80 @@
+version: freyja-5.0
+canonical_source: src/freyja/foundation_seed.py
+default_agent_mcp_servers: false
+policy:
+  ownership: capability_host
+  consumption: scoped_agent_tool_grants
+  gateway_role: authenticate_resolve_policy_trace_forward
+  no_agent_reasoning_in_mcp_servers: true
+  no_physical_model_selection_in_gateway: true
+servers:
+  - id: iris-apple-mcp
+    host: iris
+    protocol: mcp
+    role: apple-macos-capability-server
+    status: planned_live_validation
+    exposes:
+      - browser.control
+      - calendar.read
+      - calendar.write
+      - email.read
+      - macagent.apple
+      - messaging.send
+      - music.control
+    consumers: scoped_agent_tool_grants
+    egress: local_macos_capabilities
+  - id: atlas-household-mcp
+    host: atlas
+    protocol: mcp
+    role: persistent-household-service-capability-server
+    status: skeleton_implemented
+    exposes:
+      - home-assistant.read
+      - home-assistant.control
+      - scheduling.create
+    consumers: scoped_agent_tool_grants
+    egress: household_lan
+  - id: atlas-media-mcp
+    host: atlas
+    protocol: mcp
+    role: document-and-vision-capability-server
+    status: skeleton_implemented
+    exposes:
+      - documents.process
+      - vision.inspect
+    consumers: scoped_agent_tool_grants
+    egress: local_processing
+non_mcp_boundaries:
+  - id: vulcan-nexus
+    host: vulcan
+    protocol: openai-compatible
+    role: semantic-inference-plane
+    owns:
+      - physical_model_selection
+      - runtime_selection
+      - semantic_route_presets
+  - id: freyja-gateway
+    host: atlas
+    protocol: http
+    role: deterministic-ingress-boundary
+    owns:
+      - channel_normalization
+      - identity_resolution
+      - authentication
+      - deterministic_policy
+      - trace_envelope
+  - id: hera-channel-edge
+    host: hera
+    protocol: semantic-events
+    role: avatar-voice-channel-edge
+    owns:
+      - voice_input
+      - avatar_output
+      - perception_events
+agent_consumption:
+  freyja: scoped_agent_tool_grants
+  cloyd-gibbler: scoped_agent_tool_grants
+  benedict: scoped_agent_tool_grants
+  benedict-paralegal: scoped_agent_tool_grants
+  agent-47: scoped_agent_tool_grants
+  jennacide: scoped_agent_tool_grants
