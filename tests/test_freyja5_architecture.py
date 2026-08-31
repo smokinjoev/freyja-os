@@ -8,7 +8,8 @@ from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
 from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS
-from freyja.foundation_models import GatewaySender, SecurityDomainId
+from freyja.foundation_models import GatewaySender, InferenceEndpoint, SecurityDomainId
+from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.semantic_routes import SemanticRoute, capability_for_route
 
 
@@ -160,3 +161,42 @@ def test_freyja5_semantic_route_config_has_seeded_endpoint_for_each_route() -> N
         endpoint_id = route_config["preferred_runtime"]
         assert endpoint_id in capabilities_by_endpoint
         assert route_config["capability"] in capabilities_by_endpoint[endpoint_id], route_name
+
+
+def test_freyja5_mode_does_not_use_implicit_cloud_fallback() -> None:
+    registry = InferenceRegistryV3(
+        endpoints=(
+            InferenceEndpoint(
+                endpoint_id="cloud-only",
+                display_name="Cloud only",
+                provider="openrouter",
+                model="cloud",
+                capabilities=frozenset({"general.cloud"}),
+                security_domain_id=SecurityDomainId.SYSTEM,
+                priority=1,
+            ),
+        ),
+        include_configured=False,
+    )
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender(SecurityDomainId.PERSON_JOE),
+            target_agent="cloyd",
+            prompt="Public summary of model routing.",
+            conversation_id="conv-no-cloud",
+            channel="test",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(
+        inference_registry=registry,
+        run_inference=False,
+        allow_cloud_fallback=False,
+    ).run(handoff)
+
+    assert result.inference_endpoint_id is None
+    assert result.degraded is True
+    assert result.egress_state == "local-only"
+    assert result.trace_summary["actual_provider"] is None
+    assert result.trace_summary["fallbacks"] == []

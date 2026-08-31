@@ -139,6 +139,7 @@ class AgentRuntimeV3:
         run_inference: bool | None = None,
         max_tool_iterations: int = 3,
         unhealthy_endpoint_ids: Iterable[str] = (),
+        allow_cloud_fallback: bool = True,
     ) -> None:
         self._agents = agents_by_key() if agents == PERSISTENT_AGENTS else self._index_agents(agents)
         self._tools = tools_by_id() if tools == TOOL_CAPABILITIES else {tool.tool_id: tool for tool in tools}
@@ -151,6 +152,7 @@ class AgentRuntimeV3:
         self._run_inference = run_inference if run_inference is not None else False
         self._max_tool_iterations = max(1, max_tool_iterations)
         self._unhealthy_endpoint_ids = set(unhealthy_endpoint_ids)
+        self._allow_cloud_fallback = allow_cloud_fallback
 
     def run(self, handoff: GatewayHandoff) -> AgentExecutionResult:
         return asyncio.run(self.arun(handoff))
@@ -224,7 +226,7 @@ class AgentRuntimeV3:
 
         selected_capability = capability
         endpoint = self._first_healthy_endpoint(agent, selected_capability)
-        if endpoint is None and not follow_up_questions:
+        if endpoint is None and not follow_up_questions and self._allow_cloud_fallback:
             endpoint, selected_capability = self._policy_gated_cloud_fallback(agent, handoff, steps, audit_events)
         elif endpoint is not None:
             selected_capability = _selected_endpoint_capability(endpoint.capabilities, selected_capability)

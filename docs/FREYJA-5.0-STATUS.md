@@ -61,6 +61,8 @@ tasks.
   fallbacks, inference status, and egress state.
 - Source-controlled Freyja 5.0 agent and route summaries are covered by drift
   tests against `foundation_seed.py`.
+- Freyja 5.0 certification/runtime mode disables implicit cloud fallback while
+  preserving the legacy 4.1 policy-gated fallback path for compatibility.
 
 ## Start And Test
 

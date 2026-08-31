@@ -351,7 +351,7 @@ class Freyja5CertificationProvider:
             ).handoff
             if handoff is None:
                 raise RuntimeError("gateway did not produce a handoff")
-            result = await AgentRuntimeV3(run_inference=False).arun(handoff)
+            result = await AgentRuntimeV3(run_inference=False, allow_cloud_fallback=False).arun(handoff)
         except Exception as exc:
             context = CertificationContext(
                 request_id=str(request_data.get("request_id") or case.name),
