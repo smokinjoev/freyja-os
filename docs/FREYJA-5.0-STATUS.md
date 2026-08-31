@@ -71,6 +71,9 @@ tasks.
 - Freyja 5 runtime trace summaries include privacy egress decision evidence
   when fallback evaluation occurs, including denied cloud attempts with redacted
   prompt previews.
+- Freyja 5 certification reports now include a compact audit chain from Gateway
+  handoff creation through runtime events so important requests can be followed
+  from ingress to response evidence.
 - Source-controlled Freyja 5.0 agent and route summaries are covered by drift
   tests against `foundation_seed.py`.
 - Freyja 5.0 certification/runtime mode disables implicit cloud fallback while

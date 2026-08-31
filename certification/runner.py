@@ -339,7 +339,7 @@ class Freyja5CertificationProvider:
         )
         start = time.monotonic()
         try:
-            handoff = AgentGateway().handle(
+            gateway_result = AgentGateway().handle(
                 GatewayRequest(
                     sender=sender,
                     target_agent=target_agent,
@@ -348,7 +348,8 @@ class Freyja5CertificationProvider:
                     channel=str((principal_data or {}).get("client_type") or "certification"),
                     attachments=_freyja5_attachments(request_data, fixtures),
                 )
-            ).handoff
+            )
+            handoff = gateway_result.handoff
             if handoff is None:
                 raise RuntimeError("gateway did not produce a handoff")
             result = await AgentRuntimeV3(run_inference=False, allow_cloud_fallback=False).arun(handoff)
@@ -367,6 +368,9 @@ class Freyja5CertificationProvider:
             return CertificationExecution(response="", error=str(exc), context=context)
 
         context = _context_from_freyja5_result(result, principal_data, person_context, elapsed_ms(start))
+        context.rev2_evidence["freyja5_audit_chain"] = _freyja5_audit_chain(
+            [gateway_result.audit_event, *result.audit_events]
+        )
         channels = request_data.get("freyja5_identity_channels")
         if isinstance(channels, list):
             context.rev2_evidence["freyja5_identity_channels"] = _freyja5_identity_channel_evidence(
@@ -906,6 +910,26 @@ def _sender_id_for_domain(domain: Any, person_context: dict[str, str] | None) ->
     if person_id:
         return f"person:{person_id}"
     return str(getattr(domain, "value", domain))
+
+
+def _freyja5_audit_chain(events: list[Any]) -> list[dict[str, Any]]:
+    chain: list[dict[str, Any]] = []
+    for event in events:
+        event_type = getattr(event, "event_type", None)
+        domain_id = getattr(event, "domain_id", None)
+        metadata = getattr(event, "metadata", None)
+        chain.append(
+            {
+                "event_type": str(getattr(event_type, "value", event_type)),
+                "actor_id": getattr(event, "actor_id", None),
+                "domain_id": str(getattr(domain_id, "value", domain_id)),
+                "target_id": getattr(event, "target_id", None),
+                "allowed": bool(getattr(event, "allowed", False)),
+                "reason": getattr(event, "reason", None),
+                "metadata": dict(metadata) if isinstance(metadata, dict) else {},
+            }
+        )
+    return chain
 
 
 def _freyja5_identity_channel_evidence(

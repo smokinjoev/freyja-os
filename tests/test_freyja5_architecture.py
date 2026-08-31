@@ -161,6 +161,20 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert all(case.runtime_context["rev2_evidence"]["freyja5_trace_id"] for case in report.cases)
     assert all("latency_ms" in case.runtime_context["rev2_evidence"]["freyja5_trace_summary"] for case in report.cases)
     assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_audit_chain"][0]["event_type"] == "gateway_handoff_created"
+        for case in report.cases
+    )
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_audit_chain"][0]["metadata"]["handoff_id"]
+        == case.runtime_context["rev2_evidence"]["freyja5_trace_id"]
+        for case in report.cases
+    )
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_audit_chain"][-1]["event_type"]
+        in {"agent_inference_completed", "agent_memory_candidate_proposed"}
+        for case in report.cases
+    )
+    assert all(
         case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == {
             "source": "config/freyja-5.0-mcp-topology.yaml",
             "available": True,
