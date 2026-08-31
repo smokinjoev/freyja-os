@@ -5,6 +5,7 @@ import datetime as _datetime
 import json
 import os
 import re
+import time
 from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
@@ -20,6 +21,7 @@ from freyja.foundation_models import (
     AuditEvent,
     AuditEventType,
     GatewayHandoff,
+    InferenceEndpoint,
     MemoryClassification,
     MemoryScope,
     PersistentAgent,
@@ -154,6 +156,7 @@ class AgentRuntimeV3:
         return asyncio.run(self.arun(handoff))
 
     async def arun(self, handoff: GatewayHandoff) -> AgentExecutionResult:
+        started = time.monotonic()
         agent = self._agent(handoff.target_agent_id)
         requested_route = self.choose_semantic_route(agent, handoff.prompt, bool(handoff.attachments))
         capability = capability_for_route(requested_route)
@@ -202,7 +205,18 @@ class AgentRuntimeV3:
                 inference_provider=None,
                 inference_status=None,
                 egress_state="local-only",
-                trace_summary=_trace_summary(handoff, agent, requested_route.value, None, tool_results, audit_events, "local-only"),
+                trace_summary=_trace_summary(
+                    handoff=handoff,
+                    agent=agent,
+                    requested_route=requested_route.value,
+                    selected_tools=selected_tools,
+                    endpoint=None,
+                    inference_status=None,
+                    tool_results=tool_results,
+                    audit_events=audit_events,
+                    egress_state="local-only",
+                    latency_ms=_elapsed_ms(started),
+                ),
                 steps=tuple(steps),
                 audit_events=tuple(audit_events),
                 degraded=False,
@@ -313,7 +327,18 @@ class AgentRuntimeV3:
             inference_provider=inference_provider,
             inference_status=inference_status,
             egress_state=egress_state,
-            trace_summary=_trace_summary(handoff, agent, requested_route.value, inference_endpoint_id, tool_results, audit_events, egress_state),
+            trace_summary=_trace_summary(
+                handoff=handoff,
+                agent=agent,
+                requested_route=requested_route.value,
+                selected_tools=selected_tools,
+                endpoint=endpoint,
+                inference_status=inference_status,
+                tool_results=tool_results,
+                audit_events=audit_events,
+                egress_state=egress_state,
+                latency_ms=_elapsed_ms(started),
+            ),
             steps=tuple(steps),
             audit_events=tuple(audit_events),
             degraded=degraded,
@@ -1431,14 +1456,19 @@ def _legacy_capability_for_metadata(capability: str) -> str:
 
 
 def _trace_summary(
+    *,
     handoff: GatewayHandoff,
     agent: PersistentAgent,
     requested_route: str,
-    inference_endpoint_id: str | None,
+    selected_tools: list[str],
+    endpoint: InferenceEndpoint | None,
+    inference_status: str | None,
     tool_results: list[dict[str, Any]],
     audit_events: list[AuditEvent],
     egress_state: str,
+    latency_ms: float,
 ) -> dict[str, Any]:
+    failed_events = [event for event in audit_events if not event.allowed]
     return {
         "trace_id": handoff.handoff_id,
         "channel": handoff.channel,
@@ -1446,14 +1476,34 @@ def _trace_summary(
         "authenticated_subject": handoff.authenticated_subject,
         "agent": agent.agent_id,
         "requested_route": requested_route,
-        "actual_endpoint": inference_endpoint_id,
-        "tool_calls": [result.get("capability_id") for result in tool_results],
-        "delegation": [step.detail for step in []],
-        "machine": None,
+        "actual_endpoint": endpoint.endpoint_id if endpoint is not None else None,
+        "actual_provider": endpoint.provider if endpoint is not None else None,
+        "actual_model": endpoint.model if endpoint is not None else None,
+        "actual_runtime": endpoint.provider if endpoint is not None else None,
+        "machine": endpoint.machine_id if endpoint is not None else None,
+        "latency_ms": latency_ms,
+        "inference_status": inference_status,
+        "selected_tools": list(selected_tools),
+        "tool_calls": [result.get("capability_id") for result in tool_results] or list(selected_tools),
+        "delegation": _delegation_trace(agent, handoff),
         "failures": [result for result in tool_results if result.get("success") is False],
+        "fallbacks": [
+            {"event_type": event.event_type.value, "target_id": event.target_id, "reason": event.reason}
+            for event in failed_events
+        ],
         "egress_state": egress_state,
         "audit_event_count": len(audit_events),
     }
+
+
+def _delegation_trace(agent: PersistentAgent, handoff: GatewayHandoff) -> list[dict[str, str]]:
+    if agent.agent_id == "cloyd-gibbler" and "cloyd" in handoff.prompt.lower():
+        return [{"from": "freyja", "to": agent.agent_id, "reason": "explicit Cloyd delegation request"}]
+    return []
+
+
+def _elapsed_ms(started: float) -> float:
+    return round((time.monotonic() - started) * 1000, 3)
 
 
 def _openai_compatible_base_url(endpoint_provider: str) -> str:

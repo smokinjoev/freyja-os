@@ -48,6 +48,14 @@ def test_gateway_handoff_trace_summary_carries_freyja5_route_and_egress() -> Non
     assert result.trace_summary["agent"] == "freyja"
     assert result.trace_summary["requested_route"] == "code"
     assert result.trace_summary["actual_endpoint"] == "vulcan-nexus-coder"
+    assert result.trace_summary["actual_provider"] == "nexus"
+    assert result.trace_summary["actual_model"] == "@preset/freyja-coder"
+    assert result.trace_summary["actual_runtime"] == "nexus"
+    assert result.trace_summary["machine"] == "vulcan"
+    assert result.trace_summary["inference_status"] == "not_run"
+    assert result.trace_summary["selected_tools"] == []
+    assert result.trace_summary["tool_calls"] == []
+    assert isinstance(result.trace_summary["latency_ms"], float)
 
 
 def test_benedict_paralegal_uses_private_local_only_route() -> None:
@@ -72,6 +80,30 @@ def test_benedict_paralegal_uses_private_local_only_route() -> None:
     assert result.inference_provider == "nexus"
     assert result.inference_endpoint_id == "benedict-paralegal-nexus"
     assert result.egress_state == "local-only"
+    assert result.trace_summary["machine"] == "vulcan"
+    assert result.trace_summary["egress_state"] == "local-only"
+
+
+def test_cloyd_delegation_trace_records_selected_tools() -> None:
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender(SecurityDomainId.PERSON_JOE),
+            target_agent="cloyd",
+            prompt="Freyja delegates repo inspection to Cloyd.",
+            conversation_id="conv-cloyd",
+            channel="test",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(run_inference=False).run(handoff)
+
+    assert result.agent_id == "cloyd-gibbler"
+    assert result.trace_summary["selected_tools"] == ["filesystem.read"]
+    assert result.trace_summary["tool_calls"] == ["filesystem.read"]
+    assert result.trace_summary["delegation"] == [
+        {"from": "freyja", "to": "cloyd-gibbler", "reason": "explicit Cloyd delegation request"}
+    ]
 
 
 def test_freyja5_certification_suite_tracks_architecture_cases_a_through_g() -> None:
@@ -90,3 +122,4 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert report.metadata.provider == "local_reasoning"
     assert {case.runtime_context["interface"] for case in report.cases} == {"freyja5"}
     assert all(case.runtime_context["rev2_evidence"]["freyja5_trace_id"] for case in report.cases)
+    assert all("latency_ms" in case.runtime_context["rev2_evidence"]["freyja5_trace_summary"] for case in report.cases)

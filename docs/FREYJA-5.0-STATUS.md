@@ -53,8 +53,12 @@ tasks.
   calls.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
-  passed 100.0% with report
-  `certification/reports/20260831T202534Z0000-freyja5-architecture.md`.
+  passed 100.0% with latest report
+  `certification/reports/20260831T231233Z0000-freyja5-architecture.md`.
+- Runtime trace summaries now include channel, resolved user, authenticated
+  subject, agent, requested route, actual endpoint/provider/model/runtime,
+  selected tools, tool calls, delegation evidence, machine, latency, failures,
+  fallbacks, inference status, and egress state.
 
 ## Start And Test
 
