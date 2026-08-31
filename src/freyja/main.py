@@ -857,6 +857,33 @@ def _openai_chat_should_use_smith(objective: str) -> bool:
     return any(keyword in lowered for keyword in smith_keywords) or any(phrase in lowered for phrase in smith_phrases)
 
 
+def _openai_sender_for_freyja5(request: "OpenAIChatCompletionRequest") -> GatewaySender:
+    return GatewaySender(
+        sender_id=f"open-webui:{request.user or 'gui'}",
+        display_name=request.user or "Open WebUI",
+        security_domain_id=SecurityDomainId.HOUSEHOLD,
+    )
+
+
+def _freyja5_openai_response_text(result) -> str:
+    trace = result.trace_summary
+    route = trace.get("requested_route") or result.requested_route
+    provider = trace.get("actual_provider") or result.inference_provider or "unavailable"
+    model = trace.get("actual_model") or "unavailable"
+    status = trace.get("inference_status") or ("degraded" if result.degraded else "completed")
+    return "\n".join(
+        (
+            "Freyja 5.0 skeleton response.",
+            f"Trace: {trace.get('trace_id')}",
+            f"Agent: {trace.get('agent_logical_display_name') or trace.get('agent_display_name') or result.agent_id}",
+            f"Route: {route}",
+            f"Runtime: {provider} {model}",
+            f"Status: {status}",
+            f"Egress: {result.egress_state}",
+        )
+    )
+
+
 def _smith_openai_response_text(summary: dict[str, Any]) -> str:
     lines = [
         f"Agent Smith request: {summary.get('request_id')}",
@@ -891,12 +918,22 @@ def _openai_chat_response(
     duration_ms: int,
     smith_mode: str,
     smith_status: str,
+    model: str = "agent-smith",
+    extra_freyja: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    freyja_metadata = {
+        "request_id": request_id,
+        "status": smith_status,
+        "duration_ms": duration_ms,
+        "smith_mode": smith_mode,
+    }
+    if extra_freyja:
+        freyja_metadata.update(extra_freyja)
     return {
         "id": f"chatcmpl-{request_id}",
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": "agent-smith",
+        "model": model,
         "choices": [
             {
                 "index": 0,
@@ -909,18 +946,14 @@ def _openai_chat_response(
             "completion_tokens": 0,
             "total_tokens": 0,
         },
-        "freyja": {
-            "request_id": request_id,
-            "status": smith_status,
-            "duration_ms": duration_ms,
-            "smith_mode": smith_mode,
-        },
+        "freyja": freyja_metadata,
     }
 
 
 def _openai_chat_stream(response: dict[str, Any]) -> StreamingResponse:
     created = int(response.get("created") or time.time())
     response_id = str(response.get("id") or f"chatcmpl-{uuid.uuid4()}")
+    model = str(response.get("model") or "agent-smith")
     content = str(response["choices"][0]["message"].get("content") or "")
 
     async def events():
@@ -928,21 +961,21 @@ def _openai_chat_stream(response: dict[str, Any]) -> StreamingResponse:
             "id": response_id,
             "object": "chat.completion.chunk",
             "created": created,
-            "model": "agent-smith",
+            "model": model,
             "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
         }
         content_chunk = {
             "id": response_id,
             "object": "chat.completion.chunk",
             "created": created,
-            "model": "agent-smith",
+            "model": model,
             "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
         }
         final_chunk = {
             "id": response_id,
             "object": "chat.completion.chunk",
             "created": created,
-            "model": "agent-smith",
+            "model": model,
             "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
         }
         for chunk in (first_chunk, content_chunk, final_chunk):
@@ -1042,6 +1075,12 @@ async def openai_compatible_models() -> dict[str, Any]:
                 "object": "model",
                 "created": 0,
                 "owned_by": "freyja-os",
+            },
+            {
+                "id": "freyja-5",
+                "object": "model",
+                "created": 0,
+                "owned_by": "freyja-os",
             }
         ],
     }
@@ -1049,9 +1088,9 @@ async def openai_compatible_models() -> dict[str, Any]:
 
 @app.post("/v1/chat/completions", response_model=None)
 async def openai_compatible_chat_completions(request: OpenAIChatCompletionRequest) -> dict[str, Any] | StreamingResponse:
-    if request.model != "agent-smith":
+    if request.model not in {"agent-smith", "freyja-5"}:
         raise HTTPException(status_code=404, detail="Unknown model.")
-    if not settings.agent_smith_enabled or not settings.agent_smith_read_only_enabled:
+    if request.model == "agent-smith" and (not settings.agent_smith_enabled or not settings.agent_smith_read_only_enabled):
         raise HTTPException(
             status_code=404 if not settings.agent_smith_enabled else 403,
             detail="Agent Smith read-only mode is not enabled.",
@@ -1060,6 +1099,43 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
     objective = _openai_chat_objective(request.messages)
     if not objective:
         raise HTTPException(status_code=400, detail="At least one user message is required.")
+    if request.model == "freyja-5":
+        request_id = f"freyja5-openai-{uuid.uuid4()}"
+        start = time.monotonic()
+        gateway_result = AgentGateway().handle(
+            GatewayRequest(
+                sender=_openai_sender_for_freyja5(request),
+                target_agent="freyja",
+                prompt=objective,
+                conversation_id=request_id,
+                channel="open-webui",
+                channel_metadata={"client": "openai-compatible", "model": request.model},
+            )
+        )
+        if gateway_result.handoff is None:
+            raise HTTPException(status_code=403, detail="Freyja 5 Gateway rejected request.")
+        result = await AgentRuntimeV3(run_inference=False, allow_cloud_fallback=False).arun(gateway_result.handoff)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        response_body = _openai_chat_response(
+            request_id=request_id,
+            content=_freyja5_openai_response_text(result),
+            duration_ms=duration_ms,
+            smith_mode="freyja5",
+            smith_status="degraded" if result.degraded else "completed",
+            model="freyja-5",
+            extra_freyja={
+                "agent": result.agent_id,
+                "route": result.requested_route,
+                "endpoint": result.inference_endpoint_id,
+                "provider": result.inference_provider,
+                "egress_state": result.egress_state,
+                "trace": result.trace_summary,
+            },
+        )
+        if request.stream:
+            return _openai_chat_stream(response_body)
+        return response_body
+
     request_id = f"smith-openai-{uuid.uuid4()}"
     start = time.monotonic()
     smith_mode = "chat"

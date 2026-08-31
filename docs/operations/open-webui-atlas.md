@@ -34,8 +34,9 @@ phones/laptops/tablets browser or PWA
 ```
 
 Freyja remains the Atlas control plane. Main Freyja Director is healthy on
-Atlas, but it does not currently expose OpenAI-compatible `/v1/models`
-endpoints for Open WebUI.
+Atlas. Freyja 5.0 exposes an opt-in OpenAI-compatible `freyja-5` model for
+Gateway/runtime skeleton testing, but the production Open WebUI default remains
+the local `model-proxy` until live Nexus/Vulcan readiness is validated.
 
 Do not install separate Open WebUI servers on every client device. Other
 devices should open the Atlas URL in a browser and optionally install it as a
@@ -75,8 +76,8 @@ AIOHTTP_CLIENT_TIMEOUT_OPENAI_MODEL_LIST=15
 The model proxy checks Vulcan first and Iris second. Iris fallback is only for
 7B/12B-class active models installed on Iris.
 
-When Freyja exposes an OpenAI-compatible gateway, switch Open WebUI to the
-Atlas-local Freyja `/v1` endpoint.
+When the Freyja 5.0 gateway is ready for live Open WebUI traffic, switch Open
+WebUI to the Atlas-local Freyja `/v1` endpoint and select `freyja-5`.
 
 Avoid `qwen3:30b-a3b` for normal Open WebUI chat until the reasoning-output
 adapter is fixed. It can return text in an OpenAI-compatible `reasoning` field

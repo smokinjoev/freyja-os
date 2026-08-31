@@ -134,6 +134,57 @@ def test_openai_models_exposes_agent_smith(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json()["data"][0]["id"] == "agent-smith"
+    assert {model["id"] for model in response.json()["data"]} >= {"agent-smith", "freyja-5"}
+
+
+def test_openai_chat_completion_freyja5_uses_gateway_runtime_skeleton(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "freyja-5",
+            "user": "open-webui",
+            "messages": [{"role": "user", "content": "Please build and test the repo."}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["object"] == "chat.completion"
+    assert data["model"] == "freyja-5"
+    assert "Freyja 5.0 skeleton response." in data["choices"][0]["message"]["content"]
+    assert data["freyja"]["smith_mode"] == "freyja5"
+    assert data["freyja"]["agent"] == "freyja"
+    assert data["freyja"]["route"] == "code"
+    assert data["freyja"]["provider"] == "nexus"
+    assert data["freyja"]["egress_state"] == "local-only"
+    assert data["freyja"]["trace"]["channel"] == "open-webui"
+    assert data["freyja"]["trace"]["resolved_user"] == "open-webui:open-webui"
+
+
+def test_openai_chat_completion_freyja5_streams_sse(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "freyja-5",
+            "messages": [{"role": "user", "content": "Summarize this document."}],
+            "stream": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"model":"freyja-5"' in response.text
+    assert "Freyja 5.0 skeleton response." in response.text
+    assert "data: [DONE]" in response.text
 
 
 def test_openai_chat_completion_runs_agent_smith_read_only(monkeypatch) -> None:

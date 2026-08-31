@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260831T232312Z0000-freyja5-architecture.md`.
+  `certification/reports/20260831T232713Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -72,6 +72,10 @@ tasks.
   owns Apple/macOS MCP capabilities, Atlas owns household/service MCP
   capabilities, Vulcan remains Nexus inference, and agents consume MCP through
   source-controlled scoped grants.
+- Added an opt-in OpenAI-compatible `freyja-5` model path that exercises
+  Gateway identity/channel handling and `AgentRuntimeV3` route/trace selection
+  without live inference, while preserving the existing Open WebUI model-proxy
+  default and `agent-smith` compatibility path.
 
 ## Start And Test
 
@@ -79,5 +83,8 @@ tasks.
 - Run the broader architecture spine: `pytest tests/test_freyja3_architecture.py`
 - Run the 5.0 certification suite when live services are available:
   `freyja-certify routing/freyja5_architecture --provider freyja5`
+- To test the explicit Freyja 5 OpenAI-compatible skeleton path, select model
+  `freyja-5` against the Freyja `/v1/chat/completions` endpoint. Existing Open
+  WebUI deployment remains pointed at `model-proxy` unless changed manually.
 - Start Atlas/Freyja sidecar using the existing deployment docs in
   `docs/operations/deployment.md`.
