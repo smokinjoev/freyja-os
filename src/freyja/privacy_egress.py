@@ -108,7 +108,12 @@ class PrivacyEgressGate:
             target_id=destination_provider,
             allowed=allowed,
             reason=reason,
-            metadata={"classification": classification.value},
+            metadata={
+                "classification": classification.value,
+                "destination_provider": destination_provider,
+                "redacted": "[REDACTED_" in redacted_prompt,
+                "redacted_prompt_preview": redacted_prompt[:256],
+            },
         )
         return EgressDecision(
             allowed=allowed,

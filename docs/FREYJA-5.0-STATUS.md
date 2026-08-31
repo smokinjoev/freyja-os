@@ -64,6 +64,10 @@ tasks.
 - Gateway handoff audit events now carry channel, message ID, source/target
   domains, authenticated subject, actor principal, memory scopes, and handoff ID
   so important requests are traceable from ingress before agent runtime starts.
+- Privacy egress audit events now record destination provider, classification,
+  redaction status, and a bounded redacted prompt preview so explicit cloud
+  decisions and denied local-only paths remain auditable without leaking raw
+  secrets.
 - Source-controlled Freyja 5.0 agent and route summaries are covered by drift
   tests against `foundation_seed.py`.
 - Freyja 5.0 certification/runtime mode disables implicit cloud fallback while
