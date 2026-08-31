@@ -67,6 +67,23 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "protocol": "openai-compatible",
         "role": "semantic-inference-plane",
     }
+    assert data["certification"]["suite"] == "freyja5-architecture"
+    assert [target["target"] for target in data["certification"]["targets"]] == ["A", "B", "C", "D", "E", "F", "G"]
+    assert data["certification"]["targets"][0] == {
+        "target": "A",
+        "case": "a-gateway-to-freyja-to-vulcan",
+        "skeleton": "covered",
+        "live": "blocked",
+        "live_blockers": ["vulcan_nexus_presets"],
+    }
+    identity_target = next(target for target in data["certification"]["targets"] if target["target"] == "E")
+    assert identity_target["live"] == "not_required"
+    assert identity_target["live_blockers"] == []
+    assert data["certification"]["live_blockers"] == [
+        "vulcan_nexus_presets",
+        "iris_apple_session",
+        "hera_voice_avatar_hardware",
+    ]
     assert {agent["id"] for agent in data["agents"]} >= {"freyja", "cloyd-gibbler", "benedict-paralegal"}
 
 

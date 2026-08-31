@@ -88,6 +88,8 @@ tasks.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.
+- `/freyja5/readiness` reports A-G certification skeleton coverage and explicit
+  Joe-required live blockers for Vulcan/Nexus, Iris, and Hera.
 - Freyja 5 OpenAI-compatible requests now resolve known household `user` values
   such as `joe`, `beth`, `liam`, and `jenna` to stable `person:<id>` principals
   so the WebGUI channel uses the same identity/memory policy shape as other

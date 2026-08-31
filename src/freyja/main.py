@@ -217,6 +217,7 @@ async def health() -> dict[str, str]:
 async def freyja5_readiness() -> dict[str, Any]:
     route_config = _load_source_yaml("config/freyja-5.0-semantic-routes.yaml")
     mcp_topology = _load_source_yaml("config/freyja-5.0-mcp-topology.yaml")
+    certification_suite = _load_source_yaml("certification/suites/routing/freyja5_architecture.yaml")
     routes = route_config.get("routes") if isinstance(route_config.get("routes"), dict) else {}
     servers = mcp_topology.get("servers") if isinstance(mcp_topology.get("servers"), list) else []
     non_mcp = mcp_topology.get("non_mcp_boundaries") if isinstance(mcp_topology.get("non_mcp_boundaries"), list) else []
@@ -264,6 +265,15 @@ async def freyja5_readiness() -> dict[str, Any]:
             ),
             None,
         ),
+        "certification": {
+            "suite": certification_suite.get("name"),
+            "targets": _freyja5_certification_targets(certification_suite),
+            "live_blockers": [
+                "vulcan_nexus_presets",
+                "iris_apple_session",
+                "hera_voice_avatar_hardware",
+            ],
+        },
     }
 
 
@@ -274,6 +284,39 @@ def _load_source_yaml(relative_path: str) -> dict[str, Any]:
     except OSError:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _freyja5_certification_targets(certification_suite: dict[str, Any]) -> list[dict[str, Any]]:
+    cases = certification_suite.get("cases")
+    if not isinstance(cases, list):
+        return []
+    live_blockers_by_target = {
+        "a": ["vulcan_nexus_presets"],
+        "b": ["vulcan_nexus_presets", "live_tool_sessions"],
+        "c": ["iris_apple_session"],
+        "d": ["vulcan_nexus_presets"],
+        "e": [],
+        "f": ["vulcan_nexus_private_preset"],
+        "g": [],
+    }
+    targets: list[dict[str, Any]] = []
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        name = str(case.get("name") or "")
+        target = name.split("-", 1)[0]
+        if target not in live_blockers_by_target:
+            continue
+        targets.append(
+            {
+                "target": target.upper(),
+                "case": name,
+                "skeleton": "covered",
+                "live": "blocked" if live_blockers_by_target[target] else "not_required",
+                "live_blockers": live_blockers_by_target[target],
+            }
+        )
+    return targets
 
 
 @app.get("/ollama/health")
