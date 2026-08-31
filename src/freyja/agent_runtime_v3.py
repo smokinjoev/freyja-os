@@ -33,6 +33,7 @@ from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.media import AttachmentInput, document_texts_from_attachments, images_from_attachments
 from freyja.ollama_client import OllamaClient
 from freyja.privacy_egress import PrivacyEgressGate
+from freyja.semantic_routes import SemanticRoute, capability_for_route, route_for_capability, semantic_route_for_objective
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry
 from freyja.tools.weather import classify_weather_request
@@ -154,7 +155,8 @@ class AgentRuntimeV3:
 
     async def arun(self, handoff: GatewayHandoff) -> AgentExecutionResult:
         agent = self._agent(handoff.target_agent_id)
-        capability = self.choose_inference_capability(handoff.prompt, bool(handoff.attachments))
+        requested_route = self.choose_semantic_route(agent, handoff.prompt, bool(handoff.attachments))
+        capability = capability_for_route(requested_route)
         selected_tools = self.choose_tools(agent, handoff.prompt, handoff.available_tools)
         steps: list[AgentStep] = [
             AgentStep(kind="objective_received", detail=handoff.prompt),
@@ -194,9 +196,13 @@ class AgentRuntimeV3:
                 memory_candidates=tuple(memory_candidates),
                 follow_up_questions=tuple(follow_up_questions),
                 inference_endpoint_id=None,
+                requested_route=requested_route.value,
                 inference_model=None,
                 inference_machine_id=None,
+                inference_provider=None,
                 inference_status=None,
+                egress_state="local-only",
+                trace_summary=_trace_summary(handoff, agent, requested_route.value, None, tool_results, audit_events, "local-only"),
                 steps=tuple(steps),
                 audit_events=tuple(audit_events),
                 degraded=False,
@@ -212,13 +218,18 @@ class AgentRuntimeV3:
         inference_endpoint_id = None
         inference_model = None
         inference_machine_id = None
+        inference_provider = None
         inference_status = None
         inference_text = None
         degraded = False
+        egress_state = "local-only"
         if endpoint is not None and not follow_up_questions:
             inference_endpoint_id = endpoint.endpoint_id
             inference_model = endpoint.model or None
             inference_machine_id = endpoint.machine_id
+            inference_provider = endpoint.provider
+            if endpoint.provider in {"openrouter"} or endpoint.security_domain_id == SecurityDomainId.SYSTEM:
+                egress_state = "cloud-approved"
             steps.append(
                 AgentStep(
                     kind="inference_selected",
@@ -234,7 +245,7 @@ class AgentRuntimeV3:
                     target_id=endpoint.endpoint_id,
                     allowed=True,
                     reason="agent selected endpoint from compute registry",
-                    metadata={"capability": selected_capability, "role_alias": role_alias},
+                    metadata={"capability": _legacy_capability_for_metadata(selected_capability), "role_alias": role_alias},
                 )
             )
             inference_status, inference_text = await self._run_selected_inference(
@@ -296,9 +307,13 @@ class AgentRuntimeV3:
             memory_candidates=tuple(memory_candidates),
             follow_up_questions=tuple(follow_up_questions),
             inference_endpoint_id=inference_endpoint_id,
+            requested_route=requested_route.value,
             inference_model=inference_model,
             inference_machine_id=inference_machine_id,
+            inference_provider=inference_provider,
             inference_status=inference_status,
+            egress_state=egress_state,
+            trace_summary=_trace_summary(handoff, agent, requested_route.value, inference_endpoint_id, tool_results, audit_events, egress_state),
             steps=tuple(steps),
             audit_events=tuple(audit_events),
             degraded=degraded,
@@ -730,13 +745,14 @@ class AgentRuntimeV3:
         )
 
     def choose_inference_capability(self, objective: str, has_attachments: bool = False) -> str:
-        if has_attachments or any(term in objective.lower() for term in ("photo", "image", "picture")):
-            return "vision.large"
-        if _is_simple_local_objective(objective):
-            return "general.local"
-        if _is_coding_objective(objective):
-            return "code.large"
-        return "general.large"
+        return capability_for_route(semantic_route_for_objective(objective, has_attachments=has_attachments))
+
+    def choose_semantic_route(self, agent: PersistentAgent, objective: str, has_attachments: bool = False) -> SemanticRoute:
+        return semantic_route_for_objective(
+            objective,
+            has_attachments=has_attachments,
+            private=agent.cloud_egress_policy_id == "paralegal-local-only",
+        )
 
     async def _execute_selected_tools(
         self,
@@ -1363,6 +1379,19 @@ def _is_simple_local_objective(objective: str) -> bool:
 
 def inference_role_alias(capability: str) -> str:
     """Public model role surfaced to routing logs and LiteLLM-compatible clients."""
+    route = route_for_capability(capability)
+    if route == SemanticRoute.CODE:
+        return "vulcan-coder"
+    if route == SemanticRoute.VISION:
+        return "vulcan-vision"
+    if route == SemanticRoute.EMBEDDING:
+        return "vulcan-embeddings"
+    if route == SemanticRoute.FAST:
+        return "iris-fast"
+    if route == SemanticRoute.PRIVATE:
+        return "private"
+    if route in {SemanticRoute.GENERAL, SemanticRoute.DEEP}:
+        return "vulcan-general"
     if capability in {"code.large", "coding"}:
         return "vulcan-coder"
     if capability == "vision.large":
@@ -1379,10 +1408,52 @@ def inference_role_alias(capability: str) -> str:
 def _selected_endpoint_capability(endpoint_capabilities: frozenset[str], requested_capability: str) -> str:
     if requested_capability in endpoint_capabilities:
         return requested_capability
+    route = route_for_capability(requested_capability)
+    if route == SemanticRoute.PRIVATE:
+        for capability in ("route.private", "route.vision", "route.embedding"):
+            if capability in endpoint_capabilities:
+                return capability
     for capability in ("general.local", "general.large", "code.large", "vision.large", "embeddings.local", "general.cloud"):
         if capability in endpoint_capabilities:
             return capability
     return requested_capability
+
+
+def _legacy_capability_for_metadata(capability: str) -> str:
+    return {
+        "route.fast": "general.local",
+        "route.general": "general.large",
+        "route.deep": "general.deep",
+        "route.code": "code.large",
+        "route.vision": "vision.large",
+        "route.embedding": "embeddings.local",
+    }.get(capability, capability)
+
+
+def _trace_summary(
+    handoff: GatewayHandoff,
+    agent: PersistentAgent,
+    requested_route: str,
+    inference_endpoint_id: str | None,
+    tool_results: list[dict[str, Any]],
+    audit_events: list[AuditEvent],
+    egress_state: str,
+) -> dict[str, Any]:
+    return {
+        "trace_id": handoff.handoff_id,
+        "channel": handoff.channel,
+        "resolved_user": handoff.sender_id,
+        "authenticated_subject": handoff.authenticated_subject,
+        "agent": agent.agent_id,
+        "requested_route": requested_route,
+        "actual_endpoint": inference_endpoint_id,
+        "tool_calls": [result.get("capability_id") for result in tool_results],
+        "delegation": [step.detail for step in []],
+        "machine": None,
+        "failures": [result for result in tool_results if result.get("success") is False],
+        "egress_state": egress_state,
+        "audit_event_count": len(audit_events),
+    }
 
 
 def _openai_compatible_base_url(endpoint_provider: str) -> str:

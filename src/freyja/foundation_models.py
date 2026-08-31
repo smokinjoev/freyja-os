@@ -189,9 +189,13 @@ class AgentExecutionResult(BaseModel):
     memory_candidates: tuple[dict[str, Any], ...] = ()
     follow_up_questions: tuple[str, ...] = ()
     inference_endpoint_id: str | None = None
+    requested_route: str | None = None
     inference_model: str | None = None
     inference_machine_id: str | None = None
+    inference_provider: str | None = None
     inference_status: str | None = None
+    egress_state: str = "local-only"
+    trace_summary: dict[str, Any] = Field(default_factory=dict)
     steps: tuple[AgentStep, ...] = ()
     audit_events: tuple[AuditEvent, ...] = ()
     degraded: bool = False

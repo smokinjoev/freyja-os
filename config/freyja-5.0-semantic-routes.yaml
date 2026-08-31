@@ -1,0 +1,26 @@
+version: freyja-5.0
+owner: nexus
+cloud_fallback: explicit_only
+routes:
+  fast:
+    capability: route.fast
+    preferred_runtime: vulcan-nexus-fast
+  general:
+    capability: route.general
+    preferred_runtime: vulcan-nexus-strong
+  deep:
+    capability: route.deep
+    preferred_runtime: vulcan-deep
+  code:
+    capability: route.code
+    preferred_runtime: vulcan-nexus-coder
+  vision:
+    capability: route.vision
+    preferred_runtime: vulcan-nexus-vision-docs
+  embedding:
+    capability: route.embedding
+    preferred_runtime: vulcan-embeddings
+  private:
+    capability: route.private
+    preferred_runtime: benedict-paralegal-nexus
+    egress_policy: local_only

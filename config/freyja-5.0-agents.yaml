@@ -1,0 +1,36 @@
+version: freyja-5.0
+canonical_source: src/freyja/foundation_seed.py
+agents:
+  - id: freyja
+    display_name: Freyja
+    owner: household
+    home_machine: atlas
+    memory: [agent:freyja, family, system]
+  - id: cloyd-gibbler
+    display_name: Cloyd Gibbler
+    owner: person:joe
+    home_machine: atlas
+    memory: [person:joe, family, system]
+  - id: benedict
+    display_name: Benedict
+    owner: person:beth
+    home_machine: atlas
+    memory: [person:beth, family, system]
+  - id: benedict-paralegal
+    display_name: Benedict Paralegal
+    owner: enclave:paralegal
+    home_machine: atlas
+    memory: [enclave:paralegal, system]
+    egress_policy: paralegal-local-only
+  - id: agent-47
+    display_name: Agent 44
+    owner: person:liam
+    home_machine: atlas
+    aliases: [agent 44, agent_44, agent 47, agent_47, liam]
+    memory: [person:liam, family, system]
+  - id: jennacide
+    display_name: Jenna agent
+    owner: person:jenna
+    home_machine: atlas
+    aliases: [jenna, jenna-agent]
+    memory: [person:jenna, family, system]
