@@ -38,6 +38,11 @@ Atlas. Freyja 5.0 exposes an opt-in OpenAI-compatible `freyja-5` model for
 Gateway/runtime skeleton testing, but the production Open WebUI default remains
 the local `model-proxy` until live Nexus/Vulcan readiness is validated.
 
+The `freyja-5` endpoint does not run live inference unless
+`FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED=true` is set on the Freyja service with
+`NEXUS_BASE_URL` and host secrets configured outside source control. Cloud
+fallback remains disabled for this path.
+
 Do not install separate Open WebUI servers on every client device. Other
 devices should open the Atlas URL in a browser and optionally install it as a
 PWA/Add to Home Screen.

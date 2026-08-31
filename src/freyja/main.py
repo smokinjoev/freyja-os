@@ -1114,7 +1114,10 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
         )
         if gateway_result.handoff is None:
             raise HTTPException(status_code=403, detail="Freyja 5 Gateway rejected request.")
-        result = await AgentRuntimeV3(run_inference=False, allow_cloud_fallback=False).arun(gateway_result.handoff)
+        result = await AgentRuntimeV3(
+            run_inference=settings.freyja5_openai_live_inference_enabled,
+            allow_cloud_fallback=False,
+        ).arun(gateway_result.handoff)
         duration_ms = int((time.monotonic() - start) * 1000)
         response_body = _openai_chat_response(
             request_id=request_id,

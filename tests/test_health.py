@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -164,6 +165,59 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_skeleton(monkeypatc
     assert data["freyja"]["egress_state"] == "local-only"
     assert data["freyja"]["trace"]["channel"] == "open-webui"
     assert data["freyja"]["trace"]["resolved_user"] == "open-webui:open-webui"
+    assert data["freyja"]["trace"]["inference_status"] == "not_run"
+
+
+def test_openai_chat_completion_freyja5_live_inference_flag_is_explicit(monkeypatch) -> None:
+    from freyja import main as director_main
+    from freyja.config import settings
+
+    seen = {}
+
+    class FakeRuntime:
+        def __init__(self, *, run_inference, allow_cloud_fallback, **kwargs):
+            seen["run_inference"] = run_inference
+            seen["allow_cloud_fallback"] = allow_cloud_fallback
+
+        async def arun(self, handoff):
+            return SimpleNamespace(
+                trace_id=handoff.handoff_id,
+                conversation_id=handoff.conversation_id,
+                agent_id="freyja",
+                requested_route="general",
+                inference_endpoint_id="vulcan-nexus-strong",
+                inference_provider="nexus",
+                inference_model="@preset/freyja-strong",
+                egress_state="local-only",
+                degraded=False,
+                trace_summary={
+                    "trace_id": handoff.handoff_id,
+                    "channel": handoff.channel,
+                    "resolved_user": handoff.sender_id,
+                    "agent_logical_display_name": "Freyja",
+                    "requested_route": "general",
+                    "actual_provider": "nexus",
+                    "actual_model": "@preset/freyja-strong",
+                    "inference_status": "ok",
+                },
+            )
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", True)
+    monkeypatch.setattr(director_main, "AgentRuntimeV3", FakeRuntime)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "freyja-5",
+            "messages": [{"role": "user", "content": "hello from webgui"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert seen == {"run_inference": True, "allow_cloud_fallback": False}
+    assert response.json()["freyja"]["trace"]["inference_status"] == "ok"
 
 
 def test_openai_chat_completion_freyja5_streams_sse(monkeypatch) -> None:

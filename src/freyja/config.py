@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     freyja_connector_token: str = ""
     freyja3_canonical_enabled: bool = Field(default=False, alias="FREYJA3_CANONICAL_ENABLED")
     freyja3_inference_enabled: bool = Field(default=False, alias="FREYJA3_INFERENCE_ENABLED")
+    freyja5_openai_live_inference_enabled: bool = Field(default=False, alias="FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED")
     freyja3_event_database_path: str = Field(default="data/freyja3_events.db", alias="FREYJA3_EVENT_DATABASE_PATH")
     freyja3_memory_database_path: str = Field(default="data/freyja3_memory.db", alias="FREYJA3_MEMORY_DATABASE_PATH")
     freyja3_scheduler_database_path: str = Field(default="data/freyja3_scheduler.db", alias="FREYJA3_SCHEDULER_DATABASE_PATH")
