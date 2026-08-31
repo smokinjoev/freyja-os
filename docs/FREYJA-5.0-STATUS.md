@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260831T233234Z0000-freyja5-architecture.md`.
+  `certification/reports/20260831T233459Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -82,6 +82,9 @@ tasks.
 - Freyja 5 certification reports include source-controlled MCP topology
   evidence: default per-agent MCP servers are disabled, MCP hosts are Atlas and
   Iris, and Vulcan remains the OpenAI-compatible Nexus inference boundary.
+- Added a side-by-side Freyja 5 compose target at `deploy/compose/freyja5` for
+  Atlas testing on port `8500`. It preserves existing 4.1/Freyja3/Open WebUI
+  deployments and keeps live inference/cloud egress disabled by default.
 
 ## Start And Test
 
@@ -95,5 +98,7 @@ tasks.
 - To allow the `freyja-5` OpenAI-compatible endpoint to call live local Nexus
   inference, set `FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED=true` with `NEXUS_BASE_URL`
   and local host secrets configured outside source control.
+- Start the side-by-side Freyja 5 gateway with
+  `docker compose --env-file deploy/compose/freyja5/.env -f deploy/compose/freyja5/compose.yaml up -d --build`.
 - Start Atlas/Freyja sidecar using the existing deployment docs in
   `docs/operations/deployment.md`.

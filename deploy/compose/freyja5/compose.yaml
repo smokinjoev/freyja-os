@@ -1,0 +1,71 @@
+name: freyja5
+
+services:
+  gateway:
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/director.Dockerfile
+    restart: unless-stopped
+    user: "1000:1000"
+    command:
+      - uvicorn
+      - freyja.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8500"
+    environment:
+      FREYJA_ENV: ${FREYJA_ENV:-production}
+      FREYJA_CONNECTOR_TOKEN: ${FREYJA_CONNECTOR_TOKEN:-}
+      FREYJA3_CANONICAL_ENABLED: ${FREYJA3_CANONICAL_ENABLED:-true}
+      FREYJA3_INFERENCE_ENABLED: ${FREYJA3_INFERENCE_ENABLED:-false}
+      FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED: ${FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED:-false}
+      FREYJA3_EVENT_DATABASE_PATH: /app/data/freyja3_events.db
+      FREYJA3_MEMORY_DATABASE_PATH: /app/data/freyja3_memory.db
+      FREYJA3_SCHEDULER_DATABASE_PATH: /app/data/freyja3_scheduler.db
+      FREYJA3_MACHINE_DATABASE_PATH: /app/data/freyja3_machines.db
+      FREYJA3_WORKER_DATABASE_PATH: /app/data/freyja3_workers.db
+      FREYJA3_AUDIT_DATABASE_PATH: /app/data/freyja3_audit.db
+      MEMORY_DATABASE_PATH: /app/data/freyja.db
+      REPOSITORY_ROOT: /app
+      NEXUS_BASE_URL: ${NEXUS_BASE_URL:-}
+      NEXUS_API_KEY: ${NEXUS_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://100.94.80.21:11434}
+      OLLAMA_REASONING_BASE_URL: ${OLLAMA_REASONING_BASE_URL:-http://100.94.80.21:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
+      OLLAMA_REASONING_MODEL: ${OLLAMA_REASONING_MODEL:-qwen2.5:32b-instruct}
+      OLLAMA_CODING_MODEL: ${OLLAMA_CODING_MODEL:-qwen3-coder-next:q4_K_M}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-qwen2.5vl:72b}
+      CLOUD_ENABLED: ${CLOUD_ENABLED:-false}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      TOOLS_ENABLED: ${TOOLS_ENABLED:-true}
+      TOOLS_AUDIT_LOG_ENABLED: ${TOOLS_AUDIT_LOG_ENABLED:-true}
+      WEATHER_TOOL_ENABLED: ${WEATHER_TOOL_ENABLED:-false}
+      CALENDAR_DEFAULT_PROVIDER: ${CALENDAR_DEFAULT_PROVIDER:-memory}
+      APPLE_CALENDAR_ENABLED: ${APPLE_CALENDAR_ENABLED:-false}
+      APPLE_CALENDAR_BACKEND: ${APPLE_CALENDAR_BACKEND:-macagent}
+      MACAGENT_ENABLED: ${MACAGENT_ENABLED:-false}
+      MACAGENT_BASE_URL: ${MACAGENT_BASE_URL:-http://100.115.228.56:8765}
+      MACAGENT_TOKEN: ${MACAGENT_TOKEN:-}
+      HOME_ASSISTANT_BASE_URL: ${HOME_ASSISTANT_BASE_URL:-}
+      HOME_ASSISTANT_ACCESS_TOKEN: ${HOME_ASSISTANT_ACCESS_TOKEN:-}
+    ports:
+      - "${FREYJA5_BIND_IP:-0.0.0.0}:${FREYJA5_HOST_PORT:-8500}:8500"
+    volumes:
+      - ../../../data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8500/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
