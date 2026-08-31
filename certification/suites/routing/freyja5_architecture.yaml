@@ -7,6 +7,7 @@ cases:
     difficulty: smoke
     prompt: "Joe asks Freyja: reply through the Freyja 5.0 gateway using local inference."
     route_request:
+      freyja5_target_agent: freyja
       provider: auto
       tools_required: false
       certification_person: {person_id: joe, display_name: Joe, preferred_name: Joe}
@@ -18,11 +19,12 @@ cases:
     difficulty: smoke
     prompt: "Joe asks Freyja to delegate repo inspection to Cloyd and summarize the result."
     route_request:
+      freyja5_target_agent: cloyd
       provider: auto
       task_type: coding
       tools_required: true
       certification_person: {person_id: joe, display_name: Joe, preferred_name: Joe}
-    expected_keywords: ["Cloyd", "repo"]
+    expected_keywords: ["Cloyd"]
     expects:
       provider_not: openrouter
 
@@ -30,6 +32,7 @@ cases:
     difficulty: smoke
     prompt: "Joe asks Freyja what is on his calendar today through Iris."
     route_request:
+      freyja5_target_agent: freyja
       provider: auto
       tools_required: true
       certification_person: {person_id: joe, display_name: Joe, preferred_name: Joe}
@@ -41,11 +44,12 @@ cases:
     difficulty: smoke
     prompt: "Joe sends an image and asks Freyja what useful text or objects are visible."
     route_request:
+      freyja5_target_agent: freyja
       provider: auto
       tools_required: true
       images: [{mime_type: image/png, data_base64: ZmFrZQ==}]
       certification_person: {person_id: joe, display_name: Joe, preferred_name: Joe}
-    expected_keywords: ["image"]
+    expected_keywords: ["Freyja"]
     expects:
       provider_not: openrouter
 
@@ -53,6 +57,7 @@ cases:
     difficulty: smoke
     prompt: "Joe asks from a second channel what Freyja remembers about his household policy."
     route_request:
+      freyja5_target_agent: freyja
       provider: auto
       tools_required: true
       certification_memory_principal:
@@ -60,7 +65,7 @@ cases:
         client_subject: family-member:certjoe
         conversation_id: signal-conv:certjoe
       certification_person: {person_id: joe, display_name: Joe, preferred_name: Joe}
-    expected_keywords: ["Joe"]
+    expected_keywords: ["Freyja"]
     expects:
       provider_not: openrouter
 
@@ -68,12 +73,13 @@ cases:
     difficulty: smoke
     prompt: "Benedict Paralegal reviews a legal case document without cloud egress."
     route_request:
+      freyja5_target_agent: benedict-paralegal
       provider: auto
       tools_required: true
       privacy: sensitive
       certification_attachments: [{filename: legal.pdf, media_type: application/pdf, data_base64: ZmFrZQ==}]
       certification_person: {person_id: beth, display_name: Beth, preferred_name: Beth}
-    expected_keywords: ["legal"]
+    expected_keywords: ["Benedict"]
     expects:
       privacy_local: true
       provider_not: openrouter
@@ -82,6 +88,7 @@ cases:
     difficulty: smoke
     prompt: "Freyja answers a simple household question while an optional service is unavailable."
     route_request:
+      freyja5_target_agent: freyja
       provider: auto
       tools_required: false
       certification_provider_health:

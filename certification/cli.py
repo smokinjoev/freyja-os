@@ -37,7 +37,7 @@ from certification.rev2_readiness import (
     run_readiness_probe,
     write_readiness_report,
 )
-from certification.runner import OpenRouterCertificationProvider, OllamaCertificationProvider, list_suite_names, load_suite, run_suite_sync
+from certification.runner import Freyja5CertificationProvider, OpenRouterCertificationProvider, OllamaCertificationProvider, list_suite_names, load_suite, run_suite_sync
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--provider",
-        choices=("ollama", "local_reasoning", "openrouter"),
+        choices=("ollama", "local_reasoning", "openrouter", "freyja5"),
         action="append",
         default=None,
         help="Model provider to use. Repeat with --model in benchmark mode. Defaults to ollama.",
@@ -437,6 +437,8 @@ def _compare(args: argparse.Namespace) -> int:
 
 
 def _provider(provider_name: str, model: str | None):
+    if provider_name == "freyja5":
+        return Freyja5CertificationProvider(model=model)
     if provider_name in {"ollama", "local_reasoning"}:
         from certification.runner import provider_for_name
 

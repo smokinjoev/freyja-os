@@ -48,12 +48,19 @@ tasks.
   legacy Director/router path for this suite, so Freyja 5.0 Gateway/AgentRuntime
   trace assertions are not yet first-class certification evidence. Additional
   failures also depend on unavailable local/cloud model providers during the run.
+- Follow-up implementation added a `freyja5` certification provider so the suite
+  can exercise `AgentGateway` and `AgentRuntimeV3` directly without live model
+  calls.
+- Latest direct skeleton certification:
+  `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
+  passed 100.0% with report
+  `certification/reports/20260831T202534Z0000-freyja5-architecture.md`.
 
 ## Start And Test
 
 - Run unit tests: `pytest tests/test_freyja5_architecture.py tests/test_nexus_provider.py`
 - Run the broader architecture spine: `pytest tests/test_freyja3_architecture.py`
 - Run the 5.0 certification suite when live services are available:
-  `freyja-certify routing/freyja5_architecture`
+  `freyja-certify routing/freyja5_architecture --provider freyja5`
 - Start Atlas/Freyja sidecar using the existing deployment docs in
   `docs/operations/deployment.md`.

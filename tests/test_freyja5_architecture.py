@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
-from certification.runner import load_suite
+from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
 from freyja.foundation_models import GatewaySender, SecurityDomainId
 from freyja.semantic_routes import SemanticRoute, capability_for_route
 
@@ -79,3 +79,14 @@ def test_freyja5_certification_suite_tracks_architecture_cases_a_through_g() -> 
 
     assert suite.name == "freyja5-architecture"
     assert [case.name[0] for case in suite.cases] == ["a", "b", "c", "d", "e", "f", "g"]
+
+
+def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
+    suite = load_suite("routing/freyja5_architecture")
+
+    report = run_suite_sync(suite=suite, provider=Freyja5CertificationProvider())
+
+    assert report.passed is True
+    assert report.metadata.provider == "local_reasoning"
+    assert {case.runtime_context["interface"] for case in report.cases} == {"freyja5"}
+    assert all(case.runtime_context["rev2_evidence"]["freyja5_trace_id"] for case in report.cases)

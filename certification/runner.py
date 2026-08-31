@@ -317,6 +317,60 @@ class OpenRouterCertificationProvider:
         return CertificationExecution(response=result.response, context=context)
 
 
+class Freyja5CertificationProvider:
+    name = "freyja5"
+
+    def __init__(self, model: str | None = None) -> None:
+        self.model = model or "semantic-routes"
+
+    async def complete(self, case: CertificationCase) -> CertificationExecution:
+        from freyja.agent_gateway import AgentGateway, GatewayRequest
+        from freyja.agent_runtime_v3 import AgentRuntimeV3
+        from freyja.foundation_models import GatewaySender
+
+        request_data = dict(case.route_request)
+        _route_data, principal_data, person_context, fixtures = split_route_request_context(dict(request_data))
+        target_agent = str(request_data.get("freyja5_target_agent") or _target_agent_for_case(case, person_context))
+        sender_domain = _sender_domain_for_agent(target_agent, person_context)
+        sender = GatewaySender(
+            sender_id=_sender_id_for_domain(sender_domain, person_context),
+            display_name=(person_context or {}).get("display_name") or str(sender_domain),
+            security_domain_id=sender_domain,
+        )
+        start = time.monotonic()
+        try:
+            handoff = AgentGateway().handle(
+                GatewayRequest(
+                    sender=sender,
+                    target_agent=target_agent,
+                    prompt=case.prompt,
+                    conversation_id=str(request_data.get("request_id") or case.name),
+                    channel=str((principal_data or {}).get("client_type") or "certification"),
+                    attachments=_freyja5_attachments(request_data, fixtures),
+                )
+            ).handoff
+            if handoff is None:
+                raise RuntimeError("gateway did not produce a handoff")
+            result = await AgentRuntimeV3(run_inference=False).arun(handoff)
+        except Exception as exc:
+            context = CertificationContext(
+                request_id=str(request_data.get("request_id") or case.name),
+                interface="freyja5",
+                principal=principal_data,
+                person=person_context,
+                provider_selected="freyja5",
+                model_selected=self.model,
+                routing_decision="gateway_error",
+                routing_reason=str(exc),
+                timing={"duration_ms": elapsed_ms(start)},
+            )
+            return CertificationExecution(response="", error=str(exc), context=context)
+
+        context = _context_from_freyja5_result(result, principal_data, person_context, elapsed_ms(start))
+        _apply_certification_fixtures(context, fixtures)
+        return CertificationExecution(response=result.response_text, context=context)
+
+
 def provider_for_name(
     provider: str,
     model: str | None = None,
@@ -328,6 +382,8 @@ def provider_for_name(
         return LocalReasoningCertificationProvider(model=model)
     if provider == "openrouter":
         return OpenRouterCertificationProvider(model=model, router_instance=router_instance)
+    if provider == "freyja5":
+        return Freyja5CertificationProvider(model=model)
     raise ValueError(f"Unsupported certification provider '{provider}'")
 
 
@@ -634,6 +690,48 @@ def _context_from_routing_result(result: Any, duration_ms: float) -> Certificati
     return context
 
 
+def _context_from_freyja5_result(
+    result: Any,
+    principal_data: dict[str, Any] | None,
+    person_context: dict[str, str] | None,
+    duration_ms: float,
+) -> CertificationContext:
+    trace = result.trace_summary if isinstance(result.trace_summary, dict) else {}
+    context = CertificationContext(
+        request_id=result.conversation_id,
+        interface="freyja5",
+        principal=principal_data,
+        person=person_context,
+        provider_selected="local_reasoning" if result.egress_state == "local-only" else "openrouter",
+        provider_profile_id=result.inference_endpoint_id,
+        provider_locality="local" if result.egress_state == "local-only" else "cloud",
+        model_selected=result.inference_model or "semantic-routes",
+        routing_decision=str(result.requested_route or ""),
+        routing_reason="freyja5 gateway/runtime semantic route",
+        timing={"duration_ms": duration_ms},
+        rev2_evidence={
+            "freyja5_trace_id": result.trace_id,
+            "freyja5_trace_summary": trace,
+            "freyja5_requested_route": result.requested_route,
+            "freyja5_egress_state": result.egress_state,
+            "freyja5_agent_id": result.agent_id,
+        },
+    )
+    context.tool_calls = [
+        ToolCallEvidence(
+            name=_freyja5_tool_name(str(tool_id)),
+            arguments={},
+            success=True,
+        )
+        for tool_id in result.selected_tools
+    ]
+    if result.requested_route == "vision":
+        context.vision_executions.append({"route": "vision", "provider_profile_id": result.inference_endpoint_id})
+    if result.recalled_memories:
+        context.memory_lookups.append({"count": len(result.recalled_memories), "agent_id": result.agent_id})
+    return context
+
+
 def _apply_certification_fixtures(context: CertificationContext, fixtures: dict[str, Any]) -> None:
     if not fixtures:
         return
@@ -730,3 +828,79 @@ def _selected_model(case_results: list[CaseResult]) -> str | None:
         if model:
             return str(model)
     return None
+
+
+def _target_agent_for_case(case: CertificationCase, person_context: dict[str, str] | None) -> str:
+    lowered = case.prompt.lower()
+    if "benedict paralegal" in lowered or "paralegal" in lowered:
+        return "benedict-paralegal"
+    if "cloyd" in lowered or case.route_request.get("task_type") == "coding":
+        return "cloyd"
+    person_id = (person_context or {}).get("person_id")
+    if person_id == "beth":
+        return "benedict"
+    if person_id == "liam":
+        return "agent 44"
+    if person_id == "jenna":
+        return "jenna"
+    return "freyja"
+
+
+def _sender_domain_for_agent(target_agent: str, person_context: dict[str, str] | None):
+    from freyja.foundation_models import SecurityDomainId
+
+    if target_agent == "benedict-paralegal":
+        return SecurityDomainId.PARALEGAL
+    person_id = (person_context or {}).get("person_id")
+    return {
+        "joe": SecurityDomainId.PERSON_JOE,
+        "beth": SecurityDomainId.PERSON_BETH,
+        "liam": SecurityDomainId.PERSON_LIAM,
+        "jenna": SecurityDomainId.PERSON_JENNA,
+    }.get(person_id or "", SecurityDomainId.HOUSEHOLD)
+
+
+def _sender_id_for_domain(domain: Any, person_context: dict[str, str] | None) -> str:
+    person_id = (person_context or {}).get("person_id")
+    if person_id:
+        return f"person:{person_id}"
+    return str(getattr(domain, "value", domain))
+
+
+def _freyja5_attachments(request_data: dict[str, Any], fixtures: dict[str, Any]) -> list[dict[str, Any]]:
+    attachments = []
+    for image in request_data.get("images") or ():
+        if isinstance(image, dict):
+            attachments.append(
+                {
+                    "filename": "certification-image",
+                    "mime_type": image.get("mime_type") or image.get("media_type") or "image/png",
+                    "data_base64": image.get("data_base64") or "",
+                }
+            )
+    for attachment in fixtures.get("certification_attachments") or ():
+        if isinstance(attachment, dict):
+            attachments.append(
+                {
+                    "filename": attachment.get("filename") or "certification-attachment",
+                    "mime_type": attachment.get("mime_type") or attachment.get("media_type") or "application/octet-stream",
+                    "data_base64": attachment.get("data_base64") or "",
+                }
+            )
+    return attachments
+
+
+def _freyja5_tool_name(capability_id: str) -> str:
+    return {
+        "calendar.read": "calendar_today_schedule",
+        "calendar.write": "calendar_create_event",
+        "home-assistant.read": "home_assistant_list_states",
+        "home-assistant.control": "home_assistant_control_state",
+        "web.search": "web_search",
+        "weather.current": "get_weather",
+        "documents.process": "documents_process",
+        "vision.inspect": "vision_inspect",
+        "memory.private": "recall_conversation",
+        "memory.shared": "memory_recall_shared",
+        "system.health": "system_health",
+    }.get(capability_id, capability_id)
