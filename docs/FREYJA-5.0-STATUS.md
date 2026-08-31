@@ -68,6 +68,9 @@ tasks.
   redaction status, and a bounded redacted prompt preview so explicit cloud
   decisions and denied local-only paths remain auditable without leaking raw
   secrets.
+- Freyja 5 runtime trace summaries include privacy egress decision evidence
+  when fallback evaluation occurs, including denied cloud attempts with redacted
+  prompt previews.
 - Source-controlled Freyja 5.0 agent and route summaries are covered by drift
   tests against `foundation_seed.py`.
 - Freyja 5.0 certification/runtime mode disables implicit cloud fallback while

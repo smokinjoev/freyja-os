@@ -1499,6 +1499,17 @@ def _trace_summary(
             {"event_type": event.event_type.value, "target_id": event.target_id, "reason": event.reason}
             for event in failed_events
         ],
+        "egress_decisions": [
+            {
+                "event_type": event.event_type.value,
+                "target_id": event.target_id,
+                "allowed": event.allowed,
+                "reason": event.reason,
+                "metadata": dict(event.metadata),
+            }
+            for event in audit_events
+            if event.event_type in {AuditEventType.PRIVACY_EGRESS_ALLOWED, AuditEventType.PRIVACY_EGRESS_DENIED}
+        ],
         "egress_state": egress_state,
         "audit_event_count": len(audit_events),
     }

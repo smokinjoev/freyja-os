@@ -305,3 +305,48 @@ def test_freyja5_mode_does_not_use_implicit_cloud_fallback() -> None:
     assert result.egress_state == "local-only"
     assert result.trace_summary["actual_provider"] is None
     assert result.trace_summary["fallbacks"] == []
+
+
+def test_freyja5_trace_records_denied_cloud_egress_decision() -> None:
+    registry = InferenceRegistryV3(
+        endpoints=(
+            InferenceEndpoint(
+                endpoint_id="cloud-general",
+                display_name="Cloud general",
+                provider="openrouter",
+                model="cloud",
+                capabilities=frozenset({"general.cloud"}),
+                security_domain_id=SecurityDomainId.SYSTEM,
+                priority=1,
+            ),
+        ),
+        include_configured=False,
+    )
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender(SecurityDomainId.PERSON_JOE),
+            target_agent="cloyd",
+            prompt="Summarize this legal case and api_key=secret.",
+            conversation_id="conv-egress-denied",
+            channel="test",
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(
+        inference_registry=registry,
+        run_inference=False,
+        allow_cloud_fallback=True,
+    ).run(handoff)
+
+    assert result.inference_endpoint_id is None
+    assert result.degraded is True
+    assert result.egress_state == "local-only"
+    egress_decision = result.trace_summary["egress_decisions"][0]
+    assert egress_decision["event_type"] == "privacy_egress_denied"
+    assert egress_decision["target_id"] == "cloud-frontier"
+    assert egress_decision["allowed"] is False
+    assert egress_decision["metadata"]["classification"] == "restricted"
+    assert egress_decision["metadata"]["redacted"] is True
+    assert "[REDACTED_SECRET]" in egress_decision["metadata"]["redacted_prompt_preview"]
+    assert "api_key=secret" not in egress_decision["metadata"]["redacted_prompt_preview"]

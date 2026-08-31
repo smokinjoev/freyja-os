@@ -10,7 +10,7 @@ from freyja.foundation_models import AuditEvent, AuditEventType, MemoryClassific
 
 
 _SECRET_PATTERNS = (
-    re.compile(r"\b(api[_-]?key|token|password|secret)\s*[:=]", re.IGNORECASE),
+    re.compile(r"\b(api[_-]?key|token|password|secret)\s*[:=]\s*[^,\s;]+", re.IGNORECASE),
     re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
 )
 _PII_PATTERNS = (
@@ -86,7 +86,7 @@ class PrivacyEgressGate:
     def redact(self, prompt: str) -> str:
         redacted = prompt
         for pattern in _SECRET_PATTERNS:
-            redacted = pattern.sub("[REDACTED_SECRET]=", redacted)
+            redacted = pattern.sub("[REDACTED_SECRET]", redacted)
         for pattern in _PII_PATTERNS:
             redacted = pattern.sub("[REDACTED_PII]", redacted)
         return redacted

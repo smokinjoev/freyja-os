@@ -1500,6 +1500,7 @@ def test_memory_and_paralegal_boundaries_and_cloud_egress() -> None:
     assert denial.audit_event.metadata["destination_provider"] == "openrouter"
     assert denial.audit_event.metadata["redacted"] is True
     assert "[REDACTED_SECRET]" in denial.audit_event.metadata["redacted_prompt_preview"]
+    assert "api_key=secret" not in denial.audit_event.metadata["redacted_prompt_preview"].lower()
     assert "123-45-6789" not in denial.audit_event.metadata["redacted_prompt_preview"]
 
     legal = InferenceRegistryV3().endpoints_for(capability="legal_research", domain_id=SecurityDomainId.HOUSEHOLD)
