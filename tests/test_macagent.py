@@ -570,6 +570,67 @@ def test_macagent_app_reads_music_current_track(monkeypatch) -> None:
     }
 
 
+def test_macagent_app_music_write_requires_director_approval(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "macagent_token", "secret")
+    test_client = TestClient(macagent_app)
+    request = MacAgentOperationRequest(
+        capability="apple.music.write",
+        operation="play_query",
+        arguments={"query": "jazz", "destination": "HomePod"},
+        request_id="req-music-write",
+        actor="atlas_director",
+        director_authorized=True,
+        approval_granted=False,
+    )
+
+    response = test_client.post(
+        f"/capabilities/{request.capability}",
+        headers={"Authorization": "Bearer secret"},
+        json=request.model_dump(mode="json"),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["error"] == "director approval required"
+
+
+def test_macagent_app_music_write_plays_query_after_approval(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "macagent_token", "secret")
+    test_client = TestClient(macagent_app)
+    request = MacAgentOperationRequest(
+        capability="apple.music.write",
+        operation="play_query",
+        arguments={"query": "jazz", "destination": "HomePod"},
+        request_id="req-music-write",
+        actor="atlas_director",
+        director_authorized=True,
+        approval_granted=True,
+    )
+
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(return_value="playing\tSong\tArtist")) as script:
+        response = test_client.post(
+            f"/capabilities/{request.capability}",
+            headers={"Authorization": "Bearer secret"},
+            json=request.model_dump(mode="json"),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["output"] == {
+        "player_state": "playing",
+        "track": "Song",
+        "artist": "Artist",
+        "destination": "HomePod",
+    }
+    assert "every AirPlay device whose name contains targetDestination" in script.await_args.args[0]
+
+
 def test_macagent_app_reads_browser_front_tab(monkeypatch) -> None:
     from freyja.config import settings
 

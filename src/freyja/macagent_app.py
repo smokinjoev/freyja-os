@@ -27,6 +27,7 @@ MACAGENT_CAPABILITIES = [
     "apple.contacts.read",
     "apple.mail.read",
     "apple.music.read",
+    "apple.music.write",
     "apple.browser.read",
     "apple.shortcuts.run",
 ]
@@ -86,6 +87,8 @@ async def _dispatch_operation(request: MacAgentOperationRequest) -> dict[str, An
         return await _mail_read(request)
     if request.capability == "apple.music.read":
         return await _music_read(request)
+    if request.capability == "apple.music.write":
+        return await _music_write(request)
     if request.capability == "apple.browser.read":
         return await _browser_read(request)
     if request.capability == "apple.shortcuts.run":
@@ -97,6 +100,7 @@ def _requires_approval(request: MacAgentOperationRequest) -> bool:
     return request.capability in {
         "apple.calendar.write",
         "apple.messages.send",
+        "apple.music.write",
         "apple.shortcuts.run",
     }
 
@@ -245,6 +249,68 @@ end tell
 """
     state, name, artist, album = _split_fields(await _osascript(script), 4)
     return {"player_state": state, "track": name, "artist": artist, "album": album}
+
+
+async def _music_write(request: MacAgentOperationRequest) -> dict[str, Any]:
+    operation = request.operation
+    if operation == "pause":
+        await _osascript('tell application "Music" to pause')
+        return {"player_state": "paused"}
+    if operation == "resume":
+        await _osascript('tell application "Music" to play')
+        return {"player_state": "playing"}
+    if operation != "play_query":
+        raise ValueError("unsupported apple.music.write operation")
+
+    query = _required_string(request.arguments.get("query"), "query", max_length=240)
+    destination = _optional_string(request.arguments.get("destination"), max_length=120)
+    script = _music_play_query_script(query=query, destination=destination)
+    stdout = await _osascript(script, timeout=max(10.0, settings.macagent_timeout_seconds))
+    state, track, artist = _split_fields(stdout, 3)
+    return {
+        "player_state": state or "playing",
+        "track": track,
+        "artist": artist,
+        "destination": destination or "",
+    }
+
+
+def _applescript_text(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _music_play_query_script(*, query: str, destination: str | None) -> str:
+    query_text = _applescript_text(query)
+    destination_text = _applescript_text(destination or "")
+    return f"""
+tell application "Music"
+  activate
+  set targetDestination to {destination_text}
+  if targetDestination is not "" then
+    set matchingDevices to (every AirPlay device whose name contains targetDestination)
+    if (count of matchingDevices) > 0 then
+      set current AirPlay devices to matchingDevices
+    end if
+  end if
+
+  set searchText to {query_text}
+  if searchText is "music" then
+    play
+  else
+    set foundTracks to search library playlist 1 for searchText
+    if (count of foundTracks) is 0 then error "No Apple Music library result for " & searchText
+    play item 1 of foundTracks
+  end if
+
+  delay 0.5
+  if player state is stopped then
+    return "stopped||FREYJA||||FREYJA||"
+  end if
+  set trackName to name of current track
+  set artistName to artist of current track
+  return (player state as text) & "||FREYJA||" & trackName & "||FREYJA||" & artistName
+end tell
+"""
 
 
 async def _browser_read(request: MacAgentOperationRequest) -> dict[str, Any]:

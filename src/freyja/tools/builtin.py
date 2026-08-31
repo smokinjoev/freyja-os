@@ -238,6 +238,29 @@ async def _apple_music_current_track_implementation(request: ToolExecutionReques
     return result.output if result.ok else {"error": result.error or "MacAgent Music read failed."}
 
 
+async def _apple_music_play_query_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    metadata = request.metadata if isinstance(request.metadata, dict) else {}
+    result = await MacAgentClient().invoke(
+        MacAgentOperationRequest(
+            capability="apple.music.write",
+            operation="play_query",
+            arguments={
+                "query": str(args.get("query") or "music"),
+                "destination": str(args.get("destination") or ""),
+            },
+            request_id=request.request_id,
+            actor=request.actor or "atlas_director",
+            director_authorized=True,
+            required_permission="apple.music.write",
+            approval_granted=metadata.get("approval_granted") is True,
+            principal=metadata.get("memory_principal"),
+            person=metadata.get("person"),
+        )
+    )
+    return result.output if result.ok else {"error": result.error or "MacAgent Music write failed."}
+
+
 async def _apple_browser_front_tab_implementation(request: ToolExecutionRequest) -> dict:
     metadata = request.metadata if isinstance(request.metadata, dict) else {}
     result = await MacAgentClient().invoke(
@@ -681,6 +704,39 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             tags=["macagent", "iris", "apple", "music", "read-only"],
         ),
         _apple_music_current_track_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_music_play_query",
+            description="Play an Apple Music library query through Iris MacAgent, optionally targeting an AirPlay destination such as HomePods.",
+            version="1.0.0",
+            input_schema={
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {"type": "string"},
+                    "destination": {"type": "string"},
+                },
+            },
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "player_state": {"type": "string"},
+                    "track": {"type": "string"},
+                    "artist": {"type": "string"},
+                    "destination": {"type": "string"},
+                },
+            },
+            risk_level=ToolRiskLevel.CONTROLLED_WRITE,
+            host_service="iris.macagent",
+            required_permission="apple.music.write",
+            confirmation_policy="operator_approval_required",
+            audit_policy="request_result",
+            enabled=True,
+            timeout_seconds=30,
+            tags=["macagent", "iris", "apple", "music", "homepod", "approval-required"],
+        ),
+        _apple_music_play_query_implementation,
     )
     registry.register(
         ToolDefinition(
