@@ -19,7 +19,9 @@
   and existing Nexus provider tests; live Vulcan validation still depends on
   Joe's local Nexus token and service state.
 - B. Freyja to Cloyd delegation is represented by persistent agent routing and
-  coding lane contracts; richer agent-to-agent delegation remains incremental.
+  coding lane contracts; richer agent-to-agent delegation remains incremental
+  and needs a Freyja 5 certification provider that exercises `AgentGateway` and
+  `AgentRuntimeV3` directly.
 - C. Iris Calendar is represented by MCP-style tool grants and MacAgent
   adapters; live Apple Calendar certification must run on Iris.
 - D. Image/PDF media path selects the `vision` semantic route and preserves
@@ -33,6 +35,19 @@
 
 See `FREYJA-5.0-BLOCKERS.md` for Joe-required validation and physical/session
 tasks.
+
+## Latest Certification Attempt
+
+- Command:
+  `.venv/bin/freyja-certify routing/freyja5_architecture --output-dir certification/reports`
+- Report:
+  `certification/reports/20260831T202132Z0000-freyja5-architecture.md`
+- Result: failed, 14.3% overall, 1/7 cases passed.
+- Passed: C. Iris Calendar tool returned one live calendar event.
+- Main failure mode: the existing certification provider still exercises the
+  legacy Director/router path for this suite, so Freyja 5.0 Gateway/AgentRuntime
+  trace assertions are not yet first-class certification evidence. Additional
+  failures also depend on unavailable local/cloud model providers during the run.
 
 ## Start And Test
 

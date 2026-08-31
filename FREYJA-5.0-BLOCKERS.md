@@ -20,3 +20,7 @@
   until Msty Go is proven suitable or an adapter is implemented.
 - Freyja 4.1 fallback is preserved at git tag
   `freyja-4.1-baseline-before-5.0-20260831-161448`.
+- Freyja 5.0 certification suite exists, but the current certification runner
+  uses the legacy Director/router provider. Next engineering step: add a Freyja
+  5 certification provider/adapter that sends cases through `AgentGateway` and
+  `AgentRuntimeV3`, then records `trace_summary` fields as verifier evidence.
