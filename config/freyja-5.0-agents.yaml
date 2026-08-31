@@ -27,12 +27,12 @@ agents:
     owner: person:liam
     home_machine: atlas
     aliases: [agent 44, agent_44, agent 47, agent_47, liam]
-    freyja5_logical_name: Agent 44
+    logical_display_name: Agent 44
     memory: [person:liam, family, system]
   - id: jennacide
     display_name: JennaCide
     owner: person:jenna
     home_machine: atlas
     aliases: [jenna, jenna-agent]
-    freyja5_logical_name: Jenna agent
+    logical_display_name: Jenna agent
     memory: [person:jenna, family, system]

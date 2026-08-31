@@ -83,6 +83,7 @@ class PersistentAgent(BaseModel):
 
     agent_id: str = Field(min_length=1)
     display_name: str = Field(min_length=1)
+    logical_display_name: str | None = None
     owner: str = Field(min_length=1)
     security_domain_id: SecurityDomainId
     home_machine_id: str | None = None

@@ -55,6 +55,7 @@ def test_gateway_handoff_trace_summary_carries_freyja5_route_and_egress() -> Non
     assert result.trace_summary["channel"] == "test"
     assert result.trace_summary["resolved_user"] == "person:joe"
     assert result.trace_summary["agent"] == "freyja"
+    assert result.trace_summary["agent_logical_display_name"] == "Freyja"
     assert result.trace_summary["requested_route"] == "code"
     assert result.trace_summary["actual_endpoint"] == "vulcan-nexus-coder"
     assert result.trace_summary["actual_provider"] == "nexus"
@@ -142,6 +143,7 @@ def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
     for seeded in PERSISTENT_AGENTS:
         summary = configured[seeded.agent_id]
         assert summary["display_name"] == seeded.display_name
+        assert summary.get("logical_display_name") == seeded.logical_display_name
         assert summary["owner"] == seeded.owner
         assert summary["home_machine"] == seeded.home_machine_id
         assert set(summary["memory"]) == {

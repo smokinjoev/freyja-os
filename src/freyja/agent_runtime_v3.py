@@ -1477,6 +1477,8 @@ def _trace_summary(
         "resolved_user": handoff.sender_id,
         "authenticated_subject": handoff.authenticated_subject,
         "agent": agent.agent_id,
+        "agent_display_name": agent.display_name,
+        "agent_logical_display_name": agent.logical_display_name or agent.display_name,
         "requested_route": requested_route,
         "actual_endpoint": endpoint.endpoint_id if endpoint is not None else None,
         "actual_provider": endpoint.provider if endpoint is not None else None,
