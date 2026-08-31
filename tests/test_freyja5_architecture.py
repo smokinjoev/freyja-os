@@ -7,7 +7,7 @@ import yaml
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
-from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS
+from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS, TOOL_CAPABILITIES
 from freyja.foundation_models import GatewaySender, InferenceEndpoint, SecurityDomainId
 from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.semantic_routes import SemanticRoute, capability_for_route
@@ -111,6 +111,9 @@ def test_cloyd_delegation_trace_records_selected_tools() -> None:
     assert result.agent_id == "cloyd-gibbler"
     assert result.trace_summary["selected_tools"] == ["filesystem.read"]
     assert result.trace_summary["tool_calls"] == ["filesystem.read"]
+    assert result.trace_summary["tool_boundaries"] == [
+        {"tool_id": "filesystem.read", "protocol": "internal", "machine_affinity": None, "mutation": False}
+    ]
     assert result.trace_summary["delegation"] == [
         {"from": "freyja", "to": "cloyd-gibbler", "reason": "explicit Cloyd delegation request"}
     ]
@@ -163,6 +166,16 @@ def test_freyja5_semantic_route_config_has_seeded_endpoint_for_each_route() -> N
         endpoint_id = route_config["preferred_runtime"]
         assert endpoint_id in capabilities_by_endpoint
         assert route_config["capability"] in capabilities_by_endpoint[endpoint_id], route_name
+
+
+def test_freyja5_mcp_preferred_tool_boundary_is_explicit() -> None:
+    protocols = {tool.tool_id: tool.protocol for tool in TOOL_CAPABILITIES}
+
+    assert protocols["calendar.read"] == "mcp"
+    assert protocols["calendar.write"] == "mcp"
+    assert protocols["macagent.apple"] == "mcp"
+    assert protocols["home-assistant.read"] == "mcp"
+    assert protocols["filesystem.read"] == "internal"
 
 
 def test_freyja5_mode_does_not_use_implicit_cloud_fallback() -> None:

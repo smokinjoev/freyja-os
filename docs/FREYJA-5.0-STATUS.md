@@ -63,6 +63,9 @@ tasks.
   tests against `foundation_seed.py`.
 - Freyja 5.0 certification/runtime mode disables implicit cloud fallback while
   preserving the legacy 4.1 policy-gated fallback path for compatibility.
+- MCP-preferred tool boundaries are explicit in source tool grants and runtime
+  traces record each selected tool's protocol, machine affinity, and mutation
+  status.
 
 ## Start And Test
 

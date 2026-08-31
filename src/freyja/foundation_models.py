@@ -160,6 +160,7 @@ class ToolCapabilityGrant(BaseModel):
     category: str = Field(min_length=1)
     display_name: str = Field(min_length=1)
     required_permission: str = Field(min_length=1)
+    protocol: str = "internal"
     mutation: bool = False
     machine_affinity: str | None = None
     security_domain_id: SecurityDomainId = SecurityDomainId.HOUSEHOLD

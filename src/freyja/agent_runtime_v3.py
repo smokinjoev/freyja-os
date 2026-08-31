@@ -212,6 +212,7 @@ class AgentRuntimeV3:
                     agent=agent,
                     requested_route=requested_route.value,
                     selected_tools=selected_tools,
+                    tool_catalog=self._tools,
                     endpoint=None,
                     inference_status=None,
                     tool_results=tool_results,
@@ -334,6 +335,7 @@ class AgentRuntimeV3:
                 agent=agent,
                 requested_route=requested_route.value,
                 selected_tools=selected_tools,
+                tool_catalog=self._tools,
                 endpoint=endpoint,
                 inference_status=inference_status,
                 tool_results=tool_results,
@@ -1463,6 +1465,7 @@ def _trace_summary(
     agent: PersistentAgent,
     requested_route: str,
     selected_tools: list[str],
+    tool_catalog: dict[str, ToolCapabilityGrant],
     endpoint: InferenceEndpoint | None,
     inference_status: str | None,
     tool_results: list[dict[str, Any]],
@@ -1488,6 +1491,7 @@ def _trace_summary(
         "latency_ms": latency_ms,
         "inference_status": inference_status,
         "selected_tools": list(selected_tools),
+        "tool_boundaries": _tool_boundary_trace(selected_tools, tool_catalog),
         "tool_calls": [result.get("capability_id") for result in tool_results] or list(selected_tools),
         "delegation": _delegation_trace(agent, handoff),
         "failures": [result for result in tool_results if result.get("success") is False],
@@ -1504,6 +1508,24 @@ def _delegation_trace(agent: PersistentAgent, handoff: GatewayHandoff) -> list[d
     if agent.agent_id == "cloyd-gibbler" and "cloyd" in handoff.prompt.lower():
         return [{"from": "freyja", "to": agent.agent_id, "reason": "explicit Cloyd delegation request"}]
     return []
+
+
+def _tool_boundary_trace(selected_tools: list[str], tool_catalog: dict[str, ToolCapabilityGrant]) -> list[dict[str, Any]]:
+    boundaries = []
+    for tool_id in selected_tools:
+        grant = tool_catalog.get(tool_id)
+        if grant is None:
+            boundaries.append({"tool_id": tool_id, "protocol": "unknown", "machine_affinity": None})
+            continue
+        boundaries.append(
+            {
+                "tool_id": tool_id,
+                "protocol": grant.protocol,
+                "machine_affinity": grant.machine_affinity,
+                "mutation": grant.mutation,
+            }
+        )
+    return boundaries
 
 
 def _elapsed_ms(started: float) -> float:
