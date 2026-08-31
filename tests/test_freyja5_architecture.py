@@ -136,6 +136,17 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert {case.runtime_context["interface"] for case in report.cases} == {"freyja5"}
     assert all(case.runtime_context["rev2_evidence"]["freyja5_trace_id"] for case in report.cases)
     assert all("latency_ms" in case.runtime_context["rev2_evidence"]["freyja5_trace_summary"] for case in report.cases)
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == {
+            "source": "config/freyja-5.0-mcp-topology.yaml",
+            "available": True,
+            "default_agent_mcp_servers": False,
+            "mcp_hosts": ["atlas", "iris"],
+            "mcp_tool_count": 12,
+            "vulcan_protocol": "openai-compatible",
+        }
+        for case in report.cases
+    )
 
 
 def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:

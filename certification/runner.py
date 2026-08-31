@@ -697,6 +697,7 @@ def _context_from_freyja5_result(
     duration_ms: float,
 ) -> CertificationContext:
     trace = result.trace_summary if isinstance(result.trace_summary, dict) else {}
+    topology = _freyja5_mcp_topology_evidence()
     context = CertificationContext(
         request_id=result.conversation_id,
         interface="freyja5",
@@ -715,6 +716,7 @@ def _context_from_freyja5_result(
             "freyja5_requested_route": result.requested_route,
             "freyja5_egress_state": result.egress_state,
             "freyja5_agent_id": result.agent_id,
+            "freyja5_mcp_topology": topology,
         },
     )
     context.tool_calls = [
@@ -730,6 +732,35 @@ def _context_from_freyja5_result(
     if result.recalled_memories:
         context.memory_lookups.append({"count": len(result.recalled_memories), "agent_id": result.agent_id})
     return context
+
+
+def _freyja5_mcp_topology_evidence() -> dict[str, Any]:
+    topology_path = Path(__file__).resolve().parents[1] / "config" / "freyja-5.0-mcp-topology.yaml"
+    try:
+        data = yaml.safe_load(topology_path.read_text(encoding="utf-8")) or {}
+    except OSError:
+        return {"source": str(topology_path), "available": False}
+    servers = data.get("servers") if isinstance(data.get("servers"), list) else []
+    non_mcp_boundaries = data.get("non_mcp_boundaries") if isinstance(data.get("non_mcp_boundaries"), list) else []
+    return {
+        "source": "config/freyja-5.0-mcp-topology.yaml",
+        "available": True,
+        "default_agent_mcp_servers": bool(data.get("default_agent_mcp_servers")),
+        "mcp_hosts": sorted({str(server.get("host")) for server in servers if isinstance(server, dict) and server.get("host")}),
+        "mcp_tool_count": sum(
+            len(server.get("exposes") or ())
+            for server in servers
+            if isinstance(server, dict) and isinstance(server.get("exposes"), list)
+        ),
+        "vulcan_protocol": next(
+            (
+                str(boundary.get("protocol"))
+                for boundary in non_mcp_boundaries
+                if isinstance(boundary, dict) and boundary.get("id") == "vulcan-nexus"
+            ),
+            None,
+        ),
+    }
 
 
 def _apply_certification_fixtures(context: CertificationContext, fixtures: dict[str, Any]) -> None:

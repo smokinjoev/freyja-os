@@ -20,10 +20,10 @@
 - A. Gateway to Freyja to agent runtime to Nexus/Vulcan is covered by unit tests
   and existing Nexus provider tests; live Vulcan validation still depends on
   Joe's local Nexus token and service state.
-- B. Freyja to Cloyd delegation is represented by persistent agent routing and
-  coding lane contracts; richer agent-to-agent delegation remains incremental
-  and needs a Freyja 5 certification provider that exercises `AgentGateway` and
-  `AgentRuntimeV3` directly.
+- B. Freyja to Cloyd delegation is represented by persistent agent routing,
+  coding lane contracts, and Freyja 5 certification trace evidence through
+  `AgentGateway` and `AgentRuntimeV3`. Live model/tool delegation remains
+  incremental after Nexus and service sessions are validated.
 - C. Iris Calendar is represented by MCP-style tool grants and MacAgent
   adapters; live Apple Calendar certification must run on Iris.
 - D. Image/PDF media path selects the `vision` semantic route and preserves
@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260831T232713Z0000-freyja5-architecture.md`.
+  `certification/reports/20260831T232951Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -76,6 +76,9 @@ tasks.
   Gateway identity/channel handling and `AgentRuntimeV3` route/trace selection
   without live inference, while preserving the existing Open WebUI model-proxy
   default and `agent-smith` compatibility path.
+- Freyja 5 certification reports include source-controlled MCP topology
+  evidence: default per-agent MCP servers are disabled, MCP hosts are Atlas and
+  Iris, and Vulcan remains the OpenAI-compatible Nexus inference boundary.
 
 ## Start And Test
 
