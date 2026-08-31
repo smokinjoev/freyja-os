@@ -106,15 +106,15 @@ _FAMILY_ROUTE_IDENTITIES: tuple[SyntheticRouteIdentity, ...] = (
         person_id="liam",
         person_display_name="Liam",
         person_preferred_name="Liam",
-        agent_id="agent-44",
-        agent_display_name="Agent 44",
+        agent_id="agent-47",
+        agent_display_name="Agent 47",
     ),
     SyntheticRouteIdentity(
         person_id="jenna",
         person_display_name="Jenna",
         person_preferred_name="Jenna",
-        agent_id="jenna",
-        agent_display_name="Jenna",
+        agent_id="jennacide",
+        agent_display_name="JennaCide",
     ),
 )
 
@@ -671,8 +671,8 @@ def _family_agent_memory_check() -> dict[str, object]:
     expected_agents = {
         "joe": "cloyd-gibbler",
         "beth": "benedict",
-        "liam": "agent-44",
-        "jenna": "jenna",
+        "liam": "agent-47",
+        "jenna": "jennacide",
     }
     agent_ids_ok = all(
         agents[person_id]["agent_id"] == expected_agent

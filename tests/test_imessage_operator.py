@@ -385,8 +385,8 @@ def test_identity_audit_passes_when_four_people_are_mapped(monkeypatch):
     assert result["ok"] is True
     assert result["missing_people"] == []
     assert result["people"]["beth"]["agent_id"] == "benedict"
-    assert result["people"]["liam"]["agent_id"] == "agent-44"
-    assert result["people"]["jenna"]["agent_id"] == "jenna"
+    assert result["people"]["liam"]["agent_id"] == "agent-47"
+    assert result["people"]["jenna"]["agent_id"] == "jennacide"
 
 
 def test_identity_candidates_report_redacted_mapping_evidence(monkeypatch):

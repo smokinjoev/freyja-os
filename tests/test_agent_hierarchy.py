@@ -26,14 +26,14 @@ def test_personal_agents_delegate_to_shared_maintenance_with_separate_scopes() -
         objective="Inspect Beth's agent service",
     )
     liam = hierarchy.maintenance_request(
-        requested_by=AgentName.AGENT_44,
+        requested_by=AgentName.AGENT_47,
         owner=PersonName.LIAM,
         objective="Inspect Liam's agent service",
     )
     jenna = hierarchy.maintenance_request(
-        requested_by=AgentName.JENNA,
+        requested_by=AgentName.JENNACIDE,
         owner=PersonName.JENNA,
-        objective="Inspect Jenna's agent service",
+        objective="Inspect JennaCide's agent service",
     )
 
     assert joe.result_recipient is AgentName.CLOYD_GIBBLER
@@ -42,11 +42,11 @@ def test_personal_agents_delegate_to_shared_maintenance_with_separate_scopes() -
     assert beth.result_recipient is AgentName.BENEDICT
     assert beth.memory_principal.client_subject == "agent:benedict"
     assert beth.memory_principal.account_owner == "person:beth"
-    assert liam.result_recipient is AgentName.AGENT_44
-    assert liam.memory_principal.client_subject == "agent:agent-44"
+    assert liam.result_recipient is AgentName.AGENT_47
+    assert liam.memory_principal.client_subject == "agent:agent-47"
     assert liam.memory_principal.account_owner == "person:liam"
-    assert jenna.result_recipient is AgentName.JENNA
-    assert jenna.memory_principal.client_subject == "agent:jenna"
+    assert jenna.result_recipient is AgentName.JENNACIDE
+    assert jenna.memory_principal.client_subject == "agent:jennacide"
     assert jenna.memory_principal.account_owner == "person:jenna"
     assert len(
         {
@@ -64,8 +64,8 @@ def test_authenticated_people_message_only_their_primary_agent() -> None:
     family = hierarchy.route_person_message(person=PersonName.FAMILY, content="Hello Freyja")
     joe = hierarchy.route_person_message(person=PersonName.JOE, content="Hello Cloyd")
     beth = hierarchy.route_person_message(person=PersonName.BETH, content="Hello Benedict")
-    liam = hierarchy.route_person_message(person=PersonName.LIAM, content="Hello Agent 44")
-    jenna = hierarchy.route_person_message(person=PersonName.JENNA, content="Hello Jenna")
+    liam = hierarchy.route_person_message(person=PersonName.LIAM, content="Hello Agent 47")
+    jenna = hierarchy.route_person_message(person=PersonName.JENNA, content="Hello JennaCide")
 
     assert family.recipient is AgentName.FREYJA
     assert family.memory_principal.account_owner == "person:family"
@@ -73,9 +73,9 @@ def test_authenticated_people_message_only_their_primary_agent() -> None:
     assert joe.memory_principal.account_owner == "person:joe"
     assert beth.recipient is AgentName.BENEDICT
     assert beth.memory_principal.account_owner == "person:beth"
-    assert liam.recipient is AgentName.AGENT_44
+    assert liam.recipient is AgentName.AGENT_47
     assert liam.memory_principal.account_owner == "person:liam"
-    assert jenna.recipient is AgentName.JENNA
+    assert jenna.recipient is AgentName.JENNACIDE
     assert jenna.memory_principal.account_owner == "person:jenna"
     assert len(
         {
@@ -106,10 +106,11 @@ def test_agent_profiles_are_reusable_connector_identity_contracts() -> None:
     assert beth.agent_id is AgentName.BENEDICT
     assert beth.account_owner == "person:beth"
     assert liam is not None
-    assert liam.agent_id is AgentName.AGENT_44
+    assert liam.agent_id is AgentName.AGENT_47
     assert liam.account_owner == "person:liam"
     assert jenna is not None
-    assert jenna.agent_id is AgentName.JENNA
+    assert jenna.agent_id is AgentName.JENNACIDE
+    assert jenna.display_name == "JennaCide"
     assert jenna.account_owner == "person:jenna"
     assert "cannot verify it from here" in joe.prompt_role
     assert "cannot verify it from here" in beth.prompt_role

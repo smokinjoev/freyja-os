@@ -158,8 +158,8 @@ def test_imessage_family_agent_mapping_accepts_four_labeled_senders(monkeypatch,
     assert status["family_agent_mapping"]["ok"] is True
     assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "cloyd-gibbler"
     assert status["family_agent_mapping"]["people"]["beth"]["agent_id"] == "benedict"
-    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "agent-44"
-    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jenna"
+    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "agent-47"
+    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jennacide"
     assert "+15550000001" not in str(status)
     assert "+15550000004" not in str(status)
 
@@ -248,8 +248,8 @@ def test_imessage_family_agent_mapping_accepts_sqlite_identity_sender_resolution
     assert status["family_agent_mapping"]["ok"] is True
     assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "cloyd-gibbler"
     assert status["family_agent_mapping"]["people"]["beth"]["agent_id"] == "benedict"
-    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "agent-44"
-    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jenna"
+    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "agent-47"
+    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jennacide"
 
 
 def test_signal_status_redacts_sender_values(monkeypatch):
@@ -811,7 +811,7 @@ def test_imessage_family_route_smoke_covers_all_four_agents(monkeypatch):
 
     assert status["ok"] is True
     assert set(status["people"]) == {"joe", "beth", "liam", "jenna"}
-    assert set(captured) == {"cloyd-gibbler", "benedict", "agent-44", "jenna"}
+    assert set(captured) == {"cloyd-gibbler", "benedict", "agent-47", "jennacide"}
     assert all(result["terminal_equivalent"] is True for result in status["people"].values())
 
 

@@ -45,6 +45,8 @@ Prior Nexus commits are present and pushed at `origin/main`:
 ## Family Agents
 
 The finalized roster is in `docs/FREYJA_4_LOCAL_FAMILY_AGENTS.md`.
+Canonical Freyja 4.0 family-agent names are Cloyd Gibbler for Joe, Benedict for
+Beth, Agent 47 for Liam, and JennaCide as Jenna's temporary personal-agent name.
 
 Runtime defaults now prefer Nexus endpoints:
 

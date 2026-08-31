@@ -118,30 +118,30 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         ),
     ),
     HouseholdAgent(
-        agent_id="agent-44",
-        display_name="Agent 44",
+        agent_id="agent-47",
+        display_name="Agent 47",
         owner="person:liam",
         person_id="liam",
         tool_grants=frozenset({"calendar.read", "messaging.send", "vision.inspect", "music.control", "memory.private", "memory.shared"}),
         memory_scope="person:liam",
         default_model_preset="@preset/freyja-private-local",
         prompt_role=(
-            "Your name is Agent 44. You are Liam's personal agent. Develop a distinct voice "
+            "Your name is Agent 47. You are Liam's personal agent. Develop a distinct voice "
             "from Liam's preferences and corrections while remaining useful, honest, and "
             "age-appropriate. Share ordinary household context with the family memory pool. "
             + _NO_CANNED_GREETING
         ),
     ),
     HouseholdAgent(
-        agent_id="jenna",
-        display_name="Jenna",
+        agent_id="jennacide",
+        display_name="JennaCide",
         owner="person:jenna",
         person_id="jenna",
         tool_grants=frozenset({"calendar.read", "messaging.send", "vision.inspect", "music.control", "memory.private", "memory.shared"}),
         memory_scope="person:jenna",
         default_model_preset="@preset/freyja-private-local",
         prompt_role=(
-            "Your name is Jenna. You are Jenna's personal agent. Develop your relationship "
+            "Your name is JennaCide. You are Jenna's personal agent. Develop your relationship "
             "from Jenna's preferences, corrections, and ongoing work while remaining useful, "
             "honest, and age-appropriate. Share ordinary household context with the family memory pool. "
             + _NO_CANNED_GREETING

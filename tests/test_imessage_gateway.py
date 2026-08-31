@@ -690,8 +690,8 @@ async def test_family_member_alias_uses_agent_memory_subject(enabled_gateway):
     [
         ("joe", "+15550000001", "cloyd-gibbler", "person:joe"),
         ("beth", "+15550000002", "benedict", "person:beth"),
-        ("liam", "+15550000003", "agent-44", "person:liam"),
-        ("jenna", "+15550000004", "jenna", "person:jenna"),
+        ("liam", "+15550000003", "agent-47", "person:liam"),
+        ("jenna", "+15550000004", "jennacide", "person:jenna"),
     ],
 )
 async def test_family_imessage_phone_identities_route_to_personal_agents(

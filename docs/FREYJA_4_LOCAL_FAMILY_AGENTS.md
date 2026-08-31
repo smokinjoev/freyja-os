@@ -2,6 +2,9 @@
 
 Last updated: 2026-08-30.
 
+See `docs/FAMILY_AGENT_BLUEPRINT.md` for the route, memory, document, policy,
+and homework-support blueprint that sits underneath this roster.
+
 ## Final Roster
 
 Freyja 4.0 is local-first. Family and personal agents use Nexus presets on
@@ -13,8 +16,8 @@ Vulcan by default, and no agent silently falls back to cloud.
 | Cloyd Gibbler | Joe | Joe's personal/project/code agent | `person:joe`, `family`, `system` | `@preset/freyja-coder` | code, shell/files/git when authorized, Apple services through Iris, messages, calendar, private/shared memory |
 | Benedict | Beth | Beth's personal agent for ordinary personal and household work | `person:beth`, `family`, `system` | `@preset/freyja-private-local` | documents, Apple services through Iris, messages, calendar, private/shared memory |
 | Benedict Paralegal | paralegal enclave | Legal-support enclave for restricted legal documents and research | `enclave:paralegal`, `system` | `@preset/benedict-paralegal-local` | document review, browser/search when approved, vision/document inspection, enclave memory |
-| Agent 44 | Liam | Liam's personal agent | `person:liam`, `family`, `system` | `@preset/freyja-private-local` | age-appropriate personal tools, messages/calendar reads as authorized, private/shared memory |
-| Jenna | Jenna | Jenna's personal agent | `person:jenna`, `family`, `system` | `@preset/freyja-private-local` | age-appropriate personal tools, messages/calendar reads as authorized, private/shared memory |
+| Agent 47 | Liam | Liam's personal agent | `person:liam`, `family`, `system` | `@preset/freyja-private-local` | age-appropriate personal tools, messages/calendar reads as authorized, private/shared memory |
+| JennaCide | Jenna | Jenna's temporary-name personal agent | `person:jenna`, `family`, `system` | `@preset/freyja-private-local` | age-appropriate personal tools, messages/calendar reads as authorized, private/shared memory |
 | Agent Smith | system | Infrastructure, diagnostics, certification, recovery | `system` | `@preset/freyja-private-local` | system health and bounded maintenance tools |
 
 ## Boundaries

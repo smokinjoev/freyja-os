@@ -5,7 +5,8 @@ import pytest
 import freyja.agent_runtime_v3
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError, inference_role_alias
-from freyja.foundation_models import GatewaySender, InferenceEndpoint, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
+from freyja.family_agents import CHILD_HOMEWORK_POLICY_MODES, family_route_config, family_tool_policy, resolve_family_agent_alias
+from freyja.foundation_models import AgentExecutionResult, GatewaySender, InferenceEndpoint, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
 from freyja.freyja3_memory import Freyja3MemoryStore, Freyja3MemoryWrite
 from freyja.inference_registry_v3 import InferenceRegistryV3
 import freyja.main as freyja_main
@@ -44,6 +45,211 @@ def test_gateway_selects_correct_agent_without_intent_routing() -> None:
     assert result.handoff.target_agent_id == "cloyd-gibbler"
     assert result.handoff.prompt == "Search weather and check this repo."
     assert not any(name in dir(gateway) for name in ("classify_intent", "route_by_intent", "select_tool", "plan_task"))
+
+
+def test_gateway_handoff_carries_family_route_metadata() -> None:
+    gateway = AgentGateway()
+
+    result = gateway.handle(
+        GatewayRequest(
+            sender=_sender("liam"),
+            target_agent="agent_47",
+            prompt="Help me study this worksheet.",
+            conversation_id="conv-family",
+            actor_principal="person:liam",
+            document_scope="person:liam/school",
+            tool_policy="child_homework:hint_first",
+            privacy_policy="child-private",
+            parent_visibility="summary",
+        )
+    )
+
+    assert result.handoff is not None
+    assert result.handoff.actor_principal == "person:liam"
+    assert result.handoff.authenticated_subject == "person:liam"
+    assert result.handoff.target_agent_id == "agent-47"
+    assert result.handoff.document_scope == "person:liam/school"
+    assert result.handoff.tool_policy == "child_homework:hint_first"
+    assert result.handoff.privacy_policy == "child-private"
+    assert result.handoff.parent_visibility == "summary"
+    assert result.handoff.audit_reason is None
+    assert "person:liam" in result.handoff.memory_scopes
+    assert result.audit_event.metadata["document_scope"] == "person:liam/school"
+
+
+def test_family_route_registry_defines_personal_defaults() -> None:
+    joe = family_route_config("joe")
+    liam = family_route_config("liam")
+
+    assert joe is not None
+    assert liam is not None
+    assert joe.default_agent == "cloyd-gibbler"
+    assert joe.document_scope == "person:joe/documents"
+    assert liam.default_agent == "agent-47"
+    assert liam.document_scope == "person:liam/school"
+    assert liam.parent_visibility == "summary"
+    assert CHILD_HOMEWORK_POLICY_MODES == frozenset({"hint_first", "check_work", "quiz"})
+    assert family_tool_policy(liam, "quiz") == "child_homework:quiz"
+    assert resolve_family_agent_alias(liam, "@liam/agent_47") == "agent_47"
+    assert resolve_family_agent_alias(liam, "@liam/agent_44") == "agent_44"
+
+
+def test_family_liam_route_stamps_school_homework_boundary(monkeypatch) -> None:
+    seen = {}
+
+    async def fake_arun(handoff):
+        seen["handoff"] = handoff
+        return AgentExecutionResult(
+            trace_id="trace-family",
+            agent_id=handoff.target_agent_id,
+            conversation_id=handoff.conversation_id,
+            response_text="study response",
+        )
+
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post(
+        "/family/liam",
+        json={"message": "Help with algebra.", "agent": "@liam/agent_47", "policy_mode": "check_work"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    family_route = payload["family_route"]
+    assert payload["resolved_user_id"] == "liam"
+    assert payload["resolved_agent_id"] == "agent-47"
+    assert family_route["actor_principal"] == "person:liam"
+    assert family_route["authenticated_subject"] == "person:liam"
+    assert family_route["document_scope"] == "person:liam/school"
+    assert family_route["memory_scope"] == "person:liam"
+    assert family_route["tool_policy"] == "child_homework:check_work"
+    assert family_route["parent_visibility"] == "summary"
+    assert family_route["conversation_id"].startswith("family:liam:")
+    assert family_route["audit_reason"] == "authenticated family route for liam"
+    assert "person:liam" in family_route["memory_scopes"]
+    assert seen["handoff"].privacy_policy == "child-private"
+
+
+def test_family_adult_route_uses_default_personal_agent(monkeypatch) -> None:
+    async def fake_arun(handoff):
+        return AgentExecutionResult(
+            trace_id="trace-joe",
+            agent_id=handoff.target_agent_id,
+            conversation_id=handoff.conversation_id,
+            response_text="joe response",
+        )
+
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post("/family/joe", json={"message": "Check my project notes."})
+
+    assert response.status_code == 200
+    family_route = response.json()["family_route"]
+    assert family_route["actor_principal"] == "person:joe"
+    assert family_route["target_agent"] == "cloyd-gibbler"
+    assert family_route["document_scope"] == "person:joe/documents"
+    assert family_route["tool_policy"] == "adult_personal"
+    assert family_route["parent_visibility"] == "none"
+
+
+def test_family_jenna_route_uses_jennacide_temporary_agent(monkeypatch) -> None:
+    async def fake_arun(handoff):
+        return AgentExecutionResult(
+            trace_id="trace-jenna",
+            agent_id=handoff.target_agent_id,
+            conversation_id=handoff.conversation_id,
+            response_text="jenna response",
+        )
+
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post("/family/jenna", json={"message": "Check my homework."})
+
+    assert response.status_code == 200
+    family_route = response.json()["family_route"]
+    assert family_route["actor_principal"] == "person:jenna"
+    assert family_route["target_agent"] == "jennacide"
+    assert family_route["document_scope"] == "person:jenna/school"
+    assert family_route["tool_policy"] == "child_homework:hint_first"
+    assert family_route["parent_visibility"] == "summary"
+
+
+def test_family_route_response_exposes_complete_handoff_contract(monkeypatch) -> None:
+    async def fake_arun(handoff):
+        return AgentExecutionResult(
+            trace_id="trace-contract",
+            agent_id=handoff.target_agent_id,
+            conversation_id=handoff.conversation_id,
+            response_text="contract response",
+        )
+
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post(
+        "/family/liam",
+        json={
+            "message": "Help with this worksheet.",
+            "message_id": "msg-contract",
+            "attachments": [{"filename": "worksheet.pdf"}],
+        },
+    )
+
+    assert response.status_code == 200
+    route = response.json()["family_route"]
+    assert {
+        "actor_principal",
+        "target_agent",
+        "source_channel",
+        "authenticated_subject",
+        "memory_scope",
+        "document_scope",
+        "tool_policy",
+        "privacy_policy",
+        "cloud_policy",
+        "conversation_id",
+        "request_id",
+        "attachments",
+        "parent_visibility",
+        "audit_reason",
+    }.issubset(route)
+    assert route["attachments"] == [{"filename": "worksheet.pdf"}]
+
+
+def test_family_route_rejects_unknown_member() -> None:
+    client = TestClient(app)
+
+    response = client.post("/family/unknown", json={"message": "hello"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Unknown family member route."
+
+
+def test_family_child_route_rejects_unsupported_homework_mode() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/family/liam",
+        json={"message": "Help with algebra.", "policy_mode": "write_answers"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unsupported child homework policy mode."
+
+
+def test_family_route_rejects_cross_member_agent_alias() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/family/liam",
+        json={"message": "hello", "agent": "@joe/cloyd"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Family agent alias does not match this route."
 
 
 def test_agent_receives_objective_and_independently_selects_tools() -> None:
@@ -122,10 +328,65 @@ class _FakeToolRegistry:
 
     async def execute(self, request: ToolExecutionRequest) -> ToolExecutionResult:
         self.requests.append(request)
+        output = {"ok": self.output_success, "success": self.output_success, "arguments": request.arguments}
+        if request.tool_name == "home_assistant_list_states":
+            output = {
+                "live_data_available": True,
+                "count": 4,
+                "entities": (
+                    [
+                        {
+                            "entity_id": "sensor.living_room_temperature",
+                            "domain": "sensor",
+                            "state": "72.4",
+                            "friendly_name": "Living room temperature",
+                            "device_class": "temperature",
+                            "unit_of_measurement": "F",
+                        },
+                        {
+                            "entity_id": "sensor.living_room_humidity",
+                            "domain": "sensor",
+                            "state": "45",
+                            "friendly_name": "Living room humidity",
+                            "device_class": "humidity",
+                            "unit_of_measurement": "%",
+                        },
+                        {
+                            "entity_id": "sensor.house_power",
+                            "domain": "sensor",
+                            "state": "680",
+                            "friendly_name": "House power",
+                            "device_class": "power",
+                            "unit_of_measurement": "W",
+                        },
+                        {
+                            "entity_id": "sensor.door_battery",
+                            "domain": "sensor",
+                            "state": "91",
+                            "friendly_name": "Door battery",
+                            "device_class": "battery",
+                            "unit_of_measurement": "%",
+                        },
+                        {
+                            "entity_id": "sensor.basement_co2",
+                            "domain": "sensor",
+                            "state": "612",
+                            "friendly_name": "Basement CO2",
+                            "device_class": "carbon_dioxide",
+                            "unit_of_measurement": "ppm",
+                        },
+                    ]
+                    if request.arguments.get("domain") == "sensor"
+                    else [
+                        {"entity_id": "light.downstairs", "domain": "light", "state": "on"},
+                        {"entity_id": "light.kitchen", "domain": "light", "state": "off"},
+                    ]
+                ),
+            }
         return ToolExecutionResult(
             success=True,
             tool_name=request.tool_name,
-            output={"ok": self.output_success, "success": self.output_success, "arguments": request.arguments},
+            output=output,
             request_id=request.request_id,
             duration_ms=1,
         )
@@ -196,7 +457,7 @@ def test_cloyd_website_build_keeps_coding_lane_in_inference_mode() -> None:
         available_tool_names=[],
     )
 
-    assert result.inference_endpoint_id == "vulcan-code"
+    assert result.inference_endpoint_id == "vulcan-nexus-coder"
     assert "coding.execute" in result.selected_tools
     assert "BEGIN AGENT SMITH QWEN CODING LANE" in prompt
     assert "agent_id=cloyd-gibbler" in prompt
@@ -299,7 +560,7 @@ def test_agent_vision_inference_receives_canonical_attachment(monkeypatch: pytes
     ).handoff
     assert handoff is not None
 
-    result = AgentRuntimeV3(run_inference=True).run(handoff)
+    result = AgentRuntimeV3(run_inference=True, unhealthy_endpoint_ids={"vulcan-nexus-vision-docs"}).run(handoff)
 
     assert result.inference_endpoint_id == "vulcan-vision"
     assert calls
@@ -351,11 +612,15 @@ def test_live_inference_uses_model_tool_calls_without_keyword_selection(monkeypa
     assert handoff is not None
     fake_registry = _FakeToolRegistry()
 
-    result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=True).run(handoff)
+    result = AgentRuntimeV3(
+        tool_registry=fake_registry,
+        run_inference=True,
+        unhealthy_endpoint_ids={"vulcan-nexus-strong"},
+    ).run(handoff)
 
     assert result.selected_tools == ("weather.current",)
-    assert [request.tool_name for request in fake_registry.requests] == ["get_weather"]
-    assert fake_registry.requests[0].arguments["location"] == "Atlanta, Georgia"
+    assert fake_registry.requests[-1].tool_name == "get_weather"
+    assert fake_registry.requests[-1].arguments["location"] == "Atlanta, Georgia"
     assert result.response_text == "Dragon Con weather uses the Atlanta forecast."
     assert calls[0]["tools_required"] is True
     assert calls[0]["tools"]
@@ -412,17 +677,21 @@ def test_vision_inference_extracts_context_before_reasoning_tool_calls(monkeypat
     assert handoff is not None
     fake_registry = _FakeToolRegistry()
 
-    result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=True).run(handoff)
+    result = AgentRuntimeV3(
+        tool_registry=fake_registry,
+        run_inference=True,
+        unhealthy_endpoint_ids={"vulcan-nexus-vision-docs"},
+    ).run(handoff)
 
     assert result.inference_endpoint_id == "vulcan-vision"
     assert result.inference_status == "ok"
-    assert result.selected_tools == ("weather.current",)
-    assert [request.tool_name for request in fake_registry.requests] == ["event_weather"]
+    assert "weather.current" in result.selected_tools
+    assert fake_registry.requests[-1].tool_name == "event_weather"
     assert len(calls) == 3
     assert calls[0]["model"] == "qwen2.5vl:72b"
     assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
     assert calls[0]["tools_required"] is False
-    assert calls[1]["model"] == "qwen2.5:32b-instruct"
+    assert calls[1]["model"] == "@preset/freyja-strong-local"
     assert calls[1]["images"] is None
     assert "Visible attachment context extracted by Vulcan vision" in calls[1]["prompt"]
     assert calls[1]["tools_required"] is True
@@ -536,6 +805,133 @@ def test_agent_home_assistant_read_uses_non_mutating_state_tool() -> None:
     assert result.selected_tools == ("home-assistant.read",)
     assert fake_registry.requests[0].tool_name == "home_assistant_list_states"
     assert fake_registry.requests[0].metadata["approval_granted"] is False
+
+
+def test_agent_home_assistant_read_runs_before_inference_for_home_language() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="How many lights are on right now in my home?",
+            conversation_id="conv-ha-home-language",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=True).run(handoff)
+
+    assert "home-assistant.read" in result.selected_tools
+    assert fake_registry.requests[0].tool_name == "home_assistant_list_states"
+    assert fake_registry.requests[0].arguments == {"domain": "light"}
+    assert result.response_text == "1 lights are on."
+    assert result.inference_endpoint_id is None
+
+
+def test_agent_home_assistant_temperature_does_not_route_to_weather() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="What is the temperature in my home?",
+            conversation_id="conv-ha-temperature",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=True).run(handoff)
+
+    assert result.selected_tools == ("home-assistant.read",)
+    assert [request.tool_name for request in fake_registry.requests] == ["home_assistant_list_states"]
+    assert fake_registry.requests[0].arguments == {"domain": "sensor"}
+    assert result.response_text == "Temperature sensors: Living room temperature: 72.4F."
+
+
+def test_agent_home_assistant_power_sensor_routes_to_home_assistant() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="What is the power usage at home?",
+            conversation_id="conv-ha-power",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=True).run(handoff)
+
+    assert result.selected_tools == ("home-assistant.read",)
+    assert [request.tool_name for request in fake_registry.requests] == ["home_assistant_list_states"]
+    assert fake_registry.requests[0].arguments == {"domain": "sensor"}
+    assert result.response_text == "Power sensors: House power: 680W."
+
+
+def test_agent_home_assistant_focus_overlay_adds_sensor_type(monkeypatch, tmp_path) -> None:
+    focus_path = tmp_path / "home-assistant-focuses.yaml"
+    focus_path.write_text(
+        """
+focuses:
+  co2:
+    label: CO2 sensors
+    domains: [sensor]
+    keywords: [co2, carbon dioxide]
+    device_classes: [carbon_dioxide]
+    units: [ppm]
+    entity_keywords: [co2]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "home_assistant_focus_config_path", str(focus_path))
+    freyja.agent_runtime_v3._home_assistant_focuses.cache_clear()
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="What is the CO2 in the basement?",
+            conversation_id="conv-ha-co2",
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    try:
+        result = AgentRuntimeV3(tool_registry=fake_registry, run_inference=True).run(handoff)
+    finally:
+        freyja.agent_runtime_v3._home_assistant_focuses.cache_clear()
+
+    assert result.selected_tools == ("home-assistant.read",)
+    assert fake_registry.requests[0].arguments == {"domain": "sensor"}
+    assert result.response_text == "CO2 sensors: Basement CO2: 612ppm."
+
+
+def test_home_assistant_focus_overlay_retargets_to_household_agent(monkeypatch, tmp_path) -> None:
+    focus_path = tmp_path / "home-assistant-focuses.yaml"
+    focus_path.write_text(
+        """
+focuses:
+  co2:
+    label: CO2 sensors
+    domains: [sensor]
+    keywords: [co2, carbon dioxide]
+    device_classes: [carbon_dioxide]
+    units: [ppm]
+    entity_keywords: [co2]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "home_assistant_focus_config_path", str(focus_path))
+    freyja.agent_runtime_v3._home_assistant_focuses.cache_clear()
+
+    try:
+        assert freyja_main._home_specific_agent("What is the CO2 in the basement?") == "freyja"
+    finally:
+        freyja.agent_runtime_v3._home_assistant_focuses.cache_clear()
 
 
 def test_agent_home_assistant_control_passes_explicit_approval_marker() -> None:
@@ -669,16 +1065,16 @@ def test_agents_use_vulcan_inference_and_identity_survives_endpoint_changes() ->
     assert handoff is not None
 
     normal = AgentRuntimeV3().run(handoff)
-    recovered = AgentRuntimeV3(unhealthy_endpoint_ids={"vulcan-code"}).run(handoff)
+    recovered = AgentRuntimeV3(unhealthy_endpoint_ids={"vulcan-nexus-coder"}).run(handoff)
 
     assert normal.agent_id == "cloyd-gibbler"
-    assert normal.inference_endpoint_id == "vulcan-code"
+    assert normal.inference_endpoint_id == "vulcan-nexus-coder"
     assert normal.inference_machine_id == "vulcan"
     selected_event = next(event for event in normal.audit_events if event.event_type == "agent_inference_selected")
     assert selected_event.metadata["role_alias"] == "vulcan-coder"
     assert any("via vulcan-coder" in step.detail for step in normal.steps if step.kind == "inference_selected")
     assert recovered.agent_id == "cloyd-gibbler"
-    assert recovered.inference_endpoint_id != "vulcan-code"
+    assert recovered.inference_endpoint_id != "vulcan-nexus-coder"
     assert recovered.degraded is False
 
 
@@ -696,7 +1092,7 @@ def test_family_test_prompt_uses_reasoning_not_code_endpoint() -> None:
 
     result = AgentRuntimeV3().run(handoff)
 
-    assert result.inference_endpoint_id == "vulcan-reason"
+    assert result.inference_endpoint_id == "vulcan-nexus-strong"
     selected_event = next(event for event in result.audit_events if event.event_type == "agent_inference_selected")
     assert selected_event.metadata["role_alias"] == "vulcan-general"
 
@@ -710,7 +1106,7 @@ def test_simple_ack_prompt_uses_iris_fast_endpoint() -> None:
 
     result = AgentRuntimeV3().run(handoff)
 
-    assert result.inference_endpoint_id == "iris-fast"
+    assert result.inference_endpoint_id == "vulcan-nexus-fast"
     selected_event = next(event for event in result.audit_events if event.event_type == "agent_inference_selected")
     assert selected_event.metadata == {"capability": "general.local", "role_alias": "iris-fast"}
 
@@ -722,7 +1118,15 @@ def test_iris_fast_is_fallback_when_vulcan_general_and_code_are_unhealthy() -> N
     ).handoff
     assert handoff is not None
 
-    result = AgentRuntimeV3(unhealthy_endpoint_ids={"vulcan-code", "vulcan-reason"}).run(handoff)
+    result = AgentRuntimeV3(
+        unhealthy_endpoint_ids={
+            "vulcan-nexus-coder",
+            "vulcan-nexus-strong",
+            "vulcan-nexus-fast",
+            "vulcan-code",
+            "vulcan-reason",
+        }
+    ).run(handoff)
 
     assert result.inference_endpoint_id == "iris-fast"
     selected_event = next(event for event in result.audit_events if event.event_type == "agent_inference_selected")
@@ -743,7 +1147,7 @@ def test_explicit_programming_test_prompt_still_uses_code_endpoint() -> None:
 
     result = AgentRuntimeV3().run(handoff)
 
-    assert result.inference_endpoint_id == "vulcan-code"
+    assert result.inference_endpoint_id == "vulcan-nexus-coder"
 
 
 def test_rev3_1_inference_role_aliases_cover_target_routes() -> None:
@@ -768,7 +1172,7 @@ def test_image_attachment_uses_vulcan_vision_role_alias() -> None:
 
     runtime_result = AgentRuntimeV3().run(result)
 
-    assert runtime_result.inference_endpoint_id == "vulcan-vision"
+    assert runtime_result.inference_endpoint_id == "vulcan-nexus-vision-docs"
     selected_event = next(event for event in runtime_result.audit_events if event.event_type == "agent_inference_selected")
     assert selected_event.metadata["role_alias"] == "vulcan-vision"
 
@@ -933,7 +1337,17 @@ def test_rev3_1_degraded_response_names_vulcan_iris_and_cloud_policy() -> None:
     ).handoff
     assert handoff is not None
 
-    result = AgentRuntimeV3(unhealthy_endpoint_ids={"vulcan-code", "vulcan-reason", "iris-fast", "approved-cloud-premium"}).run(handoff)
+    result = AgentRuntimeV3(
+        unhealthy_endpoint_ids={
+            "vulcan-nexus-coder",
+            "vulcan-nexus-strong",
+            "vulcan-nexus-fast",
+            "vulcan-code",
+            "vulcan-reason",
+            "iris-fast",
+            "approved-cloud-premium",
+        }
+    ).run(handoff)
 
     assert result.degraded is True
     assert "no healthy Vulcan inference endpoint" in result.response_text

@@ -141,6 +141,13 @@ class GatewayHandoff(BaseModel):
     permissions: frozenset[str] = Field(default_factory=frozenset)
     available_tools: frozenset[str] = Field(default_factory=frozenset)
     memory_scopes: frozenset[str] = Field(default_factory=frozenset)
+    actor_principal: str | None = None
+    authenticated_subject: str | None = None
+    document_scope: str | None = None
+    tool_policy: str | None = None
+    privacy_policy: str | None = None
+    parent_visibility: str | None = None
+    audit_reason: str | None = None
     cloud_egress_policy_id: str = "household-default"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

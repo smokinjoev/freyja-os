@@ -4,7 +4,7 @@ from freyja.agents.household import household_agents
 def test_household_agent_assignments() -> None:
     assert household_agents.resolve("joe").agent_id == "cloyd-gibbler"
     assert household_agents.resolve("beth").agent_id == "benedict"
-    assert household_agents.resolve("liam").agent_id == "agent-44"
+    assert household_agents.resolve("liam").agent_id == "agent-47"
     assert household_agents.resolve("family").agent_id == "freyja"
     assert household_agents.resolve("system").agent_id == "smith"
 
@@ -20,8 +20,8 @@ def test_jenna_has_active_personal_agent() -> None:
 
     assert agent is not None
     assert agent.active is True
-    assert agent.display_name == "Jenna"
-    assert household_agents.resolve("jenna").agent_id == "jenna"
+    assert agent.display_name == "JennaCide"
+    assert household_agents.resolve("jenna").agent_id == "jennacide"
 
 
 def test_family_agents_have_local_presets_and_no_cloud_routes() -> None:
@@ -56,3 +56,10 @@ def test_conversational_agents_reject_canned_reset_greetings() -> None:
         prompt = household_agents.resolve(person_id).prompt_role
         assert "How may I help you?" in prompt
         assert "Maintain continuity" in prompt
+
+
+def test_canonical_family_agent_names() -> None:
+    assert household_agents.resolve("liam").agent_id == "agent-47"
+    assert household_agents.resolve("liam").display_name == "Agent 47"
+    assert household_agents.resolve("jenna").agent_id == "jennacide"
+    assert household_agents.resolve("jenna").display_name == "JennaCide"

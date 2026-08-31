@@ -1,4 +1,4 @@
-"""JennaCide private agent entry point."""
+"""Agent 47 private agent entry point."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from freyja.agents.process import AgentProcess, agent_cli, create_agent_process
 from freyja.memory.store import MemoryStore
 
 
-AGENT_PERSON = PersonName.JENNA
+AGENT_PERSON = PersonName.LIAM
 
 
 def create(*, store: MemoryStore | None = None) -> AgentProcess:
@@ -22,4 +22,3 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

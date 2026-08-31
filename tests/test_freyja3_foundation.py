@@ -20,8 +20,10 @@ def test_named_target_agents_resolve_correctly() -> None:
     assert gateway.resolve_target_agent("Freyja").agent_id == "freyja"
     assert gateway.resolve_target_agent("Cloyd Gibbler").agent_id == "cloyd-gibbler"
     assert gateway.resolve_target_agent("Benedict").agent_id == "benedict"
-    assert gateway.resolve_target_agent("Agent 44").agent_id == "agent-44"
-    assert gateway.resolve_target_agent("Jenna").agent_id == "jenna"
+    assert gateway.resolve_target_agent("Agent 47").agent_id == "agent-47"
+    assert gateway.resolve_target_agent("Agent 44").agent_id == "agent-47"
+    assert gateway.resolve_target_agent("JennaCide").agent_id == "jennacide"
+    assert gateway.resolve_target_agent("Jenna").agent_id == "jennacide"
     assert gateway.resolve_target_agent("Legal Benedict").agent_id == "benedict-paralegal"
 
 

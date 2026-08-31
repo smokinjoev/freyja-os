@@ -1,2 +1,2 @@
-"""Jenna personal agent package."""
+"""JennaCide personal agent package."""
 

@@ -30,6 +30,13 @@ class GatewayRequest(BaseModel):
     attachments: list[dict[str, Any]] = Field(default_factory=list)
     reply_context: dict[str, Any] = Field(default_factory=dict)
     permissions: frozenset[str] = Field(default_factory=frozenset)
+    actor_principal: str | None = None
+    authenticated_subject: str | None = None
+    document_scope: str | None = None
+    tool_policy: str | None = None
+    privacy_policy: str | None = None
+    parent_visibility: str | None = None
+    audit_reason: str | None = None
 
 
 class GatewayResult(BaseModel):
@@ -100,6 +107,13 @@ class AgentGateway:
                 for scope in (target.private_memory_scope, *target.shared_memory_scopes)
                 if scope
             ),
+            actor_principal=request.actor_principal or sender.sender_id,
+            authenticated_subject=request.authenticated_subject or sender.sender_id,
+            document_scope=request.document_scope,
+            tool_policy=request.tool_policy,
+            privacy_policy=request.privacy_policy,
+            parent_visibility=request.parent_visibility,
+            audit_reason=request.audit_reason,
             cloud_egress_policy_id=target.cloud_egress_policy_id,
         )
         event = AuditEvent(
@@ -109,7 +123,18 @@ class AgentGateway:
             target_id=target.agent_id,
             allowed=True,
             reason="explicit target agent resolved and domain access allowed",
-            metadata={"conversation_id": conversation_id, "handoff_id": handoff.handoff_id},
+            metadata={
+                "conversation_id": conversation_id,
+                "handoff_id": handoff.handoff_id,
+                "actor_principal": handoff.actor_principal,
+                "authenticated_subject": handoff.authenticated_subject,
+                "memory_scopes": sorted(handoff.memory_scopes),
+                "document_scope": handoff.document_scope,
+                "tool_policy": handoff.tool_policy,
+                "privacy_policy": handoff.privacy_policy,
+                "parent_visibility": handoff.parent_visibility,
+                "audit_reason": handoff.audit_reason,
+            },
         )
         return GatewayResult(handoff=handoff, audit_event=event)
 

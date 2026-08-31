@@ -1,4 +1,4 @@
-"""Agent 44 private agent entry point."""
+"""Backward-compatible Agent 44 entry point for Liam's canonical Agent 47."""
 
 from __future__ import annotations
 
@@ -22,4 +22,3 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

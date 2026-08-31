@@ -12,16 +12,17 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from freyja.agents import AgentHierarchy, PersonName
 from freyja.agents.approval_provider import PersistentApprovalProvider
 from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprovals
 from freyja.agents.runtime import SmithRuntime
 from freyja.agent_gateway import AgentGateway, GatewayAuthenticationError, GatewayPermissionError, GatewayRequest
-from freyja.agent_runtime_v3 import AgentRuntimeV3
+from freyja.agent_runtime_v3 import AgentRuntimeV3, home_assistant_focus_for_text
 from freyja.config import settings
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
+from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
@@ -146,6 +147,16 @@ if settings.agent_smith_enabled and settings.agent_smith_write_pilot_enabled:
         get_registry().set_enabled(_tool_name, True)
 
 agent_runtime_v3 = AgentRuntimeV3(tool_registry=get_registry(), run_inference=settings.freyja3_inference_enabled)
+
+
+class FamilyRouteMessage(BaseModel):
+    message: str
+    agent: str | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
+    policy_mode: str | None = None
+    channel: str = "family"
 
 
 def _domain_from_header(value: str | None, default: SecurityDomainId = SecurityDomainId.HOUSEHOLD) -> SecurityDomainId:
@@ -523,7 +534,7 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
         security_domain_id=_security_domain_for_canonical_request(request),
         authenticated=True,
     )
-    target_agent = request.resolved_agent_id or _default_agent_for_user(request.resolved_user_id)
+    target_agent = _home_specific_agent(request.text) or request.resolved_agent_id or _default_agent_for_user(request.resolved_user_id)
     try:
         gateway_result = agent_gateway_v3.handle(
             GatewayRequest(
@@ -598,15 +609,156 @@ def _default_agent_for_user(resolved_user_id: str | None) -> str:
     return {
         "joe": "cloyd-gibbler",
         "beth": "benedict",
-        "liam": "agent-44",
-        "jenna": "jenna",
+        "liam": "agent-47",
+        "jenna": "jennacide",
     }.get(person, "freyja")
+
+
+def _home_specific_agent(text: str) -> str | None:
+    lowered = text.lower()
+    home_context_terms = (
+        "home assistant",
+        "my home",
+        "at home",
+        "in my home",
+        "the house",
+        "basement",
+        "house state",
+        "home state",
+    )
+    if home_assistant_focus_for_text(lowered) and any(term in lowered for term in home_context_terms):
+        return "freyja"
+    home_terms = (
+        "home assistant",
+        "my home",
+        "at home",
+        "in my home",
+        "the house",
+        "house state",
+        "home state",
+        "lights",
+        "sensors",
+        "devices",
+        "thermostat",
+        "temperature",
+        "humidity",
+        "power",
+        "energy",
+        "battery",
+        "voltage",
+        "electric",
+        "electricity",
+        "outlet",
+        "garage",
+        "door",
+        "lock",
+    )
+    if any(term in lowered for term in home_terms):
+        return "freyja"
+    return None
 
 
 @app.post("/canonical/route")
 async def canonical_route(request: CanonicalRequest, raw_request: Request) -> dict[str, Any]:
     response = await _execute_canonical_request(request, raw_request)
     return response.model_dump(mode="json")
+
+
+def _family_route_config(member: str) -> FamilyRouteConfig:
+    config = family_route_config(member)
+    if config is None:
+        raise HTTPException(status_code=404, detail="Unknown family member route.")
+    return config
+
+
+def _family_tool_policy(config: FamilyRouteConfig, requested_mode: str | None) -> str:
+    try:
+        return family_tool_policy(config, requested_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@app.post("/family/{member}")
+async def family_route(member: str, request: FamilyRouteMessage) -> dict[str, Any]:
+    config = _family_route_config(member)
+    prompt = request.message.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Family route message is required.")
+    conversation_id = request.conversation_id or f"family:{member.strip().lower()}:{uuid.uuid4()}"
+    message_id = request.message_id or f"family-msg:{uuid.uuid4()}"
+    tool_policy = _family_tool_policy(config, request.policy_mode)
+    try:
+        target_agent = resolve_family_agent_alias(config, request.agent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    sender = GatewaySender(
+        sender_id=config.actor_principal,
+        display_name=config.display_name,
+        security_domain_id=config.security_domain_id,
+        authenticated=True,
+    )
+    try:
+        gateway_result = agent_gateway_v3.handle(
+            GatewayRequest(
+                sender=sender,
+                target_agent=target_agent,
+                prompt=prompt,
+                conversation_id=conversation_id,
+                channel=request.channel,
+                message_id=message_id,
+                attachments=request.attachments,
+                actor_principal=config.actor_principal,
+                authenticated_subject=config.actor_principal,
+                document_scope=config.document_scope,
+                tool_policy=tool_policy,
+                privacy_policy=config.privacy_policy,
+                parent_visibility=config.parent_visibility,
+                audit_reason=f"authenticated family route for {config.member}",
+                permissions=frozenset({"family:route"}),
+            )
+        )
+    except GatewayAuthenticationError:
+        raise HTTPException(status_code=403, detail="Sender is not authenticated.") from None
+    except GatewayPermissionError as exc:
+        raise HTTPException(status_code=403, detail=exc.audit_event.reason) from None
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+
+    if gateway_result.handoff is None:
+        raise HTTPException(status_code=500, detail="Gateway did not produce an agent handoff.")
+    result = await agent_runtime_v3.arun(gateway_result.handoff)
+    handoff = gateway_result.handoff
+    return {
+        "trace_id": result.trace_id,
+        "conversation_id": result.conversation_id,
+        "resolved_user_id": member.strip().lower(),
+        "resolved_agent_id": result.agent_id,
+        "text": result.response_text,
+        "status": "degraded" if result.degraded else "ok",
+        "family_route": {
+            "actor_principal": handoff.actor_principal,
+            "authenticated_subject": handoff.authenticated_subject,
+            "target_agent": handoff.target_agent_id,
+            "source_channel": handoff.channel,
+            "conversation_id": handoff.conversation_id,
+            "memory_scopes": sorted(handoff.memory_scopes),
+            "memory_scope": config.document_scope.rsplit("/", 1)[0],
+            "document_scope": handoff.document_scope,
+            "tool_policy": handoff.tool_policy,
+            "privacy_policy": handoff.privacy_policy,
+            "cloud_policy": handoff.cloud_egress_policy_id,
+            "parent_visibility": handoff.parent_visibility,
+            "request_id": handoff.handoff_id,
+            "message_id": handoff.message_id,
+            "attachments": handoff.attachments,
+            "audit_reason": handoff.audit_reason,
+        },
+        "channel_metadata": {
+            "gateway_audit": gateway_result.audit_event.model_dump(mode="json"),
+            "inference_endpoint_id": result.inference_endpoint_id,
+            "inference_status": result.inference_status,
+        },
+    }
 
 
 @app.post("/shortcuts/message")

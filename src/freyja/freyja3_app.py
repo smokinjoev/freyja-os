@@ -667,6 +667,6 @@ def _default_agent_for_user(resolved_user_id: str | None) -> str:
     return {
         "joe": "cloyd-gibbler",
         "beth": "benedict",
-        "liam": "agent-44",
-        "jenna": "jenna",
+        "liam": "agent-47",
+        "jenna": "jennacide",
     }.get(person, "freyja")
