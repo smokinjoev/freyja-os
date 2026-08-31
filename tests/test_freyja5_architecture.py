@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import yaml
+
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
+from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS
 from freyja.foundation_models import GatewaySender, SecurityDomainId
 from freyja.semantic_routes import SemanticRoute, capability_for_route
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _sender(domain: SecurityDomainId = SecurityDomainId.HOUSEHOLD) -> GatewaySender:
@@ -123,3 +131,32 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert {case.runtime_context["interface"] for case in report.cases} == {"freyja5"}
     assert all(case.runtime_context["rev2_evidence"]["freyja5_trace_id"] for case in report.cases)
     assert all("latency_ms" in case.runtime_context["rev2_evidence"]["freyja5_trace_summary"] for case in report.cases)
+
+
+def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
+    config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-agents.yaml").read_text(encoding="utf-8"))
+    configured = {agent["id"]: agent for agent in config["agents"]}
+
+    assert set(configured) == {agent.agent_id for agent in PERSISTENT_AGENTS}
+    for seeded in PERSISTENT_AGENTS:
+        summary = configured[seeded.agent_id]
+        assert summary["display_name"] == seeded.display_name
+        assert summary["owner"] == seeded.owner
+        assert summary["home_machine"] == seeded.home_machine_id
+        assert set(summary["memory"]) == {
+            scope
+            for scope in (seeded.private_memory_scope, *seeded.shared_memory_scopes)
+            if scope
+        }
+
+
+def test_freyja5_semantic_route_config_has_seeded_endpoint_for_each_route() -> None:
+    config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-semantic-routes.yaml").read_text(encoding="utf-8"))
+    routes = config["routes"]
+    capabilities_by_endpoint = {endpoint.endpoint_id: endpoint.capabilities for endpoint in INFERENCE_ENDPOINTS}
+
+    assert set(routes) == {route.value for route in SemanticRoute}
+    for route_name, route_config in routes.items():
+        endpoint_id = route_config["preferred_runtime"]
+        assert endpoint_id in capabilities_by_endpoint
+        assert route_config["capability"] in capabilities_by_endpoint[endpoint_id], route_name
