@@ -126,6 +126,10 @@ class AgentGateway:
             metadata={
                 "conversation_id": conversation_id,
                 "handoff_id": handoff.handoff_id,
+                "channel": handoff.channel,
+                "message_id": handoff.message_id,
+                "source_domain": handoff.source_domain_id.value,
+                "target_domain": handoff.target_domain_id.value,
                 "actor_principal": handoff.actor_principal,
                 "authenticated_subject": handoff.authenticated_subject,
                 "memory_scopes": sorted(handoff.memory_scopes),

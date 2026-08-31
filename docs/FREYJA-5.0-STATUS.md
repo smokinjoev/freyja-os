@@ -61,6 +61,9 @@ tasks.
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
   fallbacks, inference status, and egress state.
+- Gateway handoff audit events now carry channel, message ID, source/target
+  domains, authenticated subject, actor principal, memory scopes, and handoff ID
+  so important requests are traceable from ingress before agent runtime starts.
 - Source-controlled Freyja 5.0 agent and route summaries are covered by drift
   tests against `foundation_seed.py`.
 - Freyja 5.0 certification/runtime mode disables implicit cloud fallback while

@@ -68,6 +68,30 @@ def test_gateway_handoff_trace_summary_carries_freyja5_route_and_egress() -> Non
     assert isinstance(result.trace_summary["latency_ms"], float)
 
 
+def test_gateway_audit_event_records_ingress_trace_metadata() -> None:
+    result = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender(),
+            target_agent="freyja",
+            prompt="Trace this important request.",
+            conversation_id="conv-trace",
+            channel="open-webui",
+            message_id="msg-trace-1",
+        )
+    )
+
+    assert result.handoff is not None
+    metadata = result.audit_event.metadata
+    assert metadata["handoff_id"] == result.handoff.handoff_id
+    assert metadata["conversation_id"] == "conv-trace"
+    assert metadata["channel"] == "open-webui"
+    assert metadata["message_id"] == "msg-trace-1"
+    assert metadata["source_domain"] == "household"
+    assert metadata["target_domain"] == "household"
+    assert metadata["authenticated_subject"] == "person:joe"
+    assert "agent:freyja" in metadata["memory_scopes"]
+
+
 def test_benedict_paralegal_uses_private_local_only_route() -> None:
     handoff = AgentGateway().handle(
         GatewayRequest(
