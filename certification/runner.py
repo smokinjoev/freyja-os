@@ -338,6 +338,7 @@ class Freyja5CertificationProvider:
             security_domain_id=sender_domain,
         )
         start = time.monotonic()
+        attachments = _freyja5_attachments(request_data, fixtures)
         try:
             gateway_result = AgentGateway().handle(
                 GatewayRequest(
@@ -346,7 +347,7 @@ class Freyja5CertificationProvider:
                     prompt=case.prompt,
                     conversation_id=str(request_data.get("request_id") or case.name),
                     channel=str((principal_data or {}).get("client_type") or "certification"),
-                    attachments=_freyja5_attachments(request_data, fixtures),
+                    attachments=attachments,
                 )
             )
             handoff = gateway_result.handoff
@@ -367,7 +368,7 @@ class Freyja5CertificationProvider:
             )
             return CertificationExecution(response="", error=str(exc), context=context)
 
-        context = _context_from_freyja5_result(result, principal_data, person_context, elapsed_ms(start))
+        context = _context_from_freyja5_result(result, principal_data, person_context, elapsed_ms(start), attachments)
         context.rev2_evidence["freyja5_audit_chain"] = _freyja5_audit_chain(
             [gateway_result.audit_event, *result.audit_events]
         )
@@ -709,6 +710,7 @@ def _context_from_freyja5_result(
     principal_data: dict[str, Any] | None,
     person_context: dict[str, str] | None,
     duration_ms: float,
+    attachments: list[dict[str, Any]],
 ) -> CertificationContext:
     trace = result.trace_summary if isinstance(result.trace_summary, dict) else {}
     topology = _freyja5_mcp_topology_evidence()
@@ -736,6 +738,7 @@ def _context_from_freyja5_result(
             "freyja5_agents": _freyja5_agent_evidence(),
             "freyja5_mcp_topology": topology,
             "freyja5_vulcan": _freyja5_vulcan_evidence(),
+            "freyja5_media": _freyja5_media_evidence(result, trace, attachments),
             "freyja5_live_blockers": _freyja5_live_blocker_evidence(),
             "freyja5_webgui": _freyja5_webgui_evidence(),
             "freyja5_traceability": _freyja5_traceability_evidence(),
@@ -808,6 +811,28 @@ def _freyja5_vulcan_evidence() -> dict[str, Any] | None:
     from freyja.freyja5_config import freyja5_vulcan_evidence
 
     return freyja5_vulcan_evidence()
+
+
+def _freyja5_media_evidence(result: Any, trace: dict[str, Any], attachments: list[dict[str, Any]]) -> dict[str, Any]:
+    mime_types = sorted(
+        {
+            str(attachment.get("mime_type") or attachment.get("media_type") or "application/octet-stream")
+            for attachment in attachments
+        }
+    )
+    return {
+        "attachment_count": len(attachments),
+        "mime_types": mime_types,
+        "has_image": any(mime_type.startswith("image/") for mime_type in mime_types),
+        "has_pdf": "application/pdf" in mime_types,
+        "inline_payload_count": sum(1 for attachment in attachments if attachment.get("data_base64")),
+        "path_payload_count": sum(1 for attachment in attachments if attachment.get("path") or attachment.get("source")),
+        "raw_payload_included": False,
+        "requested_route": result.requested_route,
+        "vision_route_selected": result.requested_route == "vision",
+        "actual_model": trace.get("actual_model"),
+        "actual_runtime": trace.get("actual_runtime"),
+    }
 
 
 def _apply_certification_fixtures(context: CertificationContext, fixtures: dict[str, Any]) -> None:

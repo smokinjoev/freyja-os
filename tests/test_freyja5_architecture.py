@@ -400,6 +400,29 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert expected_vulcan["owner"] == "nexus"
     assert expected_vulcan["semantic_route_presets"]["private"] == "benedict-paralegal-nexus"
     assert expected_vulcan["cloud_fallback"] == "explicit_only"
+    media_case = next(case for case in report.cases if case.name == "d-media-vision-pathway")
+    media_evidence = media_case.runtime_context["rev2_evidence"]["freyja5_media"]
+    assert media_evidence == {
+        "attachment_count": 1,
+        "mime_types": ["image/png"],
+        "has_image": True,
+        "has_pdf": False,
+        "inline_payload_count": 1,
+        "path_payload_count": 0,
+        "raw_payload_included": False,
+        "requested_route": "vision",
+        "vision_route_selected": True,
+        "actual_model": "@preset/freyja-vision-docs",
+        "actual_runtime": "nexus",
+    }
+    enclave_case = next(case for case in report.cases if case.name == "f-benedict-enclave-local-only")
+    enclave_media = enclave_case.runtime_context["rev2_evidence"]["freyja5_media"]
+    assert enclave_media["attachment_count"] == 1
+    assert enclave_media["mime_types"] == ["application/pdf"]
+    assert enclave_media["has_pdf"] is True
+    assert enclave_media["raw_payload_included"] is False
+    assert "ZmFrZQ==" not in str(media_evidence)
+    assert "ZmFrZQ==" not in str(enclave_media)
     expected_live_blockers = {
         "source": "FREYJA-5.0-BLOCKERS.md",
         "joe_required": [
