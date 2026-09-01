@@ -484,6 +484,12 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
                     "health_endpoint_or_equivalent",
                     "source_controlled_agent_definition_compatibility",
                 ],
+                "next_actions": [
+                    "On Atlas, install or locate Msty Go and record the non-secret install path.",
+                    "Create or inspect the always-on Linux service definition, then validate start, stop, restart, and reboot recovery.",
+                    "Export or document the non-secret agent configuration path and confirm Freyja agent definitions remain source-controlled.",
+                    "Capture the Msty Go health endpoint or equivalent operational proof.",
+                ],
             },
             {
                 "id": "vulcan_nexus_presets",
@@ -497,21 +503,39 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
                     "local_only_embedding_preset",
                     "local_only_private_preset",
                 ],
+                "next_actions": [
+                    "On Vulcan, configure or confirm Nexus local-only presets for fast, general, deep, code, vision, embedding, and private.",
+                    "Put the Nexus token in the host secret store, not in source or chat.",
+                    "Run a Freyja 5 live inference smoke with explicit live inference enabled and cloud fallback disabled.",
+                ],
             },
             {
                 "id": "iris_apple_session",
                 "component": "iris",
                 "requires": ["live_apple_calendar_mcp_or_macagent_session"],
+                "next_actions": [
+                    "On Iris, start the Apple Calendar MCP or MacAgent session under the real macOS user session.",
+                    "Run Freyja 5 certification target C and attach the resulting trace evidence.",
+                ],
             },
             {
                 "id": "hera_voice_avatar_hardware",
                 "component": "hera",
                 "requires": ["microphone", "speaker", "avatar_runtime", "physical_session_validation"],
+                "next_actions": [
+                    "On Hera, verify microphone input, speaker output, and avatar runtime availability.",
+                    "Run the Hera voice/avatar smoke and record the trace ID plus hardware/session evidence.",
+                ],
             },
             {
                 "id": "live_tool_sessions",
                 "component": "atlas",
                 "requires": ["live_mcp_tool_sessions", "cloyd_delegation_tool_smoke", "tool_call_trace_evidence"],
+                "next_actions": [
+                    "On Atlas, start the live MCP servers required by Freyja 5 tool grants.",
+                    "Run a Cloyd delegation smoke that actually selects and invokes an MCP tool.",
+                    "Preserve the trace evidence showing delegation, selected tool, tool call, and result.",
+                ],
             },
             {
                 "id": "vulcan_nexus_private_preset",
@@ -520,6 +544,11 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
                     "local_only_private_preset",
                     "benedict_enclave_no_cloud_egress_smoke",
                     "private_route_trace_evidence",
+                ],
+                "next_actions": [
+                    "On Vulcan, configure or confirm the Nexus private preset is local-only.",
+                    "Run the Benedict Paralegal enclave smoke with cloud egress disabled and unauthorized egress denied.",
+                    "Preserve trace evidence showing the private route, local runtime, and no cloud fallback.",
                 ],
             },
         ],
@@ -760,6 +789,7 @@ def test_freyja5_live_blocker_config_matches_blocker_doc() -> None:
     for blocker in evidence["joe_required"]:
         assert blocker["component"] in {"atlas", "vulcan", "iris", "hera"}
         assert blocker["requires"]
+        assert blocker["next_actions"]
         assert blocker["id"] in blocker_doc
 
 

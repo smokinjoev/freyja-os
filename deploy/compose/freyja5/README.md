@@ -100,6 +100,9 @@ Summarize the latest readiness bundle without reading raw JSON:
 scripts/freyja5-preflight-status.py --report certification/reports/freyja5-readiness-bundle.json
 ```
 
+The preflight summary prints each remaining blocker, its required evidence, and
+the next operator actions to run on Atlas, Vulcan, Iris, or Hera.
+
 To allow live local Nexus inference, configure `NEXUS_BASE_URL` and
 `NEXUS_API_KEY` in the untracked `.env`, then set:
 

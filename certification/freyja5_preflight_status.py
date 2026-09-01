@@ -143,10 +143,13 @@ def _remaining_work(checks: list[Any], *, failed_checks: tuple[str, ...]) -> tup
                     blocker_id = blocker.get("id")
                     component = blocker.get("component") or "unknown"
                     requires = blocker.get("requires") if isinstance(blocker.get("requires"), list) else []
+                    next_actions = blocker.get("next_actions") if isinstance(blocker.get("next_actions"), list) else []
                     requirement_text = ", ".join(str(requirement) for requirement in requires) or "validation evidence"
-                    remaining.append(
-                        f"Resolve Joe-required blocker `{blocker_id}` ({component}): {requirement_text}."
-                    )
+                    action_text = " ".join(str(action) for action in next_actions)
+                    sentence = f"Resolve Joe-required blocker `{blocker_id}` ({component}): {requirement_text}."
+                    if action_text:
+                        sentence = f"{sentence} Next actions: {action_text}"
+                    remaining.append(sentence)
                 continue
             blockers = check.get("remaining") if isinstance(check.get("remaining"), list) else []
             for blocker in blockers:

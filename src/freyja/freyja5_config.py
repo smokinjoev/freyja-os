@@ -31,6 +31,7 @@ def freyja5_live_blocker_evidence() -> dict[str, Any]:
                 "id": str(entry.get("id")),
                 "component": str(entry.get("component")),
                 "requires": [str(item) for item in entry.get("requires") or []],
+                "next_actions": [str(item) for item in entry.get("next_actions") or []],
             }
             for entry in joe_required
             if isinstance(entry, dict) and entry.get("id") and entry.get("component")

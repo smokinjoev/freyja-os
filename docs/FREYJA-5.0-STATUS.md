@@ -153,6 +153,10 @@ physical/session tasks.
   source-ready/live-blocked state. The readiness bundle and preflight summary
   now include Joe blocker component and required-evidence details directly in
   the generated output.
+- Joe-required blocker metadata now includes source-controlled `next_actions`
+  for Atlas/Msty Go, Vulcan/Nexus, Iris, Hera, live MCP delegation, and Benedict
+  private-route validation. The readiness bundle and preflight summary surface
+  those operator actions alongside required evidence.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.

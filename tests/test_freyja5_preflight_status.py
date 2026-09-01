@@ -54,11 +54,13 @@ def test_freyja5_preflight_reports_source_ready_live_blocked(tmp_path: Path) -> 
                         "id": "vulcan_nexus_presets",
                         "component": "vulcan",
                         "requires": ["local_only_fast_preset", "local_only_private_preset"],
+                        "next_actions": ["Confirm Nexus presets on Vulcan."],
                     },
                     {
                         "id": "iris_apple_session",
                         "component": "iris",
                         "requires": ["live_apple_calendar_mcp_or_macagent_session"],
+                        "next_actions": ["Run target C on Iris."],
                     },
                 ],
             },
@@ -72,8 +74,8 @@ def test_freyja5_preflight_reports_source_ready_live_blocked(tmp_path: Path) -> 
     assert summary.exit_code == 2
     assert summary.failed_checks == ("freyja5-live-blockers",)
     assert payload["remaining"] == [
-        "Resolve Joe-required blocker `vulcan_nexus_presets` (vulcan): local_only_fast_preset, local_only_private_preset.",
-        "Resolve Joe-required blocker `iris_apple_session` (iris): live_apple_calendar_mcp_or_macagent_session.",
+        "Resolve Joe-required blocker `vulcan_nexus_presets` (vulcan): local_only_fast_preset, local_only_private_preset. Next actions: Confirm Nexus presets on Vulcan.",
+        "Resolve Joe-required blocker `iris_apple_session` (iris): live_apple_calendar_mcp_or_macagent_session. Next actions: Run target C on Iris.",
     ]
 
 

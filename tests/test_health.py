@@ -120,6 +120,12 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
             "health_endpoint_or_equivalent",
             "source_controlled_agent_definition_compatibility",
         ],
+        "next_actions": [
+            "On Atlas, install or locate Msty Go and record the non-secret install path.",
+            "Create or inspect the always-on Linux service definition, then validate start, stop, restart, and reboot recovery.",
+            "Export or document the non-secret agent configuration path and confirm Freyja agent definitions remain source-controlled.",
+            "Capture the Msty Go health endpoint or equivalent operational proof.",
+        ],
     }
     assert next(blocker for blocker in blockers["joe_required"] if blocker["id"] == "vulcan_nexus_presets")[
         "requires"

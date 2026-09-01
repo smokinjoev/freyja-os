@@ -147,6 +147,7 @@ def _blocker_check() -> dict[str, Any]:
                 "id": blocker.get("id"),
                 "component": blocker.get("component"),
                 "requires": blocker.get("requires") if isinstance(blocker.get("requires"), list) else [],
+                "next_actions": blocker.get("next_actions") if isinstance(blocker.get("next_actions"), list) else [],
             }
             for blocker in blockers
             if isinstance(blocker, dict)
