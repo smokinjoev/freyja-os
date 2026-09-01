@@ -64,6 +64,28 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "cloud_fallback": False,
         "ready": False,
     }
+    assert data["atlas"] == {
+        "host": "atlas",
+        "role": "persistent-agent-plane",
+        "implementation": "AgentRuntimeV3",
+        "msty_go": {
+            "preferred": True,
+            "validated": False,
+            "blocker": "msty_go_always_on_linux_validation",
+            "boundary_preserved": True,
+        },
+        "owns": [
+            "freyja_gateway",
+            "persistent_agent_runtime",
+            "memory",
+            "audit",
+            "workers",
+            "health_apis",
+            "household_service_mcp",
+            "media_mcp",
+        ],
+        "recoverable_fallback_tag": "freyja-4.1-baseline-before-5.0-20260831-161448",
+    }
     assert data["semantic_routes"] == {
         "owner": "nexus",
         "cloud_fallback": "explicit_only",

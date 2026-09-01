@@ -103,6 +103,10 @@ tasks.
   explicit live-local Nexus readiness without exposing secrets.
 - `/freyja5/readiness` reports A-G certification skeleton coverage and explicit
   Joe-required live blockers for Vulcan/Nexus, Iris, and Hera.
+- `/freyja5/readiness` now reports Atlas as the persistent agent plane owning
+  Gateway, `AgentRuntimeV3`, memory, audit, workers, health APIs, and Atlas MCP
+  services. Msty Go remains preferred but unvalidated; the Atlas runtime
+  boundary is preserved for substitution once live Linux reliability is proven.
 - Freyja 5 OpenAI-compatible requests now resolve known household `user` values
   such as `joe`, `beth`, `liam`, and `jenna` to stable `person:<id>` principals
   so the WebGUI channel uses the same identity/memory policy shape as other
