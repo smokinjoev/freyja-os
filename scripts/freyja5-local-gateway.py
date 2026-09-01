@@ -120,11 +120,15 @@ def command_start(args: argparse.Namespace) -> int:
 
 def command_status(args: argparse.Namespace) -> int:
     pid = read_pid(args.pid_file)
+    listener = listener_pid(args.port)
+    listener_owned_by_pid_file = bool(pid and listener == pid)
     report = {
         "status": "healthy" if health_status(args.host, args.port)["healthy"] else "not-healthy",
         "pid_file": str(args.pid_file),
         "pid": pid,
         "pid_running": bool(pid and process_running(pid)),
+        "listener_pid": listener,
+        "listener_owned_by_pid_file": listener_owned_by_pid_file,
         "health": health_status(args.host, args.port),
         "log_file": str(args.log_file),
     }

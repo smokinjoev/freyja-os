@@ -68,3 +68,19 @@ def test_freyja5_local_gateway_start_sets_safe_test_environment(monkeypatch, tmp
     assert env["FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED"] == "false"
     assert env["CLOUD_ENABLED"] == "false"
     assert "freyja.main:app" in captured["cmd"]
+
+
+def test_freyja5_local_gateway_status_reports_listener_owner(monkeypatch, tmp_path: Path, capsys) -> None:
+    module = load_gateway_module()
+    pid_file = tmp_path / "freyja5.pid"
+    pid_file.write_text("12345", encoding="utf-8")
+    args = module.build_parser().parse_args(["--pid-file", str(pid_file), "status"])
+
+    monkeypatch.setattr(module, "health_status", lambda host, port: {"healthy": True, "url": f"http://127.0.0.1:{port}/health"})
+    monkeypatch.setattr(module, "process_running", lambda pid: pid == 12345)
+    monkeypatch.setattr(module, "listener_pid", lambda port: 12345)
+
+    assert module.command_status(args) == 0
+    output = capsys.readouterr().out
+    assert '"listener_pid": 12345' in output
+    assert '"listener_owned_by_pid_file": true' in output
