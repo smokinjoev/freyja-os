@@ -73,6 +73,9 @@ def test_gateway_handoff_trace_summary_carries_freyja5_route_and_egress() -> Non
     assert result.trace_summary["trace_id"] == handoff.handoff_id
     assert result.trace_summary["channel"] == "test"
     assert result.trace_summary["resolved_user"] == "person:joe"
+    assert result.trace_summary["authenticated_subject"] == "person:joe"
+    assert result.trace_summary["actor_principal"] == "person:joe"
+    assert result.trace_summary["memory_scopes"] == ["agent:freyja", "family", "system"]
     assert result.trace_summary["agent"] == "freyja"
     assert result.trace_summary["agent_logical_display_name"] == "Freyja"
     assert result.trace_summary["requested_route"] == "code"
@@ -649,6 +652,8 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
             "channel",
             "resolved_user",
             "authenticated_subject",
+            "actor_principal",
+            "memory_scopes",
             "agent",
             "requested_route",
             "actual_endpoint",
@@ -891,6 +896,9 @@ def test_freyja5_traceability_config_matches_runtime_trace_contract() -> None:
         "trace_id",
         "channel",
         "resolved_user",
+        "authenticated_subject",
+        "actor_principal",
+        "memory_scopes",
         "agent",
         "requested_route",
         "actual_endpoint",

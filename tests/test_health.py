@@ -145,6 +145,8 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
             "channel",
             "resolved_user",
             "authenticated_subject",
+            "actor_principal",
+            "memory_scopes",
             "agent",
             "requested_route",
             "actual_endpoint",

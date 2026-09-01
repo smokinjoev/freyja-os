@@ -1479,6 +1479,8 @@ def _trace_summary(
         "channel": handoff.channel,
         "resolved_user": handoff.sender_id,
         "authenticated_subject": handoff.authenticated_subject,
+        "actor_principal": handoff.actor_principal,
+        "memory_scopes": sorted(handoff.memory_scopes),
         "agent": agent.agent_id,
         "agent_display_name": agent.display_name,
         "agent_logical_display_name": agent.logical_display_name or agent.display_name,
