@@ -34,6 +34,9 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
     monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", False)
     monkeypatch.setattr(settings, "nexus_base_url", "")
     monkeypatch.setattr(settings, "nexus_api_key", "")
+    monkeypatch.setattr(settings, "macagent_enabled", True)
+    monkeypatch.setattr(settings, "macagent_base_url", "http://iris.test:8765")
+    monkeypatch.setattr(settings, "macagent_token", "secret-macagent-token")
     response = client.get(
         "/freyja5/readiness",
         headers={"Authorization": "Bearer test-connector-token"},
@@ -99,6 +102,29 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "general_tool_server": False,
         "live_blockers": ["hera_voice_avatar_hardware"],
     }
+    assert data["iris"] == {
+        "host": "iris",
+        "role": "apple-macos-capability-server",
+        "protocol": "mcp",
+        "macagent_base_url_configured": True,
+        "macagent_enabled": True,
+        "macagent_token_configured": True,
+        "capabilities": [
+            "apple.browser.read",
+            "apple.calendar.read",
+            "apple.calendar.write",
+            "apple.contacts.read",
+            "apple.mail.read",
+            "apple.messages.read",
+            "apple.messages.send",
+            "apple.music.read",
+            "apple.shortcuts.run",
+        ],
+        "atlas_authorizes_operations": True,
+        "health_is_authoritative_for_policy": False,
+        "live_blockers": ["iris_apple_session"],
+    }
+    assert "secret-macagent-token" not in response.text
     assert data["mcp"] == {
         "default_agent_mcp_servers": False,
         "hosts": ["atlas", "iris"],

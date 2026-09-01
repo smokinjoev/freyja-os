@@ -130,6 +130,10 @@ tasks.
   edge that publishes semantic events into Atlas/Gateway, not as a general MCP
   or tool server. The readiness payload keeps live voice/avatar hardware listed
   as the remaining blocker.
+- `/freyja5/readiness` now reports Iris as the Apple/macOS MCP capability
+  server with MacAgent configuration presence, supported Apple capability
+  families, Atlas-owned authorization, and live Apple session validation
+  recorded as the remaining blocker without exposing tokens.
 - Certification target E now records separate `signal` and `open-webui` Gateway
   handoffs and verifies that both carry the same stable household principal and
   memory-scope policy for Joe.

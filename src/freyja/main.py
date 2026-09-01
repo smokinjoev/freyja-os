@@ -296,6 +296,28 @@ async def freyja5_readiness() -> dict[str, Any]:
             "general_tool_server": False,
             "live_blockers": ["hera_voice_avatar_hardware"],
         },
+        "iris": {
+            "host": "iris",
+            "role": "apple-macos-capability-server",
+            "protocol": "mcp",
+            "macagent_base_url_configured": bool(settings.macagent_base_url),
+            "macagent_enabled": bool(settings.macagent_enabled),
+            "macagent_token_configured": bool(settings.macagent_token),
+            "capabilities": [
+                "apple.browser.read",
+                "apple.calendar.read",
+                "apple.calendar.write",
+                "apple.contacts.read",
+                "apple.mail.read",
+                "apple.messages.read",
+                "apple.messages.send",
+                "apple.music.read",
+                "apple.shortcuts.run",
+            ],
+            "atlas_authorizes_operations": True,
+            "health_is_authoritative_for_policy": False,
+            "live_blockers": ["iris_apple_session"],
+        },
         "agents": [
             {
                 "id": agent.agent_id,
