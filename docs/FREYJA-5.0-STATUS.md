@@ -56,11 +56,14 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T004635Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T004932Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
   fallbacks, inference status, and egress state.
+- Freyja 5 important-request traceability is now canonicalized in
+  `config/freyja-5.0-traceability.yaml` and surfaced through readiness and
+  certification evidence.
 - Gateway handoff audit events now carry channel, message ID, source/target
   domains, authenticated subject, actor principal, memory scopes, and handoff ID
   so important requests are traceable from ingress before agent runtime starts.

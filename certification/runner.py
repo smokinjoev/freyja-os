@@ -734,6 +734,7 @@ def _context_from_freyja5_result(
             "freyja5_mcp_topology": topology,
             "freyja5_live_blockers": _freyja5_live_blocker_evidence(),
             "freyja5_webgui": _freyja5_webgui_evidence(),
+            "freyja5_traceability": _freyja5_traceability_evidence(),
         },
     )
     context.tool_calls = [
@@ -781,6 +782,12 @@ def _freyja5_webgui_evidence() -> dict[str, Any]:
     from freyja.freyja5_config import freyja5_webgui_evidence
 
     return freyja5_webgui_evidence()
+
+
+def _freyja5_traceability_evidence() -> dict[str, Any]:
+    from freyja.freyja5_config import freyja5_traceability_evidence
+
+    return freyja5_traceability_evidence()
 
 
 def _freyja5_mcp_topology_evidence() -> dict[str, Any]:

@@ -27,7 +27,7 @@ from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalRes
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
-from freyja.freyja5_config import freyja5_live_blocker_evidence, freyja5_webgui_evidence
+from freyja.freyja5_config import freyja5_live_blocker_evidence, freyja5_traceability_evidence, freyja5_webgui_evidence
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -267,6 +267,7 @@ async def freyja5_readiness() -> dict[str, Any]:
             "recoverable_fallback_tag": "freyja-4.1-baseline-before-5.0-20260831-161448",
         },
         "blockers": freyja5_live_blocker_evidence(),
+        "traceability": freyja5_traceability_evidence(),
         "semantic_routes": {
             "owner": route_config.get("owner"),
             "cloud_fallback": route_config.get("cloud_fallback"),

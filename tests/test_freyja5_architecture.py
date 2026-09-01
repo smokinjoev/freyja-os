@@ -7,7 +7,7 @@ import yaml
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
-from freyja.freyja5_config import freyja5_live_blocker_evidence, freyja5_webgui_evidence
+from freyja.freyja5_config import freyja5_live_blocker_evidence, freyja5_traceability_evidence, freyja5_webgui_evidence
 from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS, TOOL_CAPABILITIES
 from freyja.foundation_models import GatewaySender, InferenceEndpoint, SecurityDomainId
 from freyja.inference_registry_v3 import InferenceRegistryV3
@@ -67,6 +67,8 @@ def test_gateway_handoff_trace_summary_carries_freyja5_route_and_egress() -> Non
     assert result.trace_summary["selected_tools"] == []
     assert result.trace_summary["tool_calls"] == []
     assert isinstance(result.trace_summary["latency_ms"], float)
+    traceability = freyja5_traceability_evidence()
+    assert set(traceability["important_request_fields"]) <= set(result.trace_summary)
 
 
 def test_gateway_audit_event_records_ingress_trace_metadata() -> None:
@@ -301,6 +303,44 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         case.runtime_context["rev2_evidence"]["freyja5_webgui"] == expected_webgui
         for case in report.cases
     )
+    expected_traceability = {
+        "source": "config/freyja-5.0-traceability.yaml",
+        "important_request_fields": [
+            "trace_id",
+            "channel",
+            "resolved_user",
+            "authenticated_subject",
+            "agent",
+            "requested_route",
+            "actual_endpoint",
+            "actual_provider",
+            "actual_model",
+            "actual_runtime",
+            "selected_tools",
+            "tool_calls",
+            "delegation",
+            "machine",
+            "latency_ms",
+            "failures",
+            "fallbacks",
+            "inference_status",
+            "egress_state",
+        ],
+        "audit_chain": {
+            "starts_with": "gateway_handoff_created",
+            "includes": ["gateway_handoff_created", "agent_task_started"],
+            "terminal_events": ["agent_inference_completed", "agent_memory_candidate_proposed"],
+        },
+        "egress_events": {
+            "include_allowed": True,
+            "include_denied": True,
+            "redact_prompt_preview": True,
+        },
+    }
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_traceability"] == expected_traceability
+        for case in report.cases
+    )
     identity_case = next(case for case in report.cases if case.name == "e-multi-channel-household-identity")
     identity_channels = identity_case.runtime_context["rev2_evidence"]["freyja5_identity_channels"]
     assert [entry["channel"] for entry in identity_channels] == ["signal", "open-webui"]
@@ -427,6 +467,35 @@ def test_freyja5_webgui_config_preserves_open_webui_default() -> None:
     }
     assert evidence["default_model_preserved"] != evidence["freyja5_model"]
     assert evidence["freyja5_opt_in"] is True
+
+
+def test_freyja5_traceability_config_matches_runtime_trace_contract() -> None:
+    config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-traceability.yaml").read_text(encoding="utf-8"))
+    evidence = freyja5_traceability_evidence()
+
+    assert config["version"] == "freyja-5.0"
+    assert evidence["source"] == "config/freyja-5.0-traceability.yaml"
+    assert set(evidence["important_request_fields"]) >= {
+        "trace_id",
+        "channel",
+        "resolved_user",
+        "agent",
+        "requested_route",
+        "actual_endpoint",
+        "actual_model",
+        "tool_calls",
+        "machine",
+        "latency_ms",
+        "failures",
+        "egress_state",
+    }
+    assert evidence["audit_chain"]["starts_with"] == "gateway_handoff_created"
+    assert "agent_task_started" in evidence["audit_chain"]["includes"]
+    assert evidence["egress_events"] == {
+        "include_allowed": True,
+        "include_denied": True,
+        "redact_prompt_preview": True,
+    }
 
 
 def test_freyja5_agents_consume_mcp_through_scoped_grants() -> None:

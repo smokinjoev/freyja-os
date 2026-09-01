@@ -122,6 +122,40 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "local_only_embedding_preset",
         "local_only_private_preset",
     ]
+    assert data["traceability"] == {
+        "source": "config/freyja-5.0-traceability.yaml",
+        "important_request_fields": [
+            "trace_id",
+            "channel",
+            "resolved_user",
+            "authenticated_subject",
+            "agent",
+            "requested_route",
+            "actual_endpoint",
+            "actual_provider",
+            "actual_model",
+            "actual_runtime",
+            "selected_tools",
+            "tool_calls",
+            "delegation",
+            "machine",
+            "latency_ms",
+            "failures",
+            "fallbacks",
+            "inference_status",
+            "egress_state",
+        ],
+        "audit_chain": {
+            "starts_with": "gateway_handoff_created",
+            "includes": ["gateway_handoff_created", "agent_task_started"],
+            "terminal_events": ["agent_inference_completed", "agent_memory_candidate_proposed"],
+        },
+        "egress_events": {
+            "include_allowed": True,
+            "include_denied": True,
+            "redact_prompt_preview": True,
+        },
+    }
     assert data["semantic_routes"] == {
         "owner": "nexus",
         "cloud_fallback": "explicit_only",
