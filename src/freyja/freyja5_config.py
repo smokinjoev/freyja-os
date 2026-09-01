@@ -13,6 +13,7 @@ FREYJA5_WEBGUI_PATH = REPO_ROOT / "config" / "freyja-5.0-webgui.yaml"
 FREYJA5_TRACEABILITY_PATH = REPO_ROOT / "config" / "freyja-5.0-traceability.yaml"
 FREYJA5_PLANES_PATH = REPO_ROOT / "config" / "freyja-5.0-planes.yaml"
 FREYJA5_GATEWAY_PATH = REPO_ROOT / "config" / "freyja-5.0-gateway.yaml"
+FREYJA5_CERTIFICATION_SUITE_PATH = REPO_ROOT / "certification" / "suites" / "routing" / "freyja5_architecture.yaml"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -224,4 +225,33 @@ def freyja5_mcp_topology_evidence() -> dict[str, Any]:
                 "implicit_cloud_fallback",
             ],
         },
+    }
+
+
+def freyja5_certification_evidence() -> dict[str, Any]:
+    suite = _load_yaml(FREYJA5_CERTIFICATION_SUITE_PATH)
+    cases = suite.get("cases") if isinstance(suite.get("cases"), list) else []
+    live_blockers_by_target = freyja5_certification_target_blockers()
+    targets: list[dict[str, Any]] = []
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        name = str(case.get("name") or "")
+        target = name.split("-", 1)[0]
+        if target not in live_blockers_by_target:
+            continue
+        targets.append(
+            {
+                "target": target.upper(),
+                "case": name,
+                "skeleton": "covered",
+                "live": "blocked" if live_blockers_by_target[target] else "not_required",
+                "live_blockers": live_blockers_by_target[target],
+            }
+        )
+    return {
+        "source": "certification/suites/routing/freyja5_architecture.yaml",
+        "suite": str(suite.get("name") or ""),
+        "targets": targets,
+        "live_blockers": freyja5_certification_live_blocker_ids(),
     }

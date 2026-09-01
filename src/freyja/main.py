@@ -28,8 +28,7 @@ from freyja.family_agents import FamilyRouteConfig, family_route_config, family_
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.freyja5_config import (
     freyja5_agent_evidence,
-    freyja5_certification_live_blocker_ids,
-    freyja5_certification_target_blockers,
+    freyja5_certification_evidence,
     freyja5_gateway_evidence,
     freyja5_live_blocker_evidence,
     freyja5_mcp_topology_evidence,
@@ -228,7 +227,6 @@ async def health() -> dict[str, str]:
 async def freyja5_readiness() -> dict[str, Any]:
     route_config = _load_source_yaml("config/freyja-5.0-semantic-routes.yaml")
     mcp_topology = _load_source_yaml("config/freyja-5.0-mcp-topology.yaml")
-    certification_suite = _load_source_yaml("certification/suites/routing/freyja5_architecture.yaml")
     routes = route_config.get("routes") if isinstance(route_config.get("routes"), dict) else {}
     servers = mcp_topology.get("servers") if isinstance(mcp_topology.get("servers"), list) else []
     non_mcp = mcp_topology.get("non_mcp_boundaries") if isinstance(mcp_topology.get("non_mcp_boundaries"), list) else []
@@ -289,11 +287,7 @@ async def freyja5_readiness() -> dict[str, Any]:
             ),
             None,
         ),
-        "certification": {
-            "suite": certification_suite.get("name"),
-            "targets": _freyja5_certification_targets(certification_suite),
-            "live_blockers": freyja5_certification_live_blocker_ids(),
-        },
+        "certification": _readiness_certification_evidence(),
     }
 
 
@@ -306,31 +300,6 @@ def _load_source_yaml(relative_path: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _freyja5_certification_targets(certification_suite: dict[str, Any]) -> list[dict[str, Any]]:
-    cases = certification_suite.get("cases")
-    if not isinstance(cases, list):
-        return []
-    live_blockers_by_target = freyja5_certification_target_blockers()
-    targets: list[dict[str, Any]] = []
-    for case in cases:
-        if not isinstance(case, dict):
-            continue
-        name = str(case.get("name") or "")
-        target = name.split("-", 1)[0]
-        if target not in live_blockers_by_target:
-            continue
-        targets.append(
-            {
-                "target": target.upper(),
-                "case": name,
-                "skeleton": "covered",
-                "live": "blocked" if live_blockers_by_target[target] else "not_required",
-                "live_blockers": live_blockers_by_target[target],
-            }
-        )
-    return targets
-
-
 def _readiness_mcp_evidence() -> dict[str, Any]:
     evidence = freyja5_mcp_topology_evidence()
     return {
@@ -340,6 +309,15 @@ def _readiness_mcp_evidence() -> dict[str, Any]:
         "source_controlled_grants": True,
         "agent_consumption": evidence["agent_consumption"],
         "agent_grants": evidence["agent_grants"],
+    }
+
+
+def _readiness_certification_evidence() -> dict[str, Any]:
+    evidence = freyja5_certification_evidence()
+    return {
+        "suite": evidence["suite"],
+        "targets": evidence["targets"],
+        "live_blockers": evidence["live_blockers"],
     }
 
 

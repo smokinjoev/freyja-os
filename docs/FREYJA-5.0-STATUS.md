@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T012147Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T012455Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -116,6 +116,10 @@ tasks.
   explicit live-local Nexus readiness without exposing secrets.
 - `/freyja5/readiness` reports A-G certification skeleton coverage and explicit
   Joe-required live blockers for Msty Go/Atlas, Vulcan/Nexus, Iris, and Hera.
+- A-G certification target posture is now exposed through a shared canonical
+  helper backed by `certification/suites/routing/freyja5_architecture.yaml` and
+  `config/freyja-5.0-live-blockers.yaml`, while readiness preserves its compact
+  public payload shape.
 - `/freyja5/readiness` now exposes all Joe-required blockers in a
   machine-readable form, including Msty Go always-on Linux validation, Vulcan
   local-only Nexus presets, Iris Apple session validation, and Hera

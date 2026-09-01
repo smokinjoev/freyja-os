@@ -9,6 +9,7 @@ from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
 from freyja.freyja5_config import (
     freyja5_agent_evidence,
+    freyja5_certification_evidence,
     freyja5_certification_live_blocker_ids,
     freyja5_certification_target_blockers,
     freyja5_gateway_evidence,
@@ -159,9 +160,15 @@ def test_cloyd_delegation_trace_records_selected_tools() -> None:
 
 def test_freyja5_certification_suite_tracks_architecture_cases_a_through_g() -> None:
     suite = load_suite("routing/freyja5_architecture")
+    evidence = freyja5_certification_evidence()
 
     assert suite.name == "freyja5-architecture"
     assert [case.name[0] for case in suite.cases] == ["a", "b", "c", "d", "e", "f", "g"]
+    assert evidence["source"] == "certification/suites/routing/freyja5_architecture.yaml"
+    assert evidence["suite"] == suite.name
+    assert [target["target"] for target in evidence["targets"]] == ["A", "B", "C", "D", "E", "F", "G"]
+    assert [target["case"] for target in evidence["targets"]] == [case.name for case in suite.cases]
+    assert evidence["live_blockers"] == freyja5_certification_live_blocker_ids()
 
 
 def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
