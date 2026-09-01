@@ -43,8 +43,8 @@
 
 ## Blocked
 
-See `FREYJA-5.0-BLOCKERS.md` for Joe-required validation and physical/session
-tasks.
+See root-level `FREYJA-5.0-BLOCKERS.md` for Joe-required validation and
+physical/session tasks.
 
 ## Latest Certification Attempt
 
@@ -105,6 +105,9 @@ tasks.
   Gateway identity/channel handling and `AgentRuntimeV3` route/trace selection
   without live inference, while preserving the existing Open WebUI model-proxy
   default and `agent-smith` compatibility path.
+- The opt-in OpenAI-compatible `freyja-5` response metadata now exposes the
+  Gateway/runtime trace ID directly as `freyja.trace_id`, matching the nested
+  trace summary for easier WebGUI inspection of important requests.
 - Added default-off `FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED` so the opt-in
   `freyja-5` OpenAI-compatible path can use live local Nexus inference only
   when explicitly enabled. Cloud fallback remains disabled on that path.

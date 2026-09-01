@@ -1256,6 +1256,7 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
             smith_status="degraded" if result.degraded else "completed",
             model="freyja-5",
             extra_freyja={
+                "trace_id": result.trace_id,
                 "agent": result.agent_id,
                 "route": result.requested_route,
                 "endpoint": result.inference_endpoint_id,

@@ -464,6 +464,7 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatc
     assert "Route: code" in content
     assert "Status: not_run" in content
     assert data["freyja"]["smith_mode"] == "freyja5"
+    assert data["freyja"]["trace_id"] == data["freyja"]["trace"]["trace_id"]
     assert data["freyja"]["agent"] == "freyja"
     assert data["freyja"]["route"] == "code"
     assert data["freyja"]["provider"] == "nexus"
