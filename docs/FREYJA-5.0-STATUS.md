@@ -107,6 +107,11 @@ tasks.
   Gateway, `AgentRuntimeV3`, memory, audit, workers, health APIs, and Atlas MCP
   services. Msty Go remains preferred but unvalidated; the Atlas runtime
   boundary is preserved for substitution once live Linux reliability is proven.
+- `/freyja5/readiness` now reports Vulcan/Nexus as the semantic inference plane,
+  including source-controlled route-to-runtime preset mappings for `fast`,
+  `general`, `deep`, `code`, `vision`, `embedding`, and `private`. Physical
+  model/runtime selection remains owned by Nexus and cloud fallback remains
+  explicit-only.
 - Freyja 5 OpenAI-compatible requests now resolve known household `user` values
   such as `joe`, `beth`, `liam`, and `jenna` to stable `person:<id>` principals
   so the WebGUI channel uses the same identity/memory policy shape as other

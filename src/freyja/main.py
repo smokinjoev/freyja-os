@@ -375,7 +375,22 @@ async def freyja5_readiness() -> dict[str, Any]:
         },
         "vulcan": next(
             (
-                {"host": boundary.get("host"), "protocol": boundary.get("protocol"), "role": boundary.get("role")}
+                {
+                    "host": boundary.get("host"),
+                    "protocol": boundary.get("protocol"),
+                    "role": boundary.get("role"),
+                    "owner": route_config.get("owner"),
+                    "owns": list(boundary.get("owns") or []),
+                    "semantic_route_presets": {
+                        str(route): str(details.get("preferred_runtime"))
+                        for route, details in sorted(routes.items())
+                        if isinstance(details, dict) and details.get("preferred_runtime")
+                    },
+                    "route_count": len(routes),
+                    "local_by_default": True,
+                    "cloud_fallback": route_config.get("cloud_fallback"),
+                    "live_blockers": ["vulcan_nexus_presets"],
+                }
                 for boundary in non_mcp
                 if isinstance(boundary, dict) and boundary.get("id") == "vulcan-nexus"
             ),
