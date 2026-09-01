@@ -35,6 +35,7 @@ from freyja.freyja5_config import (
     freyja5_plane_evidence,
     freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
+    freyja5_vulcan_evidence,
     freyja5_webgui_evidence,
 )
 from freyja.home_assistant_monitor import (
@@ -229,7 +230,6 @@ async def freyja5_readiness() -> dict[str, Any]:
     mcp_topology = _load_source_yaml("config/freyja-5.0-mcp-topology.yaml")
     routes = route_config.get("routes") if isinstance(route_config.get("routes"), dict) else {}
     servers = mcp_topology.get("servers") if isinstance(mcp_topology.get("servers"), list) else []
-    non_mcp = mcp_topology.get("non_mcp_boundaries") if isinstance(mcp_topology.get("non_mcp_boundaries"), list) else []
     live_inference_enabled = bool(settings.freyja5_openai_live_inference_enabled)
     nexus_configured = bool(settings.nexus_base_url)
     planes = freyja5_plane_evidence()
@@ -264,29 +264,7 @@ async def freyja5_readiness() -> dict[str, Any]:
         "iris": iris_plane,
         "agents": freyja5_agent_evidence(),
         "mcp": _readiness_mcp_evidence(),
-        "vulcan": next(
-            (
-                {
-                    "host": boundary.get("host"),
-                    "protocol": boundary.get("protocol"),
-                    "role": boundary.get("role"),
-                    "owner": route_config.get("owner"),
-                    "owns": list(boundary.get("owns") or []),
-                    "semantic_route_presets": {
-                        str(route): str(details.get("preferred_runtime"))
-                        for route, details in sorted(routes.items())
-                        if isinstance(details, dict) and details.get("preferred_runtime")
-                    },
-                    "route_count": len(routes),
-                    "local_by_default": bool(planes["vulcan"].get("local_by_default")),
-                    "cloud_fallback": route_config.get("cloud_fallback"),
-                    "live_blockers": list(planes["vulcan"].get("live_blockers") or []),
-                }
-                for boundary in non_mcp
-                if isinstance(boundary, dict) and boundary.get("id") == "vulcan-nexus"
-            ),
-            None,
-        ),
+        "vulcan": freyja5_vulcan_evidence(),
         "certification": _readiness_certification_evidence(),
     }
 

@@ -228,6 +228,39 @@ def freyja5_mcp_topology_evidence() -> dict[str, Any]:
     }
 
 
+def freyja5_vulcan_evidence() -> dict[str, Any] | None:
+    route_evidence = freyja5_semantic_route_evidence()
+    plane_evidence = freyja5_plane_evidence()
+    topology = _load_yaml(REPO_ROOT / "config" / "freyja-5.0-mcp-topology.yaml")
+    raw_boundaries = topology.get("non_mcp_boundaries")
+    non_mcp_boundaries = raw_boundaries if isinstance(raw_boundaries, list) else []
+    routes = route_evidence["routes"] if isinstance(route_evidence.get("routes"), dict) else {}
+    vulcan_plane = plane_evidence["vulcan"] if isinstance(plane_evidence.get("vulcan"), dict) else {}
+    return next(
+        (
+            {
+                "host": str(boundary.get("host") or ""),
+                "protocol": str(boundary.get("protocol") or ""),
+                "role": str(boundary.get("role") or ""),
+                "owner": route_evidence["owner"],
+                "owns": [str(item) for item in boundary.get("owns") or []],
+                "semantic_route_presets": {
+                    str(route): str(details.get("preferred_runtime"))
+                    for route, details in sorted(routes.items())
+                    if isinstance(details, dict) and details.get("preferred_runtime")
+                },
+                "route_count": len(routes),
+                "local_by_default": bool(vulcan_plane.get("local_by_default")),
+                "cloud_fallback": route_evidence["cloud_fallback"],
+                "live_blockers": [str(blocker) for blocker in vulcan_plane.get("live_blockers") or []],
+            }
+            for boundary in non_mcp_boundaries
+            if isinstance(boundary, dict) and boundary.get("id") == "vulcan-nexus"
+        ),
+        None,
+    )
+
+
 def freyja5_certification_evidence() -> dict[str, Any]:
     suite = _load_yaml(FREYJA5_CERTIFICATION_SUITE_PATH)
     cases = suite.get("cases") if isinstance(suite.get("cases"), list) else []

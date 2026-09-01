@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T012455Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T012927Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -148,6 +148,10 @@ tasks.
   `general`, `deep`, `code`, `vision`, `embedding`, and `private`. Physical
   model/runtime selection remains owned by Nexus and cloud fallback remains
   explicit-only.
+- Vulcan/Nexus readiness evidence now comes from a shared canonical helper that
+  combines the MCP topology, semantic route map, and plane posture so readiness
+  keeps proving Nexus ownership, local-by-default behavior, and explicit-only
+  cloud fallback without endpoint-local boundary logic.
 - `/freyja5/readiness` now exposes the same canonical semantic route evidence
   used by certification reports, including route capabilities, preferred Nexus
   runtime presets, and Benedict Paralegal's private local-only route policy.

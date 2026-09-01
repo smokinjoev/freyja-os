@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from freyja.main import app
-from freyja.freyja5_config import freyja5_agent_evidence
+from freyja.freyja5_config import freyja5_agent_evidence, freyja5_vulcan_evidence
 from freyja.router import RoutingDecision, RoutingResult, router
 from freyja.tools.models import ToolExecutionResult
 
@@ -265,26 +265,11 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
             {"agent_id": "jennacide", "mcp_tool_count": 7, "mcp_hosts": ["atlas", "iris"]},
         ],
     }
-    assert data["vulcan"] == {
-        "host": "vulcan",
-        "protocol": "openai-compatible",
-        "role": "semantic-inference-plane",
-        "owner": "nexus",
-        "owns": ["physical_model_selection", "runtime_selection", "semantic_route_presets"],
-        "semantic_route_presets": {
-            "code": "vulcan-nexus-coder",
-            "deep": "vulcan-deep",
-            "embedding": "vulcan-embeddings",
-            "fast": "vulcan-nexus-fast",
-            "general": "vulcan-nexus-strong",
-            "private": "benedict-paralegal-nexus",
-            "vision": "vulcan-nexus-vision-docs",
-        },
-        "route_count": 7,
-        "local_by_default": True,
-        "cloud_fallback": "explicit_only",
-        "live_blockers": ["vulcan_nexus_presets"],
-    }
+    assert data["vulcan"] == freyja5_vulcan_evidence()
+    assert data["vulcan"]["owner"] == "nexus"
+    assert data["vulcan"]["semantic_route_presets"]["private"] == "benedict-paralegal-nexus"
+    assert data["vulcan"]["local_by_default"] is True
+    assert data["vulcan"]["cloud_fallback"] == "explicit_only"
     assert data["certification"]["suite"] == "freyja5-architecture"
     assert [target["target"] for target in data["certification"]["targets"]] == ["A", "B", "C", "D", "E", "F", "G"]
     assert data["certification"]["targets"][0] == {

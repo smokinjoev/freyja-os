@@ -18,6 +18,7 @@ from freyja.freyja5_config import (
     freyja5_plane_evidence,
     freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
+    freyja5_vulcan_evidence,
     freyja5_webgui_evidence,
 )
 from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS, TOOL_CAPABILITIES
@@ -169,6 +170,31 @@ def test_freyja5_certification_suite_tracks_architecture_cases_a_through_g() -> 
     assert [target["target"] for target in evidence["targets"]] == ["A", "B", "C", "D", "E", "F", "G"]
     assert [target["case"] for target in evidence["targets"]] == [case.name for case in suite.cases]
     assert evidence["live_blockers"] == freyja5_certification_live_blocker_ids()
+
+
+def test_freyja5_vulcan_evidence_combines_nexus_routes_and_plane_boundary() -> None:
+    evidence = freyja5_vulcan_evidence()
+
+    assert evidence == {
+        "host": "vulcan",
+        "protocol": "openai-compatible",
+        "role": "semantic-inference-plane",
+        "owner": "nexus",
+        "owns": ["physical_model_selection", "runtime_selection", "semantic_route_presets"],
+        "semantic_route_presets": {
+            "code": "vulcan-nexus-coder",
+            "deep": "vulcan-deep",
+            "embedding": "vulcan-embeddings",
+            "fast": "vulcan-nexus-fast",
+            "general": "vulcan-nexus-strong",
+            "private": "benedict-paralegal-nexus",
+            "vision": "vulcan-nexus-vision-docs",
+        },
+        "route_count": 7,
+        "local_by_default": True,
+        "cloud_fallback": "explicit_only",
+        "live_blockers": ["vulcan_nexus_presets"],
+    }
 
 
 def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
