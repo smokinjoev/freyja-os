@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T003343Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T004043Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -147,6 +147,10 @@ tasks.
 - Freyja 5 certification evidence now includes per-agent MCP grant posture and
   Gateway boundary policy so generated A-G reports can prove agent/tool
   consumption and non-Director Gateway constraints from source control.
+- Freyja 5 certification evidence now includes Joe-required live blocker
+  posture from `FREYJA-5.0-BLOCKERS.md`, including required validation evidence
+  and confirmation that secrets remain outside source while independent work
+  continues.
 - `/freyja5/readiness` now reports Hera as a voice/avatar/perception channel
   edge that publishes semantic events into Atlas/Gateway, not as a general MCP
   or tool server. The readiness payload keeps live voice/avatar hardware listed
