@@ -8,6 +8,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FREYJA5_LIVE_BLOCKERS_PATH = REPO_ROOT / "config" / "freyja-5.0-live-blockers.yaml"
+FREYJA5_SEMANTIC_ROUTES_PATH = REPO_ROOT / "config" / "freyja-5.0-semantic-routes.yaml"
 FREYJA5_WEBGUI_PATH = REPO_ROOT / "config" / "freyja-5.0-webgui.yaml"
 FREYJA5_TRACEABILITY_PATH = REPO_ROOT / "config" / "freyja-5.0-traceability.yaml"
 FREYJA5_PLANES_PATH = REPO_ROOT / "config" / "freyja-5.0-planes.yaml"
@@ -50,6 +51,29 @@ def freyja5_certification_target_blockers() -> dict[str, list[str]]:
 def freyja5_certification_live_blocker_ids() -> list[str]:
     blockers = freyja5_live_blocker_evidence()["joe_required"]
     return [str(blocker["id"]) for blocker in blockers]
+
+
+def freyja5_semantic_route_evidence() -> dict[str, Any]:
+    data = _load_yaml(FREYJA5_SEMANTIC_ROUTES_PATH)
+    routes = data.get("routes") if isinstance(data.get("routes"), dict) else {}
+    return {
+        "source": "config/freyja-5.0-semantic-routes.yaml",
+        "owner": str(data.get("owner") or ""),
+        "cloud_fallback": str(data.get("cloud_fallback") or ""),
+        "routes": {
+            str(route): {
+                "capability": str(details.get("capability") or ""),
+                "preferred_runtime": str(details.get("preferred_runtime") or ""),
+                **(
+                    {"egress_policy": str(details["egress_policy"])}
+                    if isinstance(details, dict) and details.get("egress_policy")
+                    else {}
+                ),
+            }
+            for route, details in sorted(routes.items())
+            if isinstance(details, dict)
+        },
+    }
 
 
 def freyja5_webgui_evidence() -> dict[str, Any]:

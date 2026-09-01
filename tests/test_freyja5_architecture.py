@@ -12,6 +12,7 @@ from freyja.freyja5_config import (
     freyja5_certification_target_blockers,
     freyja5_live_blocker_evidence,
     freyja5_plane_evidence,
+    freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
     freyja5_webgui_evidence,
 )
@@ -221,6 +222,15 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert plane_evidence["iris"]["role"] == "apple-macos-capability-server"
     assert plane_evidence["hera"]["role"] == "avatar-voice-channel-edge"
     assert plane_evidence["vulcan"]["local_by_default"] is True
+    expected_semantic_routes = freyja5_semantic_route_evidence()
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_semantic_routes"] == expected_semantic_routes
+        for case in report.cases
+    )
+    assert expected_semantic_routes["owner"] == "nexus"
+    assert expected_semantic_routes["cloud_fallback"] == "explicit_only"
+    assert set(expected_semantic_routes["routes"]) == {route.value for route in SemanticRoute}
+    assert expected_semantic_routes["routes"]["private"]["egress_policy"] == "local_only"
     assert all(
         case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == {
             "source": "config/freyja-5.0-mcp-topology.yaml",
@@ -388,13 +398,19 @@ def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
 def test_freyja5_semantic_route_config_has_seeded_endpoint_for_each_route() -> None:
     config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-semantic-routes.yaml").read_text(encoding="utf-8"))
     routes = config["routes"]
+    evidence = freyja5_semantic_route_evidence()
     capabilities_by_endpoint = {endpoint.endpoint_id: endpoint.capabilities for endpoint in INFERENCE_ENDPOINTS}
 
+    assert evidence["source"] == "config/freyja-5.0-semantic-routes.yaml"
+    assert evidence["owner"] == "nexus"
+    assert evidence["cloud_fallback"] == "explicit_only"
     assert set(routes) == {route.value for route in SemanticRoute}
+    assert set(evidence["routes"]) == set(routes)
     for route_name, route_config in routes.items():
         endpoint_id = route_config["preferred_runtime"]
         assert endpoint_id in capabilities_by_endpoint
         assert route_config["capability"] in capabilities_by_endpoint[endpoint_id], route_name
+        assert evidence["routes"][route_name]["preferred_runtime"] == endpoint_id
 
 
 def test_freyja5_mcp_preferred_tool_boundary_is_explicit() -> None:

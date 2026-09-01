@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T005740Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T005956Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -137,6 +137,10 @@ tasks.
   `general`, `deep`, `code`, `vision`, `embedding`, and `private`. Physical
   model/runtime selection remains owned by Nexus and cloud fallback remains
   explicit-only.
+- Freyja 5 certification evidence now includes canonical semantic route
+  mappings from `config/freyja-5.0-semantic-routes.yaml`, proving Nexus route
+  ownership, explicit-only cloud fallback, and the Benedict private local-only
+  route in generated A-G reports.
 - Freyja 5 OpenAI-compatible requests now resolve known household `user` values
   such as `joe`, `beth`, `liam`, and `jenna` to stable `person:<id>` principals
   so the WebGUI channel uses the same identity/memory policy shape as other
