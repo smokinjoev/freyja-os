@@ -150,7 +150,9 @@ physical/session tasks.
   state.
 - Added `scripts/freyja5-preflight-status.py`, which summarizes the latest
   Freyja 5 readiness bundle and returns exit code `2` for the expected
-  source-ready/live-blocked state.
+  source-ready/live-blocked state. The readiness bundle and preflight summary
+  now include Joe blocker component and required-evidence details directly in
+  the generated output.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.

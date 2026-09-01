@@ -142,6 +142,15 @@ def _blocker_check() -> dict[str, Any]:
         "status": "blocked" if blockers else "passed",
         "source": evidence.get("source"),
         "remaining": [blocker.get("id") for blocker in blockers if isinstance(blocker, dict)],
+        "blockers": [
+            {
+                "id": blocker.get("id"),
+                "component": blocker.get("component"),
+                "requires": blocker.get("requires") if isinstance(blocker.get("requires"), list) else [],
+            }
+            for blocker in blockers
+            if isinstance(blocker, dict)
+        ],
     }
 
 

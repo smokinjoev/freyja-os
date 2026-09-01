@@ -103,6 +103,18 @@ def test_freyja5_readiness_bundle_reports_source_ready_but_live_blocked(tmp_path
         "live_tool_sessions",
         "vulcan_nexus_private_preset",
     ]
+    assert checks["freyja5-live-blockers"]["blockers"][0] == {
+        "id": "msty_go_always_on_linux_validation",
+        "component": "atlas",
+        "requires": [
+            "install_path",
+            "service_definition",
+            "restart_behavior",
+            "local_config_export_story",
+            "health_endpoint_or_equivalent",
+            "source_controlled_agent_definition_compatibility",
+        ],
+    }
 
 
 def test_freyja5_readiness_bundle_fails_missing_artifacts() -> None:

@@ -135,6 +135,19 @@ def _remaining_work(checks: list[Any], *, failed_checks: tuple[str, ...]) -> tup
             continue
         name = str(check.get("name"))
         if name == LIVE_BLOCKER_CHECK:
+            blocker_details = check.get("blockers") if isinstance(check.get("blockers"), list) else []
+            if blocker_details:
+                for blocker in blocker_details:
+                    if not isinstance(blocker, dict):
+                        continue
+                    blocker_id = blocker.get("id")
+                    component = blocker.get("component") or "unknown"
+                    requires = blocker.get("requires") if isinstance(blocker.get("requires"), list) else []
+                    requirement_text = ", ".join(str(requirement) for requirement in requires) or "validation evidence"
+                    remaining.append(
+                        f"Resolve Joe-required blocker `{blocker_id}` ({component}): {requirement_text}."
+                    )
+                continue
             blockers = check.get("remaining") if isinstance(check.get("remaining"), list) else []
             for blocker in blockers:
                 remaining.append(f"Resolve Joe-required blocker `{blocker}` in FREYJA-5.0-BLOCKERS.md.")

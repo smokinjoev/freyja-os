@@ -49,6 +49,18 @@ def test_freyja5_preflight_reports_source_ready_live_blocked(tmp_path: Path) -> 
                 "ok": False,
                 "status": "blocked",
                 "remaining": ["vulcan_nexus_presets", "iris_apple_session"],
+                "blockers": [
+                    {
+                        "id": "vulcan_nexus_presets",
+                        "component": "vulcan",
+                        "requires": ["local_only_fast_preset", "local_only_private_preset"],
+                    },
+                    {
+                        "id": "iris_apple_session",
+                        "component": "iris",
+                        "requires": ["live_apple_calendar_mcp_or_macagent_session"],
+                    },
+                ],
             },
         ],
     )
@@ -60,9 +72,33 @@ def test_freyja5_preflight_reports_source_ready_live_blocked(tmp_path: Path) -> 
     assert summary.exit_code == 2
     assert summary.failed_checks == ("freyja5-live-blockers",)
     assert payload["remaining"] == [
-        "Resolve Joe-required blocker `vulcan_nexus_presets` in FREYJA-5.0-BLOCKERS.md.",
-        "Resolve Joe-required blocker `iris_apple_session` in FREYJA-5.0-BLOCKERS.md.",
+        "Resolve Joe-required blocker `vulcan_nexus_presets` (vulcan): local_only_fast_preset, local_only_private_preset.",
+        "Resolve Joe-required blocker `iris_apple_session` (iris): live_apple_calendar_mcp_or_macagent_session.",
     ]
+
+
+def test_freyja5_preflight_keeps_older_id_only_blocker_reports(tmp_path: Path) -> None:
+    report = tmp_path / "id-only-freyja5-readiness-bundle.json"
+    _write_report(
+        report,
+        passed=False,
+        source_ready=True,
+        live_blocked=True,
+        checks=[
+            {
+                "name": "freyja5-live-blockers",
+                "ok": False,
+                "status": "blocked",
+                "remaining": ["vulcan_nexus_presets"],
+            },
+        ],
+    )
+
+    summary = preflight.summarize_report(report)
+
+    assert summary.remaining == (
+        "Resolve Joe-required blocker `vulcan_nexus_presets` in FREYJA-5.0-BLOCKERS.md.",
+    )
 
 
 def test_freyja5_preflight_reports_not_ready_for_missing_artifacts(tmp_path: Path) -> None:
