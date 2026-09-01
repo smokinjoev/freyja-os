@@ -1,4 +1,5 @@
 import json
+import importlib.util
 from pathlib import Path
 
 from certification import freyja5_preflight_status as preflight
@@ -6,6 +7,7 @@ from certification import freyja5_preflight_status as preflight
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "freyja5-preflight-status.py"
+EXPORT_SCRIPT_PATH = REPO_ROOT / "scripts" / "freyja5-export-agent-definitions.py"
 
 
 def _write_report(path: Path, *, passed: bool, source_ready: bool, live_blocked: bool, checks: list[dict[str, object]]) -> None:
@@ -21,6 +23,14 @@ def _write_report(path: Path, *, passed: bool, source_ready: bool, live_blocked:
         ),
         encoding="utf-8",
     )
+
+
+def _load_export_module():
+    spec = importlib.util.spec_from_file_location("freyja5_agent_export", EXPORT_SCRIPT_PATH)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_freyja5_preflight_reports_complete_for_passing_bundle(tmp_path: Path) -> None:
@@ -135,6 +145,42 @@ def test_latest_freyja5_readiness_bundle_uses_mtime(tmp_path: Path) -> None:
     newer.touch()
 
     assert preflight.latest_readiness_bundle(tmp_path) == newer
+
+
+def test_freyja5_preflight_validates_agent_export(tmp_path: Path) -> None:
+    report = tmp_path / "live-blocked-freyja5-readiness-bundle.json"
+    agent_export = tmp_path / "freyja5-agent-definitions.json"
+    _write_report(report, passed=False, source_ready=True, live_blocked=True, checks=[])
+    agent_export.write_text(json.dumps(_load_export_module().build_export()), encoding="utf-8")
+
+    summary = preflight.summarize_report(report, agent_export=agent_export)
+    payload = json.loads(preflight.render_summary_json(summary))
+
+    assert summary.status == "source-ready-live-blocked"
+    assert summary.exit_code == 2
+    assert summary.agent_export_ok is True
+    assert summary.agent_export_status == "valid"
+    assert payload["agent_export"] == {
+        "path": str(agent_export),
+        "ok": True,
+        "status": "valid",
+    }
+    assert f"Agent export: valid ({agent_export})" in preflight.render_summary(summary)
+
+
+def test_freyja5_preflight_rejects_drifted_agent_export(tmp_path: Path) -> None:
+    report = tmp_path / "live-blocked-freyja5-readiness-bundle.json"
+    agent_export = tmp_path / "freyja5-agent-definitions.json"
+    export_payload = _load_export_module().build_export()
+    export_payload["agents"][0]["mcp_tool_count"] = 0
+    _write_report(report, passed=False, source_ready=True, live_blocked=True, checks=[])
+    agent_export.write_text(json.dumps(export_payload), encoding="utf-8")
+
+    summary = preflight.summarize_report(report, agent_export=agent_export)
+
+    assert summary.exit_code == 2
+    assert summary.agent_export_ok is False
+    assert summary.agent_export_status == "agent evidence drift"
 
 
 def test_freyja5_preflight_script_is_executable() -> None:

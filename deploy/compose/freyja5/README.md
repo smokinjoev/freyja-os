@@ -115,11 +115,16 @@ Joe-required live validation remains in `FREYJA-5.0-BLOCKERS.md`.
 Summarize the latest readiness bundle without reading raw JSON:
 
 ```bash
-scripts/freyja5-preflight-status.py --report certification/reports/freyja5-readiness-bundle.json
+scripts/freyja5-preflight-status.py \
+  --report certification/reports/freyja5-readiness-bundle.json \
+  --agent-export certification/reports/freyja5-agent-definitions.json
 ```
 
 The preflight summary prints each remaining blocker, its required evidence, and
-the next operator actions to run on Atlas, Vulcan, Iris, or Hera.
+the next operator actions to run on Atlas, Vulcan, Iris, or Hera. When
+`--agent-export` is supplied, it also verifies that the Freyja 5 agent-definition
+export is source-controlled, secret-free, and still aligned with the runtime
+seed.
 
 To allow live local Nexus inference, configure `NEXUS_BASE_URL` and
 `NEXUS_API_KEY` in the untracked `.env`, then set:

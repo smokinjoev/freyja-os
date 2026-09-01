@@ -158,6 +158,10 @@ physical/session tasks.
   source-ready/live-blocked state. The readiness bundle and preflight summary
   now include Joe blocker component and required-evidence details directly in
   the generated output.
+- The Freyja 5 preflight summary can also validate an optional
+  `freyja5-agent-definitions` export with `--agent-export`, confirming the
+  Atlas/Msty Go comparison artifact is source-controlled, secret-free, and
+  aligned with the current runtime seed.
 - Joe-required blocker metadata now includes source-controlled `next_actions`
   for Atlas/Msty Go, Vulcan/Nexus, Iris, Hera, live MCP delegation, and Benedict
   private-route validation. The readiness bundle and preflight summary surface
@@ -341,7 +345,7 @@ physical/session tasks.
   Exit code `2` means source certification and side-by-side smoke passed, but
   Joe-required live validation is still blocked.
 - Summarize the latest Freyja 5 readiness bundle:
-  `scripts/freyja5-preflight-status.py --report certification/reports/freyja5-readiness-bundle.json`.
+  `scripts/freyja5-preflight-status.py --report certification/reports/freyja5-readiness-bundle.json --agent-export certification/reports/freyja5-agent-definitions.json`.
 - Start the side-by-side Freyja 5 gateway with
   `docker compose --env-file deploy/compose/freyja5/.env -f deploy/compose/freyja5/compose.yaml up -d --build`.
 - Check Freyja 5 architecture posture with `GET /freyja5/readiness`.

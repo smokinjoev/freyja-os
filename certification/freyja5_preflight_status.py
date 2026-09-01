@@ -10,6 +10,8 @@ from typing import Any
 
 DEFAULT_REPORT_DIR = Path("certification/reports")
 LIVE_BLOCKER_CHECK = "freyja5-live-blockers"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = REPO_ROOT / "src"
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,9 @@ class Freyja5PreflightSummary:
     status: str
     failed_checks: tuple[str, ...]
     remaining: tuple[str, ...]
+    agent_export_path: Path | None = None
+    agent_export_ok: bool | None = None
+    agent_export_status: str | None = None
 
     @property
     def exit_code(self) -> int:
@@ -40,6 +45,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Specific freyja5-readiness-bundle JSON report. Defaults to the newest report in certification/reports.",
     )
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR)
+    parser.add_argument(
+        "--agent-export",
+        type=Path,
+        help="Optional freyja5-agent-definitions JSON export to validate and include in the summary.",
+    )
     parser.add_argument("--json", action="store_true", help="Print a machine-readable JSON summary.")
     return parser
 
@@ -51,7 +61,7 @@ def latest_readiness_bundle(report_dir: Path) -> Path:
     return reports[0]
 
 
-def summarize_report(path: Path) -> Freyja5PreflightSummary:
+def summarize_report(path: Path, *, agent_export: Path | None = None) -> Freyja5PreflightSummary:
     payload = _load_report(path)
     checks = payload.get("checks") if isinstance(payload.get("checks"), list) else []
     failed = tuple(
@@ -64,6 +74,10 @@ def summarize_report(path: Path) -> Freyja5PreflightSummary:
     live_blocked = bool(payload.get("live_blocked") is True)
     remaining = _remaining_work(checks, failed_checks=failed)
     status = _status(passed=passed, source_ready=source_ready, live_blocked=live_blocked)
+    agent_export_ok: bool | None = None
+    agent_export_status: str | None = None
+    if agent_export is not None:
+        agent_export_ok, agent_export_status = validate_agent_export(agent_export)
     return Freyja5PreflightSummary(
         report_path=path,
         passed=passed,
@@ -72,6 +86,9 @@ def summarize_report(path: Path) -> Freyja5PreflightSummary:
         status=status,
         failed_checks=failed,
         remaining=remaining,
+        agent_export_path=agent_export,
+        agent_export_ok=agent_export_ok,
+        agent_export_status=agent_export_status,
     )
 
 
@@ -89,6 +106,8 @@ def render_summary(summary: Freyja5PreflightSummary) -> str:
     if summary.remaining:
         lines.append("Remaining:")
         lines.extend(f"- {item}" for item in summary.remaining)
+    if summary.agent_export_path is not None:
+        lines.append(f"Agent export: {summary.agent_export_status} ({summary.agent_export_path})")
     return "\n".join(lines)
 
 
@@ -103,6 +122,15 @@ def render_summary_json(summary: Freyja5PreflightSummary) -> str:
             "exit_code": summary.exit_code,
             "failed_checks": list(summary.failed_checks),
             "remaining": list(summary.remaining),
+            "agent_export": (
+                {
+                    "path": str(summary.agent_export_path),
+                    "ok": summary.agent_export_ok,
+                    "status": summary.agent_export_status,
+                }
+                if summary.agent_export_path is not None
+                else None
+            ),
         },
         indent=2,
         sort_keys=True,
@@ -113,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         report = args.report or latest_readiness_bundle(args.report_dir)
-        summary = summarize_report(report)
+        summary = summarize_report(report, agent_export=args.agent_export)
     except Exception as exc:
         print(f"Freyja 5 preflight status failed: {exc}", file=sys.stderr)
         return 1
@@ -126,6 +154,45 @@ def _load_report(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"{path} is not a JSON object")
     return payload
+
+
+def validate_agent_export(path: Path) -> tuple[bool, str]:
+    try:
+        payload = _load_report(path)
+    except Exception as exc:  # noqa: BLE001 - preflight should preserve failure class
+        return False, type(exc).__name__
+    if str(SRC_ROOT) not in sys.path:
+        sys.path.insert(0, str(SRC_ROOT))
+    try:
+        from freyja.freyja5_config import freyja5_agent_evidence
+    except Exception as exc:  # noqa: BLE001 - import failures are operator-visible evidence
+        return False, f"source import failed: {type(exc).__name__}"
+
+    agents = payload.get("agents") if isinstance(payload.get("agents"), list) else []
+    expected_agents = freyja5_agent_evidence()
+    secret_markers = ("api_key", "token", "secret")
+    if payload.get("export_type") != "freyja5-agent-definitions":
+        return False, "wrong export_type"
+    if payload.get("source_controlled") is not True:
+        return False, "not source_controlled"
+    if payload.get("secrets_included") is not False:
+        return False, "secrets_included is not false"
+    if _string_value_contains(payload, secret_markers):
+        return False, "secret marker present"
+    if agents != expected_agents:
+        return False, "agent evidence drift"
+    return True, "valid"
+
+
+def _string_value_contains(value: Any, markers: tuple[str, ...]) -> bool:
+    if isinstance(value, str):
+        lowered = value.lower()
+        return any(marker in lowered for marker in markers)
+    if isinstance(value, list):
+        return any(_string_value_contains(item, markers) for item in value)
+    if isinstance(value, dict):
+        return any(_string_value_contains(item, markers) for item in value.values())
+    return False
 
 
 def _remaining_work(checks: list[Any], *, failed_checks: tuple[str, ...]) -> tuple[str, ...]:

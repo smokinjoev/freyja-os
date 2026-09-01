@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -13,8 +14,14 @@ from pathlib import Path
 from typing import Any
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+if sys.version_info < (3, 11) and VENV_PYTHON.exists():
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), *sys.argv])
+
+
 def _ensure_checkout_src_on_path() -> None:
-    src_path = Path(__file__).resolve().parents[1] / "src"
+    src_path = REPO_ROOT / "src"
     if src_path.exists() and str(src_path) not in sys.path:
         sys.path.insert(0, str(src_path))
 
