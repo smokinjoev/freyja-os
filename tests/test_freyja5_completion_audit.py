@@ -49,6 +49,7 @@ def test_freyja5_completion_audit_maps_requirements_to_current_evidence(tmp_path
     assert audit["source_ready"] is True
     assert audit["live_blocked"] is True
     assert audit["agent_export"] == {"path": str(agent_export), "ok": True, "status": "valid"}
+    assert audit["live_evidence_status"] == {"status": "not_supplied", "ok": False}
     assert audit["certification"]["targets"] == ["A", "B", "C", "D", "E", "F", "G"]
     assert requirements["fallback-preserved"]["status"] == "complete"
     assert requirements["webgui-side-by-side"]["status"] == "complete"
@@ -77,6 +78,39 @@ def test_freyja5_completion_audit_cli_writes_json(tmp_path: Path, capsys) -> Non
     assert printed["report_type"] == "freyja5-completion-audit"
     assert written["requirements"] == printed["requirements"]
     assert written["agent_export"]["status"] == "missing"
+
+
+def test_freyja5_completion_audit_includes_live_evidence_status(tmp_path: Path) -> None:
+    audit_module = load_audit_module()
+    bundle = tmp_path / "freyja5-readiness-bundle.json"
+    live_status = tmp_path / "freyja5-live-evidence-status.json"
+    _write_bundle(bundle)
+    live_status.write_text(
+        json.dumps(
+            {
+                "report_type": "freyja5-live-evidence-status",
+                "status": "incomplete",
+                "complete": False,
+                "secrets_detected": False,
+                "closeable_blockers": ["iris_apple_session"],
+                "remaining_blockers": ["vulcan_nexus_presets"],
+                "unknown_blockers": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audit = audit_module.build_audit(readiness_bundle=bundle, live_evidence_status=live_status)
+
+    assert audit["live_evidence_status"] == {
+        "path": str(live_status),
+        "status": "incomplete",
+        "ok": False,
+        "closeable_blockers": ["iris_apple_session"],
+        "remaining_blockers": ["vulcan_nexus_presets"],
+        "unknown_blockers": [],
+        "secrets_detected": False,
+    }
 
 
 def test_freyja5_completion_audit_script_is_executable() -> None:

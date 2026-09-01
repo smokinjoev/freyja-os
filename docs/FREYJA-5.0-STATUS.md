@@ -366,7 +366,7 @@ physical/session tasks.
 - Run the ordered Freyja 5 gauntlet:
   `scripts/freyja5-certification-gauntlet.py --base-url http://127.0.0.1:8500 --token "$FREYJA_CONNECTOR_TOKEN"`.
 - Generate the Freyja 5 completion audit:
-  `scripts/freyja5-completion-audit.py --readiness-bundle certification/reports/freyja5-readiness-bundle.json --agent-export certification/reports/freyja5-agent-definitions.json --output certification/reports/freyja5-completion-audit.json`.
+  `scripts/freyja5-completion-audit.py --readiness-bundle certification/reports/freyja5-readiness-bundle.json --agent-export certification/reports/freyja5-agent-definitions.json --live-evidence-status certification/reports/freyja5-live-evidence-status.json --output certification/reports/freyja5-completion-audit.json`.
 - Validate Joe-captured live blocker evidence:
   `scripts/freyja5-live-evidence-status.py --evidence certification/reports/freyja5-live-evidence.json --output certification/reports/freyja5-live-evidence-status.json`.
 - Summarize the latest Freyja 5 readiness bundle:

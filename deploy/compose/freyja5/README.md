@@ -146,6 +146,7 @@ evidence:
 scripts/freyja5-completion-audit.py \
   --readiness-bundle certification/reports/freyja5-readiness-bundle.json \
   --agent-export certification/reports/freyja5-agent-definitions.json \
+  --live-evidence-status certification/reports/freyja5-live-evidence-status.json \
   --output certification/reports/freyja5-completion-audit.json
 ```
 

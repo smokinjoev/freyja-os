@@ -43,11 +43,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate a Freyja 5 completion audit.")
     parser.add_argument("--readiness-bundle", type=Path, default=DEFAULT_BUNDLE)
     parser.add_argument("--agent-export", type=Path, default=DEFAULT_AGENT_EXPORT)
+    parser.add_argument(
+        "--live-evidence-status",
+        type=Path,
+        help="Optional freyja5-live-evidence-status JSON report to include in the audit.",
+    )
     parser.add_argument("--output", type=Path, default=Path("certification/reports/freyja5-completion-audit.json"))
     return parser
 
 
-def build_audit(*, readiness_bundle: Path, agent_export: Path | None = None) -> dict[str, Any]:
+def build_audit(
+    *,
+    readiness_bundle: Path,
+    agent_export: Path | None = None,
+    live_evidence_status: Path | None = None,
+) -> dict[str, Any]:
     bundle = _load_json(readiness_bundle)
     live_blockers = freyja5_live_blocker_evidence()["joe_required"]
     blocker_ids = [str(blocker["id"]) for blocker in live_blockers]
@@ -143,6 +153,7 @@ def build_audit(*, readiness_bundle: Path, agent_export: Path | None = None) -> 
         "live_blocked": bool(bundle.get("live_blocked") is True),
         "readiness_bundle": str(readiness_bundle),
         "agent_export": agent_export_status,
+        "live_evidence_status": _live_evidence_status(live_evidence_status),
         "certification": {
             "suite": certification["suite"],
             "targets": [target["target"] for target in certification["targets"]],
@@ -202,6 +213,23 @@ def _agent_export_status(path: Path) -> dict[str, Any]:
     }
 
 
+def _live_evidence_status(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {"status": "not_supplied", "ok": False}
+    if not path.exists():
+        return {"path": str(path), "status": "missing", "ok": False}
+    payload = _load_json(path)
+    return {
+        "path": str(path),
+        "status": str(payload.get("status") or "unknown"),
+        "ok": bool(payload.get("complete") is True and payload.get("secrets_detected") is not True),
+        "closeable_blockers": [str(blocker) for blocker in payload.get("closeable_blockers") or []],
+        "remaining_blockers": [str(blocker) for blocker in payload.get("remaining_blockers") or []],
+        "unknown_blockers": [str(blocker) for blocker in payload.get("unknown_blockers") or []],
+        "secrets_detected": bool(payload.get("secrets_detected") is True),
+    }
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else {}
@@ -209,7 +237,11 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    audit = build_audit(readiness_bundle=args.readiness_bundle, agent_export=args.agent_export)
+    audit = build_audit(
+        readiness_bundle=args.readiness_bundle,
+        agent_export=args.agent_export,
+        live_evidence_status=args.live_evidence_status,
+    )
     rendered = json.dumps(audit, indent=2, sort_keys=True)
     print(rendered)
     args.output.parent.mkdir(parents=True, exist_ok=True)
