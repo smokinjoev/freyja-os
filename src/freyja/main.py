@@ -30,6 +30,8 @@ from freyja.freyja5_config import (
     freyja5_agent_evidence,
     freyja5_certification_evidence,
     freyja5_gateway_evidence,
+    freyja5_iris_readiness_evidence,
+    freyja5_live_inference_evidence,
     freyja5_live_blocker_evidence,
     freyja5_mcp_topology_evidence,
     freyja5_plane_evidence,
@@ -230,17 +232,7 @@ async def freyja5_readiness() -> dict[str, Any]:
     mcp_topology = _load_source_yaml("config/freyja-5.0-mcp-topology.yaml")
     routes = route_config.get("routes") if isinstance(route_config.get("routes"), dict) else {}
     servers = mcp_topology.get("servers") if isinstance(mcp_topology.get("servers"), list) else []
-    live_inference_enabled = bool(settings.freyja5_openai_live_inference_enabled)
-    nexus_configured = bool(settings.nexus_base_url)
     planes = freyja5_plane_evidence()
-    iris_plane = dict(planes["iris"])
-    iris_plane.update(
-        {
-            "macagent_base_url_configured": bool(settings.macagent_base_url),
-            "macagent_enabled": bool(settings.macagent_enabled),
-            "macagent_token_configured": bool(settings.macagent_token),
-        }
-    )
     return {
         "ok": bool(routes) and bool(servers),
         "version": "freyja-5.0",
@@ -248,20 +240,22 @@ async def freyja5_readiness() -> dict[str, Any]:
         "openai_model": "freyja-5",
         "webgui": freyja5_webgui_evidence(),
         "planes": {"source": planes["source"]},
-        "live_inference": {
-            "enabled": live_inference_enabled,
-            "nexus_base_url_configured": nexus_configured,
-            "nexus_api_key_configured": bool(settings.nexus_api_key),
-            "cloud_fallback": False,
-            "ready": live_inference_enabled and nexus_configured,
-        },
+        "live_inference": freyja5_live_inference_evidence(
+            enabled=settings.freyja5_openai_live_inference_enabled,
+            nexus_base_url=settings.nexus_base_url,
+            nexus_api_key=settings.nexus_api_key,
+        ),
         "atlas": planes["atlas"],
         "blockers": freyja5_live_blocker_evidence(),
         "traceability": freyja5_traceability_evidence(),
         "semantic_routes": freyja5_semantic_route_evidence(),
         "gateway": freyja5_gateway_evidence(),
         "hera": planes["hera"],
-        "iris": iris_plane,
+        "iris": freyja5_iris_readiness_evidence(
+            macagent_enabled=settings.macagent_enabled,
+            macagent_base_url=settings.macagent_base_url,
+            macagent_token=settings.macagent_token,
+        ),
         "agents": freyja5_agent_evidence(),
         "mcp": _readiness_mcp_evidence(),
         "vulcan": freyja5_vulcan_evidence(),

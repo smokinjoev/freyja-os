@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T012927Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T013338Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -95,6 +95,9 @@ tasks.
 - Added default-off `FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED` so the opt-in
   `freyja-5` OpenAI-compatible path can use live local Nexus inference only
   when explicitly enabled. Cloud fallback remains disabled on that path.
+- Live Nexus inference readiness now comes from a shared helper that reports
+  explicit enablement, configured Nexus URL/API-key presence, disabled cloud
+  fallback, and readiness without exposing secrets.
 - Freyja 5 certification reports include source-controlled MCP topology
   evidence: default per-agent MCP servers are disabled, MCP hosts are Atlas and
   Iris, and Vulcan remains the OpenAI-compatible Nexus inference boundary.
@@ -212,6 +215,9 @@ tasks.
   server with MacAgent configuration presence, supported Apple capability
   families, Atlas-owned authorization, and live Apple session validation
   recorded as the remaining blocker without exposing tokens.
+- Iris readiness evidence now comes from a shared helper that combines the
+  source-controlled MCP plane contract with runtime MacAgent configuration
+  booleans, while keeping token values out of the readiness payload.
 - Certification target E now records separate `signal` and `open-webui` Gateway
   handoffs and verifies that both carry the same stable household principal and
   memory-scope policy for Joe.

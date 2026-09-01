@@ -124,6 +124,40 @@ def freyja5_plane_evidence() -> dict[str, Any]:
     }
 
 
+def freyja5_live_inference_evidence(
+    *,
+    enabled: bool,
+    nexus_base_url: str | None,
+    nexus_api_key: str | None,
+) -> dict[str, Any]:
+    nexus_base_url_configured = bool(nexus_base_url)
+    return {
+        "enabled": bool(enabled),
+        "nexus_base_url_configured": nexus_base_url_configured,
+        "nexus_api_key_configured": bool(nexus_api_key),
+        "cloud_fallback": False,
+        "ready": bool(enabled) and nexus_base_url_configured,
+    }
+
+
+def freyja5_iris_readiness_evidence(
+    *,
+    macagent_enabled: bool,
+    macagent_base_url: str | None,
+    macagent_token: str | None,
+) -> dict[str, Any]:
+    planes = freyja5_plane_evidence()
+    iris_plane = dict(planes["iris"])
+    iris_plane.update(
+        {
+            "macagent_base_url_configured": bool(macagent_base_url),
+            "macagent_enabled": bool(macagent_enabled),
+            "macagent_token_configured": bool(macagent_token),
+        }
+    )
+    return iris_plane
+
+
 def freyja5_gateway_evidence() -> dict[str, Any]:
     data = _load_yaml(FREYJA5_GATEWAY_PATH)
     policy = data.get("policy") if isinstance(data.get("policy"), dict) else {}

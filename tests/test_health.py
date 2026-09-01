@@ -5,7 +5,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from freyja.main import app
-from freyja.freyja5_config import freyja5_agent_evidence, freyja5_vulcan_evidence
+from freyja.freyja5_config import (
+    freyja5_agent_evidence,
+    freyja5_iris_readiness_evidence,
+    freyja5_live_inference_evidence,
+    freyja5_vulcan_evidence,
+)
 from freyja.router import RoutingDecision, RoutingResult, router
 from freyja.tools.models import ToolExecutionResult
 
@@ -61,13 +66,11 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "live_inference_default": False,
     }
     assert data["planes"] == {"source": "config/freyja-5.0-planes.yaml"}
-    assert data["live_inference"] == {
-        "enabled": False,
-        "nexus_base_url_configured": False,
-        "nexus_api_key_configured": False,
-        "cloud_fallback": False,
-        "ready": False,
-    }
+    assert data["live_inference"] == freyja5_live_inference_evidence(
+        enabled=False,
+        nexus_base_url="",
+        nexus_api_key="",
+    )
     assert data["atlas"] == {
         "host": "atlas",
         "role": "persistent-agent-plane",
@@ -220,28 +223,16 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "general_tool_server": False,
         "live_blockers": ["hera_voice_avatar_hardware"],
     }
-    assert data["iris"] == {
-        "host": "iris",
-        "role": "apple-macos-capability-server",
-        "protocol": "mcp",
-        "macagent_base_url_configured": True,
-        "macagent_enabled": True,
-        "macagent_token_configured": True,
-        "capabilities": [
-            "apple.browser.read",
-            "apple.calendar.read",
-            "apple.calendar.write",
-            "apple.contacts.read",
-            "apple.mail.read",
-            "apple.messages.read",
-            "apple.messages.send",
-            "apple.music.read",
-            "apple.shortcuts.run",
-        ],
-        "atlas_authorizes_operations": True,
-        "health_is_authoritative_for_policy": False,
-        "live_blockers": ["iris_apple_session"],
-    }
+    assert data["iris"] == freyja5_iris_readiness_evidence(
+        macagent_enabled=True,
+        macagent_base_url="http://iris.test:8765",
+        macagent_token="secret-macagent-token",
+    )
+    assert data["iris"]["host"] == "iris"
+    assert data["iris"]["protocol"] == "mcp"
+    assert data["iris"]["macagent_base_url_configured"] is True
+    assert data["iris"]["macagent_enabled"] is True
+    assert data["iris"]["macagent_token_configured"] is True
     assert "secret-macagent-token" not in response.text
     assert data["mcp"] == {
         "default_agent_mcp_servers": False,
@@ -343,13 +334,11 @@ def test_freyja5_readiness_requires_explicit_live_inference_and_nexus_url(monkey
 
     assert response.status_code == 200
     live = response.json()["live_inference"]
-    assert live == {
-        "enabled": True,
-        "nexus_base_url_configured": True,
-        "nexus_api_key_configured": True,
-        "cloud_fallback": False,
-        "ready": True,
-    }
+    assert live == freyja5_live_inference_evidence(
+        enabled=True,
+        nexus_base_url="http://vulcan.test:3939",
+        nexus_api_key="secret-test-token",
+    )
     assert "secret-test-token" not in response.text
 
 

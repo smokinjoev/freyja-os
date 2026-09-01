@@ -13,6 +13,8 @@ from freyja.freyja5_config import (
     freyja5_certification_live_blocker_ids,
     freyja5_certification_target_blockers,
     freyja5_gateway_evidence,
+    freyja5_iris_readiness_evidence,
+    freyja5_live_inference_evidence,
     freyja5_live_blocker_evidence,
     freyja5_mcp_topology_evidence,
     freyja5_plane_evidence,
@@ -195,6 +197,55 @@ def test_freyja5_vulcan_evidence_combines_nexus_routes_and_plane_boundary() -> N
         "cloud_fallback": "explicit_only",
         "live_blockers": ["vulcan_nexus_presets"],
     }
+
+
+def test_freyja5_live_inference_readiness_is_explicit_and_local_only() -> None:
+    disabled = freyja5_live_inference_evidence(
+        enabled=False,
+        nexus_base_url="http://vulcan.test:3939",
+        nexus_api_key=None,
+    )
+    enabled = freyja5_live_inference_evidence(
+        enabled=True,
+        nexus_base_url="http://vulcan.test:3939",
+        nexus_api_key="secret-token",
+    )
+
+    assert disabled == {
+        "enabled": False,
+        "nexus_base_url_configured": True,
+        "nexus_api_key_configured": False,
+        "cloud_fallback": False,
+        "ready": False,
+    }
+    assert enabled == {
+        "enabled": True,
+        "nexus_base_url_configured": True,
+        "nexus_api_key_configured": True,
+        "cloud_fallback": False,
+        "ready": True,
+    }
+    assert "secret-token" not in str(enabled)
+
+
+def test_freyja5_iris_readiness_combines_mcp_plane_and_macagent_config() -> None:
+    evidence = freyja5_iris_readiness_evidence(
+        macagent_enabled=True,
+        macagent_base_url="http://iris.test:8765",
+        macagent_token="secret-token",
+    )
+
+    assert evidence["host"] == "iris"
+    assert evidence["role"] == "apple-macos-capability-server"
+    assert evidence["protocol"] == "mcp"
+    assert "apple.calendar.read" in evidence["capabilities"]
+    assert "apple.calendar.write" in evidence["capabilities"]
+    assert evidence["atlas_authorizes_operations"] is True
+    assert evidence["health_is_authoritative_for_policy"] is False
+    assert evidence["macagent_enabled"] is True
+    assert evidence["macagent_base_url_configured"] is True
+    assert evidence["macagent_token_configured"] is True
+    assert "secret-token" not in str(evidence)
 
 
 def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
