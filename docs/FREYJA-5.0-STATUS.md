@@ -99,6 +99,9 @@ tasks.
   control: display/logical names, owners, security domains, Atlas home
   placement, private/shared memory scopes, tool grant counts, and cloud egress
   policy, including Benedict Paralegal's local-only enclave policy.
+- Freyja 5 certification evidence now includes persistent logical-agent posture
+  so generated A-G reports prove the canonical agent definitions, Agent 44/Jenna
+  display names, and Benedict Paralegal enclave policy from source control.
 - Added a side-by-side Freyja 5 compose target at `deploy/compose/freyja5` for
   Atlas testing on port `8500`. It preserves existing 4.1/Freyja3/Open WebUI
   deployments and keeps live inference/cloud egress disabled by default.

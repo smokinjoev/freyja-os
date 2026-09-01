@@ -730,6 +730,7 @@ def _context_from_freyja5_result(
             "freyja5_requested_route": result.requested_route,
             "freyja5_egress_state": result.egress_state,
             "freyja5_agent_id": result.agent_id,
+            "freyja5_agents": _freyja5_agent_evidence(),
             "freyja5_mcp_topology": topology,
         },
     )
@@ -746,6 +747,26 @@ def _context_from_freyja5_result(
     if result.recalled_memories:
         context.memory_lookups.append({"count": len(result.recalled_memories), "agent_id": result.agent_id})
     return context
+
+
+def _freyja5_agent_evidence() -> list[dict[str, Any]]:
+    from freyja.foundation_seed import PERSISTENT_AGENTS
+
+    return [
+        {
+            "id": agent.agent_id,
+            "display_name": agent.display_name,
+            "logical_display_name": agent.logical_display_name or agent.display_name,
+            "owner": agent.owner,
+            "security_domain": agent.security_domain_id.value,
+            "home_machine": agent.home_machine_id,
+            "private_memory_scope": agent.private_memory_scope,
+            "shared_memory_scopes": sorted(agent.shared_memory_scopes),
+            "tool_grant_count": len(agent.tool_grants),
+            "cloud_egress_policy": agent.cloud_egress_policy_id,
+        }
+        for agent in PERSISTENT_AGENTS
+    ]
 
 
 def _freyja5_mcp_topology_evidence() -> dict[str, Any]:

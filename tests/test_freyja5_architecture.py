@@ -175,6 +175,32 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         for case in report.cases
     )
     assert all(
+        {agent["id"] for agent in case.runtime_context["rev2_evidence"]["freyja5_agents"]}
+        >= {"freyja", "cloyd-gibbler", "benedict-paralegal", "agent-47", "jennacide"}
+        for case in report.cases
+    )
+    agent_evidence = {
+        agent["id"]: agent
+        for agent in report.cases[0].runtime_context["rev2_evidence"]["freyja5_agents"]
+    }
+    assert agent_evidence["freyja"] == {
+        "id": "freyja",
+        "display_name": "Freyja",
+        "logical_display_name": "Freyja",
+        "owner": "household",
+        "security_domain": "household",
+        "home_machine": "atlas",
+        "private_memory_scope": "agent:freyja",
+        "shared_memory_scopes": ["family", "system"],
+        "tool_grant_count": 15,
+        "cloud_egress_policy": "household-default",
+    }
+    assert agent_evidence["benedict-paralegal"]["owner"] == "enclave:paralegal"
+    assert agent_evidence["benedict-paralegal"]["private_memory_scope"] == "enclave:paralegal"
+    assert agent_evidence["benedict-paralegal"]["cloud_egress_policy"] == "paralegal-local-only"
+    assert agent_evidence["agent-47"]["logical_display_name"] == "Agent 44"
+    assert agent_evidence["jennacide"]["logical_display_name"] == "Jenna agent"
+    assert all(
         case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == {
             "source": "config/freyja-5.0-mcp-topology.yaml",
             "available": True,
