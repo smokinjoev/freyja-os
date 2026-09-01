@@ -6,22 +6,57 @@ agents:
     owner: household
     home_machine: atlas
     memory: [agent:freyja, family, system]
+    mcp_tool_grants:
+      - browser.control
+      - calendar.read
+      - calendar.write
+      - email.read
+      - home-assistant.control
+      - home-assistant.read
+      - macagent.apple
+      - messaging.send
+      - music.control
+      - scheduling.create
+      - vision.inspect
   - id: cloyd-gibbler
     display_name: Cloyd Gibbler
     owner: person:joe
     home_machine: atlas
     memory: [person:joe, family, system]
+    mcp_tool_grants:
+      - browser.control
+      - calendar.read
+      - calendar.write
+      - documents.process
+      - email.read
+      - macagent.apple
+      - messaging.send
+      - music.control
+      - vision.inspect
   - id: benedict
     display_name: Benedict
     owner: person:beth
     home_machine: atlas
     memory: [person:beth, family, system]
+    mcp_tool_grants:
+      - browser.control
+      - calendar.read
+      - calendar.write
+      - documents.process
+      - email.read
+      - messaging.send
+      - music.control
+      - vision.inspect
   - id: benedict-paralegal
     display_name: Benedict Paralegal
     owner: enclave:paralegal
     home_machine: atlas
     memory: [enclave:paralegal, system]
     egress_policy: paralegal-local-only
+    mcp_tool_grants:
+      - browser.control
+      - documents.process
+      - vision.inspect
   - id: agent-47
     display_name: Agent 47
     owner: person:liam
@@ -29,6 +64,14 @@ agents:
     aliases: [agent 44, agent_44, agent 47, agent_47, liam]
     logical_display_name: Agent 44
     memory: [person:liam, family, system]
+    mcp_tool_grants:
+      - browser.control
+      - calendar.read
+      - calendar.write
+      - email.read
+      - messaging.send
+      - music.control
+      - vision.inspect
   - id: jennacide
     display_name: JennaCide
     owner: person:jenna
@@ -36,3 +79,11 @@ agents:
     aliases: [jenna, jenna-agent]
     logical_display_name: Jenna agent
     memory: [person:jenna, family, system]
+    mcp_tool_grants:
+      - browser.control
+      - calendar.read
+      - calendar.write
+      - email.read
+      - messaging.send
+      - music.control
+      - vision.inspect

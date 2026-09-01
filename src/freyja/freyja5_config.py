@@ -183,7 +183,9 @@ def freyja5_gateway_evidence() -> dict[str, Any]:
 
 
 def freyja5_agent_evidence() -> list[dict[str, Any]]:
-    from freyja.foundation_seed import PERSISTENT_AGENTS
+    from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
+
+    mcp_tool_ids = {tool.tool_id for tool in TOOL_CAPABILITIES if tool.protocol == "mcp"}
 
     return [
         {
@@ -196,6 +198,8 @@ def freyja5_agent_evidence() -> list[dict[str, Any]]:
             "private_memory_scope": agent.private_memory_scope,
             "shared_memory_scopes": sorted(agent.shared_memory_scopes),
             "tool_grant_count": len(agent.tool_grants),
+            "mcp_tool_grants": sorted(mcp_tool_ids.intersection(agent.tool_grants)),
+            "mcp_tool_count": len(mcp_tool_ids.intersection(agent.tool_grants)),
             "cloud_egress_policy": agent.cloud_egress_policy_id,
         }
         for agent in PERSISTENT_AGENTS

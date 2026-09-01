@@ -166,6 +166,9 @@ physical/session tasks.
   MCP, and all persistent agents consume those servers through scoped tool
   grants rather than per-agent duplicated MCP servers. The compact
   `/freyja5/readiness` MCP view now includes those server records directly.
+- The source-controlled Freyja 5 agent summary now lists each persistent
+  logical agent's MCP tool grants and tests them against the runtime seed, so
+  other-agent MCP access remains explicit without creating per-agent servers.
 - Certification target posture now has a source-controlled A-G matrix in
   `config/freyja-5.0-certification-targets.yaml`; readiness and certification
   evidence expose each target's case, operator-facing name, skeleton status,

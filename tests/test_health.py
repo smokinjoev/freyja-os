@@ -301,6 +301,20 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "private_memory_scope": "agent:freyja",
         "shared_memory_scopes": ["family", "system"],
         "tool_grant_count": 15,
+        "mcp_tool_grants": [
+            "browser.control",
+            "calendar.read",
+            "calendar.write",
+            "email.read",
+            "home-assistant.control",
+            "home-assistant.read",
+            "macagent.apple",
+            "messaging.send",
+            "music.control",
+            "scheduling.create",
+            "vision.inspect",
+        ],
+        "mcp_tool_count": 11,
         "cloud_egress_policy": "household-default",
     }
     assert agents["cloyd-gibbler"]["owner"] == "person:joe"
@@ -315,6 +329,8 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "private_memory_scope": "enclave:paralegal",
         "shared_memory_scopes": ["system"],
         "tool_grant_count": 6,
+        "mcp_tool_grants": ["browser.control", "documents.process", "vision.inspect"],
+        "mcp_tool_count": 3,
         "cloud_egress_policy": "paralegal-local-only",
     }
     assert agents["agent-47"]["logical_display_name"] == "Agent 44"

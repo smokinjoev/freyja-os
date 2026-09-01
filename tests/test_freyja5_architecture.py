@@ -356,6 +356,20 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         "private_memory_scope": "agent:freyja",
         "shared_memory_scopes": ["family", "system"],
         "tool_grant_count": 15,
+        "mcp_tool_grants": [
+            "browser.control",
+            "calendar.read",
+            "calendar.write",
+            "email.read",
+            "home-assistant.control",
+            "home-assistant.read",
+            "macagent.apple",
+            "messaging.send",
+            "music.control",
+            "scheduling.create",
+            "vision.inspect",
+        ],
+        "mcp_tool_count": 11,
         "cloud_egress_policy": "household-default",
     }
     assert agent_evidence["benedict-paralegal"]["owner"] == "enclave:paralegal"
@@ -709,12 +723,14 @@ def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
     config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-agents.yaml").read_text(encoding="utf-8"))
     configured = {agent["id"]: agent for agent in config["agents"]}
     evidence = {agent["id"]: agent for agent in freyja5_agent_evidence()}
+    mcp_tool_ids = {tool.tool_id for tool in TOOL_CAPABILITIES if tool.protocol == "mcp"}
 
     assert set(configured) == {agent.agent_id for agent in PERSISTENT_AGENTS}
     assert set(evidence) == set(configured)
     for seeded in PERSISTENT_AGENTS:
         summary = configured[seeded.agent_id]
         agent_evidence = evidence[seeded.agent_id]
+        seeded_mcp_tools = sorted(mcp_tool_ids.intersection(seeded.tool_grants))
         assert summary["display_name"] == seeded.display_name
         assert summary.get("logical_display_name") == seeded.logical_display_name
         assert summary["owner"] == seeded.owner
@@ -724,6 +740,7 @@ def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
             for scope in (seeded.private_memory_scope, *seeded.shared_memory_scopes)
             if scope
         }
+        assert summary["mcp_tool_grants"] == seeded_mcp_tools
         assert agent_evidence["display_name"] == seeded.display_name
         assert agent_evidence["logical_display_name"] == (seeded.logical_display_name or seeded.display_name)
         assert agent_evidence["owner"] == seeded.owner
@@ -732,6 +749,8 @@ def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
         assert agent_evidence["private_memory_scope"] == seeded.private_memory_scope
         assert agent_evidence["shared_memory_scopes"] == sorted(seeded.shared_memory_scopes)
         assert agent_evidence["tool_grant_count"] == len(seeded.tool_grants)
+        assert agent_evidence["mcp_tool_grants"] == seeded_mcp_tools
+        assert agent_evidence["mcp_tool_count"] == len(seeded_mcp_tools)
         assert agent_evidence["cloud_egress_policy"] == seeded.cloud_egress_policy_id
 
 
