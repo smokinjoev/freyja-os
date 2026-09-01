@@ -31,6 +31,18 @@ joe_required:
       - speaker
       - avatar_runtime
       - physical_session_validation
+  - id: live_tool_sessions
+    component: atlas
+    requires:
+      - live_mcp_tool_sessions
+      - cloyd_delegation_tool_smoke
+      - tool_call_trace_evidence
+  - id: vulcan_nexus_private_preset
+    component: vulcan
+    requires:
+      - local_only_private_preset
+      - benedict_enclave_no_cloud_egress_smoke
+      - private_route_trace_evidence
 secrets_in_source: false
 continue_independent_work: true
 certification_targets:

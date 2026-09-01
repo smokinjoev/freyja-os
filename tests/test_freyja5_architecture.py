@@ -325,6 +325,20 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
                 "component": "hera",
                 "requires": ["microphone", "speaker", "avatar_runtime", "physical_session_validation"],
             },
+            {
+                "id": "live_tool_sessions",
+                "component": "atlas",
+                "requires": ["live_mcp_tool_sessions", "cloyd_delegation_tool_smoke", "tool_call_trace_evidence"],
+            },
+            {
+                "id": "vulcan_nexus_private_preset",
+                "component": "vulcan",
+                "requires": [
+                    "local_only_private_preset",
+                    "benedict_enclave_no_cloud_egress_smoke",
+                    "private_route_trace_evidence",
+                ],
+            },
         ],
         "secrets_in_source": False,
         "continue_independent_work": True,
@@ -513,12 +527,16 @@ def test_freyja5_live_blocker_config_matches_blocker_doc() -> None:
         "vulcan_nexus_presets",
         "iris_apple_session",
         "hera_voice_avatar_hardware",
+        "live_tool_sessions",
+        "vulcan_nexus_private_preset",
     ]
     assert freyja5_certification_live_blocker_ids() == [
         "msty_go_always_on_linux_validation",
         "vulcan_nexus_presets",
         "iris_apple_session",
         "hera_voice_avatar_hardware",
+        "live_tool_sessions",
+        "vulcan_nexus_private_preset",
     ]
     assert freyja5_certification_target_blockers() == {
         "a": ["vulcan_nexus_presets"],
@@ -529,6 +547,9 @@ def test_freyja5_live_blocker_config_matches_blocker_doc() -> None:
         "f": ["vulcan_nexus_private_preset"],
         "g": [],
     }
+    joe_required_ids = {blocker["id"] for blocker in evidence["joe_required"]}
+    for blockers in freyja5_certification_target_blockers().values():
+        assert set(blockers) <= joe_required_ids
     for blocker in evidence["joe_required"]:
         assert blocker["component"] in {"atlas", "vulcan", "iris", "hera"}
         assert blocker["requires"]

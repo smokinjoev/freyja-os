@@ -97,6 +97,8 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "vulcan_nexus_presets",
         "iris_apple_session",
         "hera_voice_avatar_hardware",
+        "live_tool_sessions",
+        "vulcan_nexus_private_preset",
     }
     assert next(
         blocker for blocker in blockers["joe_required"] if blocker["id"] == "msty_go_always_on_linux_validation"
@@ -292,6 +294,8 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "vulcan_nexus_presets",
         "iris_apple_session",
         "hera_voice_avatar_hardware",
+        "live_tool_sessions",
+        "vulcan_nexus_private_preset",
     ]
     agents = {agent["id"]: agent for agent in data["agents"]}
     assert set(agents) >= {"freyja", "cloyd-gibbler", "benedict-paralegal", "agent-47", "jennacide"}

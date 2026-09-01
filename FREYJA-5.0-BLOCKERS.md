@@ -13,6 +13,13 @@
   session because it requires local Apple account/session state.
 - `hera_voice_avatar_hardware`: Run live Hera voice/avatar certification where microphone/speaker/avatar
   hardware is physically present.
+- `live_tool_sessions`: Validate live MCP-backed tool sessions for delegated Freyja 5 tasks. Required
+  evidence: live MCP tool sessions reachable from Atlas, a Cloyd delegation
+  smoke that actually selects/uses a tool, and trace evidence for the tool
+  call.
+- `vulcan_nexus_private_preset`: Validate Benedict Paralegal's private Nexus route on Vulcan. Required
+  evidence: local-only private preset, Benedict enclave smoke with no cloud
+  egress, and trace evidence showing the private route.
 
 ## Non-Blocking Implementation Notes
 
