@@ -889,6 +889,9 @@ def test_freyja5_webgui_config_preserves_open_webui_default() -> None:
 def test_freyja5_traceability_config_matches_runtime_trace_contract() -> None:
     config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-traceability.yaml").read_text(encoding="utf-8"))
     evidence = freyja5_traceability_evidence()
+    architecture_doc = (REPO_ROOT / "docs" / "architecture" / "FREYJA-5.0-ARCHITECTURE.md").read_text(
+        encoding="utf-8"
+    )
 
     assert config["version"] == "freyja-5.0"
     assert evidence["source"] == "config/freyja-5.0-traceability.yaml"
@@ -909,6 +912,9 @@ def test_freyja5_traceability_config_matches_runtime_trace_contract() -> None:
         "failures",
         "egress_state",
     }
+    architecture_doc_lower = architecture_doc.lower()
+    for field in evidence["important_request_fields"]:
+        assert field.replace("_", " ") in architecture_doc_lower or field in architecture_doc_lower
     assert evidence["audit_chain"]["starts_with"] == "gateway_handoff_created"
     assert "agent_task_started" in evidence["audit_chain"]["includes"]
     assert evidence["egress_events"] == {

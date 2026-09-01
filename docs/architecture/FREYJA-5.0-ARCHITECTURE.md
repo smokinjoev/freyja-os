@@ -53,10 +53,19 @@ permissions deterministic while preserving independent logical agents.
 
 ## Traceability
 
-Important requests carry `trace_id`, channel, resolved user, agent, requested
-semantic route, actual endpoint/model/runtime when available, tool calls,
-failures, machine, and egress state through `AgentExecutionResult.trace_summary`
-and audit events.
+Important requests carry `trace_id`, channel, resolved user, authenticated
+subject, actor principal, memory scopes, agent, requested semantic route, actual
+endpoint/provider/model/runtime when available, selected tools, tool calls,
+delegation, failures, fallbacks, machine, latency, inference status, and egress
+state through `AgentExecutionResult.trace_summary` and audit events.
+
+The canonical trace fields are source controlled in
+`config/freyja-5.0-traceability.yaml`: `trace_id`, `channel`,
+`resolved_user`, `authenticated_subject`, `actor_principal`, `memory_scopes`,
+`agent`, `requested_route`, `actual_endpoint`, `actual_provider`,
+`actual_model`, `actual_runtime`, `selected_tools`, `tool_calls`,
+`delegation`, `machine`, `latency_ms`, `failures`, `fallbacks`,
+`inference_status`, and `egress_state`.
 
 ## Certification Targets
 
