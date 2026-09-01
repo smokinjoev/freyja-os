@@ -7,6 +7,7 @@ import yaml
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
+from freyja.freyja5_config import freyja5_live_blocker_evidence
 from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS, TOOL_CAPABILITIES
 from freyja.foundation_models import GatewaySender, InferenceEndpoint, SecurityDomainId
 from freyja.inference_registry_v3 import InferenceRegistryV3
@@ -367,6 +368,30 @@ def test_freyja5_mcp_topology_matches_seeded_tool_affinity() -> None:
 
     seeded_mcp_tools = {tool.tool_id for tool in TOOL_CAPABILITIES if tool.protocol == "mcp"}
     assert seeded_mcp_tools == set(exposed_by_host)
+
+
+def test_freyja5_live_blocker_config_matches_blocker_doc() -> None:
+    blocker_doc = (REPO_ROOT / "FREYJA-5.0-BLOCKERS.md").read_text(encoding="utf-8")
+    blocker_config = yaml.safe_load(
+        (REPO_ROOT / "config" / "freyja-5.0-live-blockers.yaml").read_text(encoding="utf-8")
+    )
+    evidence = freyja5_live_blocker_evidence()
+
+    assert blocker_config["version"] == "freyja-5.0"
+    assert blocker_config["source_document"] == "FREYJA-5.0-BLOCKERS.md"
+    assert evidence["source"] == "FREYJA-5.0-BLOCKERS.md"
+    assert evidence["secrets_in_source"] is False
+    assert evidence["continue_independent_work"] is True
+    assert [blocker["id"] for blocker in evidence["joe_required"]] == [
+        "msty_go_always_on_linux_validation",
+        "vulcan_nexus_presets",
+        "iris_apple_session",
+        "hera_voice_avatar_hardware",
+    ]
+    for blocker in evidence["joe_required"]:
+        assert blocker["component"] in {"atlas", "vulcan", "iris", "hera"}
+        assert blocker["requires"]
+        assert blocker["id"] in blocker_doc
 
 
 def test_freyja5_agents_consume_mcp_through_scoped_grants() -> None:

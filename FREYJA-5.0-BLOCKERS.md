@@ -2,16 +2,16 @@
 
 ## Joe Required
 
-- Validate whether Msty Go can operate reliably as the always-on Atlas agent
+- `msty_go_always_on_linux_validation`: Validate whether Msty Go can operate reliably as the always-on Atlas agent
   plane on Linux. Required evidence: install path, service definition, restart
   behavior, local config/export story, health endpoint or equivalent, and
   whether Freyja's canonical agent definitions can remain in source control.
-- Provide or confirm local-only Nexus preset names on Vulcan for `fast`,
+- `vulcan_nexus_presets`: Provide or confirm local-only Nexus preset names on Vulcan for `fast`,
   `general`, `deep`, `code`, `vision`, `embedding`, and `private`. Do not paste
   tokens into chat; place secrets in the existing host secret stores.
-- Run live Iris Apple Calendar MCP/MacAgent certification on the actual Mac
+- `iris_apple_session`: Run live Iris Apple Calendar MCP/MacAgent certification on the actual Mac
   session because it requires local Apple account/session state.
-- Run live Hera voice/avatar certification where microphone/speaker/avatar
+- `hera_voice_avatar_hardware`: Run live Hera voice/avatar certification where microphone/speaker/avatar
   hardware is physically present.
 
 ## Non-Blocking Implementation Notes

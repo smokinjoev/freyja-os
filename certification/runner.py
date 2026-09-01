@@ -771,48 +771,9 @@ def _freyja5_agent_evidence() -> list[dict[str, Any]]:
 
 
 def _freyja5_live_blocker_evidence() -> dict[str, Any]:
-    return {
-        "source": "FREYJA-5.0-BLOCKERS.md",
-        "joe_required": [
-            {
-                "id": "msty_go_always_on_linux_validation",
-                "component": "atlas",
-                "requires": [
-                    "install_path",
-                    "service_definition",
-                    "restart_behavior",
-                    "local_config_export_story",
-                    "health_endpoint_or_equivalent",
-                    "source_controlled_agent_definition_compatibility",
-                ],
-            },
-            {
-                "id": "vulcan_nexus_presets",
-                "component": "vulcan",
-                "requires": [
-                    "local_only_fast_preset",
-                    "local_only_general_preset",
-                    "local_only_deep_preset",
-                    "local_only_code_preset",
-                    "local_only_vision_preset",
-                    "local_only_embedding_preset",
-                    "local_only_private_preset",
-                ],
-            },
-            {
-                "id": "iris_apple_session",
-                "component": "iris",
-                "requires": ["live_apple_calendar_mcp_or_macagent_session"],
-            },
-            {
-                "id": "hera_voice_avatar_hardware",
-                "component": "hera",
-                "requires": ["microphone", "speaker", "avatar_runtime", "physical_session_validation"],
-            },
-        ],
-        "secrets_in_source": False,
-        "continue_independent_work": True,
-    }
+    from freyja.freyja5_config import freyja5_live_blocker_evidence
+
+    return freyja5_live_blocker_evidence()
 
 
 def _freyja5_mcp_topology_evidence() -> dict[str, Any]:

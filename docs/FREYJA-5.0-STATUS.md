@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T004043Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T004353Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -115,6 +115,9 @@ tasks.
   local-only Nexus presets, Iris Apple session validation, and Hera
   voice/avatar hardware validation. The payload records that secrets must stay
   out of source and independent work should continue.
+- Joe-required Freyja 5 live blocker posture is now canonicalized in
+  `config/freyja-5.0-live-blockers.yaml` and shared by readiness and
+  certification evidence.
 - `/freyja5/readiness` now reports Atlas as the persistent agent plane owning
   Gateway, `AgentRuntimeV3`, memory, audit, workers, health APIs, and Atlas MCP
   services. Msty Go remains preferred but unvalidated; the Atlas runtime

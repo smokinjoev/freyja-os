@@ -27,6 +27,7 @@ from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalRes
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
+from freyja.freyja5_config import freyja5_live_blocker_evidence
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -273,47 +274,7 @@ async def freyja5_readiness() -> dict[str, Any]:
             ],
             "recoverable_fallback_tag": "freyja-4.1-baseline-before-5.0-20260831-161448",
         },
-        "blockers": {
-            "joe_required": [
-                {
-                    "id": "msty_go_always_on_linux_validation",
-                    "component": "atlas",
-                    "requires": [
-                        "install_path",
-                        "service_definition",
-                        "restart_behavior",
-                        "local_config_export_story",
-                        "health_endpoint_or_equivalent",
-                        "source_controlled_agent_definition_compatibility",
-                    ],
-                },
-                {
-                    "id": "vulcan_nexus_presets",
-                    "component": "vulcan",
-                    "requires": [
-                        "local_only_fast_preset",
-                        "local_only_general_preset",
-                        "local_only_deep_preset",
-                        "local_only_code_preset",
-                        "local_only_vision_preset",
-                        "local_only_embedding_preset",
-                        "local_only_private_preset",
-                    ],
-                },
-                {
-                    "id": "iris_apple_session",
-                    "component": "iris",
-                    "requires": ["live_apple_calendar_mcp_or_macagent_session"],
-                },
-                {
-                    "id": "hera_voice_avatar_hardware",
-                    "component": "hera",
-                    "requires": ["microphone", "speaker", "avatar_runtime", "physical_session_validation"],
-                },
-            ],
-            "secrets_in_source": False,
-            "continue_independent_work": True,
-        },
+        "blockers": freyja5_live_blocker_evidence(),
         "semantic_routes": {
             "owner": route_config.get("owner"),
             "cloud_fallback": route_config.get("cloud_fallback"),
