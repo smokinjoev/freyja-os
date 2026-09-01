@@ -730,6 +730,7 @@ def _context_from_freyja5_result(
             "freyja5_requested_route": result.requested_route,
             "freyja5_egress_state": result.egress_state,
             "freyja5_agent_id": result.agent_id,
+            "freyja5_planes": _freyja5_plane_evidence(),
             "freyja5_agents": _freyja5_agent_evidence(),
             "freyja5_mcp_topology": topology,
             "freyja5_live_blockers": _freyja5_live_blocker_evidence(),
@@ -776,6 +777,12 @@ def _freyja5_live_blocker_evidence() -> dict[str, Any]:
     from freyja.freyja5_config import freyja5_live_blocker_evidence
 
     return freyja5_live_blocker_evidence()
+
+
+def _freyja5_plane_evidence() -> dict[str, Any]:
+    from freyja.freyja5_config import freyja5_plane_evidence
+
+    return freyja5_plane_evidence()
 
 
 def _freyja5_webgui_evidence() -> dict[str, Any]:

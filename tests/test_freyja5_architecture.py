@@ -210,6 +210,17 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert agent_evidence["benedict-paralegal"]["cloud_egress_policy"] == "paralegal-local-only"
     assert agent_evidence["agent-47"]["logical_display_name"] == "Agent 44"
     assert agent_evidence["jennacide"]["logical_display_name"] == "Jenna agent"
+    expected_planes = freyja5_plane_evidence()
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_planes"] == expected_planes
+        for case in report.cases
+    )
+    plane_evidence = report.cases[0].runtime_context["rev2_evidence"]["freyja5_planes"]
+    assert plane_evidence["atlas"]["role"] == "persistent-agent-plane"
+    assert plane_evidence["atlas"]["recoverable_fallback_tag"] == "freyja-4.1-baseline-before-5.0-20260831-161448"
+    assert plane_evidence["iris"]["role"] == "apple-macos-capability-server"
+    assert plane_evidence["hera"]["role"] == "avatar-voice-channel-edge"
+    assert plane_evidence["vulcan"]["local_by_default"] is True
     assert all(
         case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == {
             "source": "config/freyja-5.0-mcp-topology.yaml",
