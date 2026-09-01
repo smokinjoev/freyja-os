@@ -109,7 +109,7 @@ tasks.
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.
 - `/freyja5/readiness` reports A-G certification skeleton coverage and explicit
-  Joe-required live blockers for Vulcan/Nexus, Iris, and Hera.
+  Joe-required live blockers for Msty Go/Atlas, Vulcan/Nexus, Iris, and Hera.
 - `/freyja5/readiness` now exposes all Joe-required blockers in a
   machine-readable form, including Msty Go always-on Linux validation, Vulcan
   local-only Nexus presets, Iris Apple session validation, and Hera

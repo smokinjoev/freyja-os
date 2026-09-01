@@ -236,6 +236,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
     assert identity_target["live"] == "not_required"
     assert identity_target["live_blockers"] == []
     assert data["certification"]["live_blockers"] == [
+        "msty_go_always_on_linux_validation",
         "vulcan_nexus_presets",
         "iris_apple_session",
         "hera_voice_avatar_hardware",

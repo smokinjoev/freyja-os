@@ -448,6 +448,7 @@ async def freyja5_readiness() -> dict[str, Any]:
             "suite": certification_suite.get("name"),
             "targets": _freyja5_certification_targets(certification_suite),
             "live_blockers": [
+                "msty_go_always_on_linux_validation",
                 "vulcan_nexus_presets",
                 "iris_apple_session",
                 "hera_voice_avatar_hardware",
