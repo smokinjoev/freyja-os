@@ -34,6 +34,10 @@ curl http://${HOST}:8500/freyja5/readiness -H "Authorization: Bearer $FREYJA_CON
 curl http://${HOST}:8500/v1/models -H "Authorization: Bearer $FREYJA_CONNECTOR_TOKEN"
 ```
 
+`/freyja5/readiness` reports source-controlled route, agent, MCP, Vulcan, and
+A-G certification posture. It intentionally reports live blockers for
+Vulcan/Nexus, Iris, and Hera until those host-local sessions are validated.
+
 To test the Freyja 5 OpenAI-compatible skeleton:
 
 ```bash
@@ -42,6 +46,28 @@ curl http://${HOST}:8500/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"freyja-5","messages":[{"role":"user","content":"Joe asks Freyja to summarize the architecture status."}]}'
 ```
+
+To test WebGUI-style inline image routing without live inference:
+
+```bash
+curl http://${HOST}:8500/v1/chat/completions \
+  -H "Authorization: Bearer $FREYJA_CONNECTOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"freyja-5","user":"joe","messages":[{"role":"user","content":[{"type":"text","text":"What useful text or objects are visible?"},{"type":"image_url","image_url":{"url":"data:image/png;base64,ZmFrZQ=="}}]}]}'
+```
+
+To test WebGUI-style inline PDF/file routing without live inference:
+
+```bash
+curl http://${HOST}:8500/v1/chat/completions \
+  -H "Authorization: Bearer $FREYJA_CONNECTOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"freyja-5","user":"joe","messages":[{"role":"user","content":[{"type":"text","text":"Summarize this PDF."},{"type":"file","file":{"filename":"brief.pdf","file_data":"data:application/pdf;base64,JVBERi0xLjQK"}}]}]}'
+```
+
+Both media checks should return `freyja.route=vision`,
+`freyja.endpoint=vulcan-nexus-vision-docs`, `freyja.attachment_count=1`, and
+`freyja.egress_state=local-only`.
 
 To allow live local Nexus inference, configure `NEXUS_BASE_URL` and
 `NEXUS_API_KEY` in the untracked `.env`, then set:

@@ -8,6 +8,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FREYJA5_COMPOSE = REPO_ROOT / "deploy" / "compose" / "freyja5" / "compose.yaml"
 FREYJA5_ENV_EXAMPLE = REPO_ROOT / "deploy" / "compose" / "freyja5" / ".env.example"
+FREYJA5_README = REPO_ROOT / "deploy" / "compose" / "freyja5" / "README.md"
 
 
 def _load_freyja5_compose() -> dict:
@@ -44,3 +45,13 @@ def test_freyja5_env_example_contains_no_committed_secret() -> None:
     assert "NEXUS_API_KEY=\n" in content
     assert "OPENROUTER_API_KEY=\n" in content
     assert "FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED=false" in content
+
+
+def test_freyja5_compose_readme_documents_webgui_media_checks() -> None:
+    content = FREYJA5_README.read_text(encoding="utf-8")
+
+    assert "/freyja5/readiness" in content
+    assert "data:image/png;base64,ZmFrZQ==" in content
+    assert "data:application/pdf;base64,JVBERi0xLjQK" in content
+    assert "freyja.endpoint=vulcan-nexus-vision-docs" in content
+    assert "freyja.egress_state=local-only" in content
