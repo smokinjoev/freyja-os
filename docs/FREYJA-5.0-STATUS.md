@@ -166,6 +166,9 @@ physical/session tasks.
   evidence expose each target's case, operator-facing name, skeleton status,
   proof points, and live blocker IDs. Freyja 5 certification reports persist
   the same matrix under `freyja5_certification` case evidence.
+- The Freyja 5 readiness bundle now requires persisted target-matrix evidence
+  before accepting a certification report as source-ready, preventing stale
+  legacy-shaped reports from satisfying the current gate.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.

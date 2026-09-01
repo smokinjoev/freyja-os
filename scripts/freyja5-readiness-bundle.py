@@ -99,6 +99,7 @@ def _certification_check(path: Path | None) -> dict[str, Any]:
         suite == "freyja5-architecture"
         and payload.get("passed") is True
         and float(score or 0.0) >= 1.0
+        and _has_freyja5_certification_evidence(payload)
     )
     return {
         "name": "freyja5-certification-report",
@@ -108,7 +109,37 @@ def _certification_check(path: Path | None) -> dict[str, Any]:
         "suite": suite,
         "passed": payload.get("passed"),
         "overall_score": score,
+        "target_matrix_evidence": _has_freyja5_certification_evidence(payload),
     }
+
+
+def _has_freyja5_certification_evidence(payload: dict[str, Any]) -> bool:
+    cases = payload.get("cases") if isinstance(payload.get("cases"), list) else []
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        runtime_context = case.get("runtime_context") if isinstance(case.get("runtime_context"), dict) else {}
+        rev2_evidence = (
+            runtime_context.get("rev2_evidence") if isinstance(runtime_context.get("rev2_evidence"), dict) else {}
+        )
+        certification = (
+            rev2_evidence.get("freyja5_certification")
+            if isinstance(rev2_evidence.get("freyja5_certification"), dict)
+            else {}
+        )
+        targets = certification.get("targets") if isinstance(certification.get("targets"), list) else []
+        target_ids = {
+            str(target.get("target"))
+            for target in targets
+            if isinstance(target, dict)
+            and target.get("target")
+            and target.get("case")
+            and target.get("name")
+            and target.get("proves")
+        }
+        if target_ids == {"A", "B", "C", "D", "E", "F", "G"}:
+            return True
+    return False
 
 
 def _smoke_check(path: Path | None) -> dict[str, Any]:

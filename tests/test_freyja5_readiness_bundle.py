@@ -68,7 +68,26 @@ def test_freyja5_readiness_bundle_reports_source_ready_but_live_blocked(tmp_path
         """
 {
   "metadata": {"suite_name": "freyja5-architecture", "overall_score": 1.0},
-  "passed": true
+  "passed": true,
+  "cases": [
+    {
+      "runtime_context": {
+        "rev2_evidence": {
+          "freyja5_certification": {
+            "targets": [
+              {"target": "A", "case": "a-gateway-to-freyja-to-vulcan", "name": "gateway-to-freyja-to-vulcan", "proves": ["joe_test_channel_gateway_handoff"]},
+              {"target": "B", "case": "b-freyja-to-cloyd-delegation", "name": "freyja-to-cloyd-delegation", "proves": ["freyja_delegates_to_cloyd"]},
+              {"target": "C", "case": "c-iris-calendar-tool", "name": "iris-calendar-tool", "proves": ["iris_apple_mcp_boundary"]},
+              {"target": "D", "case": "d-media-vision-pathway", "name": "media-vision-pathway", "proves": ["webgui_inline_media_normalization"]},
+              {"target": "E", "case": "e-multi-channel-household-identity", "name": "multi-channel-household-identity", "proves": ["same_user_cross_channel_resolution"]},
+              {"target": "F", "case": "f-benedict-enclave-local-only", "name": "benedict-enclave-local-only", "proves": ["benedict_paralegal_private_agent_boundary"]},
+              {"target": "G", "case": "g-optional-service-disabled", "name": "optional-service-disabled", "proves": ["optional_service_failure_isolated"]}
+            ]
+          }
+        }
+      }
+    }
+  ]
 }
 """.strip(),
         encoding="utf-8",
@@ -93,6 +112,7 @@ def test_freyja5_readiness_bundle_reports_source_ready_but_live_blocked(tmp_path
     assert report["live_blocked"] is True
     checks = {check["name"]: check for check in report["checks"]}
     assert checks["freyja5-certification-report"]["ok"] is True
+    assert checks["freyja5-certification-report"]["target_matrix_evidence"] is True
     assert checks["freyja5-smoke-report"]["ok"] is True
     assert checks["freyja5-live-blockers"]["status"] == "blocked"
     assert checks["freyja5-live-blockers"]["remaining"] == [
@@ -121,6 +141,28 @@ def test_freyja5_readiness_bundle_reports_source_ready_but_live_blocked(tmp_path
             "Capture the Msty Go health endpoint or equivalent operational proof.",
         ],
     }
+
+
+def test_freyja5_readiness_bundle_rejects_stale_certification_without_target_matrix(tmp_path: Path) -> None:
+    bundle = load_bundle_module()
+    certification = tmp_path / "cert.json"
+    certification.write_text(
+        """
+{
+  "metadata": {"suite_name": "freyja5-architecture", "overall_score": 1.0},
+  "passed": true,
+  "cases": []
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = bundle.build_report(certification_report=certification, smoke_report=None)
+    checks = {check["name"]: check for check in report["checks"]}
+
+    assert report["source_ready"] is False
+    assert checks["freyja5-certification-report"]["ok"] is False
+    assert checks["freyja5-certification-report"]["target_matrix_evidence"] is False
 
 
 def test_freyja5_readiness_bundle_fails_missing_artifacts() -> None:
