@@ -274,6 +274,13 @@ def freyja5_readiness_mcp_evidence() -> dict[str, Any]:
     }
 
 
+def freyja5_readiness_ok() -> bool:
+    route_evidence = freyja5_semantic_route_evidence()
+    topology_evidence = freyja5_mcp_topology_evidence()
+    routes = route_evidence.get("routes") if isinstance(route_evidence.get("routes"), dict) else {}
+    return bool(routes) and bool(topology_evidence.get("mcp_hosts"))
+
+
 def freyja5_vulcan_evidence() -> dict[str, Any] | None:
     route_evidence = freyja5_semantic_route_evidence()
     plane_evidence = freyja5_plane_evidence()

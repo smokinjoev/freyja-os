@@ -11,6 +11,7 @@ from freyja.freyja5_config import (
     freyja5_live_inference_evidence,
     freyja5_readiness_certification_evidence,
     freyja5_readiness_mcp_evidence,
+    freyja5_readiness_ok,
     freyja5_vulcan_evidence,
 )
 from freyja.router import RoutingDecision, RoutingResult, router
@@ -52,7 +53,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
 
     assert response.status_code == 200
     data = response.json()
-    assert data["ok"] is True
+    assert data["ok"] == freyja5_readiness_ok()
     assert data["version"] == "freyja-5.0"
     assert data["fallback_preserved"] is True
     assert data["openai_model"] == "freyja-5"

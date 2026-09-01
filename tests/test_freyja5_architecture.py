@@ -20,6 +20,7 @@ from freyja.freyja5_config import (
     freyja5_plane_evidence,
     freyja5_readiness_certification_evidence,
     freyja5_readiness_mcp_evidence,
+    freyja5_readiness_ok,
     freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
     freyja5_vulcan_evidence,
@@ -278,6 +279,15 @@ def test_freyja5_readiness_certification_evidence_is_compact_target_view() -> No
     }
     assert evidence["suite"] == "freyja5-architecture"
     assert [target["target"] for target in evidence["targets"]] == ["A", "B", "C", "D", "E", "F", "G"]
+
+
+def test_freyja5_readiness_ok_requires_routes_and_mcp_hosts() -> None:
+    route_evidence = freyja5_semantic_route_evidence()
+    mcp_evidence = freyja5_mcp_topology_evidence()
+
+    assert freyja5_readiness_ok() is True
+    assert bool(route_evidence["routes"]) is True
+    assert mcp_evidence["mcp_hosts"] == ["atlas", "iris"]
 
 
 def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:

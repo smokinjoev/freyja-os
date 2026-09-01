@@ -6,7 +6,6 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -14,7 +13,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-import yaml
 
 from freyja.agents import AgentHierarchy, PersonName
 from freyja.agents.approval_provider import PersistentApprovalProvider
@@ -35,6 +33,7 @@ from freyja.freyja5_config import (
     freyja5_plane_evidence,
     freyja5_readiness_certification_evidence,
     freyja5_readiness_mcp_evidence,
+    freyja5_readiness_ok,
     freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
     freyja5_vulcan_evidence,
@@ -228,13 +227,9 @@ async def health() -> dict[str, str]:
 
 @app.get("/freyja5/readiness")
 async def freyja5_readiness() -> dict[str, Any]:
-    route_config = _load_source_yaml("config/freyja-5.0-semantic-routes.yaml")
-    mcp_topology = _load_source_yaml("config/freyja-5.0-mcp-topology.yaml")
-    routes = route_config.get("routes") if isinstance(route_config.get("routes"), dict) else {}
-    servers = mcp_topology.get("servers") if isinstance(mcp_topology.get("servers"), list) else []
     planes = freyja5_plane_evidence()
     return {
-        "ok": bool(routes) and bool(servers),
+        "ok": freyja5_readiness_ok(),
         "version": "freyja-5.0",
         "fallback_preserved": True,
         "openai_model": "freyja-5",
@@ -261,15 +256,6 @@ async def freyja5_readiness() -> dict[str, Any]:
         "vulcan": freyja5_vulcan_evidence(),
         "certification": freyja5_readiness_certification_evidence(),
     }
-
-
-def _load_source_yaml(relative_path: str) -> dict[str, Any]:
-    path = Path(settings.repository_root) / relative_path
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except OSError:
-        return {}
-    return data if isinstance(data, dict) else {}
 
 
 @app.get("/ollama/health")

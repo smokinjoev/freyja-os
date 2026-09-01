@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T013629Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T013855Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -117,6 +117,9 @@ tasks.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.
+- The readiness `ok` gate now comes from shared Freyja 5 evidence and requires
+  both semantic routes and MCP hosts, leaving the API endpoint as a composition
+  layer instead of a YAML parser.
 - `/freyja5/readiness` reports A-G certification skeleton coverage and explicit
   Joe-required live blockers for Msty Go/Atlas, Vulcan/Nexus, Iris, and Hera.
 - A-G certification target posture is now exposed through a shared canonical
