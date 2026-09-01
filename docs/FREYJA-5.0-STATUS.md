@@ -160,6 +160,10 @@ physical/session tasks.
 - Added `scripts/freyja5-local-gateway.py`, which starts, checks, stops, and
   smokes a local side-by-side Freyja 5 WebGUI-compatible test endpoint on
   `8500` with live inference disabled and cloud fallback disabled by default.
+- Added `scripts/freyja5-live-evidence-status.py`, which validates
+  Joe-supplied, non-secret live blocker evidence against
+  `config/freyja-5.0-live-blockers.yaml` and reports closeable, partial,
+  missing, unknown, and secret-contaminated blocker state.
 - Added `scripts/freyja5-completion-audit.py`, which generates a
   requirement-by-requirement Freyja 5 completion audit from readiness and
   agent-export evidence, separating complete source-side work from
@@ -363,6 +367,8 @@ physical/session tasks.
   `scripts/freyja5-certification-gauntlet.py --base-url http://127.0.0.1:8500 --token "$FREYJA_CONNECTOR_TOKEN"`.
 - Generate the Freyja 5 completion audit:
   `scripts/freyja5-completion-audit.py --readiness-bundle certification/reports/freyja5-readiness-bundle.json --agent-export certification/reports/freyja5-agent-definitions.json --output certification/reports/freyja5-completion-audit.json`.
+- Validate Joe-captured live blocker evidence:
+  `scripts/freyja5-live-evidence-status.py --evidence certification/reports/freyja5-live-evidence.json --output certification/reports/freyja5-live-evidence-status.json`.
 - Summarize the latest Freyja 5 readiness bundle:
   `scripts/freyja5-preflight-status.py --report certification/reports/freyja5-readiness-bundle.json --agent-export certification/reports/freyja5-agent-definitions.json`.
 - Start the side-by-side Freyja 5 gateway with

@@ -149,6 +149,19 @@ scripts/freyja5-completion-audit.py \
   --output certification/reports/freyja5-completion-audit.json
 ```
 
+After Joe captures host-local live evidence, validate it against the canonical
+blocker requirements:
+
+```bash
+scripts/freyja5-live-evidence-status.py \
+  --evidence certification/reports/freyja5-live-evidence.json \
+  --output certification/reports/freyja5-live-evidence-status.json
+```
+
+The evidence file should contain non-secret blocker records keyed by the IDs in
+`FREYJA-5.0-BLOCKERS.md`. The validator rejects secret-looking fields and
+reports which blockers are closeable, partial, missing, or unknown.
+
 Summarize the latest readiness bundle without reading raw JSON:
 
 ```bash
