@@ -33,6 +33,7 @@ from freyja.freyja5_config import (
     freyja5_gateway_evidence,
     freyja5_live_blocker_evidence,
     freyja5_plane_evidence,
+    freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
     freyja5_webgui_evidence,
 )
@@ -265,11 +266,7 @@ async def freyja5_readiness() -> dict[str, Any]:
         "atlas": planes["atlas"],
         "blockers": freyja5_live_blocker_evidence(),
         "traceability": freyja5_traceability_evidence(),
-        "semantic_routes": {
-            "owner": route_config.get("owner"),
-            "cloud_fallback": route_config.get("cloud_fallback"),
-            "routes": sorted(str(route) for route in routes),
-        },
+        "semantic_routes": freyja5_semantic_route_evidence(),
         "gateway": freyja5_gateway_evidence(),
         "hera": planes["hera"],
         "iris": iris_plane,

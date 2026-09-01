@@ -160,9 +160,22 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         },
     }
     assert data["semantic_routes"] == {
+        "source": "config/freyja-5.0-semantic-routes.yaml",
         "owner": "nexus",
         "cloud_fallback": "explicit_only",
-        "routes": ["code", "deep", "embedding", "fast", "general", "private", "vision"],
+        "routes": {
+            "code": {"capability": "route.code", "preferred_runtime": "vulcan-nexus-coder"},
+            "deep": {"capability": "route.deep", "preferred_runtime": "vulcan-deep"},
+            "embedding": {"capability": "route.embedding", "preferred_runtime": "vulcan-embeddings"},
+            "fast": {"capability": "route.fast", "preferred_runtime": "vulcan-nexus-fast"},
+            "general": {"capability": "route.general", "preferred_runtime": "vulcan-nexus-strong"},
+            "private": {
+                "capability": "route.private",
+                "preferred_runtime": "benedict-paralegal-nexus",
+                "egress_policy": "local_only",
+            },
+            "vision": {"capability": "route.vision", "preferred_runtime": "vulcan-nexus-vision-docs"},
+        },
     }
     assert data["gateway"] == {
         "source": "config/freyja-5.0-gateway.yaml",
