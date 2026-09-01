@@ -7,7 +7,7 @@ import yaml
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
-from freyja.freyja5_config import freyja5_live_blocker_evidence
+from freyja.freyja5_config import freyja5_live_blocker_evidence, freyja5_webgui_evidence
 from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS, TOOL_CAPABILITIES
 from freyja.foundation_models import GatewaySender, InferenceEndpoint, SecurityDomainId
 from freyja.inference_registry_v3 import InferenceRegistryV3
@@ -286,6 +286,21 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         case.runtime_context["rev2_evidence"]["freyja5_live_blockers"] == expected_live_blockers
         for case in report.cases
     )
+    expected_webgui = {
+        "source": "config/freyja-5.0-webgui.yaml",
+        "openai_compatible": True,
+        "default_model_preserved": "agent-smith",
+        "freyja5_model": "freyja-5",
+        "freyja5_opt_in": True,
+        "media_content_parts": ["image_url", "input_image", "file", "input_file"],
+        "inline_data_url_only": True,
+        "cloud_fallback": False,
+        "live_inference_default": False,
+    }
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_webgui"] == expected_webgui
+        for case in report.cases
+    )
     identity_case = next(case for case in report.cases if case.name == "e-multi-channel-household-identity")
     identity_channels = identity_case.runtime_context["rev2_evidence"]["freyja5_identity_channels"]
     assert [entry["channel"] for entry in identity_channels] == ["signal", "open-webui"]
@@ -392,6 +407,26 @@ def test_freyja5_live_blocker_config_matches_blocker_doc() -> None:
         assert blocker["component"] in {"atlas", "vulcan", "iris", "hera"}
         assert blocker["requires"]
         assert blocker["id"] in blocker_doc
+
+
+def test_freyja5_webgui_config_preserves_open_webui_default() -> None:
+    config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-webgui.yaml").read_text(encoding="utf-8"))
+    evidence = freyja5_webgui_evidence()
+
+    assert config["version"] == "freyja-5.0"
+    assert evidence == {
+        "source": "config/freyja-5.0-webgui.yaml",
+        "openai_compatible": True,
+        "default_model_preserved": "agent-smith",
+        "freyja5_model": "freyja-5",
+        "freyja5_opt_in": True,
+        "media_content_parts": ["image_url", "input_image", "file", "input_file"],
+        "inline_data_url_only": True,
+        "cloud_fallback": False,
+        "live_inference_default": False,
+    }
+    assert evidence["default_model_preserved"] != evidence["freyja5_model"]
+    assert evidence["freyja5_opt_in"] is True
 
 
 def test_freyja5_agents_consume_mcp_through_scoped_grants() -> None:

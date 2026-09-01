@@ -1,0 +1,13 @@
+version: freyja-5.0
+surface: openai-compatible
+default_model_preserved: agent-smith
+freyja5_model: freyja-5
+freyja5_opt_in: true
+media_content_parts:
+  - image_url
+  - input_image
+  - file
+  - input_file
+inline_data_url_only: true
+cloud_fallback: false
+live_inference_default: false

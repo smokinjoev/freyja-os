@@ -27,7 +27,7 @@ from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalRes
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
-from freyja.freyja5_config import freyja5_live_blocker_evidence
+from freyja.freyja5_config import freyja5_live_blocker_evidence, freyja5_webgui_evidence
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -236,15 +236,7 @@ async def freyja5_readiness() -> dict[str, Any]:
         "version": "freyja-5.0",
         "fallback_preserved": True,
         "openai_model": "freyja-5",
-        "webgui": {
-            "openai_compatible": True,
-            "default_model_preserved": "agent-smith",
-            "freyja5_model": "freyja-5",
-            "freyja5_opt_in": True,
-            "media_content_parts": ["image_url", "input_image", "file", "input_file"],
-            "inline_data_url_only": True,
-            "cloud_fallback": False,
-        },
+        "webgui": freyja5_webgui_evidence(),
         "live_inference": {
             "enabled": live_inference_enabled,
             "nexus_base_url_configured": nexus_configured,
