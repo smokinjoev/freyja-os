@@ -28,13 +28,13 @@ from freyja.family_agents import FamilyRouteConfig, family_route_config, family_
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.freyja5_config import (
     freyja5_agent_evidence,
-    freyja5_certification_evidence,
     freyja5_gateway_evidence,
     freyja5_iris_readiness_evidence,
     freyja5_live_inference_evidence,
     freyja5_live_blocker_evidence,
-    freyja5_mcp_topology_evidence,
     freyja5_plane_evidence,
+    freyja5_readiness_certification_evidence,
+    freyja5_readiness_mcp_evidence,
     freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
     freyja5_vulcan_evidence,
@@ -257,9 +257,9 @@ async def freyja5_readiness() -> dict[str, Any]:
             macagent_token=settings.macagent_token,
         ),
         "agents": freyja5_agent_evidence(),
-        "mcp": _readiness_mcp_evidence(),
+        "mcp": freyja5_readiness_mcp_evidence(),
         "vulcan": freyja5_vulcan_evidence(),
-        "certification": _readiness_certification_evidence(),
+        "certification": freyja5_readiness_certification_evidence(),
     }
 
 
@@ -270,27 +270,6 @@ def _load_source_yaml(relative_path: str) -> dict[str, Any]:
     except OSError:
         return {}
     return data if isinstance(data, dict) else {}
-
-
-def _readiness_mcp_evidence() -> dict[str, Any]:
-    evidence = freyja5_mcp_topology_evidence()
-    return {
-        "default_agent_mcp_servers": evidence["default_agent_mcp_servers"],
-        "hosts": evidence["mcp_hosts"],
-        "tool_count": evidence["mcp_tool_count"],
-        "source_controlled_grants": True,
-        "agent_consumption": evidence["agent_consumption"],
-        "agent_grants": evidence["agent_grants"],
-    }
-
-
-def _readiness_certification_evidence() -> dict[str, Any]:
-    evidence = freyja5_certification_evidence()
-    return {
-        "suite": evidence["suite"],
-        "targets": evidence["targets"],
-        "live_blockers": evidence["live_blockers"],
-    }
 
 
 @app.get("/ollama/health")

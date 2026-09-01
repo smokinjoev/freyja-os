@@ -18,6 +18,8 @@ from freyja.freyja5_config import (
     freyja5_live_blocker_evidence,
     freyja5_mcp_topology_evidence,
     freyja5_plane_evidence,
+    freyja5_readiness_certification_evidence,
+    freyja5_readiness_mcp_evidence,
     freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
     freyja5_vulcan_evidence,
@@ -246,6 +248,36 @@ def test_freyja5_iris_readiness_combines_mcp_plane_and_macagent_config() -> None
     assert evidence["macagent_base_url_configured"] is True
     assert evidence["macagent_token_configured"] is True
     assert "secret-token" not in str(evidence)
+
+
+def test_freyja5_readiness_mcp_evidence_is_compact_topology_view() -> None:
+    topology = freyja5_mcp_topology_evidence()
+    evidence = freyja5_readiness_mcp_evidence()
+
+    assert evidence == {
+        "default_agent_mcp_servers": topology["default_agent_mcp_servers"],
+        "hosts": topology["mcp_hosts"],
+        "tool_count": topology["mcp_tool_count"],
+        "source_controlled_grants": True,
+        "agent_consumption": topology["agent_consumption"],
+        "agent_grants": topology["agent_grants"],
+    }
+    assert evidence["default_agent_mcp_servers"] is False
+    assert evidence["hosts"] == ["atlas", "iris"]
+    assert evidence["tool_count"] == 12
+
+
+def test_freyja5_readiness_certification_evidence_is_compact_target_view() -> None:
+    certification = freyja5_certification_evidence()
+    evidence = freyja5_readiness_certification_evidence()
+
+    assert evidence == {
+        "suite": certification["suite"],
+        "targets": certification["targets"],
+        "live_blockers": certification["live_blockers"],
+    }
+    assert evidence["suite"] == "freyja5-architecture"
+    assert [target["target"] for target in evidence["targets"]] == ["A", "B", "C", "D", "E", "F", "G"]
 
 
 def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:

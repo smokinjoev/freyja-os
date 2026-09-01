@@ -9,6 +9,8 @@ from freyja.freyja5_config import (
     freyja5_agent_evidence,
     freyja5_iris_readiness_evidence,
     freyja5_live_inference_evidence,
+    freyja5_readiness_certification_evidence,
+    freyja5_readiness_mcp_evidence,
     freyja5_vulcan_evidence,
 )
 from freyja.router import RoutingDecision, RoutingResult, router
@@ -234,33 +236,16 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
     assert data["iris"]["macagent_enabled"] is True
     assert data["iris"]["macagent_token_configured"] is True
     assert "secret-macagent-token" not in response.text
-    assert data["mcp"] == {
-        "default_agent_mcp_servers": False,
-        "hosts": ["atlas", "iris"],
-        "tool_count": 12,
-        "source_controlled_grants": True,
-        "agent_consumption": {
-            "agent-47": "scoped_agent_tool_grants",
-            "benedict": "scoped_agent_tool_grants",
-            "benedict-paralegal": "scoped_agent_tool_grants",
-            "cloyd-gibbler": "scoped_agent_tool_grants",
-            "freyja": "scoped_agent_tool_grants",
-            "jennacide": "scoped_agent_tool_grants",
-        },
-        "agent_grants": [
-            {"agent_id": "freyja", "mcp_tool_count": 11, "mcp_hosts": ["atlas", "iris"]},
-            {"agent_id": "cloyd-gibbler", "mcp_tool_count": 9, "mcp_hosts": ["atlas", "iris"]},
-            {"agent_id": "benedict", "mcp_tool_count": 8, "mcp_hosts": ["atlas", "iris"]},
-            {"agent_id": "benedict-paralegal", "mcp_tool_count": 3, "mcp_hosts": ["atlas", "iris"]},
-            {"agent_id": "agent-47", "mcp_tool_count": 7, "mcp_hosts": ["atlas", "iris"]},
-            {"agent_id": "jennacide", "mcp_tool_count": 7, "mcp_hosts": ["atlas", "iris"]},
-        ],
-    }
+    assert data["mcp"] == freyja5_readiness_mcp_evidence()
+    assert data["mcp"]["default_agent_mcp_servers"] is False
+    assert data["mcp"]["hosts"] == ["atlas", "iris"]
+    assert data["mcp"]["source_controlled_grants"] is True
     assert data["vulcan"] == freyja5_vulcan_evidence()
     assert data["vulcan"]["owner"] == "nexus"
     assert data["vulcan"]["semantic_route_presets"]["private"] == "benedict-paralegal-nexus"
     assert data["vulcan"]["local_by_default"] is True
     assert data["vulcan"]["cloud_fallback"] == "explicit_only"
+    assert data["certification"] == freyja5_readiness_certification_evidence()
     assert data["certification"]["suite"] == "freyja5-architecture"
     assert [target["target"] for target in data["certification"]["targets"]] == ["A", "B", "C", "D", "E", "F", "G"]
     assert data["certification"]["targets"][0] == {

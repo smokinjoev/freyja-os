@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T013338Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T013629Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -123,6 +123,8 @@ tasks.
   helper backed by `certification/suites/routing/freyja5_architecture.yaml` and
   `config/freyja-5.0-live-blockers.yaml`, while readiness preserves its compact
   public payload shape.
+- `/freyja5/readiness` now consumes a shared compact certification view so the
+  API and certification helper expose the same A-G target/blocker posture.
 - `/freyja5/readiness` now exposes all Joe-required blockers in a
   machine-readable form, including Msty Go always-on Linux validation, Vulcan
   local-only Nexus presets, Iris Apple session validation, and Hera
@@ -189,6 +191,9 @@ tasks.
   canonical helper, with tests guarding host placement, Vulcan's
   OpenAI-compatible Nexus boundary, Gateway policy, and per-agent MCP grant
   posture from `config/freyja-5.0-mcp-topology.yaml`.
+- `/freyja5/readiness` consumes a shared compact MCP topology view instead of
+  rebuilding its own agent/server summary, keeping per-agent MCP grants and
+  host placement consistent with certification evidence.
 - `/freyja5/readiness` now reports the Gateway boundary contract: Atlas hosts a
   deterministic ingress layer for auth, identity, channel/attachment
   normalization, policy, trace envelopes, and handoff forwarding, while agent

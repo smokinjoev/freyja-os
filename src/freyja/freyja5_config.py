@@ -262,6 +262,18 @@ def freyja5_mcp_topology_evidence() -> dict[str, Any]:
     }
 
 
+def freyja5_readiness_mcp_evidence() -> dict[str, Any]:
+    evidence = freyja5_mcp_topology_evidence()
+    return {
+        "default_agent_mcp_servers": evidence["default_agent_mcp_servers"],
+        "hosts": evidence["mcp_hosts"],
+        "tool_count": evidence["mcp_tool_count"],
+        "source_controlled_grants": True,
+        "agent_consumption": evidence["agent_consumption"],
+        "agent_grants": evidence["agent_grants"],
+    }
+
+
 def freyja5_vulcan_evidence() -> dict[str, Any] | None:
     route_evidence = freyja5_semantic_route_evidence()
     plane_evidence = freyja5_plane_evidence()
@@ -321,4 +333,13 @@ def freyja5_certification_evidence() -> dict[str, Any]:
         "suite": str(suite.get("name") or ""),
         "targets": targets,
         "live_blockers": freyja5_certification_live_blocker_ids(),
+    }
+
+
+def freyja5_readiness_certification_evidence() -> dict[str, Any]:
+    evidence = freyja5_certification_evidence()
+    return {
+        "suite": evidence["suite"],
+        "targets": evidence["targets"],
+        "live_blockers": evidence["live_blockers"],
     }
