@@ -143,3 +143,23 @@ def freyja5_gateway_evidence() -> dict[str, Any]:
             "cloud_fallback": str(policy.get("cloud_fallback") or ""),
         },
     }
+
+
+def freyja5_agent_evidence() -> list[dict[str, Any]]:
+    from freyja.foundation_seed import PERSISTENT_AGENTS
+
+    return [
+        {
+            "id": agent.agent_id,
+            "display_name": agent.display_name,
+            "logical_display_name": agent.logical_display_name or agent.display_name,
+            "owner": agent.owner,
+            "security_domain": agent.security_domain_id.value,
+            "home_machine": agent.home_machine_id,
+            "private_memory_scope": agent.private_memory_scope,
+            "shared_memory_scopes": sorted(agent.shared_memory_scopes),
+            "tool_grant_count": len(agent.tool_grants),
+            "cloud_egress_policy": agent.cloud_egress_policy_id,
+        }
+        for agent in PERSISTENT_AGENTS
+    ]

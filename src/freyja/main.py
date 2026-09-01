@@ -28,6 +28,7 @@ from freyja.family_agents import FamilyRouteConfig, family_route_config, family_
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
 from freyja.freyja5_config import (
+    freyja5_agent_evidence,
     freyja5_certification_live_blocker_ids,
     freyja5_certification_target_blockers,
     freyja5_gateway_evidence,
@@ -270,21 +271,7 @@ async def freyja5_readiness() -> dict[str, Any]:
         "gateway": freyja5_gateway_evidence(),
         "hera": planes["hera"],
         "iris": iris_plane,
-        "agents": [
-            {
-                "id": agent.agent_id,
-                "display_name": agent.display_name,
-                "logical_display_name": agent.logical_display_name or agent.display_name,
-                "owner": agent.owner,
-                "security_domain": agent.security_domain_id.value,
-                "home_machine": agent.home_machine_id,
-                "private_memory_scope": agent.private_memory_scope,
-                "shared_memory_scopes": sorted(agent.shared_memory_scopes),
-                "tool_grant_count": len(agent.tool_grants),
-                "cloud_egress_policy": agent.cloud_egress_policy_id,
-            }
-            for agent in PERSISTENT_AGENTS
-        ],
+        "agents": freyja5_agent_evidence(),
         "mcp": {
             "default_agent_mcp_servers": bool(mcp_topology.get("default_agent_mcp_servers")),
             "hosts": sorted({str(server.get("host")) for server in servers if isinstance(server, dict) and server.get("host")}),

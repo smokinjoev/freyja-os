@@ -8,6 +8,7 @@ from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
 from freyja.freyja5_config import (
+    freyja5_agent_evidence,
     freyja5_certification_live_blocker_ids,
     freyja5_certification_target_blockers,
     freyja5_gateway_evidence,
@@ -191,10 +192,12 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         >= {"freyja", "cloyd-gibbler", "benedict-paralegal", "agent-47", "jennacide"}
         for case in report.cases
     )
-    agent_evidence = {
-        agent["id"]: agent
-        for agent in report.cases[0].runtime_context["rev2_evidence"]["freyja5_agents"]
-    }
+    expected_agents = freyja5_agent_evidence()
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_agents"] == expected_agents
+        for case in report.cases
+    )
+    agent_evidence = {agent["id"]: agent for agent in expected_agents}
     assert agent_evidence["freyja"] == {
         "id": "freyja",
         "display_name": "Freyja",
@@ -411,10 +414,13 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
 def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
     config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-agents.yaml").read_text(encoding="utf-8"))
     configured = {agent["id"]: agent for agent in config["agents"]}
+    evidence = {agent["id"]: agent for agent in freyja5_agent_evidence()}
 
     assert set(configured) == {agent.agent_id for agent in PERSISTENT_AGENTS}
+    assert set(evidence) == set(configured)
     for seeded in PERSISTENT_AGENTS:
         summary = configured[seeded.agent_id]
+        agent_evidence = evidence[seeded.agent_id]
         assert summary["display_name"] == seeded.display_name
         assert summary.get("logical_display_name") == seeded.logical_display_name
         assert summary["owner"] == seeded.owner
@@ -424,6 +430,15 @@ def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:
             for scope in (seeded.private_memory_scope, *seeded.shared_memory_scopes)
             if scope
         }
+        assert agent_evidence["display_name"] == seeded.display_name
+        assert agent_evidence["logical_display_name"] == (seeded.logical_display_name or seeded.display_name)
+        assert agent_evidence["owner"] == seeded.owner
+        assert agent_evidence["security_domain"] == seeded.security_domain_id.value
+        assert agent_evidence["home_machine"] == seeded.home_machine_id
+        assert agent_evidence["private_memory_scope"] == seeded.private_memory_scope
+        assert agent_evidence["shared_memory_scopes"] == sorted(seeded.shared_memory_scopes)
+        assert agent_evidence["tool_grant_count"] == len(seeded.tool_grants)
+        assert agent_evidence["cloud_egress_policy"] == seeded.cloud_egress_policy_id
 
 
 def test_freyja5_semantic_route_config_has_seeded_endpoint_for_each_route() -> None:

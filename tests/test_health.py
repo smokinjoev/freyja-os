@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from freyja.main import app
+from freyja.freyja5_config import freyja5_agent_evidence
 from freyja.router import RoutingDecision, RoutingResult, router
 from freyja.tools.models import ToolExecutionResult
 
@@ -310,6 +311,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "live_tool_sessions",
         "vulcan_nexus_private_preset",
     ]
+    assert data["agents"] == freyja5_agent_evidence()
     agents = {agent["id"]: agent for agent in data["agents"]}
     assert set(agents) >= {"freyja", "cloyd-gibbler", "benedict-paralegal", "agent-47", "jennacide"}
     assert agents["freyja"] == {

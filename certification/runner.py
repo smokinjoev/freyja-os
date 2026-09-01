@@ -756,23 +756,9 @@ def _context_from_freyja5_result(
 
 
 def _freyja5_agent_evidence() -> list[dict[str, Any]]:
-    from freyja.foundation_seed import PERSISTENT_AGENTS
+    from freyja.freyja5_config import freyja5_agent_evidence
 
-    return [
-        {
-            "id": agent.agent_id,
-            "display_name": agent.display_name,
-            "logical_display_name": agent.logical_display_name or agent.display_name,
-            "owner": agent.owner,
-            "security_domain": agent.security_domain_id.value,
-            "home_machine": agent.home_machine_id,
-            "private_memory_scope": agent.private_memory_scope,
-            "shared_memory_scopes": sorted(agent.shared_memory_scopes),
-            "tool_grant_count": len(agent.tool_grants),
-            "cloud_egress_policy": agent.cloud_egress_policy_id,
-        }
-        for agent in PERSISTENT_AGENTS
-    ]
+    return freyja5_agent_evidence()
 
 
 def _freyja5_live_blocker_evidence() -> dict[str, Any]:
