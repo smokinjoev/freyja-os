@@ -99,6 +99,28 @@ def _check(
         result["readiness_ok"] = response_payload.get("ok")
         result["version"] = response_payload.get("version")
         result["openai_model"] = response_payload.get("openai_model")
+        mcp = response_payload.get("mcp") if isinstance(response_payload.get("mcp"), dict) else {}
+        webgui = response_payload.get("webgui") if isinstance(response_payload.get("webgui"), dict) else {}
+        certification = (
+            response_payload.get("certification")
+            if isinstance(response_payload.get("certification"), dict)
+            else {}
+        )
+        mcp_servers = mcp.get("servers") if isinstance(mcp.get("servers"), list) else []
+        targets = certification.get("targets") if isinstance(certification.get("targets"), list) else []
+        result["mcp_hosts"] = [str(host) for host in mcp.get("hosts") or []]
+        result["mcp_server_ids"] = [
+            str(server.get("id"))
+            for server in mcp_servers
+            if isinstance(server, dict) and server.get("id")
+        ]
+        result["certification_targets"] = [
+            str(target.get("target"))
+            for target in targets
+            if isinstance(target, dict) and target.get("target")
+        ]
+        result["webgui_default_model"] = webgui.get("default_model_preserved")
+        result["webgui_freyja5_opt_in"] = webgui.get("freyja5_opt_in")
     elif name == "models":
         models = response_payload.get("data") if isinstance(response_payload.get("data"), list) else []
         result["models"] = [item.get("id") for item in models if isinstance(item, dict) and item.get("id")]

@@ -143,7 +143,10 @@ physical/session tasks.
 - Added `scripts/freyja5-smoke.py`, a read-only side-by-side Gateway smoke
   operator that checks health, readiness, OpenAI-compatible model listing,
   text chat, inline image routing, and inline PDF routing, then writes a
-  sanitized JSON report without exposing the connector token.
+  sanitized JSON report without exposing the connector token. The readiness
+  check now records bounded WebGUI posture, MCP hosts/server IDs, and A-G
+  certification target IDs so smoke artifacts prove the main Freyja 5
+  architecture boundaries without carrying secrets.
 - Added `scripts/freyja5-readiness-bundle.py`, which assembles Freyja 5 direct
   architecture certification plus side-by-side Gateway smoke evidence and
   reports remaining Joe-required live blockers as a distinct live-blocked
