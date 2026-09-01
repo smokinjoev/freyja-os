@@ -120,17 +120,19 @@ def _evidence_present(value: Any) -> bool:
     return True
 
 
-def _contains_secret_marker(value: Any) -> bool:
+def _contains_secret_marker(value: Any, *, path: tuple[str, ...] = ()) -> bool:
     if isinstance(value, dict):
         for key, item in value.items():
             lowered_key = str(key).lower()
+            if path == () and lowered_key in {"notes", "description"}:
+                continue
             if any(marker.strip() in lowered_key for marker in SECRET_MARKERS):
                 return True
-            if _contains_secret_marker(item):
+            if _contains_secret_marker(item, path=(*path, lowered_key)):
                 return True
         return False
     if isinstance(value, list):
-        return any(_contains_secret_marker(item) for item in value)
+        return any(_contains_secret_marker(item, path=path) for item in value)
     if isinstance(value, str):
         lowered = value.lower()
         return any(marker in lowered for marker in SECRET_MARKERS)

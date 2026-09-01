@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "report_type": "freyja5-live-evidence",
+  "notes": [
+    "Example only. Copy this shape into certification/reports/freyja5-live-evidence.json after live host validation.",
+    "Do not include API keys, bearer tokens, passwords, secrets, raw Authorization headers, private documents, or full prompt payloads.",
+    "Use non-secret paths, service names, boolean pass/fail evidence, sanitized trace IDs, and redacted report paths."
+  ],
+  "blockers": [
+    {
+      "id": "msty_go_always_on_linux_validation",
+      "host": "atlas",
+      "status": "passed",
+      "evidence": {
+        "install_path": "/opt/msty-go",
+        "service_definition": "/etc/systemd/system/msty-go.service",
+        "restart_behavior": {
+          "start": "passed",
+          "stop": "passed",
+          "restart": "passed",
+          "reboot_recovery": "passed"
+        },
+        "local_config_export_story": "Compared Msty Go import/export with certification/reports/freyja5-agent-definitions.json; source remains canonical.",
+        "health_endpoint_or_equivalent": "http://127.0.0.1:<port>/health returned healthy with sensitive values redacted.",
+        "source_controlled_agent_definition_compatibility": true
+      },
+      "trace_ids": []
+    },
+    {
+      "id": "vulcan_nexus_presets",
+      "host": "vulcan",
+      "status": "passed",
+      "evidence": {
+        "local_only_fast_preset": "fast-local",
+        "local_only_general_preset": "general-local",
+        "local_only_deep_preset": "deep-local",
+        "local_only_code_preset": "code-local",
+        "local_only_vision_preset": "vision-local",
+        "local_only_embedding_preset": "embedding-local",
+        "local_only_private_preset": "private-local"
+      },
+      "trace_ids": [
+        "trace-live-vulcan-a"
+      ]
+    },
+    {
+      "id": "iris_apple_session",
+      "host": "iris",
+      "status": "passed",
+      "evidence": {
+        "live_apple_calendar_mcp_or_macagent_session": "Freyja 5 target C returned calendar result through Iris Apple/macOS session; private event payload redacted."
+      },
+      "trace_ids": [
+        "trace-live-iris-c"
+      ]
+    },
+    {
+      "id": "hera_voice_avatar_hardware",
+      "host": "hera",
+      "status": "passed",
+      "evidence": {
+        "microphone": "passed",
+        "speaker": "passed",
+        "avatar_runtime": "passed",
+        "physical_session_validation": "Hera voice/avatar smoke completed with hardware present."
+      },
+      "trace_ids": [
+        "trace-live-hera"
+      ]
+    },
+    {
+      "id": "live_tool_sessions",
+      "host": "atlas",
+      "status": "passed",
+      "evidence": {
+        "live_mcp_tool_sessions": [
+          "iris-apple-mcp",
+          "atlas-household-mcp",
+          "atlas-media-mcp"
+        ],
+        "cloyd_delegation_tool_smoke": "Cloyd delegation selected and invoked an MCP tool; tool result redacted to bounded summary.",
+        "tool_call_trace_evidence": "Trace contains delegation, selected tool, tool call, and result metadata."
+      },
+      "trace_ids": [
+        "trace-live-cloyd-b"
+      ]
+    },
+    {
+      "id": "vulcan_nexus_private_preset",
+      "host": "vulcan",
+      "status": "passed",
+      "evidence": {
+        "local_only_private_preset": "private-local",
+        "benedict_enclave_no_cloud_egress_smoke": "Benedict Paralegal enclave smoke completed with cloud egress disabled and unauthorized egress denied.",
+        "private_route_trace_evidence": "Trace shows private route, local runtime, and no cloud fallback."
+      },
+      "trace_ids": [
+        "trace-live-benedict-f"
+      ]
+    }
+  ]
+}

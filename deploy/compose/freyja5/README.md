@@ -162,6 +162,8 @@ scripts/freyja5-live-evidence-status.py \
 The evidence file should contain non-secret blocker records keyed by the IDs in
 `FREYJA-5.0-BLOCKERS.md`. The validator rejects secret-looking fields and
 reports which blockers are closeable, partial, missing, or unknown.
+Use `docs/examples/freyja5-live-evidence.example.json` as the fill-in shape for
+the local, uncommitted evidence file.
 
 Summarize the latest readiness bundle without reading raw JSON:
 

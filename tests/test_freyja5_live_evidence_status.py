@@ -7,6 +7,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "freyja5-live-evidence-status.py"
+EXAMPLE_PATH = REPO_ROOT / "docs" / "examples" / "freyja5-live-evidence.example.json"
 
 
 def load_status_module():
@@ -81,6 +82,26 @@ def test_freyja5_live_evidence_status_rejects_secret_markers(tmp_path: Path) -> 
     assert report["complete"] is False
 
 
+def test_freyja5_live_evidence_status_allows_top_level_operator_notes(tmp_path: Path) -> None:
+    module = load_status_module()
+    evidence = tmp_path / "live-evidence.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "notes": [
+                    "Operator guidance may mention tokens and secrets as things not to include."
+                ],
+                "blockers": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = module.validate_live_evidence(evidence)
+
+    assert report["secrets_detected"] is False
+
+
 def test_freyja5_live_evidence_status_cli_writes_report(tmp_path: Path, capsys) -> None:
     module = load_status_module()
     evidence = tmp_path / "missing.json"
@@ -93,3 +114,22 @@ def test_freyja5_live_evidence_status_cli_writes_report(tmp_path: Path, capsys) 
     assert printed["status"] == "missing"
     assert written["report_type"] == "freyja5-live-evidence-status"
     assert "vulcan_nexus_presets" in written["remaining_blockers"]
+
+
+def test_freyja5_live_evidence_example_is_complete_and_secret_free() -> None:
+    module = load_status_module()
+
+    report = module.validate_live_evidence(EXAMPLE_PATH)
+
+    assert report["complete"] is True
+    assert report["secrets_detected"] is False
+    assert report["remaining_blockers"] == []
+    assert report["unknown_blockers"] == []
+    assert set(report["closeable_blockers"]) == {
+        "msty_go_always_on_linux_validation",
+        "vulcan_nexus_presets",
+        "iris_apple_session",
+        "hera_voice_avatar_hardware",
+        "live_tool_sessions",
+        "vulcan_nexus_private_preset",
+    }

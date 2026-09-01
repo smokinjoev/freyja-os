@@ -164,6 +164,9 @@ physical/session tasks.
   Joe-supplied, non-secret live blocker evidence against
   `config/freyja-5.0-live-blockers.yaml` and reports closeable, partial,
   missing, unknown, and secret-contaminated blocker state.
+- Added `docs/examples/freyja5-live-evidence.example.json`, a non-secret live
+  evidence template Joe can fill into `certification/reports` after validating
+  Atlas, Vulcan, Iris, Hera, live MCP, and Benedict private-route paths.
 - Added `scripts/freyja5-completion-audit.py`, which generates a
   requirement-by-requirement Freyja 5 completion audit from readiness and
   agent-export evidence, separating complete source-side work from
