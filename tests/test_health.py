@@ -45,6 +45,15 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
     assert data["version"] == "freyja-5.0"
     assert data["fallback_preserved"] is True
     assert data["openai_model"] == "freyja-5"
+    assert data["webgui"] == {
+        "openai_compatible": True,
+        "default_model_preserved": "agent-smith",
+        "freyja5_model": "freyja-5",
+        "freyja5_opt_in": True,
+        "media_content_parts": ["image_url", "input_image", "file", "input_file"],
+        "inline_data_url_only": True,
+        "cloud_fallback": False,
+    }
     assert data["live_inference"] == {
         "enabled": False,
         "nexus_base_url_configured": False,

@@ -228,6 +228,15 @@ async def freyja5_readiness() -> dict[str, Any]:
         "version": "freyja-5.0",
         "fallback_preserved": True,
         "openai_model": "freyja-5",
+        "webgui": {
+            "openai_compatible": True,
+            "default_model_preserved": "agent-smith",
+            "freyja5_model": "freyja-5",
+            "freyja5_opt_in": True,
+            "media_content_parts": ["image_url", "input_image", "file", "input_file"],
+            "inline_data_url_only": True,
+            "cloud_fallback": False,
+        },
         "live_inference": {
             "enabled": live_inference_enabled,
             "nexus_base_url_configured": nexus_configured,

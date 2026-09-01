@@ -748,7 +748,13 @@ def test_home_assistant_read_requires_canonical_principal(registry: ToolRegistry
     assert result.error_code == "authorization_denied"
 
 
-def test_home_assistant_read_allows_director_authorized_joe(registry: ToolRegistry) -> None:
+def test_home_assistant_read_allows_director_authorized_joe(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "home_assistant_base_url", "")
+    monkeypatch.setattr(settings, "home_assistant_access_token", "")
+    monkeypatch.setattr(settings, "home_assistant_state_fixture", '{"light.downstairs":"on"}')
     register_builtin_tools(registry)
     result = asyncio_run(
         registry.execute(

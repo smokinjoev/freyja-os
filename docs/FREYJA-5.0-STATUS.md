@@ -111,6 +111,10 @@ tasks.
   image/file content parts into Gateway attachments, preserving WebGUI
   operability while routing image/PDF-style requests through the media/vision
   skeleton without remote fetches.
+- `/freyja5/readiness` now reports the WebGUI compatibility posture: the
+  OpenAI-compatible surface is present, `agent-smith` remains the preserved
+  default model, `freyja-5` is opt-in, inline image/PDF content parts are
+  accepted, and cloud fallback stays disabled.
 - Certification target E now records separate `signal` and `open-webui` Gateway
   handoffs and verifies that both carry the same stable household principal and
   memory-scope policy for Joe.

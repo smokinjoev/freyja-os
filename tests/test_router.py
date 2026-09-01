@@ -1510,6 +1510,8 @@ class TestToolLoop:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(settings, "home_assistant_state_fixture", '{"light.downstairs":"on"}')
+        monkeypatch.setattr(settings, "home_assistant_base_url", "")
+        monkeypatch.setattr(settings, "home_assistant_access_token", "")
         router.ollama_client.healthy.return_value = False
         router.reasoning_ollama_client = AsyncMock()
         router.reasoning_ollama_client.healthy.return_value = False
