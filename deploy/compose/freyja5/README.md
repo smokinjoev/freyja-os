@@ -125,6 +125,16 @@ architecture certification, runs the side-by-side smoke checks, builds the
 readiness bundle, and runs preflight with the export attached. Exit code `2`
 has the same meaning: source-ready with Joe-required live blockers remaining.
 
+Generate a requirement-by-requirement completion audit from the current
+evidence:
+
+```bash
+scripts/freyja5-completion-audit.py \
+  --readiness-bundle certification/reports/freyja5-readiness-bundle.json \
+  --agent-export certification/reports/freyja5-agent-definitions.json \
+  --output certification/reports/freyja5-completion-audit.json
+```
+
 Summarize the latest readiness bundle without reading raw JSON:
 
 ```bash

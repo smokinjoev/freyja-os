@@ -157,6 +157,10 @@ physical/session tasks.
   agent-definition export, direct Freyja 5 certification, side-by-side smoke,
   readiness bundle, and preflight summary in one operator flow while preserving
   the existing source-ready/live-blocked exit semantics.
+- Added `scripts/freyja5-completion-audit.py`, which generates a
+  requirement-by-requirement Freyja 5 completion audit from readiness and
+  agent-export evidence, separating complete source-side work from
+  Joe-required live blockers.
 - Added `scripts/freyja5-preflight-status.py`, which summarizes the latest
   Freyja 5 readiness bundle and returns exit code `2` for the expected
   source-ready/live-blocked state. The readiness bundle and preflight summary
@@ -350,6 +354,8 @@ physical/session tasks.
   Joe-required live validation is still blocked.
 - Run the ordered Freyja 5 gauntlet:
   `scripts/freyja5-certification-gauntlet.py --base-url http://127.0.0.1:8500 --token "$FREYJA_CONNECTOR_TOKEN"`.
+- Generate the Freyja 5 completion audit:
+  `scripts/freyja5-completion-audit.py --readiness-bundle certification/reports/freyja5-readiness-bundle.json --agent-export certification/reports/freyja5-agent-definitions.json --output certification/reports/freyja5-completion-audit.json`.
 - Summarize the latest Freyja 5 readiness bundle:
   `scripts/freyja5-preflight-status.py --report certification/reports/freyja5-readiness-bundle.json --agent-export certification/reports/freyja5-agent-definitions.json`.
 - Start the side-by-side Freyja 5 gateway with
