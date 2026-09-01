@@ -270,6 +270,7 @@ def test_freyja5_readiness_mcp_evidence_is_compact_topology_view() -> None:
     assert evidence == {
         "default_agent_mcp_servers": topology["default_agent_mcp_servers"],
         "hosts": topology["mcp_hosts"],
+        "servers": topology["servers"],
         "tool_count": topology["mcp_tool_count"],
         "source_controlled_grants": True,
         "agent_consumption": topology["agent_consumption"],
@@ -277,6 +278,11 @@ def test_freyja5_readiness_mcp_evidence_is_compact_topology_view() -> None:
     }
     assert evidence["default_agent_mcp_servers"] is False
     assert evidence["hosts"] == ["atlas", "iris"]
+    assert [server["id"] for server in evidence["servers"]] == [
+        "iris-apple-mcp",
+        "atlas-household-mcp",
+        "atlas-media-mcp",
+    ]
     assert evidence["tool_count"] == 12
 
 

@@ -246,6 +246,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
     assert data["mcp"] == freyja5_readiness_mcp_evidence()
     assert data["mcp"]["default_agent_mcp_servers"] is False
     assert data["mcp"]["hosts"] == ["atlas", "iris"]
+    assert [server["host"] for server in data["mcp"]["servers"]] == ["iris", "atlas", "atlas"]
     assert data["mcp"]["source_controlled_grants"] is True
     assert data["vulcan"] == freyja5_vulcan_evidence()
     assert data["vulcan"]["owner"] == "nexus"

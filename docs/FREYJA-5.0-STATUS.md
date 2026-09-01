@@ -160,7 +160,8 @@ physical/session tasks.
 - MCP topology evidence now exposes the concrete capability-server records:
   Iris hosts Apple/macOS MCP, Atlas hosts household-service MCP and media/vision
   MCP, and all persistent agents consume those servers through scoped tool
-  grants rather than per-agent duplicated MCP servers.
+  grants rather than per-agent duplicated MCP servers. The compact
+  `/freyja5/readiness` MCP view now includes those server records directly.
 - Certification target posture now has a source-controlled A-G matrix in
   `config/freyja-5.0-certification-targets.yaml`; readiness and certification
   evidence expose each target's case, operator-facing name, skeleton status,

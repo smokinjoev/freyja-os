@@ -284,6 +284,7 @@ def freyja5_readiness_mcp_evidence() -> dict[str, Any]:
     return {
         "default_agent_mcp_servers": evidence["default_agent_mcp_servers"],
         "hosts": evidence["mcp_hosts"],
+        "servers": evidence["servers"],
         "tool_count": evidence["mcp_tool_count"],
         "source_controlled_grants": True,
         "agent_consumption": evidence["agent_consumption"],
