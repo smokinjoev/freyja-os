@@ -436,6 +436,23 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert enclave_tools["selected_tools"] == ["documents.process"]
     assert enclave_tools["protocols"] == ["mcp"]
     assert enclave_tools["mcp_tool_count"] == 1
+    enclave_evidence = enclave_case.runtime_context["rev2_evidence"]["freyja5_enclave"]
+    assert enclave_evidence == {
+        "agent_id": "benedict-paralegal",
+        "is_benedict_paralegal": True,
+        "owner": "enclave:paralegal",
+        "security_domain": "paralegal",
+        "private_memory_scope": "enclave:paralegal",
+        "shared_memory_scopes": ["system"],
+        "cloud_egress_policy": "paralegal-local-only",
+        "requested_route": "private",
+        "inference_endpoint": "benedict-paralegal-nexus",
+        "egress_state": "local-only",
+        "actual_provider": "nexus",
+        "actual_runtime": "nexus",
+        "machine": "vulcan",
+        "unauthorized_egress": False,
+    }
     enclave_media = enclave_case.runtime_context["rev2_evidence"]["freyja5_media"]
     assert enclave_media["attachment_count"] == 1
     assert enclave_media["mime_types"] == ["application/pdf"]

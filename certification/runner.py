@@ -748,6 +748,7 @@ def _context_from_freyja5_result(
             "freyja5_vulcan": _freyja5_vulcan_evidence(),
             "freyja5_tools": _freyja5_tool_evidence(result, trace),
             "freyja5_media": _freyja5_media_evidence(result, trace, attachments),
+            "freyja5_enclave": _freyja5_enclave_evidence(result, trace),
             "freyja5_service_degradation": _freyja5_service_degradation_evidence(result, fixtures),
             "freyja5_live_blockers": _freyja5_live_blocker_evidence(),
             "freyja5_webgui": _freyja5_webgui_evidence(),
@@ -874,6 +875,27 @@ def _freyja5_tool_evidence(result: Any, trace: dict[str, Any]) -> dict[str, Any]
             for boundary in tool_boundaries
             if isinstance(boundary, dict) and boundary.get("mutation") is True
         ],
+    }
+
+
+def _freyja5_enclave_evidence(result: Any, trace: dict[str, Any]) -> dict[str, Any]:
+    agents = {agent["id"]: agent for agent in _freyja5_agent_evidence()}
+    agent = agents.get(str(result.agent_id), {})
+    return {
+        "agent_id": result.agent_id,
+        "is_benedict_paralegal": result.agent_id == "benedict-paralegal",
+        "owner": agent.get("owner"),
+        "security_domain": agent.get("security_domain"),
+        "private_memory_scope": agent.get("private_memory_scope"),
+        "shared_memory_scopes": agent.get("shared_memory_scopes") or [],
+        "cloud_egress_policy": agent.get("cloud_egress_policy"),
+        "requested_route": result.requested_route,
+        "inference_endpoint": result.inference_endpoint_id,
+        "egress_state": result.egress_state,
+        "actual_provider": trace.get("actual_provider"),
+        "actual_runtime": trace.get("actual_runtime"),
+        "machine": trace.get("machine"),
+        "unauthorized_egress": result.egress_state != "local-only",
     }
 
 

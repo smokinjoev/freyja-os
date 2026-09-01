@@ -31,6 +31,9 @@
 - E. Multi-channel identity maps into stable domain principals through gateway
   handoff metadata.
 - F. Benedict Paralegal selects the `private` route and local-only egress policy.
+  Freyja 5 certification now records explicit enclave evidence for owner,
+  security domain, private/shared memory scopes, private route, local Nexus
+  endpoint, Vulcan runtime, and absence of unauthorized egress.
 - G. Optional service disablement is covered by endpoint health fallback tests.
   Freyja 5 certification now records explicit service-degradation evidence for
   disabled optional-service fixtures and verifies unrelated local-only response
@@ -59,7 +62,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T015053Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T015348Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -193,6 +196,10 @@ tasks.
 - Freyja 5 certification reports now include optional-service degradation
   evidence for target G, recording disabled service fixtures, response
   availability, route selection, and local-only egress state.
+- Freyja 5 certification reports now include Benedict Paralegal enclave
+  evidence for target F, proving the paralegal owner/domain, enclave memory
+  scope, private route, local-only egress policy, Vulcan/Nexus endpoint, and no
+  unauthorized egress.
 - The opt-in `freyja-5` OpenAI-compatible path now returns the
   `AgentRuntimeV3` response text with trace metadata instead of discarding it
   for a fixed skeleton banner. The preserved `agent-smith` WebGUI default path
