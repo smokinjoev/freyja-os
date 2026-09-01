@@ -29,7 +29,9 @@
 - D. Image/PDF media path selects the `vision` semantic route and preserves
   document/image extraction code.
 - E. Multi-channel identity maps into stable domain principals through gateway
-  handoff metadata.
+  handoff metadata. Freyja 5 certification now summarizes same-user,
+  authenticated-subject, actor-principal, and memory-policy evidence across
+  channels.
 - F. Benedict Paralegal selects the `private` route and local-only egress policy.
   Freyja 5 certification now records explicit enclave evidence for owner,
   security domain, private/shared memory scopes, private route, local Nexus
@@ -62,7 +64,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T015348Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T015814Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -186,6 +188,9 @@ tasks.
   such as `joe`, `beth`, `liam`, and `jenna` to stable `person:<id>` principals
   so the WebGUI channel uses the same identity/memory policy shape as other
   channels. Unknown UI users remain channel-scoped.
+- Freyja 5 certification target E now includes compact identity-policy evidence
+  summarizing channels, handoff count, common sender/authenticated subject/actor
+  principal, and matching memory scopes.
 - The opt-in `freyja-5` OpenAI-compatible path now converts inline data URL
   image/file content parts into Gateway attachments, preserving WebGUI
   operability while routing image/PDF-style requests through the media/vision

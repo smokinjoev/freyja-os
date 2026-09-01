@@ -589,6 +589,18 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert {entry["sender_id"] for entry in identity_channels} == {"person:joe"}
     assert {entry["authenticated_subject"] for entry in identity_channels} == {"person:joe"}
     assert all("agent:freyja" in entry["memory_scopes"] for entry in identity_channels)
+    assert identity_case.runtime_context["rev2_evidence"]["freyja5_identity_policy"] == {
+        "channels": ["signal", "open-webui"],
+        "handoff_count": 2,
+        "same_sender": True,
+        "same_authenticated_subject": True,
+        "same_actor_principal": True,
+        "same_memory_policy": True,
+        "sender_ids": ["person:joe"],
+        "authenticated_subjects": ["person:joe"],
+        "actor_principals": ["person:joe"],
+        "memory_scopes": ["agent:freyja", "family", "system"],
+    }
 
 
 def test_freyja5_agent_config_summary_matches_runtime_seed() -> None:

@@ -381,7 +381,7 @@ class Freyja5CertificationProvider:
         )
         channels = request_data.get("freyja5_identity_channels")
         if isinstance(channels, list):
-            context.rev2_evidence["freyja5_identity_channels"] = _freyja5_identity_channel_evidence(
+            identity_channels = _freyja5_identity_channel_evidence(
                 channels=channels,
                 target_agent=target_agent,
                 sender_domain=sender_domain,
@@ -389,6 +389,8 @@ class Freyja5CertificationProvider:
                 prompt=case.prompt,
                 conversation_id=str(request_data.get("request_id") or case.name),
             )
+            context.rev2_evidence["freyja5_identity_channels"] = identity_channels
+            context.rev2_evidence["freyja5_identity_policy"] = _freyja5_identity_policy_evidence(identity_channels)
         _apply_certification_fixtures(context, fixtures)
         return CertificationExecution(response=result.response_text, context=context)
 
@@ -1119,6 +1121,28 @@ def _freyja5_identity_channel_evidence(
             }
         )
     return evidence
+
+
+def _freyja5_identity_policy_evidence(identity_channels: list[dict[str, Any]]) -> dict[str, Any]:
+    successful = [entry for entry in identity_channels if entry.get("handoff") is True]
+    sender_ids = sorted({str(entry.get("sender_id")) for entry in successful if entry.get("sender_id")})
+    authenticated_subjects = sorted(
+        {str(entry.get("authenticated_subject")) for entry in successful if entry.get("authenticated_subject")}
+    )
+    actor_principals = sorted({str(entry.get("actor_principal")) for entry in successful if entry.get("actor_principal")})
+    memory_scope_sets = sorted({tuple(entry.get("memory_scopes") or ()) for entry in successful})
+    return {
+        "channels": [str(entry.get("channel")) for entry in identity_channels],
+        "handoff_count": len(successful),
+        "same_sender": len(sender_ids) == 1,
+        "same_authenticated_subject": len(authenticated_subjects) == 1,
+        "same_actor_principal": len(actor_principals) == 1,
+        "same_memory_policy": len(memory_scope_sets) == 1,
+        "sender_ids": sender_ids,
+        "authenticated_subjects": authenticated_subjects,
+        "actor_principals": actor_principals,
+        "memory_scopes": list(memory_scope_sets[0]) if len(memory_scope_sets) == 1 else [],
+    }
 
 
 def _freyja5_attachments(request_data: dict[str, Any], fixtures: dict[str, Any]) -> list[dict[str, Any]]:
