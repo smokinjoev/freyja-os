@@ -258,6 +258,12 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
     assert data["certification"]["targets"][0] == {
         "target": "A",
         "case": "a-gateway-to-freyja-to-vulcan",
+        "name": "gateway-to-freyja-to-vulcan",
+        "proves": [
+            "joe_test_channel_gateway_handoff",
+            "freyja_agent_runtime_execution",
+            "semantic_route_to_nexus_vulcan",
+        ],
         "skeleton": "covered",
         "live": "blocked",
         "live_blockers": ["vulcan_nexus_presets"],

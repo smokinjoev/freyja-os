@@ -13,6 +13,7 @@ FREYJA5_WEBGUI_PATH = REPO_ROOT / "config" / "freyja-5.0-webgui.yaml"
 FREYJA5_TRACEABILITY_PATH = REPO_ROOT / "config" / "freyja-5.0-traceability.yaml"
 FREYJA5_PLANES_PATH = REPO_ROOT / "config" / "freyja-5.0-planes.yaml"
 FREYJA5_GATEWAY_PATH = REPO_ROOT / "config" / "freyja-5.0-gateway.yaml"
+FREYJA5_CERTIFICATION_TARGETS_PATH = REPO_ROOT / "config" / "freyja-5.0-certification-targets.yaml"
 FREYJA5_CERTIFICATION_SUITE_PATH = REPO_ROOT / "certification" / "suites" / "routing" / "freyja5_architecture.yaml"
 
 
@@ -332,7 +333,11 @@ def freyja5_vulcan_evidence() -> dict[str, Any] | None:
 
 def freyja5_certification_evidence() -> dict[str, Any]:
     suite = _load_yaml(FREYJA5_CERTIFICATION_SUITE_PATH)
+    target_config = _load_yaml(FREYJA5_CERTIFICATION_TARGETS_PATH)
     cases = suite.get("cases") if isinstance(suite.get("cases"), list) else []
+    configured_targets = (
+        target_config.get("targets") if isinstance(target_config.get("targets"), dict) else {}
+    )
     live_blockers_by_target = freyja5_certification_target_blockers()
     targets: list[dict[str, Any]] = []
     for case in cases:
@@ -342,11 +347,14 @@ def freyja5_certification_evidence() -> dict[str, Any]:
         target = name.split("-", 1)[0]
         if target not in live_blockers_by_target:
             continue
+        target_details = configured_targets.get(target) if isinstance(configured_targets.get(target), dict) else {}
         targets.append(
             {
                 "target": target.upper(),
                 "case": name,
-                "skeleton": "covered",
+                "name": str(target_details.get("name") or name),
+                "proves": [str(item) for item in target_details.get("proves") or []],
+                "skeleton": str(target_details.get("skeleton_status") or "covered"),
                 "live": "blocked" if live_blockers_by_target[target] else "not_required",
                 "live_blockers": live_blockers_by_target[target],
             }

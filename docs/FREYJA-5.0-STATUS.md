@@ -64,7 +64,7 @@ physical/session tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T021523Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T023326Z0000-freyja5-architecture.md`.
 - Latest local side-by-side smoke:
   `scripts/freyja5-smoke.py --base-url http://127.0.0.1:8500 --token test-connector-token --output certification/reports/freyja5-smoke-local.json`
   passed after starting a temporary `uvicorn freyja.main:app` service on port
@@ -72,7 +72,7 @@ physical/session tasks.
   `/freyja5/readiness`, `/v1/models`, text chat, inline image routing, and
   inline PDF routing. The temporary service was stopped afterward.
 - Latest Freyja 5 readiness bundle:
-  `scripts/freyja5-readiness-bundle.py --certification-report certification/reports/20260901T021523Z0000-freyja5-architecture.json --smoke-report certification/reports/freyja5-smoke-local.json --output certification/reports/freyja5-readiness-bundle-local.json`
+  `scripts/freyja5-readiness-bundle.py --certification-report certification/reports/20260901T023326Z0000-freyja5-architecture.json --smoke-report certification/reports/freyja5-smoke-local.json --output certification/reports/freyja5-readiness-bundle-local.json`
   returned exit code `2`: source certification and side-by-side smoke passed,
   and only Joe-required live blockers remain.
 - Runtime trace summaries now include channel, resolved user, authenticated
@@ -161,6 +161,11 @@ physical/session tasks.
   Iris hosts Apple/macOS MCP, Atlas hosts household-service MCP and media/vision
   MCP, and all persistent agents consume those servers through scoped tool
   grants rather than per-agent duplicated MCP servers.
+- Certification target posture now has a source-controlled A-G matrix in
+  `config/freyja-5.0-certification-targets.yaml`; readiness and certification
+  evidence expose each target's case, operator-facing name, skeleton status,
+  proof points, and live blocker IDs. Freyja 5 certification reports persist
+  the same matrix under `freyja5_certification` case evidence.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.

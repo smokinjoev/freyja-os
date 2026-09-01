@@ -174,6 +174,18 @@ def test_freyja5_certification_suite_tracks_architecture_cases_a_through_g() -> 
     assert evidence["suite"] == suite.name
     assert [target["target"] for target in evidence["targets"]] == ["A", "B", "C", "D", "E", "F", "G"]
     assert [target["case"] for target in evidence["targets"]] == [case.name for case in suite.cases]
+    assert [target["name"] for target in evidence["targets"]] == [
+        "gateway-to-freyja-to-vulcan",
+        "freyja-to-cloyd-delegation",
+        "iris-calendar-tool",
+        "media-vision-pathway",
+        "multi-channel-household-identity",
+        "benedict-enclave-local-only",
+        "optional-service-disabled",
+    ]
+    for target in evidence["targets"]:
+        assert target["skeleton"] == "covered"
+        assert target["proves"]
     assert evidence["live_blockers"] == freyja5_certification_live_blocker_ids()
 
 
@@ -383,6 +395,16 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == expected_mcp_topology
         for case in report.cases
     )
+    expected_certification = freyja5_certification_evidence()
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_certification"] == expected_certification
+        for case in report.cases
+    )
+    assert expected_certification["targets"][0]["proves"] == [
+        "joe_test_channel_gateway_handoff",
+        "freyja_agent_runtime_execution",
+        "semantic_route_to_nexus_vulcan",
+    ]
     assert expected_mcp_topology["source"] == "config/freyja-5.0-mcp-topology.yaml"
     assert expected_mcp_topology["available"] is True
     assert expected_mcp_topology["default_agent_mcp_servers"] is False

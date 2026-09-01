@@ -1,0 +1,53 @@
+version: freyja-5.0
+source_document: docs/architecture/FREYJA-5.0-ARCHITECTURE.md
+suite: freyja5-architecture
+targets:
+  a:
+    name: gateway-to-freyja-to-vulcan
+    proves:
+      - joe_test_channel_gateway_handoff
+      - freyja_agent_runtime_execution
+      - semantic_route_to_nexus_vulcan
+    skeleton_status: covered
+  b:
+    name: freyja-to-cloyd-delegation
+    proves:
+      - freyja_delegates_to_cloyd
+      - delegated_agent_tool_boundary_trace
+      - response_returns_through_freyja
+    skeleton_status: covered
+  c:
+    name: iris-calendar-tool
+    proves:
+      - iris_apple_mcp_boundary
+      - calendar_tool_grant
+      - gateway_to_tool_trace
+    skeleton_status: covered
+  d:
+    name: media-vision-pathway
+    proves:
+      - webgui_inline_media_normalization
+      - image_pdf_attachment_path
+      - vision_semantic_route_selection
+    skeleton_status: covered
+  e:
+    name: multi-channel-household-identity
+    proves:
+      - same_user_cross_channel_resolution
+      - authenticated_subject_consistency
+      - memory_policy_consistency
+    skeleton_status: covered
+  f:
+    name: benedict-enclave-local-only
+    proves:
+      - benedict_paralegal_private_agent_boundary
+      - private_semantic_route_selection
+      - local_only_no_unauthorized_egress
+    skeleton_status: covered
+  g:
+    name: optional-service-disabled
+    proves:
+      - optional_service_failure_isolated
+      - unrelated_path_operational
+      - response_trace_preserved
+    skeleton_status: covered

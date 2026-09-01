@@ -748,6 +748,7 @@ def _context_from_freyja5_result(
             "freyja5_agents": _freyja5_agent_evidence(),
             "freyja5_mcp_topology": topology,
             "freyja5_vulcan": _freyja5_vulcan_evidence(),
+            "freyja5_certification": _freyja5_certification_evidence(),
             "freyja5_tools": _freyja5_tool_evidence(result, trace),
             "freyja5_media": _freyja5_media_evidence(result, trace, attachments),
             "freyja5_enclave": _freyja5_enclave_evidence(result, trace),
@@ -782,6 +783,12 @@ def _freyja5_live_blocker_evidence() -> dict[str, Any]:
     from freyja.freyja5_config import freyja5_live_blocker_evidence
 
     return freyja5_live_blocker_evidence()
+
+
+def _freyja5_certification_evidence() -> dict[str, Any]:
+    from freyja.freyja5_config import freyja5_certification_evidence
+
+    return freyja5_certification_evidence()
 
 
 def _freyja5_plane_evidence() -> dict[str, Any]:
