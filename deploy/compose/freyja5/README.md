@@ -34,6 +34,20 @@ curl http://${HOST}:8500/freyja5/readiness -H "Authorization: Bearer $FREYJA_CON
 curl http://${HOST}:8500/v1/models -H "Authorization: Bearer $FREYJA_CONNECTOR_TOKEN"
 ```
 
+For local test sessions where Docker Compose is not being used, the
+non-secret wrapper keeps the WebGUI-compatible Freyja 5 endpoint reproducible
+without enabling live inference or cloud fallback:
+
+```bash
+scripts/freyja5-local-gateway.py start
+scripts/freyja5-local-gateway.py status
+scripts/freyja5-local-gateway.py smoke --token test-connector-token \
+  --output certification/reports/freyja5-smoke-local.json
+```
+
+`stop` only terminates the pid-file-owned process by default. Use `--force`
+only when deliberately clearing a matching local test listener on port `8500`.
+
 `/freyja5/readiness` reports source-controlled route, agent, MCP, per-agent MCP
 grant, Vulcan, and A-G certification posture. It intentionally reports live
 blockers for Vulcan/Nexus, Iris, and Hera until those host-local sessions are

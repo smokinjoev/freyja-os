@@ -157,6 +157,9 @@ physical/session tasks.
   agent-definition export, direct Freyja 5 certification, side-by-side smoke,
   readiness bundle, and preflight summary in one operator flow while preserving
   the existing source-ready/live-blocked exit semantics.
+- Added `scripts/freyja5-local-gateway.py`, which starts, checks, stops, and
+  smokes a local side-by-side Freyja 5 WebGUI-compatible test endpoint on
+  `8500` with live inference disabled and cloud fallback disabled by default.
 - Added `scripts/freyja5-completion-audit.py`, which generates a
   requirement-by-requirement Freyja 5 completion audit from readiness and
   agent-export evidence, separating complete source-side work from
@@ -343,6 +346,10 @@ physical/session tasks.
 - To test the explicit Freyja 5 OpenAI-compatible skeleton path, select model
   `freyja-5` against the Freyja `/v1/chat/completions` endpoint. Existing Open
   WebUI deployment remains pointed at `model-proxy` unless changed manually.
+- For a local WebGUI-compatible Freyja 5 test service without Docker Compose,
+  run `scripts/freyja5-local-gateway.py start`, verify it with
+  `scripts/freyja5-local-gateway.py status`, and capture smoke evidence with
+  `scripts/freyja5-local-gateway.py smoke --token test-connector-token --output certification/reports/freyja5-smoke-local.json`.
 - To allow the `freyja-5` OpenAI-compatible endpoint to call live local Nexus
   inference, set `FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED=true` with `NEXUS_BASE_URL`
   and local host secrets configured outside source control.
