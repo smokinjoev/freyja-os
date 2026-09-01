@@ -99,7 +99,20 @@ def test_freyja5_readiness_bundle_reports_source_ready_but_live_blocked(tmp_path
   "report_type": "freyja5-smoke",
   "passed": true,
   "token_configured": true,
-  "checks": [{"name": "health"}, {"name": "readiness"}, {"name": "chat_text"}]
+  "checks": [
+    {"name": "health"},
+    {
+      "name": "readiness",
+      "readiness_ok": true,
+      "openai_model": "freyja-5",
+      "webgui_default_model": "agent-smith",
+      "webgui_freyja5_opt_in": true,
+      "mcp_hosts": ["atlas", "iris"],
+      "mcp_server_ids": ["iris-apple-mcp", "atlas-household-mcp", "atlas-media-mcp"],
+      "certification_targets": ["A", "B", "C", "D", "E", "F", "G"]
+    },
+    {"name": "chat_text"}
+  ]
 }
 """.strip(),
         encoding="utf-8",
@@ -114,6 +127,7 @@ def test_freyja5_readiness_bundle_reports_source_ready_but_live_blocked(tmp_path
     assert checks["freyja5-certification-report"]["ok"] is True
     assert checks["freyja5-certification-report"]["target_matrix_evidence"] is True
     assert checks["freyja5-smoke-report"]["ok"] is True
+    assert checks["freyja5-smoke-report"]["readiness_architecture_evidence"] is True
     assert checks["freyja5-live-blockers"]["status"] == "blocked"
     assert checks["freyja5-live-blockers"]["remaining"] == [
         "msty_go_always_on_linux_validation",
@@ -163,6 +177,31 @@ def test_freyja5_readiness_bundle_rejects_stale_certification_without_target_mat
     assert report["source_ready"] is False
     assert checks["freyja5-certification-report"]["ok"] is False
     assert checks["freyja5-certification-report"]["target_matrix_evidence"] is False
+
+
+def test_freyja5_readiness_bundle_rejects_stale_smoke_without_readiness_architecture(
+    tmp_path: Path,
+) -> None:
+    bundle = load_bundle_module()
+    smoke = tmp_path / "smoke.json"
+    smoke.write_text(
+        """
+{
+  "report_type": "freyja5-smoke",
+  "passed": true,
+  "token_configured": true,
+  "checks": [{"name": "health"}, {"name": "readiness"}, {"name": "chat_text"}]
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = bundle.build_report(certification_report=None, smoke_report=smoke)
+    checks = {check["name"]: check for check in report["checks"]}
+
+    assert report["source_ready"] is False
+    assert checks["freyja5-smoke-report"]["ok"] is False
+    assert checks["freyja5-smoke-report"]["readiness_architecture_evidence"] is False
 
 
 def test_freyja5_readiness_bundle_fails_missing_artifacts() -> None:

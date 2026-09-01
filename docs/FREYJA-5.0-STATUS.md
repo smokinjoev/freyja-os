@@ -174,6 +174,9 @@ physical/session tasks.
 - The Freyja 5 readiness bundle now requires persisted target-matrix evidence
   before accepting a certification report as source-ready, preventing stale
   legacy-shaped reports from satisfying the current gate.
+- The readiness bundle now also requires the smoke report's readiness check to
+  include WebGUI default/opt-in posture, MCP host/server IDs, and A-G target
+  IDs before accepting side-by-side smoke evidence as source-ready.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.

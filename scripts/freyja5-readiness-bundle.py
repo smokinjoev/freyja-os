@@ -151,7 +151,12 @@ def _smoke_check(path: Path | None) -> dict[str, Any]:
         return {"name": "freyja5-smoke-report", "ok": False, "status": type(exc).__name__, "path": str(path)}
     checks = payload.get("checks") if isinstance(payload.get("checks"), list) else []
     names = [str(check.get("name")) for check in checks if isinstance(check, dict) and check.get("name")]
-    ok = payload.get("report_type") == "freyja5-smoke" and payload.get("passed") is True
+    readiness_evidence = _has_freyja5_smoke_readiness_evidence(payload)
+    ok = (
+        payload.get("report_type") == "freyja5-smoke"
+        and payload.get("passed") is True
+        and readiness_evidence
+    )
     return {
         "name": "freyja5-smoke-report",
         "ok": ok,
@@ -159,7 +164,27 @@ def _smoke_check(path: Path | None) -> dict[str, Any]:
         "path": str(path),
         "checks": names,
         "token_configured": payload.get("token_configured"),
+        "readiness_architecture_evidence": readiness_evidence,
     }
+
+
+def _has_freyja5_smoke_readiness_evidence(payload: dict[str, Any]) -> bool:
+    checks = payload.get("checks") if isinstance(payload.get("checks"), list) else []
+    readiness = next(
+        (check for check in checks if isinstance(check, dict) and check.get("name") == "readiness"),
+        {},
+    )
+    if not isinstance(readiness, dict):
+        return False
+    return (
+        readiness.get("readiness_ok") is True
+        and readiness.get("openai_model") == "freyja-5"
+        and readiness.get("webgui_default_model") == "agent-smith"
+        and readiness.get("webgui_freyja5_opt_in") is True
+        and readiness.get("mcp_hosts") == ["atlas", "iris"]
+        and readiness.get("mcp_server_ids") == ["iris-apple-mcp", "atlas-household-mcp", "atlas-media-mcp"]
+        and readiness.get("certification_targets") == ["A", "B", "C", "D", "E", "F", "G"]
+    )
 
 
 def _blocker_check() -> dict[str, Any]:
