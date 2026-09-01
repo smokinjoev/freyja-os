@@ -51,6 +51,7 @@ def test_freyja5_compose_readme_documents_webgui_media_checks() -> None:
     content = FREYJA5_README.read_text(encoding="utf-8")
 
     assert "/freyja5/readiness" in content
+    assert "scripts/freyja5-smoke.py" in content
     assert "data:image/png;base64,ZmFrZQ==" in content
     assert "data:application/pdf;base64,JVBERi0xLjQK" in content
     assert "freyja.endpoint=vulcan-nexus-vision-docs" in content

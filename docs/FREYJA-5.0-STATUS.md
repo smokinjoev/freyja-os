@@ -130,6 +130,10 @@ physical/session tasks.
 - Added a side-by-side Freyja 5 compose target at `deploy/compose/freyja5` for
   Atlas testing on port `8500`. It preserves existing 4.1/Freyja3/Open WebUI
   deployments and keeps live inference/cloud egress disabled by default.
+- Added `scripts/freyja5-smoke.py`, a read-only side-by-side Gateway smoke
+  operator that checks health, readiness, OpenAI-compatible model listing,
+  text chat, inline image routing, and inline PDF routing, then writes a
+  sanitized JSON report without exposing the connector token.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.
@@ -276,6 +280,8 @@ physical/session tasks.
 - To allow the `freyja-5` OpenAI-compatible endpoint to call live local Nexus
   inference, set `FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED=true` with `NEXUS_BASE_URL`
   and local host secrets configured outside source control.
+- Capture the side-by-side Freyja 5 smoke report after starting the service:
+  `scripts/freyja5-smoke.py --base-url http://127.0.0.1:8500 --token "$FREYJA_CONNECTOR_TOKEN" --output certification/reports/freyja5-smoke.json`.
 - Start the side-by-side Freyja 5 gateway with
   `docker compose --env-file deploy/compose/freyja5/.env -f deploy/compose/freyja5/compose.yaml up -d --build`.
 - Check Freyja 5 architecture posture with `GET /freyja5/readiness`.

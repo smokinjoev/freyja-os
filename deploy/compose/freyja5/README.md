@@ -69,6 +69,16 @@ Both media checks should return `freyja.route=vision`,
 `freyja.endpoint=vulcan-nexus-vision-docs`, `freyja.attachment_count=1`, and
 `freyja.egress_state=local-only`.
 
+The same health/readiness/models/chat/media checks can be captured as a
+sanitized report:
+
+```bash
+scripts/freyja5-smoke.py \
+  --base-url http://${HOST}:8500 \
+  --token "$FREYJA_CONNECTOR_TOKEN" \
+  --output certification/reports/freyja5-smoke.json
+```
+
 To allow live local Nexus inference, configure `NEXUS_BASE_URL` and
 `NEXUS_API_KEY` in the untracked `.env`, then set:
 
