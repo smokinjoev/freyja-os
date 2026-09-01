@@ -157,6 +157,10 @@ physical/session tasks.
   for Atlas/Msty Go, Vulcan/Nexus, Iris, Hera, live MCP delegation, and Benedict
   private-route validation. The readiness bundle and preflight summary surface
   those operator actions alongside required evidence.
+- MCP topology evidence now exposes the concrete capability-server records:
+  Iris hosts Apple/macOS MCP, Atlas hosts household-service MCP and media/vision
+  MCP, and all persistent agents consume those servers through scoped tool
+  grants rather than per-agent duplicated MCP servers.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.

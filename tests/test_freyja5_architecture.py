@@ -386,6 +386,46 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert expected_mcp_topology["source"] == "config/freyja-5.0-mcp-topology.yaml"
     assert expected_mcp_topology["available"] is True
     assert expected_mcp_topology["default_agent_mcp_servers"] is False
+    assert expected_mcp_topology["servers"] == [
+        {
+            "id": "iris-apple-mcp",
+            "host": "iris",
+            "protocol": "mcp",
+            "role": "apple-macos-capability-server",
+            "status": "planned_live_validation",
+            "exposes": [
+                "browser.control",
+                "calendar.read",
+                "calendar.write",
+                "email.read",
+                "macagent.apple",
+                "messaging.send",
+                "music.control",
+            ],
+            "consumers": "scoped_agent_tool_grants",
+            "egress": "local_macos_capabilities",
+        },
+        {
+            "id": "atlas-household-mcp",
+            "host": "atlas",
+            "protocol": "mcp",
+            "role": "persistent-household-service-capability-server",
+            "status": "skeleton_implemented",
+            "exposes": ["home-assistant.read", "home-assistant.control", "scheduling.create"],
+            "consumers": "scoped_agent_tool_grants",
+            "egress": "household_lan",
+        },
+        {
+            "id": "atlas-media-mcp",
+            "host": "atlas",
+            "protocol": "mcp",
+            "role": "document-and-vision-capability-server",
+            "status": "skeleton_implemented",
+            "exposes": ["documents.process", "vision.inspect"],
+            "consumers": "scoped_agent_tool_grants",
+            "egress": "local_processing",
+        },
+    ]
     assert expected_mcp_topology["mcp_hosts"] == ["atlas", "iris"]
     assert expected_mcp_topology["mcp_tool_count"] == 12
     assert expected_mcp_topology["vulcan_protocol"] == "openai-compatible"

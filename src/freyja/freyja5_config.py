@@ -220,6 +220,20 @@ def freyja5_mcp_topology_evidence() -> dict[str, Any]:
         "available": bool(servers),
         "default_agent_mcp_servers": bool(data.get("default_agent_mcp_servers")),
         "mcp_hosts": sorted({str(server.get("host")) for server in servers if isinstance(server, dict) and server.get("host")}),
+        "servers": [
+            {
+                "id": str(server.get("id")),
+                "host": str(server.get("host")),
+                "protocol": str(server.get("protocol")),
+                "role": str(server.get("role")),
+                "status": str(server.get("status")),
+                "exposes": [str(tool_id) for tool_id in server.get("exposes") or []],
+                "consumers": str(server.get("consumers") or ""),
+                "egress": str(server.get("egress") or ""),
+            }
+            for server in servers
+            if isinstance(server, dict) and server.get("id") and server.get("host")
+        ],
         "mcp_tool_count": sum(
             len(server.get("exposes") or ())
             for server in servers
