@@ -95,6 +95,10 @@ tasks.
 - Freyja 5 certification reports include source-controlled MCP topology
   evidence: default per-agent MCP servers are disabled, MCP hosts are Atlas and
   Iris, and Vulcan remains the OpenAI-compatible Nexus inference boundary.
+- `/freyja5/readiness` now exposes persistent logical-agent posture from source
+  control: display/logical names, owners, security domains, Atlas home
+  placement, private/shared memory scopes, tool grant counts, and cloud egress
+  policy, including Benedict Paralegal's local-only enclave policy.
 - Added a side-by-side Freyja 5 compose target at `deploy/compose/freyja5` for
   Atlas testing on port `8500`. It preserves existing 4.1/Freyja3/Open WebUI
   deployments and keeps live inference/cloud egress disabled by default.

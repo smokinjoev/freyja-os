@@ -206,7 +206,36 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "iris_apple_session",
         "hera_voice_avatar_hardware",
     ]
-    assert {agent["id"] for agent in data["agents"]} >= {"freyja", "cloyd-gibbler", "benedict-paralegal"}
+    agents = {agent["id"]: agent for agent in data["agents"]}
+    assert set(agents) >= {"freyja", "cloyd-gibbler", "benedict-paralegal", "agent-47", "jennacide"}
+    assert agents["freyja"] == {
+        "id": "freyja",
+        "display_name": "Freyja",
+        "logical_display_name": "Freyja",
+        "owner": "household",
+        "security_domain": "household",
+        "home_machine": "atlas",
+        "private_memory_scope": "agent:freyja",
+        "shared_memory_scopes": ["family", "system"],
+        "tool_grant_count": 15,
+        "cloud_egress_policy": "household-default",
+    }
+    assert agents["cloyd-gibbler"]["owner"] == "person:joe"
+    assert agents["cloyd-gibbler"]["private_memory_scope"] == "person:joe"
+    assert agents["benedict-paralegal"] == {
+        "id": "benedict-paralegal",
+        "display_name": "Benedict Paralegal",
+        "logical_display_name": "Benedict Paralegal",
+        "owner": "enclave:paralegal",
+        "security_domain": "paralegal",
+        "home_machine": "atlas",
+        "private_memory_scope": "enclave:paralegal",
+        "shared_memory_scopes": ["system"],
+        "tool_grant_count": 6,
+        "cloud_egress_policy": "paralegal-local-only",
+    }
+    assert agents["agent-47"]["logical_display_name"] == "Agent 44"
+    assert agents["jennacide"]["logical_display_name"] == "Jenna agent"
 
 
 def test_freyja5_readiness_requires_explicit_live_inference_and_nexus_url(monkeypatch) -> None:
