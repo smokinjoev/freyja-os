@@ -1,0 +1,25 @@
+version: freyja-5.0
+host: atlas
+role: deterministic-ingress-boundary
+protocol: http
+allowed_responsibilities:
+  - channel_normalization
+  - identity_resolution
+  - authentication
+  - deterministic_policy
+  - attachment_normalization
+  - trace_envelope
+  - handoff_forwarding
+forbidden_responsibilities:
+  - agent_reasoning
+  - arbitrary_tool_orchestration
+  - physical_model_selection
+  - implicit_cloud_fallback
+policy:
+  no_agent_reasoning: true
+  no_arbitrary_tool_orchestration: true
+  no_physical_model_selection: true
+  no_implicit_cloud_fallback: true
+  forwards_to: agent-runtime-v3
+  physical_model_selection_owner: nexus
+  cloud_fallback: explicit_only

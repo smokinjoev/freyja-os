@@ -30,6 +30,7 @@ from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
 from freyja.freyja5_config import (
     freyja5_certification_live_blocker_ids,
     freyja5_certification_target_blockers,
+    freyja5_gateway_evidence,
     freyja5_live_blocker_evidence,
     freyja5_plane_evidence,
     freyja5_traceability_evidence,
@@ -269,27 +270,7 @@ async def freyja5_readiness() -> dict[str, Any]:
             "cloud_fallback": route_config.get("cloud_fallback"),
             "routes": sorted(str(route) for route in routes),
         },
-        "gateway": {
-            "host": "atlas",
-            "role": "deterministic-ingress-boundary",
-            "allowed_responsibilities": [
-                "channel_normalization",
-                "identity_resolution",
-                "authentication",
-                "deterministic_policy",
-                "attachment_normalization",
-                "trace_envelope",
-                "handoff_forwarding",
-            ],
-            "forbidden_responsibilities": [
-                "agent_reasoning",
-                "arbitrary_tool_orchestration",
-                "physical_model_selection",
-                "implicit_cloud_fallback",
-            ],
-            "no_agent_reasoning": bool((mcp_topology.get("policy") or {}).get("no_agent_reasoning_in_mcp_servers")),
-            "no_physical_model_selection": bool((mcp_topology.get("policy") or {}).get("no_physical_model_selection_in_gateway")),
-        },
+        "gateway": freyja5_gateway_evidence(),
         "hera": planes["hera"],
         "iris": iris_plane,
         "agents": [

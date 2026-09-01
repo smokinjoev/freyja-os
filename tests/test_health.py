@@ -163,8 +163,10 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "routes": ["code", "deep", "embedding", "fast", "general", "private", "vision"],
     }
     assert data["gateway"] == {
+        "source": "config/freyja-5.0-gateway.yaml",
         "host": "atlas",
         "role": "deterministic-ingress-boundary",
+        "protocol": "http",
         "allowed_responsibilities": [
             "channel_normalization",
             "identity_resolution",
@@ -180,8 +182,15 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
             "physical_model_selection",
             "implicit_cloud_fallback",
         ],
-        "no_agent_reasoning": True,
-        "no_physical_model_selection": True,
+        "policy": {
+            "no_agent_reasoning": True,
+            "no_arbitrary_tool_orchestration": True,
+            "no_physical_model_selection": True,
+            "no_implicit_cloud_fallback": True,
+            "forwards_to": "agent-runtime-v3",
+            "physical_model_selection_owner": "nexus",
+            "cloud_fallback": "explicit_only",
+        },
     }
     assert data["hera"] == {
         "host": "hera",

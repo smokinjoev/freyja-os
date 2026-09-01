@@ -12,6 +12,7 @@ FREYJA5_SEMANTIC_ROUTES_PATH = REPO_ROOT / "config" / "freyja-5.0-semantic-route
 FREYJA5_WEBGUI_PATH = REPO_ROOT / "config" / "freyja-5.0-webgui.yaml"
 FREYJA5_TRACEABILITY_PATH = REPO_ROOT / "config" / "freyja-5.0-traceability.yaml"
 FREYJA5_PLANES_PATH = REPO_ROOT / "config" / "freyja-5.0-planes.yaml"
+FREYJA5_GATEWAY_PATH = REPO_ROOT / "config" / "freyja-5.0-gateway.yaml"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -119,4 +120,26 @@ def freyja5_plane_evidence() -> dict[str, Any]:
         "iris": dict(data.get("iris") or {}),
         "hera": dict(data.get("hera") or {}),
         "vulcan": dict(data.get("vulcan") or {}),
+    }
+
+
+def freyja5_gateway_evidence() -> dict[str, Any]:
+    data = _load_yaml(FREYJA5_GATEWAY_PATH)
+    policy = data.get("policy") if isinstance(data.get("policy"), dict) else {}
+    return {
+        "source": "config/freyja-5.0-gateway.yaml",
+        "host": str(data.get("host") or ""),
+        "role": str(data.get("role") or ""),
+        "protocol": str(data.get("protocol") or ""),
+        "allowed_responsibilities": [str(item) for item in data.get("allowed_responsibilities") or []],
+        "forbidden_responsibilities": [str(item) for item in data.get("forbidden_responsibilities") or []],
+        "policy": {
+            "no_agent_reasoning": bool(policy.get("no_agent_reasoning")),
+            "no_arbitrary_tool_orchestration": bool(policy.get("no_arbitrary_tool_orchestration")),
+            "no_physical_model_selection": bool(policy.get("no_physical_model_selection")),
+            "no_implicit_cloud_fallback": bool(policy.get("no_implicit_cloud_fallback")),
+            "forwards_to": str(policy.get("forwards_to") or ""),
+            "physical_model_selection_owner": str(policy.get("physical_model_selection_owner") or ""),
+            "cloud_fallback": str(policy.get("cloud_fallback") or ""),
+        },
     }

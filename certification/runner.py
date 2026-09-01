@@ -732,6 +732,7 @@ def _context_from_freyja5_result(
             "freyja5_agent_id": result.agent_id,
             "freyja5_planes": _freyja5_plane_evidence(),
             "freyja5_semantic_routes": _freyja5_semantic_route_evidence(),
+            "freyja5_gateway": _freyja5_gateway_evidence(),
             "freyja5_agents": _freyja5_agent_evidence(),
             "freyja5_mcp_topology": topology,
             "freyja5_live_blockers": _freyja5_live_blocker_evidence(),
@@ -790,6 +791,12 @@ def _freyja5_semantic_route_evidence() -> dict[str, Any]:
     from freyja.freyja5_config import freyja5_semantic_route_evidence
 
     return freyja5_semantic_route_evidence()
+
+
+def _freyja5_gateway_evidence() -> dict[str, Any]:
+    from freyja.freyja5_config import freyja5_gateway_evidence
+
+    return freyja5_gateway_evidence()
 
 
 def _freyja5_webgui_evidence() -> dict[str, Any]:

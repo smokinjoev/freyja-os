@@ -10,6 +10,7 @@ from certification.runner import Freyja5CertificationProvider, load_suite, run_s
 from freyja.freyja5_config import (
     freyja5_certification_live_blocker_ids,
     freyja5_certification_target_blockers,
+    freyja5_gateway_evidence,
     freyja5_live_blocker_evidence,
     freyja5_plane_evidence,
     freyja5_semantic_route_evidence,
@@ -231,6 +232,22 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert expected_semantic_routes["cloud_fallback"] == "explicit_only"
     assert set(expected_semantic_routes["routes"]) == {route.value for route in SemanticRoute}
     assert expected_semantic_routes["routes"]["private"]["egress_policy"] == "local_only"
+    expected_gateway = freyja5_gateway_evidence()
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_gateway"] == expected_gateway
+        for case in report.cases
+    )
+    assert expected_gateway["host"] == "atlas"
+    assert expected_gateway["role"] == "deterministic-ingress-boundary"
+    assert expected_gateway["policy"]["forwards_to"] == "agent-runtime-v3"
+    assert expected_gateway["policy"]["physical_model_selection_owner"] == "nexus"
+    assert expected_gateway["policy"]["cloud_fallback"] == "explicit_only"
+    assert all(expected_gateway["policy"][key] is True for key in (
+        "no_agent_reasoning",
+        "no_arbitrary_tool_orchestration",
+        "no_physical_model_selection",
+        "no_implicit_cloud_fallback",
+    ))
     assert all(
         case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == {
             "source": "config/freyja-5.0-mcp-topology.yaml",
@@ -564,6 +581,40 @@ def test_freyja5_traceability_config_matches_runtime_trace_contract() -> None:
         "include_allowed": True,
         "include_denied": True,
         "redact_prompt_preview": True,
+    }
+
+
+def test_freyja5_gateway_config_is_non_director_boundary() -> None:
+    config = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-gateway.yaml").read_text(encoding="utf-8"))
+    evidence = freyja5_gateway_evidence()
+
+    assert config["version"] == "freyja-5.0"
+    assert evidence["source"] == "config/freyja-5.0-gateway.yaml"
+    assert evidence["host"] == "atlas"
+    assert evidence["role"] == "deterministic-ingress-boundary"
+    assert set(evidence["allowed_responsibilities"]) == {
+        "channel_normalization",
+        "identity_resolution",
+        "authentication",
+        "deterministic_policy",
+        "attachment_normalization",
+        "trace_envelope",
+        "handoff_forwarding",
+    }
+    assert set(evidence["forbidden_responsibilities"]) == {
+        "agent_reasoning",
+        "arbitrary_tool_orchestration",
+        "physical_model_selection",
+        "implicit_cloud_fallback",
+    }
+    assert evidence["policy"] == {
+        "no_agent_reasoning": True,
+        "no_arbitrary_tool_orchestration": True,
+        "no_physical_model_selection": True,
+        "no_implicit_cloud_fallback": True,
+        "forwards_to": "agent-runtime-v3",
+        "physical_model_selection_owner": "nexus",
+        "cloud_fallback": "explicit_only",
     }
 
 

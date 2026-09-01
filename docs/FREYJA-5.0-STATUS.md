@@ -56,7 +56,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T005956Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T010424Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -168,6 +168,12 @@ tasks.
 - Freyja 5 certification evidence now includes per-agent MCP grant posture and
   Gateway boundary policy so generated A-G reports can prove agent/tool
   consumption and non-Director Gateway constraints from source control.
+- The Freyja 5 Gateway non-Director contract is now canonicalized in
+  `config/freyja-5.0-gateway.yaml` and shared by readiness and certification
+  evidence: Atlas hosts channel normalization, identity/auth/policy,
+  attachment normalization, trace envelopes, and handoff forwarding while agent
+  reasoning, arbitrary tool orchestration, physical model selection, and
+  implicit cloud fallback stay out of the Gateway.
 - Freyja 5 certification evidence now includes Joe-required live blocker
   posture from `FREYJA-5.0-BLOCKERS.md`, including required validation evidence
   and confirmation that secrets remain outside source while independent work
