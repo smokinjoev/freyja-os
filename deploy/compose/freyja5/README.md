@@ -85,6 +85,18 @@ server IDs, persistent logical-agent IDs, per-agent MCP grant counts, WebGUI
 default/opt-in posture, and A-G certification target IDs. The readiness bundle
 rejects stale smoke artifacts that omit those architecture fields.
 
+Export canonical Freyja 5 agent definitions for Atlas/Msty Go validation:
+
+```bash
+scripts/freyja5-export-agent-definitions.py \
+  --output certification/reports/freyja5-agent-definitions.json
+```
+
+The export is derived from source-controlled agent, route, Gateway policy, and
+MCP topology definitions. It contains no tokens or host-local credentials and
+can be compared against any Msty Go import/export without making Msty Go the
+source of truth.
+
 To assemble the current Freyja 5 certification and smoke evidence into one
 readiness bundle:
 

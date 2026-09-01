@@ -64,7 +64,7 @@ physical/session tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T025720Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T030735Z0000-freyja5-architecture.md`.
 - Latest local side-by-side smoke:
   `scripts/freyja5-smoke.py --base-url http://127.0.0.1:8500 --token test-connector-token --output certification/reports/freyja5-smoke-local.json`
   passed after starting a temporary `uvicorn freyja.main:app` service on port
@@ -72,7 +72,7 @@ physical/session tasks.
   `/freyja5/readiness`, `/v1/models`, text chat, inline image routing, and
   inline PDF routing. The temporary service was stopped afterward.
 - Latest Freyja 5 readiness bundle:
-  `scripts/freyja5-readiness-bundle.py --certification-report certification/reports/20260901T025720Z0000-freyja5-architecture.json --smoke-report certification/reports/freyja5-smoke-local.json --output certification/reports/freyja5-readiness-bundle-local.json`
+  `scripts/freyja5-readiness-bundle.py --certification-report certification/reports/20260901T030735Z0000-freyja5-architecture.json --smoke-report certification/reports/freyja5-smoke-local.json --output certification/reports/freyja5-readiness-bundle-local.json`
   returned exit code `2`: source certification and side-by-side smoke passed,
   and only Joe-required live blockers remain.
 - Runtime trace summaries now include channel, resolved user, authenticated
@@ -170,6 +170,9 @@ physical/session tasks.
 - The source-controlled Freyja 5 agent summary now lists each persistent
   logical agent's MCP tool grants and tests them against the runtime seed, so
   other-agent MCP access remains explicit without creating per-agent servers.
+- Added `scripts/freyja5-export-agent-definitions.py` to export non-secret
+  Freyja 5 agent, route, Gateway policy, MCP server, and per-agent MCP grant
+  posture from source control for Atlas/Msty Go compatibility validation.
 - Certification target posture now has a source-controlled A-G matrix in
   `config/freyja-5.0-certification-targets.yaml`; readiness and certification
   evidence expose each target's case, operator-facing name, skeleton status,

@@ -8,8 +8,10 @@
   whether Freyja's canonical agent definitions can remain in source control.
   Next actions: on Atlas, install or locate Msty Go and record the non-secret
   install path; create or inspect the always-on Linux service definition; validate
-  start, stop, restart, and reboot recovery; document the non-secret agent
-  config/export path; capture the health endpoint or equivalent proof.
+  start, stop, restart, and reboot recovery; run
+  `scripts/freyja5-export-agent-definitions.py --output certification/reports/freyja5-agent-definitions.json`
+  and compare any Msty Go import/export against that non-secret source-controlled
+  artifact; capture the health endpoint or equivalent proof.
 - `vulcan_nexus_presets`: Provide or confirm local-only Nexus preset names on Vulcan for `fast`,
   `general`, `deep`, `code`, `vision`, `embedding`, and `private`. Do not paste
   tokens into chat; place secrets in the existing host secret stores. Next
@@ -42,6 +44,9 @@
 
 - Msty Go is not assumed. The source boundary remains `AgentRuntimeV3` on Atlas
   until Msty Go is proven suitable or an adapter is implemented.
+- `scripts/freyja5-export-agent-definitions.py` exports Freyja 5 persistent
+  agent, semantic route, MCP server, and per-agent MCP grant posture from source
+  control without secrets for Atlas/Msty Go compatibility validation.
 - Freyja 4.1 fallback is preserved at git tag
   `freyja-4.1-baseline-before-5.0-20260831-161448`.
 - Freyja 5.0 certification now has a `freyja5` provider/adapter that sends cases

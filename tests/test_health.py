@@ -123,7 +123,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "next_actions": [
             "On Atlas, install or locate Msty Go and record the non-secret install path.",
             "Create or inspect the always-on Linux service definition, then validate start, stop, restart, and reboot recovery.",
-            "Export or document the non-secret agent configuration path and confirm Freyja agent definitions remain source-controlled.",
+                "Run scripts/freyja5-export-agent-definitions.py --output certification/reports/freyja5-agent-definitions.json and compare any Msty Go import/export against that non-secret source-controlled artifact.",
             "Capture the Msty Go health endpoint or equivalent operational proof.",
         ],
     }
