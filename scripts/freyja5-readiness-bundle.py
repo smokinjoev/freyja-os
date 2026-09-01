@@ -95,11 +95,14 @@ def _certification_check(path: Path | None) -> dict[str, Any]:
     score = metadata.get("overall_score") if metadata.get("overall_score") is not None else payload.get("overall_score")
     if score is None:
         score = payload.get("average_score")
+    target_matrix_evidence = _has_freyja5_certification_evidence(payload)
+    trace_evidence = _has_freyja5_trace_evidence(payload)
     ok = (
         suite == "freyja5-architecture"
         and payload.get("passed") is True
         and float(score or 0.0) >= 1.0
-        and _has_freyja5_certification_evidence(payload)
+        and target_matrix_evidence
+        and trace_evidence
     )
     return {
         "name": "freyja5-certification-report",
@@ -109,7 +112,8 @@ def _certification_check(path: Path | None) -> dict[str, Any]:
         "suite": suite,
         "passed": payload.get("passed"),
         "overall_score": score,
-        "target_matrix_evidence": _has_freyja5_certification_evidence(payload),
+        "target_matrix_evidence": target_matrix_evidence,
+        "trace_evidence": trace_evidence,
     }
 
 
@@ -138,6 +142,44 @@ def _has_freyja5_certification_evidence(payload: dict[str, Any]) -> bool:
             and target.get("proves")
         }
         if target_ids == {"A", "B", "C", "D", "E", "F", "G"}:
+            return True
+    return False
+
+
+def _has_freyja5_trace_evidence(payload: dict[str, Any]) -> bool:
+    required_fields = {
+        "trace_id",
+        "channel",
+        "resolved_user",
+        "authenticated_subject",
+        "actor_principal",
+        "memory_scopes",
+        "agent",
+        "requested_route",
+        "actual_endpoint",
+        "actual_provider",
+        "actual_model",
+        "actual_runtime",
+        "selected_tools",
+        "tool_calls",
+        "delegation",
+        "machine",
+        "latency_ms",
+        "failures",
+        "fallbacks",
+        "inference_status",
+        "egress_state",
+    }
+    cases = payload.get("cases") if isinstance(payload.get("cases"), list) else []
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        runtime_context = case.get("runtime_context") if isinstance(case.get("runtime_context"), dict) else {}
+        rev2_evidence = (
+            runtime_context.get("rev2_evidence") if isinstance(runtime_context.get("rev2_evidence"), dict) else {}
+        )
+        trace = rev2_evidence.get("freyja5_trace_summary")
+        if isinstance(trace, dict) and required_fields <= set(trace):
             return True
     return False
 

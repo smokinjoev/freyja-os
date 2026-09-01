@@ -174,6 +174,9 @@ physical/session tasks.
 - The Freyja 5 readiness bundle now requires persisted target-matrix evidence
   before accepting a certification report as source-ready, preventing stale
   legacy-shaped reports from satisfying the current gate.
+- The readiness bundle also requires persisted Freyja 5 trace summary fields
+  before accepting certification evidence as source-ready, so important-request
+  observability remains part of the certification gate.
 - The readiness bundle now also requires the smoke report's readiness check to
   include WebGUI default/opt-in posture, MCP host/server IDs, and A-G target
   IDs before accepting side-by-side smoke evidence as source-ready.
