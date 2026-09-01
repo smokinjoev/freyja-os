@@ -65,6 +65,12 @@ physical/session tasks.
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
   `certification/reports/20260901T020220Z0000-freyja5-architecture.md`.
+- Latest local side-by-side smoke:
+  `scripts/freyja5-smoke.py --base-url http://127.0.0.1:8500 --token test-connector-token --output certification/reports/freyja5-smoke-local.json`
+  passed after starting a temporary `uvicorn freyja.main:app` service on port
+  `8500` with live inference disabled. Checks covered `/health`,
+  `/freyja5/readiness`, `/v1/models`, text chat, inline image routing, and
+  inline PDF routing. The temporary service was stopped afterward.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
