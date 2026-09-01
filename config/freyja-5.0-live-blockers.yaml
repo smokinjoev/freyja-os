@@ -33,3 +33,24 @@ joe_required:
       - physical_session_validation
 secrets_in_source: false
 continue_independent_work: true
+certification_targets:
+  a:
+    live_blockers:
+      - vulcan_nexus_presets
+  b:
+    live_blockers:
+      - vulcan_nexus_presets
+      - live_tool_sessions
+  c:
+    live_blockers:
+      - iris_apple_session
+  d:
+    live_blockers:
+      - vulcan_nexus_presets
+  e:
+    live_blockers: []
+  f:
+    live_blockers:
+      - vulcan_nexus_private_preset
+  g:
+    live_blockers: []

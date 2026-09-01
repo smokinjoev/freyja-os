@@ -7,7 +7,13 @@ import yaml
 from freyja.agent_gateway import AgentGateway, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from certification.runner import Freyja5CertificationProvider, load_suite, run_suite_sync
-from freyja.freyja5_config import freyja5_live_blocker_evidence, freyja5_traceability_evidence, freyja5_webgui_evidence
+from freyja.freyja5_config import (
+    freyja5_certification_live_blocker_ids,
+    freyja5_certification_target_blockers,
+    freyja5_live_blocker_evidence,
+    freyja5_traceability_evidence,
+    freyja5_webgui_evidence,
+)
 from freyja.foundation_seed import INFERENCE_ENDPOINTS, PERSISTENT_AGENTS, TOOL_CAPABILITIES
 from freyja.foundation_models import GatewaySender, InferenceEndpoint, SecurityDomainId
 from freyja.inference_registry_v3 import InferenceRegistryV3
@@ -443,6 +449,21 @@ def test_freyja5_live_blocker_config_matches_blocker_doc() -> None:
         "iris_apple_session",
         "hera_voice_avatar_hardware",
     ]
+    assert freyja5_certification_live_blocker_ids() == [
+        "msty_go_always_on_linux_validation",
+        "vulcan_nexus_presets",
+        "iris_apple_session",
+        "hera_voice_avatar_hardware",
+    ]
+    assert freyja5_certification_target_blockers() == {
+        "a": ["vulcan_nexus_presets"],
+        "b": ["vulcan_nexus_presets", "live_tool_sessions"],
+        "c": ["iris_apple_session"],
+        "d": ["vulcan_nexus_presets"],
+        "e": [],
+        "f": ["vulcan_nexus_private_preset"],
+        "g": [],
+    }
     for blocker in evidence["joe_required"]:
         assert blocker["component"] in {"atlas", "vulcan", "iris", "hera"}
         assert blocker["requires"]

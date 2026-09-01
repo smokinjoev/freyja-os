@@ -27,7 +27,13 @@ from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalRes
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
-from freyja.freyja5_config import freyja5_live_blocker_evidence, freyja5_traceability_evidence, freyja5_webgui_evidence
+from freyja.freyja5_config import (
+    freyja5_certification_live_blocker_ids,
+    freyja5_certification_target_blockers,
+    freyja5_live_blocker_evidence,
+    freyja5_traceability_evidence,
+    freyja5_webgui_evidence,
+)
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -401,12 +407,7 @@ async def freyja5_readiness() -> dict[str, Any]:
         "certification": {
             "suite": certification_suite.get("name"),
             "targets": _freyja5_certification_targets(certification_suite),
-            "live_blockers": [
-                "msty_go_always_on_linux_validation",
-                "vulcan_nexus_presets",
-                "iris_apple_session",
-                "hera_voice_avatar_hardware",
-            ],
+            "live_blockers": freyja5_certification_live_blocker_ids(),
         },
     }
 
@@ -424,15 +425,7 @@ def _freyja5_certification_targets(certification_suite: dict[str, Any]) -> list[
     cases = certification_suite.get("cases")
     if not isinstance(cases, list):
         return []
-    live_blockers_by_target = {
-        "a": ["vulcan_nexus_presets"],
-        "b": ["vulcan_nexus_presets", "live_tool_sessions"],
-        "c": ["iris_apple_session"],
-        "d": ["vulcan_nexus_presets"],
-        "e": [],
-        "f": ["vulcan_nexus_private_preset"],
-        "g": [],
-    }
+    live_blockers_by_target = freyja5_certification_target_blockers()
     targets: list[dict[str, Any]] = []
     for case in cases:
         if not isinstance(case, dict):

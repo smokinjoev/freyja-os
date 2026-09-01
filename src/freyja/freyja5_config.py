@@ -31,6 +31,21 @@ def freyja5_live_blocker_evidence() -> dict[str, Any]:
     }
 
 
+def freyja5_certification_target_blockers() -> dict[str, list[str]]:
+    data = yaml.safe_load(FREYJA5_LIVE_BLOCKERS_PATH.read_text(encoding="utf-8")) or {}
+    targets = data.get("certification_targets") if isinstance(data.get("certification_targets"), dict) else {}
+    return {
+        str(target): [str(blocker) for blocker in (details.get("live_blockers") or [])]
+        for target, details in targets.items()
+        if isinstance(details, dict)
+    }
+
+
+def freyja5_certification_live_blocker_ids() -> list[str]:
+    blockers = freyja5_live_blocker_evidence()["joe_required"]
+    return [str(blocker["id"]) for blocker in blockers]
+
+
 def freyja5_webgui_evidence() -> dict[str, Any]:
     data = yaml.safe_load(FREYJA5_WEBGUI_PATH.read_text(encoding="utf-8")) or {}
     return {

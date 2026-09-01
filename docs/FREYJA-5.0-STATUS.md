@@ -121,6 +121,8 @@ tasks.
 - Joe-required Freyja 5 live blocker posture is now canonicalized in
   `config/freyja-5.0-live-blockers.yaml` and shared by readiness and
   certification evidence.
+- A-G target-specific live blocker mappings are now canonicalized in the same
+  blocker config instead of being embedded in the readiness endpoint.
 - `/freyja5/readiness` now reports Atlas as the persistent agent plane owning
   Gateway, `AgentRuntimeV3`, memory, audit, workers, health APIs, and Atlas MCP
   services. Msty Go remains preferred but unvalidated; the Atlas runtime

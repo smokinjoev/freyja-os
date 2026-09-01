@@ -271,6 +271,12 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
     identity_target = next(target for target in data["certification"]["targets"] if target["target"] == "E")
     assert identity_target["live"] == "not_required"
     assert identity_target["live_blockers"] == []
+    cloyd_target = next(target for target in data["certification"]["targets"] if target["target"] == "B")
+    assert cloyd_target["live"] == "blocked"
+    assert cloyd_target["live_blockers"] == ["vulcan_nexus_presets", "live_tool_sessions"]
+    enclave_target = next(target for target in data["certification"]["targets"] if target["target"] == "F")
+    assert enclave_target["live"] == "blocked"
+    assert enclave_target["live_blockers"] == ["vulcan_nexus_private_preset"]
     assert data["certification"]["live_blockers"] == [
         "msty_go_always_on_linux_validation",
         "vulcan_nexus_presets",
