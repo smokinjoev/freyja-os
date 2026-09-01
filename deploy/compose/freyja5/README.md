@@ -79,6 +79,21 @@ scripts/freyja5-smoke.py \
   --output certification/reports/freyja5-smoke.json
 ```
 
+To assemble the current Freyja 5 certification and smoke evidence into one
+readiness bundle:
+
+```bash
+scripts/freyja5-readiness-bundle.py \
+  --run-certification \
+  --run-smoke \
+  --base-url http://${HOST}:8500 \
+  --token "$FREYJA_CONNECTOR_TOKEN" \
+  --output certification/reports/freyja5-readiness-bundle.json
+```
+
+Exit code `2` means source certification and smoke evidence passed but
+Joe-required live validation remains in `FREYJA-5.0-BLOCKERS.md`.
+
 To allow live local Nexus inference, configure `NEXUS_BASE_URL` and
 `NEXUS_API_KEY` in the untracked `.env`, then set:
 
