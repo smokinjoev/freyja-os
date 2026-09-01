@@ -306,6 +306,43 @@ def test_openai_chat_completion_freyja5_inline_image_uses_vision_route(monkeypat
     assert data["freyja"]["trace"]["actual_model"] == "@preset/freyja-vision-docs"
 
 
+def test_openai_chat_completion_freyja5_inline_pdf_file_uses_vision_route(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "freyja-5",
+            "user": "joe",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Summarize this PDF."},
+                        {
+                            "type": "file",
+                            "file": {
+                                "filename": "brief.pdf",
+                                "file_data": "data:application/pdf;base64,JVBERi0xLjQK",
+                            },
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["freyja"]["route"] == "vision"
+    assert data["freyja"]["endpoint"] == "vulcan-nexus-vision-docs"
+    assert data["freyja"]["attachment_count"] == 1
+    assert data["freyja"]["trace"]["requested_route"] == "vision"
+    assert data["freyja"]["trace"]["actual_runtime"] == "nexus"
+
+
 def test_openai_chat_completion_freyja5_live_inference_flag_is_explicit(monkeypatch) -> None:
     from freyja import main as director_main
     from freyja.config import settings
