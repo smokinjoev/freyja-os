@@ -34,9 +34,10 @@ curl http://${HOST}:8500/freyja5/readiness -H "Authorization: Bearer $FREYJA_CON
 curl http://${HOST}:8500/v1/models -H "Authorization: Bearer $FREYJA_CONNECTOR_TOKEN"
 ```
 
-`/freyja5/readiness` reports source-controlled route, agent, MCP, Vulcan, and
-A-G certification posture. It intentionally reports live blockers for
-Vulcan/Nexus, Iris, and Hera until those host-local sessions are validated.
+`/freyja5/readiness` reports source-controlled route, agent, MCP, per-agent MCP
+grant, Vulcan, and A-G certification posture. It intentionally reports live
+blockers for Vulcan/Nexus, Iris, and Hera until those host-local sessions are
+validated.
 
 To test the Freyja 5 OpenAI-compatible skeleton:
 
@@ -78,6 +79,11 @@ scripts/freyja5-smoke.py \
   --token "$FREYJA_CONNECTOR_TOKEN" \
   --output certification/reports/freyja5-smoke.json
 ```
+
+The smoke report's readiness check must include the MCP hosts, concrete MCP
+server IDs, persistent logical-agent IDs, per-agent MCP grant counts, WebGUI
+default/opt-in posture, and A-G certification target IDs. The readiness bundle
+rejects stale smoke artifacts that omit those architecture fields.
 
 To assemble the current Freyja 5 certification and smoke evidence into one
 readiness bundle:

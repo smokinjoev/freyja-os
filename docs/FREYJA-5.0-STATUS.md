@@ -64,7 +64,7 @@ physical/session tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T024420Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T025720Z0000-freyja5-architecture.md`.
 - Latest local side-by-side smoke:
   `scripts/freyja5-smoke.py --base-url http://127.0.0.1:8500 --token test-connector-token --output certification/reports/freyja5-smoke-local.json`
   passed after starting a temporary `uvicorn freyja.main:app` service on port
@@ -145,9 +145,10 @@ physical/session tasks.
   operator that checks health, readiness, OpenAI-compatible model listing,
   text chat, inline image routing, and inline PDF routing, then writes a
   sanitized JSON report without exposing the connector token. The readiness
-  check now records bounded WebGUI posture, MCP hosts/server IDs, and A-G
-  certification target IDs so smoke artifacts prove the main Freyja 5
-  architecture boundaries without carrying secrets.
+  check now records bounded WebGUI posture, MCP hosts/server IDs, persistent
+  logical-agent MCP grant counts, and A-G certification target IDs so smoke
+  artifacts prove the main Freyja 5 architecture boundaries without carrying
+  secrets.
 - Added `scripts/freyja5-readiness-bundle.py`, which assembles Freyja 5 direct
   architecture certification plus side-by-side Gateway smoke evidence and
   reports remaining Joe-required live blockers as a distinct live-blocked
@@ -181,8 +182,9 @@ physical/session tasks.
   before accepting certification evidence as source-ready, so important-request
   observability remains part of the certification gate.
 - The readiness bundle now also requires the smoke report's readiness check to
-  include WebGUI default/opt-in posture, MCP host/server IDs, and A-G target
-  IDs before accepting side-by-side smoke evidence as source-ready.
+  include WebGUI default/opt-in posture, MCP host/server IDs, persistent
+  logical-agent MCP grant counts, and A-G target IDs before accepting
+  side-by-side smoke evidence as source-ready.
 - Added `GET /freyja5/readiness` for source-controlled architecture posture:
   semantic routes, persistent agents, MCP host placement, Vulcan boundary, and
   explicit live-local Nexus readiness without exposing secrets.

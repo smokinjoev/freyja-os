@@ -107,6 +107,7 @@ def _check(
             else {}
         )
         mcp_servers = mcp.get("servers") if isinstance(mcp.get("servers"), list) else []
+        agent_grants = mcp.get("agent_grants") if isinstance(mcp.get("agent_grants"), list) else []
         targets = certification.get("targets") if isinstance(certification.get("targets"), list) else []
         result["mcp_hosts"] = [str(host) for host in mcp.get("hosts") or []]
         result["mcp_server_ids"] = [
@@ -114,6 +115,16 @@ def _check(
             for server in mcp_servers
             if isinstance(server, dict) and server.get("id")
         ]
+        result["mcp_agent_ids"] = [
+            str(agent.get("agent_id"))
+            for agent in agent_grants
+            if isinstance(agent, dict) and agent.get("agent_id")
+        ]
+        result["mcp_agent_grant_counts"] = {
+            str(agent.get("agent_id")): int(agent.get("mcp_tool_count") or 0)
+            for agent in agent_grants
+            if isinstance(agent, dict) and agent.get("agent_id")
+        }
         result["certification_targets"] = [
             str(target.get("target"))
             for target in targets

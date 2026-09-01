@@ -225,6 +225,9 @@ def _has_freyja5_smoke_readiness_evidence(payload: dict[str, Any]) -> bool:
         and readiness.get("webgui_freyja5_opt_in") is True
         and readiness.get("mcp_hosts") == ["atlas", "iris"]
         and readiness.get("mcp_server_ids") == ["iris-apple-mcp", "atlas-household-mcp", "atlas-media-mcp"]
+        and readiness.get("mcp_agent_ids")
+        == ["freyja", "cloyd-gibbler", "benedict", "benedict-paralegal", "agent-47", "jennacide"]
+        and readiness.get("mcp_agent_grant_counts", {}).get("benedict-paralegal") == 3
         and readiness.get("certification_targets") == ["A", "B", "C", "D", "E", "F", "G"]
     )
 

@@ -55,6 +55,8 @@ def test_freyja5_compose_readme_documents_webgui_media_checks() -> None:
     assert "scripts/freyja5-readiness-bundle.py" in content
     assert "scripts/freyja5-preflight-status.py" in content
     assert "Exit code `2` means source certification and smoke evidence passed" in content
+    assert "per-agent MCP grant counts" in content
+    assert "rejects stale smoke artifacts" in content
     assert "data:image/png;base64,ZmFrZQ==" in content
     assert "data:application/pdf;base64,JVBERi0xLjQK" in content
     assert "freyja.endpoint=vulcan-nexus-vision-docs" in content

@@ -132,6 +132,15 @@ def test_freyja5_readiness_bundle_reports_source_ready_but_live_blocked(tmp_path
       "webgui_freyja5_opt_in": true,
       "mcp_hosts": ["atlas", "iris"],
       "mcp_server_ids": ["iris-apple-mcp", "atlas-household-mcp", "atlas-media-mcp"],
+      "mcp_agent_ids": ["freyja", "cloyd-gibbler", "benedict", "benedict-paralegal", "agent-47", "jennacide"],
+      "mcp_agent_grant_counts": {
+        "freyja": 11,
+        "cloyd-gibbler": 9,
+        "benedict": 8,
+        "benedict-paralegal": 3,
+        "agent-47": 7,
+        "jennacide": 7
+      },
       "certification_targets": ["A", "B", "C", "D", "E", "F", "G"]
     },
     {"name": "chat_text"}
@@ -256,6 +265,42 @@ def test_freyja5_readiness_bundle_rejects_stale_smoke_without_readiness_architec
   "passed": true,
   "token_configured": true,
   "checks": [{"name": "health"}, {"name": "readiness"}, {"name": "chat_text"}]
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = bundle.build_report(certification_report=None, smoke_report=smoke)
+    checks = {check["name"]: check for check in report["checks"]}
+
+    assert report["source_ready"] is False
+    assert checks["freyja5-smoke-report"]["ok"] is False
+    assert checks["freyja5-smoke-report"]["readiness_architecture_evidence"] is False
+
+
+def test_freyja5_readiness_bundle_rejects_smoke_without_agent_mcp_grants(tmp_path: Path) -> None:
+    bundle = load_bundle_module()
+    smoke = tmp_path / "smoke.json"
+    smoke.write_text(
+        """
+{
+  "report_type": "freyja5-smoke",
+  "passed": true,
+  "token_configured": true,
+  "checks": [
+    {"name": "health"},
+    {
+      "name": "readiness",
+      "readiness_ok": true,
+      "openai_model": "freyja-5",
+      "webgui_default_model": "agent-smith",
+      "webgui_freyja5_opt_in": true,
+      "mcp_hosts": ["atlas", "iris"],
+      "mcp_server_ids": ["iris-apple-mcp", "atlas-household-mcp", "atlas-media-mcp"],
+      "certification_targets": ["A", "B", "C", "D", "E", "F", "G"]
+    },
+    {"name": "chat_text"}
+  ]
 }
 """.strip(),
         encoding="utf-8",

@@ -37,6 +37,14 @@ def test_freyja5_smoke_report_is_token_safe_and_checks_webgui_paths(monkeypatch)
                         {"id": "atlas-household-mcp"},
                         {"id": "atlas-media-mcp"},
                     ],
+                    "agent_grants": [
+                        {"agent_id": "freyja", "mcp_tool_count": 11},
+                        {"agent_id": "cloyd-gibbler", "mcp_tool_count": 9},
+                        {"agent_id": "benedict", "mcp_tool_count": 8},
+                        {"agent_id": "benedict-paralegal", "mcp_tool_count": 3},
+                        {"agent_id": "agent-47", "mcp_tool_count": 7},
+                        {"agent_id": "jennacide", "mcp_tool_count": 7},
+                    ],
                 },
                 "certification": {
                     "targets": [
@@ -94,6 +102,15 @@ def test_freyja5_smoke_report_is_token_safe_and_checks_webgui_paths(monkeypatch)
     readiness = next(check for check in report["checks"] if check["name"] == "readiness")
     assert readiness["mcp_hosts"] == ["atlas", "iris"]
     assert readiness["mcp_server_ids"] == ["iris-apple-mcp", "atlas-household-mcp", "atlas-media-mcp"]
+    assert readiness["mcp_agent_ids"] == [
+        "freyja",
+        "cloyd-gibbler",
+        "benedict",
+        "benedict-paralegal",
+        "agent-47",
+        "jennacide",
+    ]
+    assert readiness["mcp_agent_grant_counts"]["benedict-paralegal"] == 3
     assert readiness["certification_targets"] == ["A", "B", "C", "D", "E", "F", "G"]
     assert readiness["webgui_default_model"] == "agent-smith"
     assert readiness["webgui_freyja5_opt_in"] is True
