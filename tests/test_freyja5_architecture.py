@@ -857,6 +857,10 @@ def test_freyja5_agents_consume_mcp_through_scoped_grants() -> None:
         granted_mcp_tools = exposed_tools.intersection(agent.tool_grants)
         assert granted_mcp_tools
         assert granted_mcp_tools <= exposed_tools
+    evidence_grants = {grant["agent_id"]: grant for grant in freyja5_mcp_topology_evidence()["agent_grants"]}
+    for agent_id, agent in agents.items():
+        granted_mcp_tools = exposed_tools.intersection(agent.tool_grants)
+        assert evidence_grants[agent_id]["mcp_tool_ids"] == sorted(granted_mcp_tools)
 
 
 def test_freyja5_mode_does_not_use_implicit_cloud_fallback() -> None:

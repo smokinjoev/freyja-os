@@ -236,6 +236,7 @@ def freyja5_mcp_topology_evidence() -> dict[str, Any]:
         "agent_grants": [
             {
                 "agent_id": agent.agent_id,
+                "mcp_tool_ids": sorted(mcp_tool_ids.intersection(agent.tool_grants)),
                 "mcp_tool_count": len(mcp_tool_ids.intersection(agent.tool_grants)),
                 "mcp_hosts": sorted(
                     {

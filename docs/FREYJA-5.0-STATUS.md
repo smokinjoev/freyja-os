@@ -64,7 +64,7 @@ physical/session tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T015814Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T020220Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -221,8 +221,9 @@ physical/session tasks.
   evidence so generated reports prove the opt-in `freyja-5` path does not
   replace the preserved `agent-smith`/model-proxy default.
 - `/freyja5/readiness` now exposes source-controlled MCP consumption evidence:
-  per-agent scoped MCP grant counts, the MCP hosts those grants depend on, and
-  confirmation that logical agents do not run duplicated default MCP servers.
+  per-agent scoped MCP tool IDs, grant counts, the MCP hosts those grants depend
+  on, and confirmation that logical agents do not run duplicated default MCP
+  servers.
 - MCP topology readiness and certification evidence now share a single
   canonical helper, with tests guarding host placement, Vulcan's
   OpenAI-compatible Nexus boundary, Gateway policy, and per-agent MCP grant
