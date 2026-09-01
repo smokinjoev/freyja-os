@@ -391,6 +391,15 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert expected_mcp_topology["vulcan_protocol"] == "openai-compatible"
     assert expected_mcp_topology["gateway_policy"]["no_agent_reasoning"] is True
     assert expected_mcp_topology["gateway_policy"]["no_physical_model_selection"] is True
+    expected_vulcan = freyja5_vulcan_evidence()
+    assert all(
+        case.runtime_context["rev2_evidence"]["freyja5_vulcan"] == expected_vulcan
+        for case in report.cases
+    )
+    assert expected_vulcan is not None
+    assert expected_vulcan["owner"] == "nexus"
+    assert expected_vulcan["semantic_route_presets"]["private"] == "benedict-paralegal-nexus"
+    assert expected_vulcan["cloud_fallback"] == "explicit_only"
     expected_live_blockers = {
         "source": "FREYJA-5.0-BLOCKERS.md",
         "joe_required": [

@@ -735,6 +735,7 @@ def _context_from_freyja5_result(
             "freyja5_gateway": _freyja5_gateway_evidence(),
             "freyja5_agents": _freyja5_agent_evidence(),
             "freyja5_mcp_topology": topology,
+            "freyja5_vulcan": _freyja5_vulcan_evidence(),
             "freyja5_live_blockers": _freyja5_live_blocker_evidence(),
             "freyja5_webgui": _freyja5_webgui_evidence(),
             "freyja5_traceability": _freyja5_traceability_evidence(),
@@ -801,6 +802,12 @@ def _freyja5_mcp_topology_evidence() -> dict[str, Any]:
     from freyja.freyja5_config import freyja5_mcp_topology_evidence
 
     return freyja5_mcp_topology_evidence()
+
+
+def _freyja5_vulcan_evidence() -> dict[str, Any] | None:
+    from freyja.freyja5_config import freyja5_vulcan_evidence
+
+    return freyja5_vulcan_evidence()
 
 
 def _apply_certification_fixtures(context: CertificationContext, fixtures: dict[str, Any]) -> None:
