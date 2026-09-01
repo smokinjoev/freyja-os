@@ -66,6 +66,27 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "cloud_fallback": "explicit_only",
         "routes": ["code", "deep", "embedding", "fast", "general", "private", "vision"],
     }
+    assert data["gateway"] == {
+        "host": "atlas",
+        "role": "deterministic-ingress-boundary",
+        "allowed_responsibilities": [
+            "channel_normalization",
+            "identity_resolution",
+            "authentication",
+            "deterministic_policy",
+            "attachment_normalization",
+            "trace_envelope",
+            "handoff_forwarding",
+        ],
+        "forbidden_responsibilities": [
+            "agent_reasoning",
+            "arbitrary_tool_orchestration",
+            "physical_model_selection",
+            "implicit_cloud_fallback",
+        ],
+        "no_agent_reasoning": True,
+        "no_physical_model_selection": True,
+    }
     assert data["mcp"] == {
         "default_agent_mcp_servers": False,
         "hosts": ["atlas", "iris"],

@@ -118,6 +118,11 @@ tasks.
 - `/freyja5/readiness` now exposes source-controlled MCP consumption evidence:
   per-agent scoped MCP grant counts, the MCP hosts those grants depend on, and
   confirmation that logical agents do not run duplicated default MCP servers.
+- `/freyja5/readiness` now reports the Gateway boundary contract: Atlas hosts a
+  deterministic ingress layer for auth, identity, channel/attachment
+  normalization, policy, trace envelopes, and handoff forwarding, while agent
+  reasoning, arbitrary tool orchestration, physical model selection, and
+  implicit cloud fallback remain outside the Gateway.
 - Certification target E now records separate `signal` and `open-webui` Gateway
   handoffs and verifies that both carry the same stable household principal and
   memory-scope policy for Joe.
