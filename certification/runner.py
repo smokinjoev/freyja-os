@@ -368,7 +368,14 @@ class Freyja5CertificationProvider:
             )
             return CertificationExecution(response="", error=str(exc), context=context)
 
-        context = _context_from_freyja5_result(result, principal_data, person_context, elapsed_ms(start), attachments)
+        context = _context_from_freyja5_result(
+            result,
+            principal_data,
+            person_context,
+            elapsed_ms(start),
+            attachments,
+            fixtures,
+        )
         context.rev2_evidence["freyja5_audit_chain"] = _freyja5_audit_chain(
             [gateway_result.audit_event, *result.audit_events]
         )
@@ -711,6 +718,7 @@ def _context_from_freyja5_result(
     person_context: dict[str, str] | None,
     duration_ms: float,
     attachments: list[dict[str, Any]],
+    fixtures: dict[str, Any],
 ) -> CertificationContext:
     trace = result.trace_summary if isinstance(result.trace_summary, dict) else {}
     topology = _freyja5_mcp_topology_evidence()
@@ -739,6 +747,7 @@ def _context_from_freyja5_result(
             "freyja5_mcp_topology": topology,
             "freyja5_vulcan": _freyja5_vulcan_evidence(),
             "freyja5_media": _freyja5_media_evidence(result, trace, attachments),
+            "freyja5_service_degradation": _freyja5_service_degradation_evidence(result, fixtures),
             "freyja5_live_blockers": _freyja5_live_blocker_evidence(),
             "freyja5_webgui": _freyja5_webgui_evidence(),
             "freyja5_traceability": _freyja5_traceability_evidence(),
@@ -832,6 +841,25 @@ def _freyja5_media_evidence(result: Any, trace: dict[str, Any], attachments: lis
         "vision_route_selected": result.requested_route == "vision",
         "actual_model": trace.get("actual_model"),
         "actual_runtime": trace.get("actual_runtime"),
+    }
+
+
+def _freyja5_service_degradation_evidence(result: Any, fixtures: dict[str, Any]) -> dict[str, Any]:
+    provider_health = fixtures.get("certification_provider_health")
+    disabled_services = []
+    if isinstance(provider_health, dict):
+        disabled_services = [
+            str(service)
+            for service, details in sorted(provider_health.items())
+            if isinstance(details, dict) and details.get("ready") is False
+        ]
+    return {
+        "fixture_present": bool(provider_health),
+        "disabled_services": disabled_services,
+        "unrelated_path_operational": bool(disabled_services) and not bool(result.degraded),
+        "response_returned": bool(str(result.response_text or "").strip()),
+        "requested_route": result.requested_route,
+        "egress_state": result.egress_state,
     }
 
 

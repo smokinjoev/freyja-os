@@ -32,6 +32,9 @@
   handoff metadata.
 - F. Benedict Paralegal selects the `private` route and local-only egress policy.
 - G. Optional service disablement is covered by endpoint health fallback tests.
+  Freyja 5 certification now records explicit service-degradation evidence for
+  disabled optional-service fixtures and verifies unrelated local-only response
+  paths remain operational.
 
 ## Blocked
 
@@ -56,7 +59,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T014532Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T014812Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -182,6 +185,9 @@ tasks.
 - Freyja 5 certification reports now include sanitized media-path evidence for
   attachment count, MIME types, inline/path payload shape, vision-route
   selection, model/runtime, and confirmation that raw payload data is omitted.
+- Freyja 5 certification reports now include optional-service degradation
+  evidence for target G, recording disabled service fixtures, response
+  availability, route selection, and local-only egress state.
 - The opt-in `freyja-5` OpenAI-compatible path now returns the
   `AgentRuntimeV3` response text with trace metadata instead of discarding it
   for a fixed skeleton banner. The preserved `agent-smith` WebGUI default path

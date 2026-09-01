@@ -423,6 +423,16 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert enclave_media["raw_payload_included"] is False
     assert "ZmFrZQ==" not in str(media_evidence)
     assert "ZmFrZQ==" not in str(enclave_media)
+    optional_service_case = next(case for case in report.cases if case.name == "g-optional-service-disabled")
+    service_degradation = optional_service_case.runtime_context["rev2_evidence"]["freyja5_service_degradation"]
+    assert service_degradation == {
+        "fixture_present": True,
+        "disabled_services": ["optional_service"],
+        "unrelated_path_operational": True,
+        "response_returned": True,
+        "requested_route": "general",
+        "egress_state": "local-only",
+    }
     expected_live_blockers = {
         "source": "FREYJA-5.0-BLOCKERS.md",
         "joe_required": [
