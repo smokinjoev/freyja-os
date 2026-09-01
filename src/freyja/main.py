@@ -277,6 +277,25 @@ async def freyja5_readiness() -> dict[str, Any]:
             "no_agent_reasoning": bool((mcp_topology.get("policy") or {}).get("no_agent_reasoning_in_mcp_servers")),
             "no_physical_model_selection": bool((mcp_topology.get("policy") or {}).get("no_physical_model_selection_in_gateway")),
         },
+        "hera": {
+            "host": "hera",
+            "role": "avatar-voice-channel-edge",
+            "protocol": next(
+                (
+                    str(boundary.get("protocol"))
+                    for boundary in non_mcp
+                    if isinstance(boundary, dict) and boundary.get("id") == "hera-channel-edge"
+                ),
+                "semantic-events",
+            ),
+            "publishes_to": "atlas-gateway",
+            "channel_ingress": ["voice", "avatar", "perception_events"],
+            "semantic_event_store": True,
+            "publisher_domain": "system",
+            "allowed_reader_domains": ["household", "system"],
+            "general_tool_server": False,
+            "live_blockers": ["hera_voice_avatar_hardware"],
+        },
         "agents": [
             {
                 "id": agent.agent_id,

@@ -87,6 +87,18 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "no_agent_reasoning": True,
         "no_physical_model_selection": True,
     }
+    assert data["hera"] == {
+        "host": "hera",
+        "role": "avatar-voice-channel-edge",
+        "protocol": "semantic-events",
+        "publishes_to": "atlas-gateway",
+        "channel_ingress": ["voice", "avatar", "perception_events"],
+        "semantic_event_store": True,
+        "publisher_domain": "system",
+        "allowed_reader_domains": ["household", "system"],
+        "general_tool_server": False,
+        "live_blockers": ["hera_voice_avatar_hardware"],
+    }
     assert data["mcp"] == {
         "default_agent_mcp_servers": False,
         "hosts": ["atlas", "iris"],

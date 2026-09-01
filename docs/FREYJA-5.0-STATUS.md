@@ -126,6 +126,10 @@ tasks.
 - Freyja 5 certification evidence now includes per-agent MCP grant posture and
   Gateway boundary policy so generated A-G reports can prove agent/tool
   consumption and non-Director Gateway constraints from source control.
+- `/freyja5/readiness` now reports Hera as a voice/avatar/perception channel
+  edge that publishes semantic events into Atlas/Gateway, not as a general MCP
+  or tool server. The readiness payload keeps live voice/avatar hardware listed
+  as the remaining blocker.
 - Certification target E now records separate `signal` and `open-webui` Gateway
   handoffs and verifies that both carry the same stable household principal and
   memory-scope policy for Joe.
