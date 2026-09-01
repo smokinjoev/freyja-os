@@ -946,6 +946,68 @@ def _openai_message_content_text(content: str | list[dict[str, Any]] | None) -> 
     return "\n".join(chunk for chunk in chunks if chunk).strip()
 
 
+def _openai_chat_attachments(messages: list["OpenAIChatMessage"]) -> list[dict[str, Any]]:
+    attachments: list[dict[str, Any]] = []
+    for message in messages:
+        if message.role != "user" or not isinstance(message.content, list):
+            continue
+        for index, item in enumerate(message.content, start=1):
+            if not isinstance(item, dict):
+                continue
+            attachment = _openai_content_part_attachment(item, index=index)
+            if attachment is not None:
+                attachments.append(attachment)
+    return attachments
+
+
+def _openai_content_part_attachment(item: dict[str, Any], *, index: int) -> dict[str, Any] | None:
+    part_type = item.get("type")
+    if part_type in {"image_url", "input_image"}:
+        image_url = item.get("image_url")
+        url = image_url.get("url") if isinstance(image_url, dict) else item.get("image_url") or item.get("url")
+        parsed = _parse_data_url(str(url or ""))
+        if parsed is None or not parsed[0].startswith("image/"):
+            return None
+        mime_type, data_base64 = parsed
+        return {
+            "filename": str(item.get("filename") or f"openai-image-{index}{_extension_for_mime_type(mime_type)}"),
+            "mime_type": mime_type,
+            "data_base64": data_base64,
+        }
+    if part_type in {"file", "input_file"}:
+        file_data = item.get("file")
+        if isinstance(file_data, dict):
+            filename = str(file_data.get("filename") or item.get("filename") or f"openai-file-{index}")
+            payload = str(file_data.get("file_data") or file_data.get("data") or item.get("file_data") or "")
+        else:
+            filename = str(item.get("filename") or f"openai-file-{index}")
+            payload = str(item.get("file_data") or item.get("data") or "")
+        parsed = _parse_data_url(payload)
+        if parsed is None:
+            return None
+        mime_type, data_base64 = parsed
+        return {"filename": filename, "mime_type": mime_type, "data_base64": data_base64}
+    return None
+
+
+def _parse_data_url(value: str) -> tuple[str, str] | None:
+    header, separator, data = value.partition(",")
+    if not separator or not header.startswith("data:") or ";base64" not in header:
+        return None
+    mime_type = header.removeprefix("data:").split(";", 1)[0] or "application/octet-stream"
+    return mime_type, data.strip()
+
+
+def _extension_for_mime_type(mime_type: str) -> str:
+    return {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "application/pdf": ".pdf",
+    }.get(mime_type.lower(), "")
+
+
 def _openai_chat_should_use_smith(objective: str) -> bool:
     lowered = objective.lower()
     smith_keywords = (
@@ -1224,6 +1286,7 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
     if request.model == "freyja-5":
         request_id = f"freyja5-openai-{uuid.uuid4()}"
         start = time.monotonic()
+        attachments = _openai_chat_attachments(request.messages)
         gateway_result = AgentGateway().handle(
             GatewayRequest(
                 sender=_openai_sender_for_freyja5(request),
@@ -1231,7 +1294,8 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
                 prompt=objective,
                 conversation_id=request_id,
                 channel="open-webui",
-                channel_metadata={"client": "openai-compatible", "model": request.model},
+                attachments=attachments,
+                reply_context={"client": "openai-compatible", "model": request.model},
             )
         )
         if gateway_result.handoff is None:
@@ -1254,6 +1318,7 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
                 "endpoint": result.inference_endpoint_id,
                 "provider": result.inference_provider,
                 "egress_state": result.egress_state,
+                "attachment_count": len(attachments),
                 "trace": result.trace_summary,
             },
         )

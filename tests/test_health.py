@@ -275,6 +275,37 @@ def test_openai_chat_completion_freyja5_known_user_gets_stable_household_identit
     assert response.json()["freyja"]["egress_state"] == "local-only"
 
 
+def test_openai_chat_completion_freyja5_inline_image_uses_vision_route(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "freyja-5",
+            "user": "joe",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What useful text or objects are visible?"},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,ZmFrZQ=="}},
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["freyja"]["route"] == "vision"
+    assert data["freyja"]["endpoint"] == "vulcan-nexus-vision-docs"
+    assert data["freyja"]["attachment_count"] == 1
+    assert data["freyja"]["trace"]["requested_route"] == "vision"
+    assert data["freyja"]["trace"]["actual_model"] == "@preset/freyja-vision-docs"
+
+
 def test_openai_chat_completion_freyja5_live_inference_flag_is_explicit(monkeypatch) -> None:
     from freyja import main as director_main
     from freyja.config import settings

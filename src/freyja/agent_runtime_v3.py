@@ -533,7 +533,7 @@ class AgentRuntimeV3:
             ),
             ("calendar.read", ("calendar", "calender", "schedule", "appointment")),
             ("email.read", ("email", "mail")),
-            ("messaging.send", ("message", "imessage", "text ", "sms")),
+            ("messaging.send", ("send message", "send a message", "imessage", "text joe", "text beth", "text liam", "text jenna", "sms")),
             (
                 "home-assistant.read",
                 (
