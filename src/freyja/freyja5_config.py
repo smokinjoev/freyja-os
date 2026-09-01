@@ -163,3 +163,65 @@ def freyja5_agent_evidence() -> list[dict[str, Any]]:
         }
         for agent in PERSISTENT_AGENTS
     ]
+
+
+def freyja5_mcp_topology_evidence() -> dict[str, Any]:
+    from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
+
+    data = _load_yaml(REPO_ROOT / "config" / "freyja-5.0-mcp-topology.yaml")
+    servers = data.get("servers") if isinstance(data.get("servers"), list) else []
+    non_mcp_boundaries = data.get("non_mcp_boundaries") if isinstance(data.get("non_mcp_boundaries"), list) else []
+    policy = data.get("policy") if isinstance(data.get("policy"), dict) else {}
+    mcp_hosts_by_tool = {
+        str(tool_id): str(server.get("host"))
+        for server in servers
+        if isinstance(server, dict) and server.get("host") and isinstance(server.get("exposes"), list)
+        for tool_id in server["exposes"]
+    }
+    mcp_tool_ids = {tool.tool_id for tool in TOOL_CAPABILITIES if tool.protocol == "mcp"}
+    return {
+        "source": "config/freyja-5.0-mcp-topology.yaml",
+        "available": bool(servers),
+        "default_agent_mcp_servers": bool(data.get("default_agent_mcp_servers")),
+        "mcp_hosts": sorted({str(server.get("host")) for server in servers if isinstance(server, dict) and server.get("host")}),
+        "mcp_tool_count": sum(
+            len(server.get("exposes") or ())
+            for server in servers
+            if isinstance(server, dict) and isinstance(server.get("exposes"), list)
+        ),
+        "vulcan_protocol": next(
+            (
+                str(boundary.get("protocol"))
+                for boundary in non_mcp_boundaries
+                if isinstance(boundary, dict) and boundary.get("id") == "vulcan-nexus"
+            ),
+            None,
+        ),
+        "agent_consumption": dict(sorted((data.get("agent_consumption") or {}).items())),
+        "agent_grants": [
+            {
+                "agent_id": agent.agent_id,
+                "mcp_tool_count": len(mcp_tool_ids.intersection(agent.tool_grants)),
+                "mcp_hosts": sorted(
+                    {
+                        mcp_hosts_by_tool[tool_id]
+                        for tool_id in mcp_tool_ids.intersection(agent.tool_grants)
+                        if tool_id in mcp_hosts_by_tool
+                    }
+                ),
+            }
+            for agent in PERSISTENT_AGENTS
+        ],
+        "gateway_policy": {
+            "host": "atlas",
+            "role": "deterministic-ingress-boundary",
+            "no_agent_reasoning": bool(policy.get("no_agent_reasoning_in_mcp_servers")),
+            "no_physical_model_selection": bool(policy.get("no_physical_model_selection_in_gateway")),
+            "forbidden_responsibilities": [
+                "agent_reasoning",
+                "arbitrary_tool_orchestration",
+                "physical_model_selection",
+                "implicit_cloud_fallback",
+            ],
+        },
+    }

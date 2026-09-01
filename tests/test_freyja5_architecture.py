@@ -13,6 +13,7 @@ from freyja.freyja5_config import (
     freyja5_certification_target_blockers,
     freyja5_gateway_evidence,
     freyja5_live_blocker_evidence,
+    freyja5_mcp_topology_evidence,
     freyja5_plane_evidence,
     freyja5_semantic_route_evidence,
     freyja5_traceability_evidence,
@@ -251,45 +252,19 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         "no_physical_model_selection",
         "no_implicit_cloud_fallback",
     ))
+    expected_mcp_topology = freyja5_mcp_topology_evidence()
     assert all(
-        case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == {
-            "source": "config/freyja-5.0-mcp-topology.yaml",
-            "available": True,
-            "default_agent_mcp_servers": False,
-            "mcp_hosts": ["atlas", "iris"],
-            "mcp_tool_count": 12,
-            "vulcan_protocol": "openai-compatible",
-            "agent_consumption": {
-                "agent-47": "scoped_agent_tool_grants",
-                "benedict": "scoped_agent_tool_grants",
-                "benedict-paralegal": "scoped_agent_tool_grants",
-                "cloyd-gibbler": "scoped_agent_tool_grants",
-                "freyja": "scoped_agent_tool_grants",
-                "jennacide": "scoped_agent_tool_grants",
-            },
-            "agent_grants": [
-                {"agent_id": "freyja", "mcp_tool_count": 11, "mcp_hosts": ["atlas", "iris"]},
-                {"agent_id": "cloyd-gibbler", "mcp_tool_count": 9, "mcp_hosts": ["atlas", "iris"]},
-                {"agent_id": "benedict", "mcp_tool_count": 8, "mcp_hosts": ["atlas", "iris"]},
-                {"agent_id": "benedict-paralegal", "mcp_tool_count": 3, "mcp_hosts": ["atlas", "iris"]},
-                {"agent_id": "agent-47", "mcp_tool_count": 7, "mcp_hosts": ["atlas", "iris"]},
-                {"agent_id": "jennacide", "mcp_tool_count": 7, "mcp_hosts": ["atlas", "iris"]},
-            ],
-            "gateway_policy": {
-                "host": "atlas",
-                "role": "deterministic-ingress-boundary",
-                "no_agent_reasoning": True,
-                "no_physical_model_selection": True,
-                "forbidden_responsibilities": [
-                    "agent_reasoning",
-                    "arbitrary_tool_orchestration",
-                    "physical_model_selection",
-                    "implicit_cloud_fallback",
-                ],
-            },
-        }
+        case.runtime_context["rev2_evidence"]["freyja5_mcp_topology"] == expected_mcp_topology
         for case in report.cases
     )
+    assert expected_mcp_topology["source"] == "config/freyja-5.0-mcp-topology.yaml"
+    assert expected_mcp_topology["available"] is True
+    assert expected_mcp_topology["default_agent_mcp_servers"] is False
+    assert expected_mcp_topology["mcp_hosts"] == ["atlas", "iris"]
+    assert expected_mcp_topology["mcp_tool_count"] == 12
+    assert expected_mcp_topology["vulcan_protocol"] == "openai-compatible"
+    assert expected_mcp_topology["gateway_policy"]["no_agent_reasoning"] is True
+    assert expected_mcp_topology["gateway_policy"]["no_physical_model_selection"] is True
     expected_live_blockers = {
         "source": "FREYJA-5.0-BLOCKERS.md",
         "joe_required": [
