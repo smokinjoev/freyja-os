@@ -70,6 +70,23 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "default_agent_mcp_servers": False,
         "hosts": ["atlas", "iris"],
         "tool_count": 12,
+        "source_controlled_grants": True,
+        "agent_consumption": {
+            "agent-47": "scoped_agent_tool_grants",
+            "benedict": "scoped_agent_tool_grants",
+            "benedict-paralegal": "scoped_agent_tool_grants",
+            "cloyd-gibbler": "scoped_agent_tool_grants",
+            "freyja": "scoped_agent_tool_grants",
+            "jennacide": "scoped_agent_tool_grants",
+        },
+        "agent_grants": [
+            {"agent_id": "freyja", "mcp_tool_count": 11, "mcp_hosts": ["atlas", "iris"]},
+            {"agent_id": "cloyd-gibbler", "mcp_tool_count": 9, "mcp_hosts": ["atlas", "iris"]},
+            {"agent_id": "benedict", "mcp_tool_count": 8, "mcp_hosts": ["atlas", "iris"]},
+            {"agent_id": "benedict-paralegal", "mcp_tool_count": 3, "mcp_hosts": ["atlas", "iris"]},
+            {"agent_id": "agent-47", "mcp_tool_count": 7, "mcp_hosts": ["atlas", "iris"]},
+            {"agent_id": "jennacide", "mcp_tool_count": 7, "mcp_hosts": ["atlas", "iris"]},
+        ],
     }
     assert data["vulcan"] == {
         "host": "vulcan",

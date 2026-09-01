@@ -26,7 +26,7 @@ from freyja.config import settings
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
-from freyja.foundation_seed import PERSISTENT_AGENTS
+from freyja.foundation_seed import PERSISTENT_AGENTS, TOOL_CAPABILITIES
 from freyja.home_assistant_monitor import (
     start_home_assistant_inventory_monitor,
     stop_home_assistant_inventory_monitor,
@@ -221,6 +221,13 @@ async def freyja5_readiness() -> dict[str, Any]:
     routes = route_config.get("routes") if isinstance(route_config.get("routes"), dict) else {}
     servers = mcp_topology.get("servers") if isinstance(mcp_topology.get("servers"), list) else []
     non_mcp = mcp_topology.get("non_mcp_boundaries") if isinstance(mcp_topology.get("non_mcp_boundaries"), list) else []
+    mcp_hosts_by_tool = {
+        str(tool_id): str(server.get("host"))
+        for server in servers
+        if isinstance(server, dict) and server.get("host") and isinstance(server.get("exposes"), list)
+        for tool_id in server["exposes"]
+    }
+    mcp_tool_ids = {tool.tool_id for tool in TOOL_CAPABILITIES if tool.protocol == "mcp"}
     live_inference_enabled = bool(settings.freyja5_openai_live_inference_enabled)
     nexus_configured = bool(settings.nexus_base_url)
     return {
@@ -265,6 +272,22 @@ async def freyja5_readiness() -> dict[str, Any]:
                 for server in servers
                 if isinstance(server, dict) and isinstance(server.get("exposes"), list)
             ),
+            "source_controlled_grants": True,
+            "agent_consumption": dict(sorted((mcp_topology.get("agent_consumption") or {}).items())),
+            "agent_grants": [
+                {
+                    "agent_id": agent.agent_id,
+                    "mcp_tool_count": len(mcp_tool_ids.intersection(agent.tool_grants)),
+                    "mcp_hosts": sorted(
+                        {
+                            mcp_hosts_by_tool[tool_id]
+                            for tool_id in mcp_tool_ids.intersection(agent.tool_grants)
+                            if tool_id in mcp_hosts_by_tool
+                        }
+                    ),
+                }
+                for agent in PERSISTENT_AGENTS
+            ],
         },
         "vulcan": next(
             (

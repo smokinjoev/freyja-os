@@ -115,6 +115,9 @@ tasks.
   OpenAI-compatible surface is present, `agent-smith` remains the preserved
   default model, `freyja-5` is opt-in, inline image/PDF content parts are
   accepted, and cloud fallback stays disabled.
+- `/freyja5/readiness` now exposes source-controlled MCP consumption evidence:
+  per-agent scoped MCP grant counts, the MCP hosts those grants depend on, and
+  confirmation that logical agents do not run duplicated default MCP servers.
 - Certification target E now records separate `signal` and `open-webui` Gateway
   handoffs and verifies that both carry the same stable household principal and
   memory-scope policy for Joe.
