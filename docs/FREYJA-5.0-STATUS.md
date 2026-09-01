@@ -59,7 +59,7 @@ tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T014812Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T015053Z0000-freyja5-architecture.md`.
 - Runtime trace summaries now include channel, resolved user, authenticated
   subject, agent, requested route, actual endpoint/provider/model/runtime,
   selected tools, tool calls, delegation evidence, machine, latency, failures,
@@ -87,6 +87,11 @@ tasks.
 - MCP-preferred tool boundaries are explicit in source tool grants and runtime
   traces record each selected tool's protocol, machine affinity, and mutation
   status.
+- Freyja 5 certification reports now include compact per-case tool-boundary
+  evidence for selected tools, tool calls, protocols, MCP host affinity, MCP
+  counts, and mutation-tool presence. Target B currently proves Cloyd
+  delegation through internal read tooling while live MCP delegation remains
+  listed under the `live_tool_sessions` blocker.
 - MCP servers are assigned by capability host, not duplicated per agent: Iris
   owns Apple/macOS MCP capabilities, Atlas owns household/service MCP
   capabilities, Vulcan remains Nexus inference, and agents consume MCP through

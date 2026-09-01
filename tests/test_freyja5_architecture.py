@@ -400,7 +400,23 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert expected_vulcan["owner"] == "nexus"
     assert expected_vulcan["semantic_route_presets"]["private"] == "benedict-paralegal-nexus"
     assert expected_vulcan["cloud_fallback"] == "explicit_only"
+    cloyd_case = next(case for case in report.cases if case.name == "b-freyja-to-cloyd-delegation")
+    cloyd_tools = cloyd_case.runtime_context["rev2_evidence"]["freyja5_tools"]
+    assert cloyd_tools["selected_tools"] == ["filesystem.read"]
+    assert cloyd_tools["protocols"] == ["internal"]
+    assert cloyd_tools["mcp_tool_count"] == 0
+    assert cloyd_tools["mutation_tools"] == []
+    calendar_case = next(case for case in report.cases if case.name == "c-iris-calendar-tool")
+    calendar_tools = calendar_case.runtime_context["rev2_evidence"]["freyja5_tools"]
+    assert calendar_tools["selected_tools"] == ["calendar.read"]
+    assert calendar_tools["protocols"] == ["mcp"]
+    assert calendar_tools["mcp_hosts"] == ["iris"]
+    assert calendar_tools["mcp_tool_count"] == 1
     media_case = next(case for case in report.cases if case.name == "d-media-vision-pathway")
+    media_tools = media_case.runtime_context["rev2_evidence"]["freyja5_tools"]
+    assert media_tools["selected_tools"] == ["vision.inspect"]
+    assert media_tools["protocols"] == ["mcp"]
+    assert media_tools["mcp_tool_count"] == 1
     media_evidence = media_case.runtime_context["rev2_evidence"]["freyja5_media"]
     assert media_evidence == {
         "attachment_count": 1,
@@ -416,6 +432,10 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         "actual_runtime": "nexus",
     }
     enclave_case = next(case for case in report.cases if case.name == "f-benedict-enclave-local-only")
+    enclave_tools = enclave_case.runtime_context["rev2_evidence"]["freyja5_tools"]
+    assert enclave_tools["selected_tools"] == ["documents.process"]
+    assert enclave_tools["protocols"] == ["mcp"]
+    assert enclave_tools["mcp_tool_count"] == 1
     enclave_media = enclave_case.runtime_context["rev2_evidence"]["freyja5_media"]
     assert enclave_media["attachment_count"] == 1
     assert enclave_media["mime_types"] == ["application/pdf"]

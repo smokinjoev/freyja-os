@@ -746,6 +746,7 @@ def _context_from_freyja5_result(
             "freyja5_agents": _freyja5_agent_evidence(),
             "freyja5_mcp_topology": topology,
             "freyja5_vulcan": _freyja5_vulcan_evidence(),
+            "freyja5_tools": _freyja5_tool_evidence(result, trace),
             "freyja5_media": _freyja5_media_evidence(result, trace, attachments),
             "freyja5_service_degradation": _freyja5_service_degradation_evidence(result, fixtures),
             "freyja5_live_blockers": _freyja5_live_blocker_evidence(),
@@ -841,6 +842,38 @@ def _freyja5_media_evidence(result: Any, trace: dict[str, Any], attachments: lis
         "vision_route_selected": result.requested_route == "vision",
         "actual_model": trace.get("actual_model"),
         "actual_runtime": trace.get("actual_runtime"),
+    }
+
+
+def _freyja5_tool_evidence(result: Any, trace: dict[str, Any]) -> dict[str, Any]:
+    selected_tools = [str(tool_id) for tool_id in result.selected_tools]
+    tool_boundaries = trace.get("tool_boundaries") if isinstance(trace.get("tool_boundaries"), list) else []
+    protocols = sorted(
+        {
+            str(boundary.get("protocol"))
+            for boundary in tool_boundaries
+            if isinstance(boundary, dict) and boundary.get("protocol")
+        }
+    )
+    mcp_hosts = sorted(
+        {
+            str(boundary.get("machine_affinity"))
+            for boundary in tool_boundaries
+            if isinstance(boundary, dict) and boundary.get("protocol") == "mcp" and boundary.get("machine_affinity")
+        }
+    )
+    return {
+        "selected_tools": selected_tools,
+        "tool_calls": [str(tool_id) for tool_id in trace.get("tool_calls") or []],
+        "tool_boundaries": tool_boundaries,
+        "protocols": protocols,
+        "mcp_tool_count": sum(1 for boundary in tool_boundaries if isinstance(boundary, dict) and boundary.get("protocol") == "mcp"),
+        "mcp_hosts": mcp_hosts,
+        "mutation_tools": [
+            str(boundary.get("tool_id"))
+            for boundary in tool_boundaries
+            if isinstance(boundary, dict) and boundary.get("mutation") is True
+        ],
     }
 
 
