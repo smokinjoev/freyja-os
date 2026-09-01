@@ -94,6 +94,12 @@ scripts/freyja5-readiness-bundle.py \
 Exit code `2` means source certification and smoke evidence passed but
 Joe-required live validation remains in `FREYJA-5.0-BLOCKERS.md`.
 
+Summarize the latest readiness bundle without reading raw JSON:
+
+```bash
+scripts/freyja5-preflight-status.py --report certification/reports/freyja5-readiness-bundle.json
+```
+
 To allow live local Nexus inference, configure `NEXUS_BASE_URL` and
 `NEXUS_API_KEY` in the untracked `.env`, then set:
 
