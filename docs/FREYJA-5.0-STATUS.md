@@ -72,7 +72,7 @@ physical/session tasks.
   `/freyja5/readiness`, `/v1/models`, text chat, inline image routing, and
   inline PDF routing. The temporary service was stopped afterward.
 - Latest Freyja 5 readiness bundle:
-  `scripts/freyja5-readiness-bundle.py --certification-report certification/reports/20260901T024420Z0000-freyja5-architecture.json --smoke-report certification/reports/freyja5-smoke-local.json --output certification/reports/freyja5-readiness-bundle-local.json`
+  `scripts/freyja5-readiness-bundle.py --certification-report certification/reports/20260901T025720Z0000-freyja5-architecture.json --smoke-report certification/reports/freyja5-smoke-local.json --output certification/reports/freyja5-readiness-bundle-local.json`
   returned exit code `2`: source certification and side-by-side smoke passed,
   and only Joe-required live blockers remain.
 - Runtime trace summaries now include channel, resolved user, authenticated
