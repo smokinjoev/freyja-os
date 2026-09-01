@@ -10,10 +10,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FREYJA5_LIVE_BLOCKERS_PATH = REPO_ROOT / "config" / "freyja-5.0-live-blockers.yaml"
 FREYJA5_WEBGUI_PATH = REPO_ROOT / "config" / "freyja-5.0-webgui.yaml"
 FREYJA5_TRACEABILITY_PATH = REPO_ROOT / "config" / "freyja-5.0-traceability.yaml"
+FREYJA5_PLANES_PATH = REPO_ROOT / "config" / "freyja-5.0-planes.yaml"
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return data if isinstance(data, dict) else {}
 
 
 def freyja5_live_blocker_evidence() -> dict[str, Any]:
-    data = yaml.safe_load(FREYJA5_LIVE_BLOCKERS_PATH.read_text(encoding="utf-8")) or {}
+    data = _load_yaml(FREYJA5_LIVE_BLOCKERS_PATH)
     joe_required = data.get("joe_required") if isinstance(data.get("joe_required"), list) else []
     return {
         "source": str(data.get("source_document") or "FREYJA-5.0-BLOCKERS.md"),
@@ -32,7 +38,7 @@ def freyja5_live_blocker_evidence() -> dict[str, Any]:
 
 
 def freyja5_certification_target_blockers() -> dict[str, list[str]]:
-    data = yaml.safe_load(FREYJA5_LIVE_BLOCKERS_PATH.read_text(encoding="utf-8")) or {}
+    data = _load_yaml(FREYJA5_LIVE_BLOCKERS_PATH)
     targets = data.get("certification_targets") if isinstance(data.get("certification_targets"), dict) else {}
     return {
         str(target): [str(blocker) for blocker in (details.get("live_blockers") or [])]
@@ -47,7 +53,7 @@ def freyja5_certification_live_blocker_ids() -> list[str]:
 
 
 def freyja5_webgui_evidence() -> dict[str, Any]:
-    data = yaml.safe_load(FREYJA5_WEBGUI_PATH.read_text(encoding="utf-8")) or {}
+    data = _load_yaml(FREYJA5_WEBGUI_PATH)
     return {
         "source": "config/freyja-5.0-webgui.yaml",
         "openai_compatible": str(data.get("surface") or "") == "openai-compatible",
@@ -62,7 +68,7 @@ def freyja5_webgui_evidence() -> dict[str, Any]:
 
 
 def freyja5_traceability_evidence() -> dict[str, Any]:
-    data = yaml.safe_load(FREYJA5_TRACEABILITY_PATH.read_text(encoding="utf-8")) or {}
+    data = _load_yaml(FREYJA5_TRACEABILITY_PATH)
     audit_chain = data.get("audit_chain") if isinstance(data.get("audit_chain"), dict) else {}
     egress_events = data.get("egress_events") if isinstance(data.get("egress_events"), dict) else {}
     return {
@@ -78,4 +84,15 @@ def freyja5_traceability_evidence() -> dict[str, Any]:
             "include_denied": bool(egress_events.get("include_denied")),
             "redact_prompt_preview": bool(egress_events.get("redact_prompt_preview")),
         },
+    }
+
+
+def freyja5_plane_evidence() -> dict[str, Any]:
+    data = _load_yaml(FREYJA5_PLANES_PATH)
+    return {
+        "source": "config/freyja-5.0-planes.yaml",
+        "atlas": dict(data.get("atlas") or {}),
+        "iris": dict(data.get("iris") or {}),
+        "hera": dict(data.get("hera") or {}),
+        "vulcan": dict(data.get("vulcan") or {}),
     }

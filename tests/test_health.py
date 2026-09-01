@@ -59,6 +59,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "cloud_fallback": False,
         "live_inference_default": False,
     }
+    assert data["planes"] == {"source": "config/freyja-5.0-planes.yaml"}
     assert data["live_inference"] == {
         "enabled": False,
         "nexus_base_url_configured": False,

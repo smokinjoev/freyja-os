@@ -1,0 +1,59 @@
+version: freyja-5.0
+atlas:
+  host: atlas
+  role: persistent-agent-plane
+  implementation: AgentRuntimeV3
+  msty_go:
+    preferred: true
+    validated: false
+    blocker: msty_go_always_on_linux_validation
+    boundary_preserved: true
+  owns:
+    - freyja_gateway
+    - persistent_agent_runtime
+    - memory
+    - audit
+    - workers
+    - health_apis
+    - household_service_mcp
+    - media_mcp
+  recoverable_fallback_tag: freyja-4.1-baseline-before-5.0-20260831-161448
+iris:
+  host: iris
+  role: apple-macos-capability-server
+  protocol: mcp
+  capabilities:
+    - apple.browser.read
+    - apple.calendar.read
+    - apple.calendar.write
+    - apple.contacts.read
+    - apple.mail.read
+    - apple.messages.read
+    - apple.messages.send
+    - apple.music.read
+    - apple.shortcuts.run
+  atlas_authorizes_operations: true
+  health_is_authoritative_for_policy: false
+  live_blockers:
+    - iris_apple_session
+hera:
+  host: hera
+  role: avatar-voice-channel-edge
+  protocol: semantic-events
+  publishes_to: atlas-gateway
+  channel_ingress:
+    - voice
+    - avatar
+    - perception_events
+  semantic_event_store: true
+  publisher_domain: system
+  allowed_reader_domains:
+    - household
+    - system
+  general_tool_server: false
+  live_blockers:
+    - hera_voice_avatar_hardware
+vulcan:
+  local_by_default: true
+  live_blockers:
+    - vulcan_nexus_presets

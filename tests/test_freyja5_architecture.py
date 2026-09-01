@@ -11,6 +11,7 @@ from freyja.freyja5_config import (
     freyja5_certification_live_blocker_ids,
     freyja5_certification_target_blockers,
     freyja5_live_blocker_evidence,
+    freyja5_plane_evidence,
     freyja5_traceability_evidence,
     freyja5_webgui_evidence,
 )
@@ -409,6 +410,26 @@ def test_freyja5_mcp_topology_places_servers_by_capability_host() -> None:
     assert non_mcp["vulcan-nexus"]["host"] == "vulcan"
     assert non_mcp["vulcan-nexus"]["protocol"] == "openai-compatible"
     assert all(server["host"] != "vulcan" for server in config["servers"])
+
+
+def test_freyja5_plane_config_matches_mcp_topology_boundaries() -> None:
+    topology = yaml.safe_load((REPO_ROOT / "config" / "freyja-5.0-mcp-topology.yaml").read_text(encoding="utf-8"))
+    planes = freyja5_plane_evidence()
+    non_mcp = {boundary["id"]: boundary for boundary in topology["non_mcp_boundaries"]}
+
+    assert planes["source"] == "config/freyja-5.0-planes.yaml"
+    assert planes["atlas"]["host"] == non_mcp["freyja-gateway"]["host"]
+    assert planes["atlas"]["role"] == "persistent-agent-plane"
+    assert planes["atlas"]["msty_go"]["boundary_preserved"] is True
+    assert planes["atlas"]["recoverable_fallback_tag"] == "freyja-4.1-baseline-before-5.0-20260831-161448"
+    assert planes["hera"]["host"] == non_mcp["hera-channel-edge"]["host"]
+    assert planes["hera"]["protocol"] == non_mcp["hera-channel-edge"]["protocol"]
+    assert planes["hera"]["general_tool_server"] is False
+    assert planes["iris"]["host"] == "iris"
+    assert planes["iris"]["protocol"] == "mcp"
+    assert planes["iris"]["atlas_authorizes_operations"] is True
+    assert planes["vulcan"]["local_by_default"] is True
+    assert planes["vulcan"]["live_blockers"] == ["vulcan_nexus_presets"]
 
 
 def test_freyja5_mcp_topology_matches_seeded_tool_affinity() -> None:

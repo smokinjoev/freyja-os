@@ -31,6 +31,7 @@ from freyja.freyja5_config import (
     freyja5_certification_live_blocker_ids,
     freyja5_certification_target_blockers,
     freyja5_live_blocker_evidence,
+    freyja5_plane_evidence,
     freyja5_traceability_evidence,
     freyja5_webgui_evidence,
 )
@@ -237,12 +238,22 @@ async def freyja5_readiness() -> dict[str, Any]:
     mcp_tool_ids = {tool.tool_id for tool in TOOL_CAPABILITIES if tool.protocol == "mcp"}
     live_inference_enabled = bool(settings.freyja5_openai_live_inference_enabled)
     nexus_configured = bool(settings.nexus_base_url)
+    planes = freyja5_plane_evidence()
+    iris_plane = dict(planes["iris"])
+    iris_plane.update(
+        {
+            "macagent_base_url_configured": bool(settings.macagent_base_url),
+            "macagent_enabled": bool(settings.macagent_enabled),
+            "macagent_token_configured": bool(settings.macagent_token),
+        }
+    )
     return {
         "ok": bool(routes) and bool(servers),
         "version": "freyja-5.0",
         "fallback_preserved": True,
         "openai_model": "freyja-5",
         "webgui": freyja5_webgui_evidence(),
+        "planes": {"source": planes["source"]},
         "live_inference": {
             "enabled": live_inference_enabled,
             "nexus_base_url_configured": nexus_configured,
@@ -250,28 +261,7 @@ async def freyja5_readiness() -> dict[str, Any]:
             "cloud_fallback": False,
             "ready": live_inference_enabled and nexus_configured,
         },
-        "atlas": {
-            "host": "atlas",
-            "role": "persistent-agent-plane",
-            "implementation": "AgentRuntimeV3",
-            "msty_go": {
-                "preferred": True,
-                "validated": False,
-                "blocker": "msty_go_always_on_linux_validation",
-                "boundary_preserved": True,
-            },
-            "owns": [
-                "freyja_gateway",
-                "persistent_agent_runtime",
-                "memory",
-                "audit",
-                "workers",
-                "health_apis",
-                "household_service_mcp",
-                "media_mcp",
-            ],
-            "recoverable_fallback_tag": "freyja-4.1-baseline-before-5.0-20260831-161448",
-        },
+        "atlas": planes["atlas"],
         "blockers": freyja5_live_blocker_evidence(),
         "traceability": freyja5_traceability_evidence(),
         "semantic_routes": {
@@ -300,47 +290,8 @@ async def freyja5_readiness() -> dict[str, Any]:
             "no_agent_reasoning": bool((mcp_topology.get("policy") or {}).get("no_agent_reasoning_in_mcp_servers")),
             "no_physical_model_selection": bool((mcp_topology.get("policy") or {}).get("no_physical_model_selection_in_gateway")),
         },
-        "hera": {
-            "host": "hera",
-            "role": "avatar-voice-channel-edge",
-            "protocol": next(
-                (
-                    str(boundary.get("protocol"))
-                    for boundary in non_mcp
-                    if isinstance(boundary, dict) and boundary.get("id") == "hera-channel-edge"
-                ),
-                "semantic-events",
-            ),
-            "publishes_to": "atlas-gateway",
-            "channel_ingress": ["voice", "avatar", "perception_events"],
-            "semantic_event_store": True,
-            "publisher_domain": "system",
-            "allowed_reader_domains": ["household", "system"],
-            "general_tool_server": False,
-            "live_blockers": ["hera_voice_avatar_hardware"],
-        },
-        "iris": {
-            "host": "iris",
-            "role": "apple-macos-capability-server",
-            "protocol": "mcp",
-            "macagent_base_url_configured": bool(settings.macagent_base_url),
-            "macagent_enabled": bool(settings.macagent_enabled),
-            "macagent_token_configured": bool(settings.macagent_token),
-            "capabilities": [
-                "apple.browser.read",
-                "apple.calendar.read",
-                "apple.calendar.write",
-                "apple.contacts.read",
-                "apple.mail.read",
-                "apple.messages.read",
-                "apple.messages.send",
-                "apple.music.read",
-                "apple.shortcuts.run",
-            ],
-            "atlas_authorizes_operations": True,
-            "health_is_authoritative_for_policy": False,
-            "live_blockers": ["iris_apple_session"],
-        },
+        "hera": planes["hera"],
+        "iris": iris_plane,
         "agents": [
             {
                 "id": agent.agent_id,
@@ -395,9 +346,9 @@ async def freyja5_readiness() -> dict[str, Any]:
                         if isinstance(details, dict) and details.get("preferred_runtime")
                     },
                     "route_count": len(routes),
-                    "local_by_default": True,
+                    "local_by_default": bool(planes["vulcan"].get("local_by_default")),
                     "cloud_fallback": route_config.get("cloud_fallback"),
-                    "live_blockers": ["vulcan_nexus_presets"],
+                    "live_blockers": list(planes["vulcan"].get("live_blockers") or []),
                 }
                 for boundary in non_mcp
                 if isinstance(boundary, dict) and boundary.get("id") == "vulcan-nexus"
