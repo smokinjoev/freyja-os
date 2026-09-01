@@ -64,7 +64,7 @@ physical/session tasks.
 - Latest direct skeleton certification:
   `.venv/bin/freyja-certify routing/freyja5_architecture --provider freyja5 --output-dir certification/reports`
   passed 100.0% with latest report
-  `certification/reports/20260901T030735Z0000-freyja5-architecture.md`.
+  `certification/reports/20260901T031637Z0000-freyja5-architecture.md`.
 - Latest local side-by-side smoke:
   `scripts/freyja5-smoke.py --base-url http://127.0.0.1:8500 --token test-connector-token --output certification/reports/freyja5-smoke-local.json`
   passed after starting a temporary `uvicorn freyja.main:app` service on port
@@ -72,7 +72,7 @@ physical/session tasks.
   `/freyja5/readiness`, `/v1/models`, text chat, inline image routing, and
   inline PDF routing. The temporary service was stopped afterward.
 - Latest Freyja 5 readiness bundle:
-  `scripts/freyja5-readiness-bundle.py --certification-report certification/reports/20260901T030735Z0000-freyja5-architecture.json --smoke-report certification/reports/freyja5-smoke-local.json --output certification/reports/freyja5-readiness-bundle-local.json`
+  `scripts/freyja5-readiness-bundle.py --certification-report certification/reports/20260901T031637Z0000-freyja5-architecture.json --smoke-report certification/reports/freyja5-smoke-local.json --output certification/reports/freyja5-readiness-bundle-local.json`
   returned exit code `2`: source certification and side-by-side smoke passed,
   and only Joe-required live blockers remain.
 - Runtime trace summaries now include channel, resolved user, authenticated
@@ -153,6 +153,10 @@ physical/session tasks.
   architecture certification plus side-by-side Gateway smoke evidence and
   reports remaining Joe-required live blockers as a distinct live-blocked
   state.
+- Added `scripts/freyja5-certification-gauntlet.py`, which runs the source
+  agent-definition export, direct Freyja 5 certification, side-by-side smoke,
+  readiness bundle, and preflight summary in one operator flow while preserving
+  the existing source-ready/live-blocked exit semantics.
 - Added `scripts/freyja5-preflight-status.py`, which summarizes the latest
   Freyja 5 readiness bundle and returns exit code `2` for the expected
   source-ready/live-blocked state. The readiness bundle and preflight summary
@@ -344,6 +348,8 @@ physical/session tasks.
   `scripts/freyja5-readiness-bundle.py --run-certification --run-smoke --base-url http://127.0.0.1:8500 --token "$FREYJA_CONNECTOR_TOKEN" --output certification/reports/freyja5-readiness-bundle.json`.
   Exit code `2` means source certification and side-by-side smoke passed, but
   Joe-required live validation is still blocked.
+- Run the ordered Freyja 5 gauntlet:
+  `scripts/freyja5-certification-gauntlet.py --base-url http://127.0.0.1:8500 --token "$FREYJA_CONNECTOR_TOKEN"`.
 - Summarize the latest Freyja 5 readiness bundle:
   `scripts/freyja5-preflight-status.py --report certification/reports/freyja5-readiness-bundle.json --agent-export certification/reports/freyja5-agent-definitions.json`.
 - Start the side-by-side Freyja 5 gateway with

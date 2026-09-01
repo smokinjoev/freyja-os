@@ -112,6 +112,19 @@ scripts/freyja5-readiness-bundle.py \
 Exit code `2` means source certification and smoke evidence passed but
 Joe-required live validation remains in `FREYJA-5.0-BLOCKERS.md`.
 
+To run the full Freyja 5 evidence flow in order:
+
+```bash
+scripts/freyja5-certification-gauntlet.py \
+  --base-url http://${HOST}:8500 \
+  --token "$FREYJA_CONNECTOR_TOKEN"
+```
+
+The gauntlet exports source agent definitions, runs direct Freyja 5
+architecture certification, runs the side-by-side smoke checks, builds the
+readiness bundle, and runs preflight with the export attached. Exit code `2`
+has the same meaning: source-ready with Joe-required live blockers remaining.
+
 Summarize the latest readiness bundle without reading raw JSON:
 
 ```bash
