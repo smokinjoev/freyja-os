@@ -110,6 +110,11 @@ tasks.
   explicit live-local Nexus readiness without exposing secrets.
 - `/freyja5/readiness` reports A-G certification skeleton coverage and explicit
   Joe-required live blockers for Vulcan/Nexus, Iris, and Hera.
+- `/freyja5/readiness` now exposes all Joe-required blockers in a
+  machine-readable form, including Msty Go always-on Linux validation, Vulcan
+  local-only Nexus presets, Iris Apple session validation, and Hera
+  voice/avatar hardware validation. The payload records that secrets must stay
+  out of source and independent work should continue.
 - `/freyja5/readiness` now reports Atlas as the persistent agent plane owning
   Gateway, `AgentRuntimeV3`, memory, audit, workers, health APIs, and Atlas MCP
   services. Msty Go remains preferred but unvalidated; the Atlas runtime

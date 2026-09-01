@@ -86,6 +86,40 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         ],
         "recoverable_fallback_tag": "freyja-4.1-baseline-before-5.0-20260831-161448",
     }
+    blockers = data["blockers"]
+    assert blockers["secrets_in_source"] is False
+    assert blockers["continue_independent_work"] is True
+    assert {blocker["id"] for blocker in blockers["joe_required"]} == {
+        "msty_go_always_on_linux_validation",
+        "vulcan_nexus_presets",
+        "iris_apple_session",
+        "hera_voice_avatar_hardware",
+    }
+    assert next(
+        blocker for blocker in blockers["joe_required"] if blocker["id"] == "msty_go_always_on_linux_validation"
+    ) == {
+        "id": "msty_go_always_on_linux_validation",
+        "component": "atlas",
+        "requires": [
+            "install_path",
+            "service_definition",
+            "restart_behavior",
+            "local_config_export_story",
+            "health_endpoint_or_equivalent",
+            "source_controlled_agent_definition_compatibility",
+        ],
+    }
+    assert next(blocker for blocker in blockers["joe_required"] if blocker["id"] == "vulcan_nexus_presets")[
+        "requires"
+    ] == [
+        "local_only_fast_preset",
+        "local_only_general_preset",
+        "local_only_deep_preset",
+        "local_only_code_preset",
+        "local_only_vision_preset",
+        "local_only_embedding_preset",
+        "local_only_private_preset",
+    ]
     assert data["semantic_routes"] == {
         "owner": "nexus",
         "cloud_fallback": "explicit_only",
