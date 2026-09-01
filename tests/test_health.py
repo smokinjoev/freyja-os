@@ -464,7 +464,7 @@ def test_openai_models_exposes_agent_smith(monkeypatch) -> None:
     assert {model["id"] for model in response.json()["data"]} >= {"agent-smith", "freyja-5"}
 
 
-def test_openai_chat_completion_freyja5_uses_gateway_runtime_skeleton(monkeypatch) -> None:
+def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatch) -> None:
     from freyja.config import settings
 
     monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
@@ -483,7 +483,11 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_skeleton(monkeypatc
     data = response.json()
     assert data["object"] == "chat.completion"
     assert data["model"] == "freyja-5"
-    assert "Freyja 5.0 skeleton response." in data["choices"][0]["message"]["content"]
+    content = data["choices"][0]["message"]["content"]
+    assert "Freyja received the objective and selected no tools using vulcan-nexus-coder." in content
+    assert "Trace:" in content
+    assert "Route: code" in content
+    assert "Status: not_run" in content
     assert data["freyja"]["smith_mode"] == "freyja5"
     assert data["freyja"]["agent"] == "freyja"
     assert data["freyja"]["route"] == "code"
@@ -601,6 +605,7 @@ def test_openai_chat_completion_freyja5_live_inference_flag_is_explicit(monkeypa
                 trace_id=handoff.handoff_id,
                 conversation_id=handoff.conversation_id,
                 agent_id="freyja",
+                response_text="live Freyja response",
                 requested_route="general",
                 inference_endpoint_id="vulcan-nexus-strong",
                 inference_provider="nexus",
@@ -634,6 +639,7 @@ def test_openai_chat_completion_freyja5_live_inference_flag_is_explicit(monkeypa
 
     assert response.status_code == 200
     assert seen == {"run_inference": True, "allow_cloud_fallback": False}
+    assert "live Freyja response" in response.json()["choices"][0]["message"]["content"]
     assert response.json()["freyja"]["trace"]["inference_status"] == "ok"
 
 
@@ -654,7 +660,8 @@ def test_openai_chat_completion_freyja5_streams_sse(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert '"model":"freyja-5"' in response.text
-    assert "Freyja 5.0 skeleton response." in response.text
+    assert "Freyja received the objective and selected no tools using vulcan-nexus-vision-docs." in response.text
+    assert "Route: vision" in response.text
     assert "data: [DONE]" in response.text
 
 

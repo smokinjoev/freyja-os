@@ -153,6 +153,10 @@ tasks.
   image/file content parts into Gateway attachments, preserving WebGUI
   operability while routing image/PDF-style requests through the media/vision
   skeleton without remote fetches.
+- The opt-in `freyja-5` OpenAI-compatible path now returns the
+  `AgentRuntimeV3` response text with trace metadata instead of discarding it
+  for a fixed skeleton banner. The preserved `agent-smith` WebGUI default path
+  is unchanged.
 - `/freyja5/readiness` now reports the WebGUI compatibility posture: the
   OpenAI-compatible surface is present, `agent-smith` remains the preserved
   default model, `freyja-5` is opt-in, inline image/PDF content parts are

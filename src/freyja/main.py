@@ -1114,9 +1114,13 @@ def _freyja5_openai_response_text(result) -> str:
     provider = trace.get("actual_provider") or result.inference_provider or "unavailable"
     model = trace.get("actual_model") or "unavailable"
     status = trace.get("inference_status") or ("degraded" if result.degraded else "completed")
+    response_text = str(getattr(result, "response_text", "") or "").strip()
+    if not response_text:
+        response_text = "Freyja 5.0 response is unavailable."
     return "\n".join(
         (
-            "Freyja 5.0 skeleton response.",
+            response_text,
+            "",
             f"Trace: {trace.get('trace_id')}",
             f"Agent: {trace.get('agent_logical_display_name') or trace.get('agent_display_name') or result.agent_id}",
             f"Route: {route}",
