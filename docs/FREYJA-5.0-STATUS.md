@@ -123,6 +123,9 @@ tasks.
   normalization, policy, trace envelopes, and handoff forwarding, while agent
   reasoning, arbitrary tool orchestration, physical model selection, and
   implicit cloud fallback remain outside the Gateway.
+- Freyja 5 certification evidence now includes per-agent MCP grant posture and
+  Gateway boundary policy so generated A-G reports can prove agent/tool
+  consumption and non-Director Gateway constraints from source control.
 - Certification target E now records separate `signal` and `open-webui` Gateway
   handoffs and verifies that both carry the same stable household principal and
   memory-scope policy for Joe.
