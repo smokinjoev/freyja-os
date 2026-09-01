@@ -4,14 +4,33 @@ import importlib.util
 import json
 from pathlib import Path
 
+import yaml
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+OPEN_WEBUI_COMPOSE = REPO_ROOT / "deploy" / "compose" / "open-webui" / "compose.yaml"
+OPEN_WEBUI_ENV_EXAMPLE = REPO_ROOT / "deploy" / "compose" / "open-webui" / ".env.example"
+
 
 def load_proxy_module():
-    path = Path(__file__).resolve().parents[1] / "deploy/compose/open-webui/model-proxy.py"
+    path = REPO_ROOT / "deploy/compose/open-webui/model-proxy.py"
     spec = importlib.util.spec_from_file_location("open_webui_model_proxy", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_open_webui_defaults_stay_on_model_proxy_until_freyja5_cutover() -> None:
+    compose = yaml.safe_load(OPEN_WEBUI_COMPOSE.read_text(encoding="utf-8"))
+    environment = compose["services"]["open-webui"]["environment"]
+    env_example = OPEN_WEBUI_ENV_EXAMPLE.read_text(encoding="utf-8")
+
+    assert environment["OPENAI_API_BASE_URL"] == "${OPENAI_API_BASE_URL:-http://model-proxy:8080/v1}"
+    assert environment["DEFAULT_MODELS"] == "${DEFAULT_MODELS:-qwen2.5vl:72b}"
+    assert "OPENAI_API_BASE_URL=http://model-proxy:8080/v1" in env_example
+    assert "DEFAULT_MODELS=qwen2.5vl:72b" in env_example
+    assert "DEFAULT_MODELS=freyja-5" not in env_example
 
 
 def test_probe_failure_unloads_loaded_primary_model() -> None:
