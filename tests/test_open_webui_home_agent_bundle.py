@@ -121,6 +121,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["resource_counts_git_head"]
     assert isinstance(bundle["evidence_summary"]["proxy_catalog_generated_at_unix"], int)
     assert bundle["evidence_summary"]["proxy_catalog_git_head"]
+    assert bundle["evidence_summary"]["proxy_missing_models"] == []
+    assert "agent/freyja" in bundle["evidence_summary"]["proxy_agent_models_present"]
     assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20
     assert isinstance(bundle["evidence_summary"]["tools_gateway_generated_at_unix"], int)
     assert bundle["evidence_summary"]["tools_gateway_git_head"]

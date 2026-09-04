@@ -350,6 +350,12 @@ Evidence artifact:
 certification/reports/open-webui-home-resources-live-counts.json
 ```
 
+Repeatable live count command:
+
+```bash
+scripts/count-open-webui-home-resources-live.py
+```
+
 Prepare the offline resource rows with a dry-run first:
 
 ```bash
@@ -712,6 +718,12 @@ Live checks completed:
 - Freyja 5 `/health` returned healthy.
 - Freyja 5 `/v1/models` returned Open WebUI-visible agent model entries.
 - Open WebUI `model-proxy` `/v1/models` returned all six Freyja agent model IDs from inside the compose network.
+
+Repeatable model-proxy catalog command:
+
+```bash
+scripts/check-open-webui-model-proxy-catalog.py
+```
 - Freyja 5 `/freyja-home-memory/operations` returned all six required operations.
 - Live HTTP scope test: Joe wrote/read `personal:joe`; Beth read of `personal:joe` returned `403`.
 - `certification/reports/open-webui-home-agent-live.json` records repeatable live verification evidence without secrets.
