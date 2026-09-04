@@ -181,6 +181,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "label": str(gate.get("label")),
             "ready": bool(gate.get("ready")),
             "evidence": str(gate.get("evidence")),
+            "evidence_generated_at_unix": gate.get("evidence_generated_at_unix"),
+            "evidence_git_head": gate.get("evidence_git_head"),
             "next_action": gate.get("next_action"),
             "command": gate.get("command") or GATE_COMMANDS.get(str(gate.get("gate_id"))),
         }

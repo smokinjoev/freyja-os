@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -35,6 +36,13 @@ def _env_float(name: str, default: float) -> float:
     except ValueError:
         return default
     return value if value > 0 else default
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,9 +146,12 @@ def agent_checks(
 
 
 def build_pending_report(args: argparse.Namespace, manifest: dict[str, Any], reason: str) -> dict[str, Any]:
+    generated_at = int(time.time())
     return {
         "report_type": "open-webui-home-agent-chat-smoke",
-        "timestamp_unix": int(time.time()),
+        "generated_at_unix": generated_at,
+        "timestamp_unix": generated_at,
+        "git_head": _git_head(),
         "open_webui_url": args.open_webui_url,
         "secrets_included": False,
         "private_content_included": False,
@@ -174,9 +185,12 @@ def run_smoke(args: argparse.Namespace, manifest: dict[str, Any]) -> dict[str, A
                 "ok": status == 200 and bool(content.strip()),
             }
         )
+    generated_at = int(time.time())
     return {
         "report_type": "open-webui-home-agent-chat-smoke",
-        "timestamp_unix": int(time.time()),
+        "generated_at_unix": generated_at,
+        "timestamp_unix": generated_at,
+        "git_head": _git_head(),
         "open_webui_url": args.open_webui_url,
         "secrets_included": False,
         "private_content_included": False,

@@ -159,12 +159,15 @@ def test_post_auth_activation_main_can_dry_run_from_container_snapshot(tmp_path:
         raise AssertionError(args)
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module, "_git_head", lambda: "test-head")
 
     assert module.main(["--db", str(tmp_path / "missing.db"), "--resources-json", str(resource_import), "--output", str(output)]) == 0
 
     written = json.loads(output.read_text(encoding="utf-8"))
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"] == "test-head"
     assert written["dry_run_snapshot"]["container"] == module.DEFAULT_OPEN_WEBUI_CONTAINER
     assert written["plan"]["access"]["missing_models"] == []
     assert written["plan"]["access"]["missing_users"] == ["beth", "jenna", "joe", "liam"]
@@ -180,6 +183,7 @@ def test_post_auth_activation_apply_does_not_use_container_snapshot(tmp_path: Pa
         raise AssertionError("snapshot should not be used in apply mode")
 
     monkeypatch.setattr(module.subprocess, "run", fail_if_called)
+    monkeypatch.setattr(module, "_git_head", lambda: "test-head")
 
     assert (
         module.main(
@@ -199,6 +203,8 @@ def test_post_auth_activation_apply_does_not_use_container_snapshot(tmp_path: Pa
     printed = json.loads(capsys.readouterr().out)
     assert json.loads(output.read_text(encoding="utf-8")) == printed
     assert "dry_run_snapshot" not in printed
+    assert isinstance(printed["generated_at_unix"], int)
+    assert printed["git_head"] == "test-head"
     assert printed["plan"]["reason"] == "Open WebUI database is not available at the requested path"
     assert printed["apply_result"]["applied"] is False
 
@@ -271,5 +277,7 @@ def test_post_auth_activation_main_apply_returns_zero_when_applied(tmp_path: Pat
 
     printed = json.loads(capsys.readouterr().out)
     assert json.loads(output.read_text(encoding="utf-8")) == printed
+    assert isinstance(printed["generated_at_unix"], int)
+    assert printed["git_head"]
     assert printed["apply_result"]["applied"] is True
     assert printed["live_verifier"] == {"returncode": 0, "ran": True}

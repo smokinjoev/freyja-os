@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,13 @@ def _load_module(path: Path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -177,6 +185,8 @@ def main(argv: list[str] | None = None) -> int:
         plan = build_activation_plan(db, args.resources_json, args.owner_user_id, args.script_dir)
     report: dict[str, Any] = {
         "report_type": "open-webui-home-agent-post-auth-activation",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "mode": "apply" if args.apply else "dry-run",
         "secrets_included": False,
         "private_content_included": False,

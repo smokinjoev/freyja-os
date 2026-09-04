@@ -66,6 +66,9 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert "OPEN_WEBUI_API_KEY=<redacted>" in bundle["external_gates"][1]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in bundle["external_gates"][2]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in bundle["external_gates"][3]["command"]
+    for gate in bundle["external_gates"]:
+        assert "evidence_generated_at_unix" in gate
+        assert "evidence_git_head" in gate
     requirement_audit = {item["requirement_id"]: item for item in bundle["requirement_audit"]}
     assert len(requirement_audit) == 15
     assert requirement_audit["local_inference"]["status"] == "partial"

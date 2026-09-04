@@ -37,6 +37,8 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert gates["authenticated_chat_smoke"]["ready"] is False
     assert gates["telegram_pilot"]["ready"] is False
     assert gates["signal_pilot"]["ready"] is False
+    for gate in gates.values():
+        assert gate["evidence_generated_at_unix"] is None or isinstance(gate["evidence_generated_at_unix"], int)
     assert "OPEN_WEBUI_API_KEY" in gates["authenticated_chat_smoke"]["next_action"]
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
     assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]

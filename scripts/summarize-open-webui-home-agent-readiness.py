@@ -36,6 +36,8 @@ def _gate(
     evidence: str,
     next_action: str | None = None,
     command: str | None = None,
+    evidence_generated_at_unix: int | None = None,
+    evidence_git_head: str | None = None,
 ) -> dict[str, Any]:
     return {
         "gate_id": gate_id,
@@ -44,6 +46,8 @@ def _gate(
         "evidence": evidence,
         "next_action": next_action,
         "command": command,
+        "evidence_generated_at_unix": evidence_generated_at_unix,
+        "evidence_git_head": evidence_git_head,
     }
 
 
@@ -72,6 +76,8 @@ def build_summary() -> dict[str, Any]:
             "certification/reports/open-webui-home-agent-post-auth-activation.json",
             None if activation.get("ready") else "Create/sign in to Open WebUI and rerun activation dry-run with the owner user ID.",
             "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json --owner-user-id <open-webui-owner-user-id>",
+            activation.get("generated_at_unix") or activation.get("timestamp_unix"),
+            activation.get("git_head"),
         ),
         _gate(
             "authenticated_chat_smoke",
@@ -80,6 +86,8 @@ def build_summary() -> dict[str, Any]:
             "certification/reports/open-webui-home-agent-chat-smoke.json",
             None if chat_smoke.get("status") == "complete" else "Set OPEN_WEBUI_API_KEY and run the five-agent chat smoke.",
             "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
+            chat_smoke.get("generated_at_unix") or chat_smoke.get("timestamp_unix"),
+            chat_smoke.get("git_head"),
         ),
         _gate(
             "telegram_pilot",
@@ -90,6 +98,8 @@ def build_summary() -> dict[str, Any]:
             if telegram.get("ready")
             else "Set TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, TELEGRAM_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
             "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
+            telegram.get("generated_at_unix") or telegram.get("timestamp_unix"),
+            telegram.get("git_head"),
         ),
         _gate(
             "signal_pilot",
@@ -100,6 +110,8 @@ def build_summary() -> dict[str, Any]:
             if signal.get("ready")
             else "Register signal-cli-rest-api and set SIGNAL_ACCOUNT_NUMBER, SIGNAL_ALLOWED_SENDERS, SIGNAL_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
             "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
+            signal.get("generated_at_unix") or signal.get("timestamp_unix"),
+            signal.get("git_head"),
         ),
     ]
     return {

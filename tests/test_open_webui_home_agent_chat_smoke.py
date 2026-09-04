@@ -28,6 +28,9 @@ def test_chat_smoke_dry_run_lists_all_agents_without_secrets(tmp_path: Path, cap
     assert printed == report
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["timestamp_unix"] == report["generated_at_unix"]
+    assert report["git_head"]
     assert report["status"] == "pending"
     assert {item["agent_id"] for item in report["checks"]} == {
         "freyja",
@@ -49,6 +52,8 @@ def test_chat_smoke_missing_api_key_is_pending(tmp_path: Path, monkeypatch, caps
     assert report["status"] == "pending"
     assert report["complete"] is False
     assert report["reason"] == "OPEN_WEBUI_API_KEY not supplied"
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
 
 
 def test_chat_smoke_invalid_timeout_env_uses_default(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -102,6 +107,9 @@ def test_chat_smoke_live_report_redacts_auth_and_requires_response(monkeypatch) 
 
     assert report["status"] == "complete"
     assert report["secrets_included"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["timestamp_unix"] == report["generated_at_unix"]
+    assert report["git_head"]
     assert "secret-token" not in json.dumps(report)
     assert calls == [
         {
