@@ -5,6 +5,8 @@ import argparse
 import json
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +53,36 @@ def _docker_ps() -> dict[str, dict[str, str]]:
             continue
         rows[parts[0]] = {"image": parts[1], "status": parts[2], "ports": parts[3]}
     return rows
+
+
+def _open_webui_public_config(url: str = "http://127.0.0.1:3001", timeout: float = 5.0) -> dict[str, Any]:
+    req = urllib.request.Request(f"{url.rstrip('/')}/api/config", headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        return {
+            "reachable": False,
+            "error_class": exc.__class__.__name__,
+            "secrets_included": False,
+            "private_content_included": False,
+        }
+    features = payload.get("features") if isinstance(payload.get("features"), dict) else {}
+    oauth = payload.get("oauth") if isinstance(payload.get("oauth"), dict) else {}
+    providers = oauth.get("providers") if isinstance(oauth.get("providers"), dict) else {}
+    return {
+        "reachable": True,
+        "onboarding": bool(payload.get("onboarding")),
+        "status": bool(payload.get("status")),
+        "version": payload.get("version"),
+        "auth_enabled": bool(features.get("auth")),
+        "signup_enabled": bool(features.get("enable_signup")),
+        "login_form_enabled": bool(features.get("enable_login_form")),
+        "auth_trusted_header": bool(features.get("auth_trusted_header")),
+        "oauth_provider_count": len(providers),
+        "secrets_included": False,
+        "private_content_included": False,
+    }
 
 
 def build_inventory(now: int | None = None) -> dict[str, Any]:
@@ -101,6 +133,7 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
         "vulcan_ollama": "http://100.94.80.21:11434",
         "iris_fallback": "http://100.115.228.56:11434/v1",
     }
+    public_config = _open_webui_public_config(endpoints["open_webui"])
     return {
         "report_type": "open-webui-home-agent-platform-inventory",
         "generated_at_unix": int(now or time.time()),
@@ -109,6 +142,12 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
         "private_content_included": False,
         "hosts": hosts,
         "endpoints": endpoints,
+        "open_webui_public_config": public_config,
+        "open_webui_next_action_hint": (
+            "Complete first-account Open WebUI onboarding at http://127.0.0.1:3001, then rerun post-auth activation."
+            if public_config.get("onboarding")
+            else "Sign in to Open WebUI or provide an admin API key/session, then rerun post-auth activation."
+        ),
         "source_topology": {
             "planes": "config/freyja-5.0-planes.yaml",
             "mcp": "config/freyja-5.0-mcp-topology.yaml",

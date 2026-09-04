@@ -53,6 +53,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["tests"]["open_webui_tools_gateway_ok"] is True
     assert bundle["tests"]["open_webui_tools_openapi_ok"] is True
     assert "exact_next_action" in bundle
+    assert "Open WebUI" in bundle["exact_next_action"]
     assert [gate["gate_id"] for gate in bundle["external_gates"]] == [
         "post_auth_activation",
         "authenticated_chat_smoke",
@@ -92,6 +93,10 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
     assert bundle["artifacts"]["signal_pilot"] == "certification/reports/freyja-channels-signal-pilot.json"
     assert bundle["evidence_summary"]["inventory_hosts"] == ["atlas", "hera", "iris", "vulcan"]
+    assert isinstance(bundle["evidence_summary"]["open_webui_public_config"], dict)
+    assert bundle["evidence_summary"]["open_webui_public_config"].get("secrets_included") is False
+    assert "token=" not in json.dumps(bundle["evidence_summary"]["open_webui_public_config"]).lower()
+    assert "Open WebUI" in bundle["evidence_summary"]["open_webui_next_action_hint"]
     assert isinstance(bundle["evidence_summary"]["inventory_generated_at_unix"], int)
     assert bundle["evidence_summary"]["inventory_git_head"]
     assert isinstance(bundle["evidence_summary"]["live_verifier_generated_at_unix"], int)

@@ -192,6 +192,18 @@ group_count=0
 pending=["open_webui_users_missing","open_webui_groups_missing"]
 ```
 
+Current public Open WebUI setup status:
+
+```text
+onboarding=true
+auth_enabled=true
+signup_enabled=true
+login_form_enabled=true
+```
+
+Exact next action: complete first-account Open WebUI onboarding at
+`http://127.0.0.1:3001`, then rerun the post-auth activation dry-run.
+
 Once real Open WebUI users exist, bind the imported models to groups with a
 dry-run first:
 

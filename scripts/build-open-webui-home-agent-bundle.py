@@ -227,6 +227,16 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     ]
     git_head = _command(["git", "rev-parse", "--short", "HEAD"])
     completion_status_counts = completion.get("status_counts") or {}
+    open_webui_public_config = inventory.get("open_webui_public_config") or {
+        "reachable": None,
+        "secrets_included": False,
+        "private_content_included": False,
+    }
+    open_webui_next_action_hint = (
+        inventory.get("open_webui_next_action_hint")
+        or "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session."
+    )
+    exact_next_action = open_webui_next_action_hint
     return {
         "report_type": "open-webui-home-agent-consolidated-deliverable",
         "generated_at_unix": int(now or time.time()),
@@ -240,7 +250,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "tests": tests,
         "blockers": blockers,
         "external_gates": external_gates,
-        "exact_next_action": "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session.",
+        "exact_next_action": exact_next_action,
         "artifacts": {
             "runbook": "docs/operations/open-webui-home-agent.md",
             "progress_log": "logs/open-webui-diagnostics/home-agent-20260904T174214Z/progress-log.md",
@@ -344,6 +354,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "completion_audit_generated_at_unix": completion.get("generated_at_unix") or _mtime(completion_report_path),
             "completion_audit_git_head": completion.get("git_head") or "unknown",
             "inventory_hosts": sorted((inventory.get("hosts") or {}).keys()),
+            "open_webui_public_config": open_webui_public_config,
+            "open_webui_next_action_hint": open_webui_next_action_hint,
             "inventory_generated_at_unix": inventory.get("generated_at_unix") or _mtime(inventory_path),
             "inventory_git_head": inventory.get("git_head") or "unknown",
             "post_auth_activation_ready": activation.get("ready"),

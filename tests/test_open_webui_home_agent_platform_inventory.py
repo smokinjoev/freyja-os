@@ -37,9 +37,39 @@ def test_platform_inventory_records_endpoint_map_and_credential_locations_only()
 
     assert inventory["endpoints"]["open_webui"] == "http://127.0.0.1:3001"
     assert inventory["endpoints"]["vulcan_ollama"] == "http://100.94.80.21:11434"
+    assert inventory["open_webui_public_config"]["secrets_included"] is False
+    assert inventory["open_webui_public_config"]["private_content_included"] is False
+    assert "Open WebUI" in inventory["open_webui_next_action_hint"]
     assert inventory["credential_policy"]["values_recorded"] is False
     assert inventory["credential_policy"]["locations_only"] is True
     assert "deploy/compose/open-webui/.env" in inventory["hosts"]["atlas"]["credential_locations"]
+
+
+def test_platform_inventory_summarizes_public_open_webui_config(monkeypatch) -> None:
+    module = _module()
+    monkeypatch.setattr(
+        module,
+        "_open_webui_public_config",
+        lambda url: {
+            "reachable": True,
+            "onboarding": True,
+            "status": True,
+            "version": "0.11.3",
+            "auth_enabled": True,
+            "signup_enabled": True,
+            "login_form_enabled": True,
+            "auth_trusted_header": False,
+            "oauth_provider_count": 0,
+            "secrets_included": False,
+            "private_content_included": False,
+        },
+    )
+
+    inventory = module.build_inventory(now=1)
+
+    assert inventory["open_webui_public_config"]["onboarding"] is True
+    assert inventory["open_webui_public_config"]["signup_enabled"] is True
+    assert inventory["open_webui_next_action_hint"].startswith("Complete first-account Open WebUI onboarding")
 
 
 def test_platform_inventory_writes_report(tmp_path: Path, capsys) -> None:
