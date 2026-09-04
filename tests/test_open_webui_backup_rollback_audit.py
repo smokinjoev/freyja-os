@@ -53,6 +53,8 @@ def test_backup_rollback_audit_accepts_readable_open_webui_archive(tmp_path: Pat
     assert report["ok"] is True
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["backup"]["contains_webui_db"] is True
     assert report["backup"]["tar_gzip_readable"] is True
     assert report["backup"]["member_count"] == 2
@@ -99,3 +101,5 @@ def test_backup_rollback_audit_writes_report(tmp_path: Path, capsys) -> None:
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "open-webui-backup-rollback-audit"
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"]

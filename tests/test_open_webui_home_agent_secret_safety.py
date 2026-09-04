@@ -22,6 +22,8 @@ def test_secret_safety_audit_scans_current_home_agent_artifacts() -> None:
 
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["ok"] is True
     assert report["artifact_count"] == 59
     assert report["missing_artifacts"] == []
@@ -49,3 +51,5 @@ def test_secret_safety_audit_writes_report(tmp_path: Path, capsys) -> None:
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "open-webui-home-agent-secret-safety"
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"]

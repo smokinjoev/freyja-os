@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -102,6 +103,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -158,6 +166,7 @@ def build_report() -> dict[str, Any]:
     report = {
         "report_type": "open-webui-home-agent-secret-safety",
         "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "artifact_count": len(scanned),

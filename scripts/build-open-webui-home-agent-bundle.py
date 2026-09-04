@@ -95,7 +95,9 @@ def _nested_check(report: dict[str, Any], parent: str, child: str) -> dict[str, 
 def build_bundle(now: int | None = None) -> dict[str, Any]:
     live = _load_json(REPORTS / "open-webui-home-agent-live.json")
     live_report_path = REPORTS / "open-webui-home-agent-live.json"
+    backup_path = REPORTS / "open-webui-backup-rollback-audit.json"
     backup = _load_json(REPORTS / "open-webui-backup-rollback-audit.json")
+    secret_safety_path = REPORTS / "open-webui-home-agent-secret-safety.json"
     secret_safety = _load_json(REPORTS / "open-webui-home-agent-secret-safety.json")
     access_audit = _load_json(REPORTS / "open-webui-home-agent-access-audit.json")
     access_bind = _load_json(REPORTS / "open-webui-home-agent-access-bind-dry-run.json")
@@ -265,8 +267,12 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "data_backup_path": _text(DIAG / "data-backup-path.txt"),
             "backup_sha256": (backup.get("backup") or {}).get("sha256"),
             "backup_contains_webui_db": (backup.get("backup") or {}).get("contains_webui_db"),
+            "backup_rollback_generated_at_unix": backup.get("generated_at_unix") or _mtime(backup_path),
+            "backup_rollback_git_head": backup.get("git_head") or "unknown",
             "secret_safety_artifact_count": secret_safety.get("artifact_count"),
             "secret_safety_findings": len(secret_safety.get("secret_pattern_findings") or []),
+            "secret_safety_generated_at_unix": secret_safety.get("generated_at_unix") or _mtime(secret_safety_path),
+            "secret_safety_git_head": secret_safety.get("git_head") or "unknown",
             "git_head": git_head,
             "live_auth_required_pending": live.get("auth_required_checks_pending") or [],
             "live_optional_pending": live.get("optional_checks_pending") or [],

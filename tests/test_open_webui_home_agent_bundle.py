@@ -91,7 +91,11 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert isinstance(bundle["evidence_summary"]["live_verifier_generated_at_unix"], int)
     assert bundle["evidence_summary"]["live_verifier_git_head"]
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
+    assert isinstance(bundle["evidence_summary"]["backup_rollback_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["backup_rollback_git_head"]
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0
+    assert isinstance(bundle["evidence_summary"]["secret_safety_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["secret_safety_git_head"]
     assert bundle["evidence_summary"]["chat_smoke_status"] == "pending"
     assert bundle["evidence_summary"]["completion_status_counts"] == bundle["completion_status_counts"]
     assert isinstance(bundle["evidence_summary"]["completion_audit_generated_at_unix"], int)
