@@ -22,6 +22,8 @@ def test_inference_policy_audit_is_secret_free_and_complete() -> None:
 
     assert audit["secrets_included"] is False
     assert audit["private_content_included"] is False
+    assert isinstance(audit["generated_at_unix"], int)
+    assert audit["git_head"]
     assert audit["ok"] is True
     checks = {check["name"]: check for check in audit["checks"]}
     assert checks["open_webui_uses_model_proxy"]["ok"] is True
@@ -48,3 +50,5 @@ def test_inference_policy_audit_writes_report(tmp_path: Path, capsys) -> None:
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "open-webui-inference-policy-audit"
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"]

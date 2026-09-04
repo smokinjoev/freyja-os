@@ -91,6 +91,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
     assert bundle["artifacts"]["signal_pilot"] == "certification/reports/freyja-channels-signal-pilot.json"
     assert bundle["evidence_summary"]["inventory_hosts"] == ["atlas", "hera", "iris", "vulcan"]
+    assert isinstance(bundle["evidence_summary"]["inventory_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["inventory_git_head"]
     assert isinstance(bundle["evidence_summary"]["live_verifier_generated_at_unix"], int)
     assert bundle["evidence_summary"]["live_verifier_git_head"]
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
@@ -115,6 +117,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
     assert isinstance(bundle["evidence_summary"]["readiness_summary_generated_at_unix"], int)
     assert bundle["evidence_summary"]["readiness_summary_git_head"]
+    assert isinstance(bundle["evidence_summary"]["inference_policy_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["inference_policy_git_head"]
     assert bundle["evidence_summary"]["channel_thread_persistence_store"]["path"] == "data/freyja-channels/threads.json"
     assert bundle["evidence_summary"]["channel_audit_store"]["raw_sender_logged"] is False
     assert bundle["evidence_summary"]["channel_audit_store"]["denied_attempts_logged"] is True

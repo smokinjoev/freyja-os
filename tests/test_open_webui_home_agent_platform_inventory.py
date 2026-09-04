@@ -23,6 +23,8 @@ def test_platform_inventory_contains_required_hosts_and_no_secret_values() -> No
 
     assert inventory["secrets_included"] is False
     assert inventory["private_content_included"] is False
+    assert inventory["generated_at_unix"] == 1
+    assert inventory["git_head"]
     assert set(inventory["hosts"]) == {"atlas", "vulcan", "iris", "hera"}
     assert inventory["hosts"]["vulcan"]["nexus_required"] is False
     assert "password=" not in serialized
@@ -49,3 +51,5 @@ def test_platform_inventory_writes_report(tmp_path: Path, capsys) -> None:
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "open-webui-home-agent-platform-inventory"
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"]

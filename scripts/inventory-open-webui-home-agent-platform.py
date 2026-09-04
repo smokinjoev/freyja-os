@@ -26,6 +26,13 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
 def _docker_ps() -> dict[str, dict[str, str]]:
     proc = subprocess.run(
         ["docker", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"],
@@ -97,6 +104,7 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
     return {
         "report_type": "open-webui-home-agent-platform-inventory",
         "generated_at_unix": int(now or time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "hosts": hosts,

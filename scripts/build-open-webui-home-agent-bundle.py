@@ -118,8 +118,10 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     proactive_dry_run = _load_json(REPORTS / "freyja-proactive-dry-run.json")
     freyja41 = _load_json(REPORTS / "freyja41-preservation-audit.json")
     completion = _load_json(REPORTS / "open-webui-home-agent-completion-audit.json")
+    inventory_path = REPORTS / "open-webui-home-agent-platform-inventory.json"
     inventory = _load_json(REPORTS / "open-webui-home-agent-platform-inventory.json")
     activation = _load_json(REPORTS / "open-webui-home-agent-post-auth-activation.json")
+    inference_path = REPORTS / "open-webui-inference-policy-audit.json"
     inference = _load_json(REPORTS / "open-webui-inference-policy-audit.json")
     chat_smoke = _load_json(REPORTS / "open-webui-home-agent-chat-smoke.json")
     tools_gateway_path = REPORTS / "open-webui-tools-gateway-readiness.json"
@@ -314,8 +316,12 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "completion_audit_generated_at_unix": completion.get("generated_at_unix") or _mtime(completion_report_path),
             "completion_audit_git_head": completion.get("git_head") or "unknown",
             "inventory_hosts": sorted((inventory.get("hosts") or {}).keys()),
+            "inventory_generated_at_unix": inventory.get("generated_at_unix") or _mtime(inventory_path),
+            "inventory_git_head": inventory.get("git_head") or "unknown",
             "post_auth_activation_ready": activation.get("ready"),
             "inference_model_profiles": inference.get("model_profiles") or {},
+            "inference_policy_generated_at_unix": inference.get("generated_at_unix") or _mtime(inference_path),
+            "inference_policy_git_head": inference.get("git_head") or "unknown",
             "chat_smoke_status": chat_smoke.get("status"),
             "chat_smoke_complete": chat_smoke.get("complete"),
             "tools_gateway_operation_count": tools_gateway.get("operation_count"),
