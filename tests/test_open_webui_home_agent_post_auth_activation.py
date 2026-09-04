@@ -173,6 +173,7 @@ def test_post_auth_activation_main_can_dry_run_from_container_snapshot(tmp_path:
 def test_post_auth_activation_apply_does_not_use_container_snapshot(tmp_path: Path, monkeypatch, capsys) -> None:
     _, resource_import = _write_imports(tmp_path)
     module = _module(SCRIPT)
+    output = tmp_path / "activation.json"
     capsys.readouterr()
 
     def fail_if_called(*args, **kwargs):
@@ -180,9 +181,23 @@ def test_post_auth_activation_apply_does_not_use_container_snapshot(tmp_path: Pa
 
     monkeypatch.setattr(module.subprocess, "run", fail_if_called)
 
-    assert module.main(["--apply", "--db", str(tmp_path / "missing.db"), "--resources-json", str(resource_import)]) == 1
+    assert (
+        module.main(
+            [
+                "--apply",
+                "--db",
+                str(tmp_path / "missing.db"),
+                "--resources-json",
+                str(resource_import),
+                "--output",
+                str(output),
+            ]
+        )
+        == 1
+    )
 
     printed = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == printed
     assert "dry_run_snapshot" not in printed
     assert printed["plan"]["reason"] == "Open WebUI database is not available at the requested path"
     assert printed["apply_result"]["applied"] is False
