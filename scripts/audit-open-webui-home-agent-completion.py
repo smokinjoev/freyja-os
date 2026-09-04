@@ -213,12 +213,13 @@ def build_audit() -> dict[str, Any]:
         _item(
             "verification",
             "Create repeatable verification",
-            "partial",
+            "complete" if readiness_summary.get("all_ready") is True else "partial",
             [
                 "tests/",
                 "certification/reports/open-webui-home-agent-live.json",
                 "certification/reports/open-webui-home-agent-chat-smoke.json",
                 "certification/reports/open-webui-home-agent-readiness-summary.json",
+                "certification/reports/open-webui-home-agent-evidence-refresh.json",
             ],
             "Credentialed Open WebUI, Telegram, and Signal round trips remain pending."
             if readiness_summary.get("all_ready") is not True
