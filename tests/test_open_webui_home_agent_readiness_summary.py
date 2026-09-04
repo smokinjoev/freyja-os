@@ -37,6 +37,15 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]
 
 
+def test_readiness_summary_prefers_current_git_head(monkeypatch) -> None:
+    module = _module()
+    monkeypatch.setattr(module, "_git_head", lambda: "current-head")
+
+    summary = module.build_summary()
+
+    assert summary["git_head"] == "current-head"
+
+
 def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(tmp_path: Path, capsys) -> None:
     output_json = tmp_path / "summary.json"
     output_md = tmp_path / "summary.md"

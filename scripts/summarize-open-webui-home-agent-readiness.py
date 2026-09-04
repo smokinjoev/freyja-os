@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,13 @@ def _gate(gate_id: str, label: str, ready: bool, evidence: str, next_action: str
         "evidence": evidence,
         "next_action": next_action,
     }
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def build_summary() -> dict[str, Any]:
@@ -87,7 +95,7 @@ def build_summary() -> dict[str, Any]:
         "private_content_included": False,
         "status": "ready_for_live_activation" if all(gate["ready"] for gate in gates) else "pending_external_auth_or_credentials",
         "all_ready": all(gate["ready"] for gate in gates),
-        "git_head": deliverable.get("git_head"),
+        "git_head": _git_head() or deliverable.get("git_head"),
         "completion_status_counts": completion.get("status_counts") or {},
         "gates": gates,
         "telegram_checks": telegram_checks,
