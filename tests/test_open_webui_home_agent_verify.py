@@ -71,6 +71,8 @@ def test_verify_script_writes_secret_free_report(tmp_path: Path, capsys) -> None
     def fake_run_command(args):
         if args[:3] == ["git", "tag", "--list"]:
             return 0, module.FREYJA41_BASELINE_TAG + "\n", ""
+        if args[:3] == ["git", "rev-parse", "--short"]:
+            return 0, "current-head\n", ""
         if args[:2] == ["docker", "ps"]:
             return (
                 0,
@@ -91,6 +93,10 @@ def test_verify_script_writes_secret_free_report(tmp_path: Path, capsys) -> None
     printed = json.loads(capsys.readouterr().out)
     assert report == printed
     assert report["secrets_included"] is False
+    assert report["private_content_included"] is False
+    assert report["generated_at_unix"] == 1
+    assert report["timestamp_unix"] == 1
+    assert report["git_head"] == "current-head"
     assert report["ok"] is True
     assert report["optional_checks_pending"] == ["model_proxy_agent_models"]
     assert any(check["name"] == "freyja41_baseline_tag_present" and check["ok"] for check in report["checks"])
@@ -124,6 +130,8 @@ def test_verify_script_can_check_model_proxy_when_url_is_supplied(tmp_path: Path
     def fake_run_command(args):
         if args[:3] == ["git", "tag", "--list"]:
             return 0, module.FREYJA41_BASELINE_TAG + "\n", ""
+        if args[:3] == ["git", "rev-parse", "--short"]:
+            return 0, "current-head\n", ""
         if args[:2] == ["docker", "ps"]:
             return (
                 0,
@@ -170,6 +178,8 @@ def test_verify_script_can_check_model_proxy_from_container(tmp_path: Path) -> N
     def fake_run_command(args):
         if args[:3] == ["git", "tag", "--list"]:
             return 0, module.FREYJA41_BASELINE_TAG + "\n", ""
+        if args[:3] == ["git", "rev-parse", "--short"]:
+            return 0, "current-head\n", ""
         if args[:2] == ["docker", "ps"]:
             return (
                 0,
@@ -223,6 +233,8 @@ def test_verify_script_uses_supplied_api_key_without_writing_it_to_report(tmp_pa
     def fake_run_command(args):
         if args[:3] == ["git", "tag", "--list"]:
             return 0, module.FREYJA41_BASELINE_TAG + "\n", ""
+        if args[:3] == ["git", "rev-parse", "--short"]:
+            return 0, "current-head\n", ""
         if args[:2] == ["docker", "ps"]:
             return (
                 0,

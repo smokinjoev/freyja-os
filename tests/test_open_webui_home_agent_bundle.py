@@ -88,6 +88,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
     assert bundle["artifacts"]["signal_pilot"] == "certification/reports/freyja-channels-signal-pilot.json"
     assert bundle["evidence_summary"]["inventory_hosts"] == ["atlas", "hera", "iris", "vulcan"]
+    assert isinstance(bundle["evidence_summary"]["live_verifier_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["live_verifier_git_head"]
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0
     assert bundle["evidence_summary"]["chat_smoke_status"] == "pending"

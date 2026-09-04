@@ -104,6 +104,11 @@ def run_command(args: list[str]) -> tuple[int, str, str]:
     return completed.returncode, completed.stdout, completed.stderr
 
 
+def git_head() -> str | None:
+    code, stdout, _ = run_command(["git", "rev-parse", "--short", "HEAD"])
+    return stdout.strip() if code == 0 and stdout.strip() else None
+
+
 def request_model_proxy_container(container: str) -> tuple[int, dict[str, Any] | None, str | None]:
     code, stdout, stderr = run_command(
         [
@@ -255,14 +260,18 @@ def main(argv: list[str] | None = None) -> int:
     else:
         checks.append(check("open_webui_authenticated_models", False, {"status": "skipped", "reason": "credential not supplied"}))
 
+    generated_at = int(time.time())
     report = {
         "report_type": "open-webui-home-agent-live-verification",
-        "timestamp_unix": int(time.time()),
+        "generated_at_unix": generated_at,
+        "timestamp_unix": generated_at,
+        "git_head": git_head(),
         "open_webui_url": args.open_webui_url,
         "freyja_url": args.freyja_url,
         "model_proxy_url": args.model_proxy_url or None,
         "model_proxy_container": None if args.no_model_proxy_container else args.model_proxy_container,
         "secrets_included": False,
+        "private_content_included": False,
         "checks": checks,
         "ok": all(required_check_ok(item) for item in checks),
         "auth_required_checks_pending": [
