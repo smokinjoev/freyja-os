@@ -130,6 +130,16 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "Telegram pilot round trip needs bot token and allowlist configured outside source control.",
         "Signal round trip needs registered signal-cli-rest-api credentials.",
     ]
+    external_gates = [
+        {
+            "gate_id": str(gate.get("gate_id")),
+            "label": str(gate.get("label")),
+            "ready": bool(gate.get("ready")),
+            "evidence": str(gate.get("evidence")),
+            "next_action": gate.get("next_action"),
+        }
+        for gate in readiness_summary.get("gates") or []
+    ]
     requirement_status = {
         "backup_and_checkpoint": "complete",
         "local_inference_path": "implemented; authenticated chat proof pending",
@@ -157,6 +167,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "rollback": rollback,
         "tests": tests,
         "blockers": blockers,
+        "external_gates": external_gates,
         "exact_next_action": "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session.",
         "artifacts": {
             "runbook": "docs/operations/open-webui-home-agent.md",
@@ -280,6 +291,12 @@ def render_markdown(bundle: dict[str, Any]) -> str:
     lines += ["", "## Blockers", ""]
     for blocker in bundle["blockers"]:
         lines.append(f"- {blocker}")
+    lines += ["", "## External Gates", ""]
+    for gate in bundle["external_gates"]:
+        state = "ready" if gate["ready"] else "pending"
+        lines.append(f"- `{gate['gate_id']}`: {state} - {gate['label']}")
+        if gate.get("next_action"):
+            lines.append(f"  Next: {gate['next_action']}")
     lines += ["", "## Exact Next Action", "", bundle["exact_next_action"], ""]
     return "\n".join(lines)
 

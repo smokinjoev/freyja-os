@@ -45,6 +45,15 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["tests"]["open_webui_tools_gateway_ok"] is True
     assert bundle["tests"]["open_webui_tools_openapi_ok"] is True
     assert "exact_next_action" in bundle
+    assert [gate["gate_id"] for gate in bundle["external_gates"]] == [
+        "post_auth_activation",
+        "authenticated_chat_smoke",
+        "telegram_pilot",
+        "signal_pilot",
+    ]
+    assert all(gate["ready"] is False for gate in bundle["external_gates"])
+    assert bundle["external_gates"][0]["next_action"].startswith("Create/sign in to Open WebUI")
+    assert bundle["external_gates"][2]["next_action"].startswith("Set TELEGRAM_BOT_TOKEN")
     assert bundle["artifacts"]["runbook"] == "docs/operations/open-webui-home-agent.md"
     assert bundle["artifacts"]["backup_rollback_audit"] == "certification/reports/open-webui-backup-rollback-audit.json"
     assert bundle["artifacts"]["secret_safety_audit"] == "certification/reports/open-webui-home-agent-secret-safety.json"
@@ -106,6 +115,9 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Open WebUI tools gateway ok" in text
     assert "Open WebUI tools OpenAPI ok" in text
     assert "Readiness summary" in text
+    assert "External Gates" in text
+    assert "`post_auth_activation`: pending" in text
+    assert "`telegram_pilot`: pending" in text
     assert "pending_external_auth_or_credentials" in text
     assert "readiness_summary" in text
     assert "Exact Next Action" in text
