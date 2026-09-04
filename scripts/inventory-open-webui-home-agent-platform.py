@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-platform-inventory.json"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Build a redacted Freyja Open WebUI platform inventory.")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    return parser
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+def _docker_ps() -> dict[str, dict[str, str]]:
+    proc = subprocess.run(
+        ["docker", "ps", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"],
+        cwd=REPO_ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return {}
+    rows: dict[str, dict[str, str]] = {}
+    for line in proc.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 4:
+            continue
+        rows[parts[0]] = {"image": parts[1], "status": parts[2], "ports": parts[3]}
+    return rows
+
+
+def build_inventory(now: int | None = None) -> dict[str, Any]:
+    planes = _load_yaml(REPO_ROOT / "config" / "freyja-5.0-planes.yaml")
+    mcp = _load_yaml(REPO_ROOT / "config" / "freyja-5.0-mcp-topology.yaml")
+    resources = _load_yaml(REPO_ROOT / "config" / "open-webui-home-resources.yaml")
+    docker = _docker_ps()
+
+    hosts = {
+        "atlas": {
+            "role": "always-on Open WebUI, shared memory, messaging adapters, non-Apple services",
+            "current_services": {
+                name: docker[name]
+                for name in sorted(docker)
+                if name.startswith("freyja-open-webui-atlas") or name.startswith("freyja3-") or name.startswith("freyja5-") or name.startswith("freyja-signal-atlas")
+            },
+            "credential_locations": [
+                "deploy/compose/open-webui/.env",
+                "deploy/compose/freyja5/.env",
+                "deploy/compose/signal/.env",
+            ],
+        },
+        "vulcan": {
+            "role": "local inference through Ollama/OpenAI-compatible endpoints",
+            "endpoints": {
+                "openai": "http://100.94.80.21:8088/v1",
+                "ollama": "http://100.94.80.21:11434",
+            },
+            "nexus_required": False,
+        },
+        "iris": {
+            "role": "Apple capability server for Calendar, Reminders, iMessage, Shortcuts, HomePod actions",
+            "endpoint": "http://100.115.228.56:11434/v1",
+            "mcp_host": "iris",
+        },
+        "hera": {
+            "role": "future voice/avatar interface",
+            "status": "future",
+        },
+    }
+    endpoints = {
+        "open_webui": "http://127.0.0.1:3001",
+        "open_webui_tailnet": "http://100.119.235.114:3001",
+        "freyja5_gateway": "http://127.0.0.1:8500",
+        "freyja_home_memory": "http://127.0.0.1:8500/freyja-home-memory",
+        "model_proxy_internal": "http://model-proxy:8080/v1",
+        "vulcan_openai": "http://100.94.80.21:8088/v1",
+        "vulcan_ollama": "http://100.94.80.21:11434",
+        "iris_fallback": "http://100.115.228.56:11434/v1",
+    }
+    return {
+        "report_type": "open-webui-home-agent-platform-inventory",
+        "generated_at_unix": int(now or time.time()),
+        "secrets_included": False,
+        "private_content_included": False,
+        "hosts": hosts,
+        "endpoints": endpoints,
+        "source_topology": {
+            "planes": "config/freyja-5.0-planes.yaml",
+            "mcp": "config/freyja-5.0-mcp-topology.yaml",
+            "home_resources": "config/open-webui-home-resources.yaml",
+            "atlas_recoverable_fallback_tag": (planes.get("atlas") or {}).get("recoverable_fallback_tag"),
+            "mcp_hosts": sorted({server.get("host") for server in (mcp.get("servers") or []) if server.get("host")}),
+            "resource_tool_count": len(((resources.get("resources") or {}).get("tools") or [])),
+        },
+        "credential_policy": {
+            "values_recorded": False,
+            "locations_only": True,
+            "secret_env_names_redacted": True,
+        },
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    inventory = build_inventory()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(inventory, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps(inventory, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

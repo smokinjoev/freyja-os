@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Any
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+REPORTS = REPO_ROOT / "certification" / "reports"
+DEFAULT_OUTPUT = REPORTS / "open-webui-home-agent-completion-audit.json"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Audit Freyja Open WebUI home-agent completion from generated evidence.")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    return parser
+
+
+def _load(path: Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("secrets_included") is not False:
+        raise ValueError(f"report is not marked secret-free: {path}")
+    return data
+
+
+def _exists(path: str) -> bool:
+    return (REPO_ROOT / path).exists()
+
+
+def _item(requirement: str, status: str, evidence: list[str], blocker: str | None = None) -> dict[str, Any]:
+    return {
+        "requirement": requirement,
+        "status": status,
+        "evidence": evidence,
+        "blocker": blocker,
+    }
+
+
+def build_audit() -> dict[str, Any]:
+    live = _load(REPORTS / "open-webui-home-agent-live.json")
+    backup = _load(REPORTS / "open-webui-backup-rollback-audit.json")
+    secret_safety = _load(REPORTS / "open-webui-home-agent-secret-safety.json")
+    model_apply = _load(REPORTS / "open-webui-home-agents-offline-apply.json")
+    access_audit = _load(REPORTS / "open-webui-home-agent-access-audit.json")
+    access_bind = _load(REPORTS / "open-webui-home-agent-access-bind-dry-run.json")
+    resources = _load(REPORTS / "open-webui-home-resources-export.json")
+    resource_counts = _load(REPORTS / "open-webui-home-resources-live-counts.json")
+    resource_import = _load(REPORTS / "open-webui-home-resources-offline-dry-run.json")
+    channels = _load(REPORTS / "freyja-channels-readiness.json")
+    proactive = _load(REPORTS / "freyja-proactive-readiness.json")
+    proactive_dry_run = _load(REPORTS / "freyja-proactive-dry-run.json")
+    freyja41 = _load(REPORTS / "freyja41-preservation-audit.json")
+    proxy = _load(REPORTS / "open-webui-model-proxy-catalog.json")
+    inventory = _load(REPORTS / "open-webui-home-agent-platform-inventory.json")
+    inference = _load(REPORTS / "open-webui-inference-policy-audit.json")
+    chat_smoke = _load(REPORTS / "open-webui-home-agent-chat-smoke.json")
+    tools_gateway = _load(REPORTS / "open-webui-tools-gateway-readiness.json")
+    tools_openapi = _load(REPORTS / "open-webui-tools-openapi.json")
+
+    items = [
+        _item(
+            "Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config",
+            "complete" if set((inventory.get("hosts") or {})) == {"atlas", "vulcan", "iris", "hera"} else "partial",
+            [
+                "logs/open-webui-diagnostics/home-agent-20260904T174214Z/",
+                "docs/operations/open-webui-home-agent.md",
+                "certification/reports/open-webui-home-agent-platform-inventory.json",
+            ],
+        ),
+        _item(
+            "Identify Open WebUI host and Vulcan path",
+            "complete" if live.get("open_webui_url") and proxy.get("ok") is True else "partial",
+            ["certification/reports/open-webui-home-agent-live.json", "certification/reports/open-webui-model-proxy-catalog.json"],
+        ),
+        _item(
+            "Back up Open WebUI data/config/version/image/volumes/database and rollback",
+            "complete" if backup.get("ok") else "partial",
+            [
+                "logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz",
+                "docs/operations/open-webui-home-agent.md",
+                "certification/reports/open-webui-backup-rollback-audit.json",
+            ],
+        ),
+        _item(
+            "Create recoverable git checkpoint before repo modifications",
+            "complete" if _exists(".codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch") else "missing",
+            [".codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch"],
+        ),
+        _item(
+            "Never print or commit secrets, tokens, private messages, or private documents",
+            "complete" if secret_safety.get("ok") else "partial",
+            [
+                "certification/reports/open-webui-home-agent-secret-safety.json",
+                "logs/open-webui-diagnostics/home-agent-20260904T174214Z/env.redacted",
+                "logs/open-webui-diagnostics/home-agent-20260904T174214Z/compose-config.redacted",
+            ],
+        ),
+        _item(
+            "Keep inference local by default and connect Open WebUI to Vulcan",
+            "complete" if inference.get("ok") and chat_smoke.get("status") == "complete" else "partial",
+            [
+                "deploy/compose/open-webui/model-proxy.py",
+                "certification/reports/open-webui-home-agent-live.json",
+                "certification/reports/open-webui-inference-policy-audit.json",
+                "certification/reports/open-webui-home-agent-chat-smoke.json",
+            ],
+            "Authenticated model/chat proof requires Open WebUI API key or session.",
+        ),
+        _item(
+            "Define model profiles for fast chat, reasoning, vision/document analysis, and coding",
+            "complete" if _exists("config/open-webui-home-agents.yaml") else "missing",
+            ["config/open-webui-home-agents.yaml"],
+        ),
+        _item(
+            "Create/import five Open WebUI agents",
+            "auth_gated" if model_apply.get("model_count") == 5 and access_audit.get("ok") else "partial",
+            ["certification/reports/open-webui-home-agents-offline-apply.json", "certification/reports/open-webui-home-agent-access-audit.json"],
+            "Imported into model table; authenticated UI/API and real group binding require users/session.",
+        ),
+        _item(
+            "Implement three-layer memory with scoped freyja-home-memory service",
+            "auth_gated" if resource_import.get("ready") is False and live.get("ok") else "partial",
+            ["src/freyja/home_memory.py", "certification/reports/open-webui-home-resources-offline-dry-run.json", "certification/reports/open-webui-home-agent-live.json"],
+            "Native Open WebUI per-user memory rows require an owner user/authenticated import.",
+        ),
+        _item(
+            "Expose narrow MCP/OpenAPI tools and assign per agent",
+            "auth_gated" if resources.get("ok") and tools_gateway.get("ok") and tools_openapi.get("ok") and resource_import.get("ready") is False else "partial",
+            [
+                "config/open-webui-home-resources.yaml",
+                "src/freyja/open_webui_tools.py",
+                "certification/reports/open-webui-home-resources-export.json",
+                "certification/reports/open-webui-tools-gateway-readiness.json",
+                "certification/reports/open-webui-tools-openapi.json",
+            ],
+            "Open WebUI tool rows/enablement require owner user or authenticated admin session.",
+        ),
+        _item(
+            "Implement deterministic Telegram/Signal channel gateway with WhatsApp disabled",
+            "credential_gated" if channels.get("deterministic_gateway_only") else "partial",
+            ["src/freyja/channels.py", "certification/reports/freyja-channels-readiness.json"],
+            "Telegram/Signal live round trips require allowlists and credentials.",
+        ),
+        _item(
+            "Add proactive behavior disabled by default",
+            "complete" if proactive.get("all_disabled_by_default") and not proactive.get("ready_schedule_ids") and proactive_dry_run.get("all_sends_suppressed") else "partial",
+            [
+                "src/freyja/proactive.py",
+                "certification/reports/freyja-proactive-readiness.json",
+                "certification/reports/freyja-proactive-dry-run.json",
+            ],
+        ),
+        _item(
+            "Create repeatable verification",
+            "partial",
+            [
+                "tests/",
+                "certification/reports/open-webui-home-agent-live.json",
+                "certification/reports/open-webui-home-agent-chat-smoke.json",
+            ],
+            "Credentialed Open WebUI, Telegram, and Signal round trips remain pending.",
+        ),
+        _item(
+            "Preserve Freyja 4.1 fallback",
+            "partial" if freyja41.get("pending") else "complete",
+            ["certification/reports/freyja41-preservation-audit.json"],
+            "Dedicated Freyja 4.1 endpoint contract is not defined in current repo evidence." if freyja41.get("pending") else None,
+        ),
+        _item(
+            "Deliver endpoint map, config inventory, test results, blockers, rollback, and exact next action",
+            "complete",
+            ["certification/reports/open-webui-home-agent-deliverable.json", "docs/operations/open-webui-home-agent.md"],
+        ),
+    ]
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item["status"]] = counts.get(item["status"], 0) + 1
+    return {
+        "report_type": "open-webui-home-agent-completion-audit",
+        "secrets_included": False,
+        "private_content_included": False,
+        "items": items,
+        "status_counts": counts,
+        "complete": counts.get("missing", 0) == 0 and counts.get("partial", 0) == 0 and counts.get("auth_gated", 0) == 0 and counts.get("credential_gated", 0) == 0,
+        "exact_next_action": "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session.",
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    audit = build_audit()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps(audit, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

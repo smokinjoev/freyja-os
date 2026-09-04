@@ -1,0 +1,104 @@
+schema_version: 1
+platform: freyja-open-webui-home-agent
+secrets_included: false
+resources:
+  knowledge:
+    - id: freyja_household
+      name: Freyja Household
+      owner_group: household
+      scope: household
+      sensitivity: internal
+      description: Stable family, device, procedure, and household logistics information.
+      allowed_agents: [freyja, agent-44, jenna]
+      excluded_agents: [benedict]
+      seed_policy:
+        source: curated_documents_only
+        private_messages: forbidden
+        secrets: forbidden
+    - id: freyja_projects
+      name: Freyja Projects
+      owner_group: joe
+      scope: project:freyja-os
+      sensitivity: internal
+      description: Freyja OS architecture, operations, runbooks, and project decisions.
+      allowed_agents: [freyja, cloyd]
+      excluded_agents: [benedict, agent-44, jenna]
+      seed_policy:
+        source: repository_docs_and_runbooks
+        private_messages: forbidden
+        secrets: forbidden
+    - id: benedict_restricted
+      name: Benedict Restricted
+      owner_group: beth
+      scope: restricted:benedict
+      sensitivity: restricted
+      description: Beth-authorized local paralegal knowledge only.
+      allowed_agents: [benedict]
+      excluded_agents: [freyja, cloyd, agent-44, jenna]
+      seed_policy:
+        source: beth_authorized_local_documents_only
+        private_messages: forbidden
+        cloud_sync: forbidden
+        secrets: forbidden
+  native_memory:
+    mode: per_user
+    private_preferences:
+      joe: personal:joe
+      beth: personal:beth
+      liam: personal:liam
+      jenna: personal:jenna
+    policy:
+      cross_user_reads: forbidden
+      children_admin_memory: forbidden
+      benedict_cloud_fallback: forbidden
+  tools:
+    - id: freyja_home_memory
+      name: Freyja Home Memory
+      boundary: openapi
+      base_url: http://freyja5-gateway:8500/freyja-home-memory
+      operations: [search, remember, update, forget, record-decision, recent-events]
+      allowed_agents: [freyja, cloyd, benedict, agent-44, jenna]
+      confirmation_required: [forget, update]
+      destructive_default: deny
+      children_allowed_operations: [search, recent-events]
+    - id: iris_apple
+      name: Iris Apple Capabilities
+      boundary: mcp
+      host: iris
+      operations: [calendar.read, calendar.create, reminders.read, reminders.create, imessage.send.approved, shortcuts.run]
+      allowed_agents: [freyja, cloyd]
+      confirmation_required: [calendar.create, reminders.create, imessage.send.approved, shortcuts.run]
+      destructive_default: deny
+      children_allowed_operations: []
+    - id: home_assistant
+      name: Home Assistant
+      boundary: openapi
+      operations: [home.status, home.device_action]
+      allowed_agents: [freyja, cloyd]
+      confirmation_required: [home.device_action]
+      destructive_default: deny
+      children_allowed_operations: []
+    - id: household_analysis
+      name: Household Files And Analysis
+      boundary: openapi
+      operations: [files.household.read, files.beth.read, pdf.analyze, image.analyze]
+      allowed_agents: [freyja, cloyd, benedict, agent-44, jenna]
+      confirmation_required: []
+      destructive_default: deny
+      children_allowed_operations: [pdf.analyze, image.analyze]
+    - id: infrastructure_health
+      name: Infrastructure Health
+      boundary: openapi
+      operations: [infrastructure.health]
+      allowed_agents: [freyja, cloyd]
+      confirmation_required: []
+      destructive_default: deny
+      children_allowed_operations: []
+    - id: weather
+      name: Weather
+      boundary: openapi
+      operations: [weather.read]
+      allowed_agents: [freyja, cloyd, agent-44, jenna]
+      confirmation_required: []
+      destructive_default: deny
+      children_allowed_operations: [weather.read]

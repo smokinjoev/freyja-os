@@ -1,0 +1,47 @@
+schema_version: 1
+service: freyja-proactive
+host: atlas
+secrets_included: false
+default_status: disabled
+enablement_gate:
+  chat_stable: required
+  recipients_verified: required
+  destinations_verified: required
+  per_schedule_approval: required
+  dry_run_first: required
+allowed_jobs:
+  scheduled_briefing:
+    status: disabled
+    allowed_recipients: [joe, beth]
+    allowed_destinations: [open-webui, telegram, signal]
+    required_tools: [calendar.read, reminders.read, weather.read, infrastructure.health]
+    sends_without_verification: false
+  reminder_followup:
+    status: disabled
+    allowed_recipients: [joe, beth, liam, jenna]
+    allowed_destinations: [open-webui, telegram, signal]
+    required_tools: [reminders.read, reminders.create]
+    sends_without_verification: false
+  calendar_conflict_warning:
+    status: disabled
+    allowed_recipients: [joe, beth]
+    allowed_destinations: [open-webui, telegram, signal]
+    required_tools: [calendar.read]
+    sends_without_verification: false
+  system_health_notification:
+    status: disabled
+    allowed_recipients: [joe]
+    allowed_destinations: [open-webui, telegram, signal]
+    required_tools: [infrastructure.health]
+    sends_without_verification: false
+prohibitions:
+  enable_globally_by_default: true
+  message_children_without_parent_policy: true
+  run_destructive_tools: true
+  infer_unverified_destination: true
+audit:
+  record_schedule_id: true
+  record_recipient: true
+  record_destination: true
+  record_delivery_result: true
+  log_message_body: false

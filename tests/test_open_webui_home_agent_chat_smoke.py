@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+from argparse import Namespace
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = REPO_ROOT / "scripts" / "smoke-open-webui-home-agent-chats.py"
+
+
+def _module():
+    spec = importlib.util.spec_from_file_location("smoke_open_webui_home_agent_chats", SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_chat_smoke_dry_run_lists_all_agents_without_secrets(tmp_path: Path, capsys) -> None:
+    output = tmp_path / "smoke.json"
+
+    assert _module().main(["--dry-run", "--output", str(output)]) == 0
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+    assert printed == report
+    assert report["secrets_included"] is False
+    assert report["private_content_included"] is False
+    assert report["status"] == "pending"
+    assert {item["agent_id"] for item in report["checks"]} == {
+        "freyja",
+        "cloyd",
+        "benedict",
+        "agent-44",
+        "jenna",
+    }
+    assert all(item["open_webui_model_id"].startswith("agent/") for item in report["checks"])
+
+
+def test_chat_smoke_missing_api_key_is_pending(tmp_path: Path, monkeypatch, capsys) -> None:
+    output = tmp_path / "smoke.json"
+    monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
+
+    assert _module().main(["--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "pending"
+    assert report["complete"] is False
+    assert report["reason"] == "OPEN_WEBUI_API_KEY not supplied"
+
+
+def test_chat_smoke_live_report_redacts_auth_and_requires_response(monkeypatch) -> None:
+    module = _module()
+    manifest = module.load_manifest(REPO_ROOT / "config" / "open-webui-home-agents.yaml")
+    calls = []
+
+    def fake_request(base_url, api_key, model_id, display_name, *, timeout):
+        calls.append(
+            {
+                "base_url": base_url,
+                "api_key": api_key,
+                "model_id": model_id,
+                "display_name": display_name,
+                "timeout": timeout,
+            }
+        )
+        return 200, {"choices": [{"message": {"content": "Freyja home agent online"}}]}, None, 0.25
+
+    monkeypatch.setattr(module, "request_chat_completion", fake_request)
+    report = module.run_smoke(
+        Namespace(
+            open_webui_url="http://open-webui.local:3001",
+            open_webui_api_key="secret-token",
+            timeout=10,
+            agent=["benedict"],
+        ),
+        manifest,
+    )
+
+    assert report["status"] == "complete"
+    assert report["secrets_included"] is False
+    assert "secret-token" not in json.dumps(report)
+    assert calls == [
+        {
+            "base_url": "http://open-webui.local:3001",
+            "api_key": "secret-token",
+            "model_id": "agent/benedict",
+            "display_name": "Benedict",
+            "timeout": 10,
+        }
+    ]
+    assert report["checks"][0]["expected_vulcan_model"] == "qwen3:30b-a3b"

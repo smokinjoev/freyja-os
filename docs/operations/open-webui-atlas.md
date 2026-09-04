@@ -53,6 +53,14 @@ Atlas deployment files live under:
 deploy/compose/open-webui/
 ```
 
+The home-agent runbook, source-controlled agent definitions, scoped memory API,
+backup inventory, and current blockers are tracked in:
+
+```text
+docs/operations/open-webui-home-agent.md
+config/open-webui-home-agents.yaml
+```
+
 Default Atlas URL:
 
 ```text
@@ -84,10 +92,10 @@ The model proxy checks Vulcan first and Iris second. Iris fallback is only for
 When the Freyja 5.0 gateway is ready for live Open WebUI traffic, switch Open
 WebUI to the Atlas-local Freyja `/v1` endpoint and select `freyja-5`.
 
-Avoid `qwen3:30b-a3b` for normal Open WebUI chat until the reasoning-output
-adapter is fixed. It can return text in an OpenAI-compatible `reasoning` field
-with empty assistant `content`, which leaves Open WebUI showing little or no
-answer.
+The model proxy includes a narrow non-streaming reasoning-output adapter. If an
+upstream returns empty assistant `content` with useful text in an
+OpenAI-compatible `reasoning` field, the proxy promotes that text to visible
+content so Open WebUI does not render a blank answer.
 
 Change procedure:
 

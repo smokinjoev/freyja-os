@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+import importlib.util
+import io
+import json
+import tarfile
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = REPO_ROOT / "scripts" / "audit-open-webui-backup-rollback.py"
+
+
+def _module():
+    spec = importlib.util.spec_from_file_location("audit_open_webui_backup_rollback", SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _tar(path: Path, files: dict[str, bytes]) -> None:
+    with tarfile.open(path, "w:gz") as archive:
+        for name, content in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(content)
+            archive.addfile(info, io.BytesIO(content))
+
+
+def _runbook(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "docker compose --env-file deploy/compose/open-webui/.env",
+                "git apply .codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch",
+                "open-webui-data-volume.tgz",
+                "tar -xzf",
+                "http://127.0.0.1:3001/api/version",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_backup_rollback_audit_accepts_readable_open_webui_archive(tmp_path: Path) -> None:
+    backup = tmp_path / "open-webui-data-volume.tgz"
+    runbook = tmp_path / "runbook.md"
+    _tar(backup, {"webui.db": b"sqlite-ish", "config.json": b"{}"})
+    _runbook(runbook)
+
+    report = _module().build_report(backup, runbook)
+
+    assert report["ok"] is True
+    assert report["secrets_included"] is False
+    assert report["private_content_included"] is False
+    assert report["backup"]["contains_webui_db"] is True
+    assert report["backup"]["tar_gzip_readable"] is True
+    assert report["backup"]["member_count"] == 2
+    assert len(report["backup"]["sha256"]) == 64
+    assert "sqlite-ish" not in json.dumps(report)
+
+
+def test_backup_rollback_audit_rejects_missing_rollback_step(tmp_path: Path) -> None:
+    backup = tmp_path / "open-webui-data-volume.tgz"
+    runbook = tmp_path / "runbook.md"
+    _tar(backup, {"webui.db": b"sqlite-ish"})
+    runbook.write_text("open-webui-data-volume.tgz", encoding="utf-8")
+
+    report = _module().build_report(backup, runbook)
+
+    assert report["ok"] is False
+    assert report["rollback_documentation"]["missing_required_phrases"]
+
+
+def test_backup_rollback_audit_writes_report(tmp_path: Path, capsys) -> None:
+    backup = tmp_path / "open-webui-data-volume.tgz"
+    runbook = tmp_path / "runbook.md"
+    output = tmp_path / "audit.json"
+    _tar(backup, {"webui.db": b"sqlite-ish"})
+    _runbook(runbook)
+
+    assert _module().main(["--backup", str(backup), "--runbook", str(runbook), "--output", str(output)]) == 0
+
+    written = json.loads(output.read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+    assert written == printed
+    assert written["report_type"] == "open-webui-backup-rollback-audit"

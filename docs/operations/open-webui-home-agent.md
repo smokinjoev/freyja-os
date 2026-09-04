@@ -1,0 +1,686 @@
+# Open WebUI Home-Agent Runbook
+
+Status date: 2026-09-04.
+
+## Current Placement
+
+Open WebUI is running as the Atlas household UI:
+
+```text
+browser/PWA -> Atlas Open WebUI :3001 -> model-proxy -> Vulcan Ollama/OpenAI-compatible endpoint
+```
+
+Live local observation on 2026-09-04:
+
+| Component | Value |
+| --- | --- |
+| Compose project | `freyja-open-webui-atlas` |
+| Open WebUI URL | `http://127.0.0.1:3001` locally, `http://100.119.235.114:3001` on tailnet |
+| Open WebUI version | `0.11.3` |
+| Open WebUI image | `ghcr.io/open-webui/open-webui:main` |
+| Open WebUI data volume | `freyja-open-webui-atlas_open-webui` mounted at `/app/backend/data` |
+| Model proxy image | `python:3.12-alpine` |
+| Model proxy source | `deploy/compose/open-webui/model-proxy.py` |
+| Model proxy Freyja 5 upstream | `http://host.docker.internal:8500/v1` |
+| Freyja 5 gateway URL | `http://127.0.0.1:8500` locally |
+| Freyja 5 gateway container | `freyja5-gateway-1`, side-by-side with Open WebUI/Freyja 3 |
+| Vulcan primary endpoint | `http://100.94.80.21:8088/v1` |
+| Vulcan Ollama endpoint | `http://100.94.80.21:11434` |
+| Iris fallback endpoint | `http://100.115.228.56:11434/v1` |
+
+Nexus is not required for the current Open WebUI path.
+
+Inference policy audit:
+
+```bash
+scripts/audit-open-webui-inference-policy.py \
+  --output certification/reports/open-webui-inference-policy-audit.json
+```
+
+Latest audit:
+
+```text
+ok=true
+model_profiles={fast_chat,strong_reasoning,vision_documents,coding}
+nexus_not_required=true
+unloads_other_primary_models=true
+cloud_fallback_disabled_for_open_webui_path=true
+```
+
+## Recovery Checkpoints
+
+Before home-agent changes, a source checkpoint patch was written under:
+
+```text
+.codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch
+.codex-checkpoints/pre-open-webui-home-agent-status-20260904T133828-0400.txt
+```
+
+The Open WebUI configuration and data volume backup was captured under:
+
+```text
+logs/open-webui-diagnostics/home-agent-20260904T174214Z/
+logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz
+```
+
+Broader redacted platform inventory:
+
+```text
+certification/reports/open-webui-home-agent-platform-inventory.json
+```
+
+Backup and rollback audit:
+
+```bash
+scripts/audit-open-webui-backup-rollback.py \
+  --output certification/reports/open-webui-backup-rollback-audit.json
+```
+
+Latest audit:
+
+```text
+ok=true
+tar_gzip_readable=true
+contains_webui_db=true
+sha256=44b3dd287665387a843e0068e1b69a1e459744b4a23f20cf6fcc311fa5187f21
+```
+
+Rollback procedure:
+
+1. Stop the Open WebUI stack:
+
+```bash
+docker compose --env-file deploy/compose/open-webui/.env \
+  -f deploy/compose/open-webui/compose.yaml down
+```
+
+2. Restore source files if needed:
+
+```bash
+git apply .codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch
+```
+
+3. Restore the Open WebUI volume from the backup:
+
+```bash
+docker run --rm \
+  -v freyja-open-webui-atlas_open-webui:/target \
+  -v "$(pwd)/logs/open-webui-diagnostics/home-agent-20260904T174214Z:/backup:ro" \
+  alpine:3.20 \
+  sh -c 'rm -rf /target/* && tar -xzf /backup/open-webui-data-volume.tgz -C /target'
+```
+
+4. Start the stack:
+
+```bash
+docker compose --env-file deploy/compose/open-webui/.env \
+  -f deploy/compose/open-webui/compose.yaml up -d
+```
+
+5. Verify `http://127.0.0.1:3001/api/version` returns `0.11.3` or the intended restored version.
+
+## Source-Controlled Agent Definitions
+
+Open WebUI-facing definitions live at:
+
+```text
+config/open-webui-home-agents.yaml
+config/freyja-channels.yaml
+config/freyja-proactive.yaml
+```
+
+They define five importable/mirrorable agents:
+
+| Agent | Owner | Model profile | Sensitive constraints |
+| --- | --- | --- | --- |
+| Freyja | household | `strong_reasoning` | confirms writes/destructive actions |
+| Cloyd | Joe | `coding` | technical tools for Joe only |
+| Benedict | Beth | `strong_reasoning` | local-only, `restricted:benedict`, no cloud fallback |
+| Agent 44 | Liam | `fast_chat` | no admin, messaging, or device actions |
+| Jenna | Jenna | `fast_chat` | no admin, messaging, or device actions |
+
+Use these definitions as the source of truth when creating Open WebUI Model/agent entries. Do not paste secrets into agent prompts, tools, or knowledge descriptions.
+
+Generate reviewable Open WebUI import payloads from the source manifest:
+
+```bash
+scripts/export-open-webui-home-agents.py \
+  --output certification/reports/open-webui-home-agents-import.json
+```
+
+The payload uses the live proxy model IDs while preserving the requested
+friendly display names and agent IDs in metadata:
+
+| Display agent | Open WebUI base model ID |
+| --- | --- |
+| Freyja | `agent/freyja` |
+| Cloyd | `agent/cloyd-gibbler` |
+| Benedict | `agent/benedict` |
+| Agent 44 | `agent/agent-47` |
+| Jenna | `agent/jennacide` |
+
+Output artifact:
+
+```text
+certification/reports/open-webui-home-agents-import.json
+```
+
+The five agent rows have also been applied directly to the Open WebUI `model`
+table with the guarded offline importer. The importer created a SQLite backup
+before writing and touched only the `model` table.
+
+Evidence artifact:
+
+```text
+certification/reports/open-webui-home-agents-offline-apply.json
+```
+
+Access metadata audit:
+
+```bash
+scripts/audit-open-webui-home-agent-access.py \
+  --db /app/backend/data/webui.db \
+  --output certification/reports/open-webui-home-agent-access-audit.json
+```
+
+Latest live audit:
+
+```text
+ok=true
+user_count=0
+group_count=0
+pending=["open_webui_users_missing","open_webui_groups_missing"]
+```
+
+Once real Open WebUI users exist, bind the imported models to groups with a
+dry-run first:
+
+```bash
+scripts/bind-open-webui-home-agent-access.py \
+  --db /app/backend/data/webui.db
+```
+
+Current dry-run evidence:
+
+```text
+certification/reports/open-webui-home-agent-access-bind-dry-run.json
+```
+
+Latest live dry-run:
+
+```text
+ready=false
+missing_users=["beth","jenna","joe","liam"]
+grant_insert_count=10
+mode=dry-run
+```
+
+Only after the dry-run shows `ready=true`, apply with `--apply`; the binder
+creates a database backup before writing.
+
+After Joe signs in or provides an authenticated Open WebUI owner/admin session,
+the full post-auth activation sequence is:
+
+```bash
+scripts/activate-open-webui-home-agent-post-auth.py \
+  --db /app/backend/data/webui.db \
+  --resources-json certification/reports/open-webui-home-resources-export.json \
+  --owner-user-id <open-webui-owner-user-id>
+```
+
+Current dry-run evidence:
+
+```text
+certification/reports/open-webui-home-agent-post-auth-activation.json
+```
+
+Latest dry-run:
+
+```text
+ready=false
+access.missing_users=["beth","jenna","joe","liam"]
+resources.reason="missing or ambiguous Open WebUI owner user"
+```
+
+Only run with `--apply` after the dry-run shows `ready=true`. Apply mode creates
+database backups before writing access grants and resource rows.
+
+Live database state after import:
+
+| Open WebUI model ID | Display name |
+| --- | --- |
+| `agent/freyja` | Freyja |
+| `agent/cloyd-gibbler` | Cloyd |
+| `agent/benedict` | Benedict |
+| `agent/agent-47` | Agent 44 |
+| `agent/jennacide` | Jenna |
+
+## Scoped Memory Service
+
+The additive home-memory API is mounted in the Freyja FastAPI app at:
+
+```text
+/freyja-home-memory
+```
+
+Deployment note: the side-by-side Freyja 5 gateway is started with
+`deploy/compose/freyja5/compose.yaml`. The container sets `REPOSITORY_ROOT=/app`
+so source-controlled config files resolve from `/app/config` after package
+installation.
+
+Operations:
+
+| Operation | Endpoint |
+| --- | --- |
+| `search` | `GET /freyja-home-memory/search?scope=<scope>&q=<query>` |
+| `remember` | `POST /freyja-home-memory/remember` |
+| `update` | `POST /freyja-home-memory/update` |
+| `forget` | `DELETE /freyja-home-memory/forget/{scope}/{record_id}` |
+| `record-decision` | `POST /freyja-home-memory/record-decision` |
+| `recent-events` | `GET /freyja-home-memory/recent-events?scope=<scope>` |
+
+Records include scope, owner, provenance, created/updated timestamps, sensitivity, and operation metadata. Current enforced scopes include:
+
+```text
+personal:joe
+personal:beth
+personal:liam
+personal:jenna
+household
+project:freyja-os
+restricted:benedict
+```
+
+Benedict can read `personal:beth` and `restricted:benedict`, but can only write `restricted:benedict`. Joe cannot read Beth/Benedict scopes, Beth cannot read Joe's personal scope, and child agents cannot access administrative scopes.
+
+## Open WebUI Resources
+
+Knowledge, native memory, and tool/resource policy live at:
+
+```text
+config/open-webui-home-resources.yaml
+```
+
+Export reviewable Open WebUI resource payloads with:
+
+```bash
+scripts/export-open-webui-home-resources.py \
+  --output certification/reports/open-webui-home-resources-export.json
+```
+
+The export contains:
+
+- `Freyja Household` Knowledge for stable household/device/procedure information.
+- `Freyja Projects` Knowledge for Freyja OS architecture and runbooks.
+- `Benedict Restricted` Knowledge for Beth-authorized local paralegal material only.
+- Native Open WebUI per-user memory policy for Joe, Beth, Liam, and Jenna.
+- Narrow MCP/OpenAPI tool boundaries for Iris, Home Assistant, weather, household files, infrastructure health, PDF/image analysis, and `freyja-home-memory`.
+- Atlas-side `/open-webui-tools` policy gateway for Open WebUI tool calls.
+- Secret-free `/open-webui-tools` OpenAPI schema export for Open WebUI tool import.
+
+Current live Open WebUI resource tables are empty:
+
+```text
+knowledge=0
+knowledge_file=0
+tool=0
+function=0
+memory=0
+```
+
+Evidence artifact:
+
+```text
+certification/reports/open-webui-home-resources-live-counts.json
+```
+
+Prepare the offline resource rows with a dry-run first:
+
+```bash
+scripts/apply-open-webui-home-resources-offline.py \
+  --db /app/backend/data/webui.db \
+  --import-json certification/reports/open-webui-home-resources-export.json
+```
+
+Current dry-run evidence:
+
+```text
+certification/reports/open-webui-home-resources-offline-dry-run.json
+```
+
+Latest live dry-run:
+
+```text
+ready=false
+applied=false
+reason="missing or ambiguous Open WebUI owner user"
+knowledge_count=3
+tool_count=6
+memory_policy_count=4
+```
+
+Only after a real owner user exists, apply with `--owner-user-id <id> --apply`.
+The importer creates a database backup before writing and touches only
+`knowledge`, `tool`, and `memory`.
+
+This is expected until a real owner user or authenticated Open WebUI admin session exists. The source/export artifacts are safe for source control and contain no secrets or private content.
+
+## Channel Service Boundary
+
+`freyja-channels` policy lives at:
+
+```text
+config/freyja-channels.yaml
+```
+
+The deterministic channel service implementation lives at:
+
+```text
+src/freyja/channels.py
+src/freyja/channel_transports.py
+```
+
+Readiness check:
+
+```bash
+scripts/check-freyja-channels-readiness.py \
+  --output certification/reports/freyja-channels-readiness.json
+```
+
+Latest readiness:
+
+```text
+deterministic_gateway_only=true
+telegram.transport_adapter=TelegramLongPollingTransport
+telegram.ready_for_live_round_trip=false
+signal.transport_adapter=SignalCliRestTransport
+signal.ready_for_live_round_trip=false
+whatsapp.status=disabled
+```
+
+The Telegram pilot transport uses Bot API long polling and converts updates
+into deterministic `ChannelMessage` records. The Signal transport uses the
+existing `signal-cli-rest-api` pathway and converts received data-message
+events into the same `ChannelMessage` shape. Both fail closed when credentials
+or allowlists are absent.
+
+It remains deterministic:
+
+```text
+Telegram/Signal sender -> verified family identity -> permitted agent -> Open WebUI API -> response
+```
+
+It must not route models or contain independent agent intelligence. Empty allowlists are denied. WhatsApp stays documented and disabled until a secured public webhook is deliberately approved.
+
+Build order remains:
+
+1. Telegram pilot for Joe using long polling.
+2. Signal through the existing `signal-cli-rest-api` stack.
+3. WhatsApp disabled.
+
+## Proactive Behavior
+
+Proactive policy lives at:
+
+```text
+config/freyja-proactive.yaml
+```
+
+The disabled-by-default planner lives at:
+
+```text
+src/freyja/proactive.py
+```
+
+Readiness check:
+
+```bash
+scripts/check-freyja-proactive-readiness.py \
+  --output certification/reports/freyja-proactive-readiness.json
+```
+
+Dry-run dispatch preview:
+
+```bash
+scripts/dry-run-freyja-proactive.py \
+  --output certification/reports/freyja-proactive-dry-run.json
+```
+
+Latest readiness:
+
+```text
+candidate_count=27
+ready_schedule_ids=[]
+all_disabled_by_default=true
+dry_run.dispatch_count=27
+dry_run.would_send_count=0
+```
+
+Scheduled briefings, reminder follow-ups, calendar-conflict warnings, and
+system-health notifications are defined there but disabled by default. They
+must not be enabled until chat stability, recipient verification, destination
+verification, per-schedule approval, and a dry run are complete.
+
+## Verification
+
+Consolidated final-deliverable artifacts:
+
+```text
+certification/reports/open-webui-home-agent-deliverable.json
+certification/reports/open-webui-home-agent-deliverable.md
+certification/reports/open-webui-home-agent-completion-audit.json
+certification/reports/open-webui-home-agent-chat-smoke.json
+certification/reports/freyja-proactive-dry-run.json
+certification/reports/open-webui-tools-openapi.json
+certification/reports/open-webui-backup-rollback-audit.json
+certification/reports/open-webui-home-agent-secret-safety.json
+```
+
+Regenerate them with:
+
+```bash
+scripts/build-open-webui-home-agent-bundle.py \
+  --output-json certification/reports/open-webui-home-agent-deliverable.json \
+  --output-md certification/reports/open-webui-home-agent-deliverable.md
+```
+
+Regenerate the requirement-by-requirement completion audit with:
+
+```bash
+scripts/audit-open-webui-home-agent-completion.py \
+  --output certification/reports/open-webui-home-agent-completion-audit.json
+```
+
+Latest completion audit:
+
+```text
+complete=false
+status_counts={"complete":7,"auth_gated":3,"credential_gated":1,"partial":3}
+```
+
+Focused verification added on 2026-09-04:
+
+```bash
+.venv/bin/pytest -q \
+  tests/test_home_memory.py \
+  tests/test_open_webui_home_agents.py \
+  tests/test_freyja_channels_policy.py \
+  tests/test_freyja_proactive_policy.py \
+  tests/test_open_webui_home_agent_verify.py
+```
+
+Result:
+
+```text
+117 passed, 1 warning
+```
+
+Full local test suite result:
+
+```text
+1540 passed, 1 skipped, 1 warning
+```
+
+Covered:
+
+- required `freyja-home-memory` operations
+- unauthorized personal-scope read denial
+- Benedict restricted-scope write isolation
+- complete five-agent Open WebUI definition inventory
+- Benedict/child agent tool constraints
+- deterministic `freyja-channels` policy
+- deterministic `freyja-channels` service routing
+- Telegram long-polling transport parser and fail-closed credential gate
+- Signal REST transport parser and fail-closed registration gate
+- Telegram/Signal fail-closed policy shape
+- Telegram/Signal readiness reporting without secret values
+- WhatsApp disabled policy
+- proactive jobs defined but disabled by default
+- proactive dry-run dispatches suppress all sends
+- live verifier report shape
+- authenticated chat smoke report shape
+- Open WebUI tool gateway fail-closed authorization
+- Open WebUI tool gateway OpenAPI export
+- Open WebUI backup rollback integrity audit
+- Open WebUI home-agent secret safety audit
+
+Open WebUI tool gateway readiness:
+
+```bash
+scripts/check-open-webui-tools-gateway.py \
+  --output certification/reports/open-webui-tools-gateway-readiness.json
+```
+
+OpenAPI schema export:
+
+```bash
+scripts/export-open-webui-tools-openapi.py \
+  --output certification/reports/open-webui-tools-openapi.json
+```
+
+Latest result:
+
+```text
+ok=true
+operation_count=20
+live_side_effects_invoked=false
+openapi.paths=["/open-webui-tools","/open-webui-tools/invoke"]
+```
+
+The Freyja 5 gateway was rebuilt and restarted after adding this route. Live
+authenticated checks confirmed `/open-webui-tools` returns the policy catalog
+and that Jenna receives `403` for `infrastructure.health`.
+
+Live verifier:
+
+```bash
+scripts/open-webui-home-agent-verify.py \
+  --model-proxy-url http://127.0.0.1:3001/openai \
+  --output certification/reports/open-webui-home-agent-live.json
+```
+
+Latest result:
+
+```text
+ok=true
+auth_required_checks_pending=["open_webui_authenticated_models"]
+optional_checks_pending=["model_proxy_agent_models"]
+```
+
+The optional model-proxy check is pending only when run through Open WebUI's
+authenticated public `/openai` path without an Open WebUI API credential. The
+separate in-network model-proxy catalog report proves the proxy exposes the
+required Freyja agent model IDs inside the compose network.
+
+Authenticated five-agent chat smoke:
+
+```bash
+OPEN_WEBUI_API_KEY=... scripts/smoke-open-webui-home-agent-chats.py \
+  --output certification/reports/open-webui-home-agent-chat-smoke.json
+```
+
+Without an API key the smoke runner writes a pending, secret-free report:
+
+```text
+status="pending"
+reason="OPEN_WEBUI_API_KEY not supplied"
+```
+
+When an authenticated Open WebUI admin/session token is available, the runner
+posts one short non-private completion request through `/openai/v1/chat/completions`
+for each imported agent model and records only status, timing, expected Vulcan
+profile, and response presence.
+
+The verifier also checks that the protected fallback tag exists and that the
+side-by-side services present before this work are still running:
+
+```text
+freyja-4.1-baseline-before-5.0-20260831-161448
+freyja-open-webui-atlas-open-webui-1
+freyja-open-webui-atlas-model-proxy-1
+freyja3-agent-gateway-1
+freyja3-litellm-1
+```
+
+Live checks completed:
+
+- Docker stack observed running.
+- Open WebUI `/api/version` returned `0.11.3`.
+- Open WebUI unauthenticated `/api/config` returned auth enabled.
+- Open WebUI data volume backup succeeded.
+- Open WebUI backup archive integrity audit succeeded and confirmed `webui.db` is present without extracting or printing database contents.
+- Freyja 5 side-by-side gateway deployed on `http://127.0.0.1:8500`.
+- Freyja 5 `/health` returned healthy.
+- Freyja 5 `/v1/models` returned Open WebUI-visible agent model entries.
+- Open WebUI `model-proxy` `/v1/models` returned all six Freyja agent model IDs from inside the compose network.
+- Freyja 5 `/freyja-home-memory/operations` returned all six required operations.
+- Live HTTP scope test: Joe wrote/read `personal:joe`; Beth read of `personal:joe` returned `403`.
+- `certification/reports/open-webui-home-agent-live.json` records repeatable live verification evidence without secrets.
+- `certification/reports/open-webui-model-proxy-catalog.json` records the model-proxy catalog evidence without secrets.
+- `certification/reports/open-webui-home-agents-import.json` records reviewable Open WebUI model import payloads without secrets.
+- `certification/reports/open-webui-home-agents-offline-apply.json` records sanitized evidence that the five agent model rows exist in Open WebUI's database.
+- `certification/reports/open-webui-home-agent-access-audit.json` records sanitized evidence that the imported agent rows contain the intended read-group metadata.
+- `certification/reports/open-webui-home-agent-access-bind-dry-run.json` records the current no-write access-binding plan and missing real users.
+- `certification/reports/open-webui-home-resources-export.json` records reviewable Knowledge, native-memory, and tool resource payloads without secrets or private content.
+- `certification/reports/open-webui-home-resources-live-counts.json` records sanitized live Open WebUI Knowledge/tool/native-memory table counts.
+- `certification/reports/open-webui-home-resources-offline-dry-run.json` records the no-write resource importer plan and owner-user blocker.
+- `certification/reports/open-webui-home-agent-deliverable.json` and `.md` consolidate endpoint map, rollback pointers, verification status, blockers, artifacts, and exact next action.
+- `certification/reports/open-webui-backup-rollback-audit.json` records backup tar integrity, checksum, `webui.db` presence, and rollback-doc coverage without private content.
+- `certification/reports/open-webui-home-agent-secret-safety.json` records scoped secret-pattern and private-content flag checks for the current home-agent artifact set.
+- `certification/reports/open-webui-home-agent-completion-audit.json` records requirement-by-requirement completion status from current evidence.
+- `certification/reports/open-webui-home-agent-platform-inventory.json` records host roles, endpoint map, running Atlas services, and credential locations without secret values.
+- `certification/reports/open-webui-home-agent-post-auth-activation.json` records the current dry-run post-auth activation plan.
+- `certification/reports/open-webui-inference-policy-audit.json` records local-default Vulcan inference, model profile, guard, and unload policy evidence.
+- `certification/reports/freyja-channels-readiness.json` records deterministic channel readiness without sender values or tokens.
+- `certification/reports/freyja-proactive-readiness.json` records disabled-by-default proactive schedule readiness with no message bodies.
+- `certification/reports/freyja41-preservation-audit.json` records Freyja 4.1 preservation evidence: baseline tag, rollback artifacts, side-by-side Freyja 5, protected running services, `freyja3-agent-gateway` health on `http://127.0.0.1:8300/health`, and `freyja3-litellm` reachability/auth boundary on `http://127.0.0.1:4001/health`.
+
+Blocked or still pending:
+
+- Authenticated Open WebUI API tests for all five agents require Joe's Open WebUI API key or browser session.
+- Telegram round trip requires Joe's bot token/allowlist to be configured outside source control.
+- Signal round trip requires registered `signal-cli-rest-api` credentials.
+- Open WebUI user/group assignment cannot be completed offline yet because the live database currently has `user_count=0` and `group_count=0`. Joe must create/sign in to Open WebUI or provide an admin API/browser session.
+- Dedicated Freyja 4.1 live endpoint proof remains pending because no separate endpoint contract is defined in current repo evidence.
+
+## Requirement Matrix
+
+| Requirement | Current evidence | Status |
+| --- | --- | --- |
+| Inspect repository, services, Docker stacks, endpoints, credential locations | Repo files, Docker `ps`, Open WebUI collector output, redacted env capture, platform inventory report | Complete for current known Atlas/Vulcan/Iris/Hera topology |
+| Identify Open WebUI host and Vulcan path | `docs/operations/open-webui-atlas.md`, live containers, model-proxy env | Complete for current deployment |
+| Back up Open WebUI data/config/version/image/volume | `logs/open-webui-diagnostics/home-agent-20260904T174214Z/`, `certification/reports/open-webui-backup-rollback-audit.json` | Complete for current deployment |
+| Recoverable git checkpoint before changes | `.codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch` | Complete |
+| Keep secrets out of output/source | Redacted collector output, no-secret manifests, `certification/reports/open-webui-home-agent-secret-safety.json` | Complete for current home-agent artifact set; keep running before commits |
+| Inference local by default through Vulcan | Open WebUI compose/model-proxy, Atlas docs, inference policy audit | Implemented and policy-audited; authenticated live chat response still needs Open WebUI API/session |
+| Explicit model profiles | `config/open-webui-home-agents.yaml` | Complete as source-controlled definitions |
+| Five Open WebUI agents | `config/open-webui-home-agents.yaml`, Freyja 5 `/v1/models`, model-proxy catalog report, import payload export, offline Open WebUI model-table import evidence, access metadata audit | Imported into Open WebUI model table with intended read-group metadata; authenticated API/UI verification and real user/group binding pending |
+| Benedict local-only isolation | Agent manifest, home-memory tests, access metadata audit | Complete at source/API policy layer; real Open WebUI Beth group binding pending account creation/auth |
+| Native per-user Open WebUI memory | `config/open-webui-home-resources.yaml`, resource export, resource importer dry-run | Source policy/import path prepared; live rows require owner user/authenticated import |
+| Shared household Knowledge | `config/open-webui-home-resources.yaml`, resource export, resource importer dry-run | Source policy/import path prepared; live collection rows require owner user/authenticated import |
+| Scoped `freyja-home-memory` service | `/freyja-home-memory` router, tests, live `8500` endpoint | Deployed in side-by-side Freyja 5 gateway |
+| Tool boundaries | Agent manifest, resource manifest/export, resource importer dry-run, existing Freyja tools, model-proxy agent forwarding | Source policy/import path prepared; Open WebUI tool enablement pending owner user/auth |
+| Messaging channels | Existing Telegram/Signal connectors, `config/freyja-channels.yaml`, `src/freyja/channels.py`, channel readiness report | Deterministic gateway implemented/tested; live Telegram/Signal round trips pending credentials |
+| Proactive behavior disabled by default | `config/freyja-proactive.yaml`, `src/freyja/proactive.py`, proactive readiness report | Implemented/tested as disabled-by-default candidates; live sends pending chat/destination/recipient verification and approval |
+| Repeatable verification | New and existing pytest coverage | Partial; live external tests pending credentials |
+| No regression to Freyja 4.1 | Baseline tag, side-by-side protected service check in live verifier, `freyja41-preservation-audit.json`, protected legacy endpoint probes | Preservation invariants and protected legacy endpoint reachability verified; dedicated Freyja 4.1 endpoint proof pending endpoint contract |

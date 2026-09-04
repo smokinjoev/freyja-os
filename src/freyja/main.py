@@ -25,11 +25,13 @@ from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalRes
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
 from freyja.freyja5_config import (
+    FREYJA5_OPEN_WEBUI_AGENT_MODELS,
     freyja5_agent_evidence,
     freyja5_gateway_evidence,
     freyja5_iris_readiness_evidence,
     freyja5_live_inference_evidence,
     freyja5_live_blocker_evidence,
+    freyja5_open_webui_agent_model_evidence,
     freyja5_plane_evidence,
     freyja5_readiness_certification_evidence,
     freyja5_readiness_mcp_evidence,
@@ -49,10 +51,12 @@ from freyja.iris_router import IrisRouterClient
 from freyja.iris_monitor import start_iris_warm_monitor, stop_iris_warm_monitor
 from freyja.macagent import MacAgentClient
 from freyja.media import AttachmentInput, images_from_attachments
+from freyja.home_memory import home_memory_router
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
 from freyja.ollama_client import OllamaClient
 from freyja.openrouter_client import OpenRouterClient
+from freyja.open_webui_tools import open_webui_tools_router
 from freyja.router import RouteRequest, router
 from freyja.semantic_events import SemanticEventPermissionError, SemanticEventQuery, SemanticEventStore
 from freyja.tools.api import tools_router
@@ -61,6 +65,8 @@ from freyja.tools.registry import get_registry
 
 
 logger = logging.getLogger(__name__)
+FREYJA5_LEGACY_OPENAI_MODEL_ID = "freyja-5"
+FREYJA5_OPENAI_MODEL_IDS = {FREYJA5_LEGACY_OPENAI_MODEL_ID, *FREYJA5_OPEN_WEBUI_AGENT_MODELS}
 
 
 @asynccontextmanager
@@ -148,6 +154,8 @@ agent_gateway_v3 = AgentGateway()
 semantic_event_store_v3 = SemanticEventStore()
 
 app.include_router(memory_router)
+app.include_router(home_memory_router)
+app.include_router(open_webui_tools_router)
 app.include_router(tools_router)
 
 register_builtin_tools(get_registry())
@@ -974,6 +982,7 @@ def _openai_sender_for_freyja5(request: "OpenAIChatCompletionRequest") -> Gatewa
         "beth": SecurityDomainId.PERSON_BETH,
         "liam": SecurityDomainId.PERSON_LIAM,
         "jenna": SecurityDomainId.PERSON_JENNA,
+        "paralegal": SecurityDomainId.PARALEGAL,
     }.get(user)
     if person_domain is not None:
         return GatewaySender(
@@ -1194,6 +1203,17 @@ async def smith_read_only(request: SmithReadOnlyRequest) -> dict[str, Any]:
 
 @app.get("/v1/models")
 async def openai_compatible_models() -> dict[str, Any]:
+    agent_models = [
+        {
+            "id": model["model_id"],
+            "object": "model",
+            "created": 0,
+            "owned_by": "freyja-os",
+            "name": model["display_name"],
+            "freyja": model,
+        }
+        for model in freyja5_open_webui_agent_model_evidence()
+    ]
     return {
         "object": "list",
         "data": [
@@ -1208,14 +1228,15 @@ async def openai_compatible_models() -> dict[str, Any]:
                 "object": "model",
                 "created": 0,
                 "owned_by": "freyja-os",
-            }
+            },
+            *agent_models,
         ],
     }
 
 
 @app.post("/v1/chat/completions", response_model=None)
 async def openai_compatible_chat_completions(request: OpenAIChatCompletionRequest) -> dict[str, Any] | StreamingResponse:
-    if request.model not in {"agent-smith", "freyja-5"}:
+    if request.model not in {"agent-smith", *FREYJA5_OPENAI_MODEL_IDS}:
         raise HTTPException(status_code=404, detail="Unknown model.")
     if request.model == "agent-smith" and (not settings.agent_smith_enabled or not settings.agent_smith_read_only_enabled):
         raise HTTPException(
@@ -1226,21 +1247,42 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
     objective = _openai_chat_objective(request.messages)
     if not objective:
         raise HTTPException(status_code=400, detail="At least one user message is required.")
-    if request.model == "freyja-5":
+    if request.model in FREYJA5_OPENAI_MODEL_IDS:
+        agent_model = next(
+            (
+                model
+                for model in freyja5_open_webui_agent_model_evidence()
+                if model["model_id"] == request.model
+            ),
+            None,
+        )
+        if request.model == FREYJA5_LEGACY_OPENAI_MODEL_ID:
+            target_agent = "freyja"
+        elif agent_model is not None:
+            target_agent = str(agent_model["agent_id"])
+        else:
+            raise HTTPException(status_code=404, detail="Unknown Freyja 5 agent model.")
         request_id = f"freyja5-openai-{uuid.uuid4()}"
         start = time.monotonic()
         attachments = _openai_chat_attachments(request.messages)
-        gateway_result = AgentGateway().handle(
-            GatewayRequest(
-                sender=_openai_sender_for_freyja5(request),
-                target_agent="freyja",
-                prompt=objective,
-                conversation_id=request_id,
-                channel="open-webui",
-                attachments=attachments,
-                reply_context={"client": "openai-compatible", "model": request.model},
+        try:
+            gateway_result = AgentGateway().handle(
+                GatewayRequest(
+                    sender=_openai_sender_for_freyja5(request),
+                    target_agent=target_agent,
+                    prompt=objective,
+                    conversation_id=request_id,
+                    channel="open-webui",
+                    attachments=attachments,
+                    reply_context={
+                        "client": "openai-compatible",
+                        "model": request.model,
+                        "originating_channel": "open-webui",
+                    },
+                )
             )
-        )
+        except GatewayPermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
         if gateway_result.handoff is None:
             raise HTTPException(status_code=403, detail="Freyja 5 Gateway rejected request.")
         result = await AgentRuntimeV3(
@@ -1254,16 +1296,18 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
             duration_ms=duration_ms,
             smith_mode="freyja5",
             smith_status="degraded" if result.degraded else "completed",
-            model="freyja-5",
+            model=request.model,
             extra_freyja={
                 "trace_id": result.trace_id,
                 "agent": result.agent_id,
+                "agent_model": request.model,
                 "route": result.requested_route,
                 "endpoint": result.inference_endpoint_id,
                 "provider": result.inference_provider,
                 "egress_state": result.egress_state,
                 "attachment_count": len(attachments),
                 "trace": result.trace_summary,
+                **({"agent_model_metadata": agent_model} if agent_model else {}),
             },
         )
         if request.stream:

@@ -3,20 +3,21 @@
 This Compose target runs Open WebUI as a user-facing web UI on Atlas while
 keeping Atlas Freyja as the control-plane authority and Vulcan as compute.
 
-Policy: Open WebUI lists the approved model catalog. The backend enforces one resident Vulcan model at a time.
+Policy: Open WebUI lists the approved model catalog. The backend enforces one
+resident Vulcan model at a time.
 
 Planned model catalog:
 
 | Role | Model |
 | --- | --- |
-| Daily driver | `qwen2.5vl:72b` |
 | Fast general chat | `qwen2.5:32b-instruct` |
 | Reasoning agent candidate | `qwen3:30b-a3b` |
 | Coding | `qwen3-coder-next:q4_K_M` |
 | GPT OSS small | `gpt-oss:20b` or `gpt-oss-freyja:20b-analysis-prefill` |
 | GPT OSS large | `gpt-oss:120b` |
 
-Open WebUI may show these models in its picker. Only the selected model should be resident on Vulcan at runtime.
+Open WebUI may show these models in its picker. Only the selected model should
+be resident on Vulcan at runtime.
 
 Fallback rule: Iris/Ollama is only a 7B/12B-class fallback tier. The 20B, 30B,
 coder, 72B, and 120B roles are Vulcan-only unless another machine with enough
@@ -70,15 +71,16 @@ choice belongs to Open WebUI; the proxy preserves the selected request model
 and unloads other resident Vulcan models before forwarding chat.
 
 The model proxy checks Vulcan first and Iris second. Iris fallback is only for
-7B/12B-class active models installed on Iris.
+7B/12B-class active models installed on Iris. DNS, socket, and other connection
+failures from any upstream are returned as bounded JSON errors instead of
+disconnecting the Open WebUI client.
 
-When Freyja exposes an OpenAI-compatible gateway, switch `OPENAI_API_BASE_URL`
-to that Atlas-local `/v1` endpoint.
-
-Avoid `qwen3:30b-a3b` for normal Open WebUI chat until the reasoning-output
-adapter is fixed. It can return text in an OpenAI-compatible `reasoning` field
-with empty assistant `content`, which leaves Open WebUI showing little or no
-answer.
+The model proxy includes a narrow reasoning-output adapter for local models
+such as `gpt-oss:120b` that sometimes return useful text in an
+OpenAI-compatible `reasoning` field while leaving assistant `content` empty.
+For non-streaming chat completions, the proxy promotes nonempty `reasoning` to
+visible `content` only when `content` is empty. Normal responses with existing
+assistant content are left unchanged.
 
 ## Default Model Change Procedure
 
@@ -109,7 +111,12 @@ curl http://100.94.80.21:8088/api/ps
 ```
 
 If more than the intended model is resident, unload the unwanted model from
-Vulcan before continuing.
+Vulcan before continuing:
+
+```bash
+scripts/vulcan-operator.py loaded
+scripts/vulcan-operator.py unload-profile reason --yes
+```
 
 For now, when ending an Open WebUI work session, leave the last active model
 warm on Vulcan instead of unloading it immediately.

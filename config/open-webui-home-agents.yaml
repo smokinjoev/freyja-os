@@ -1,0 +1,117 @@
+schema_version: 1
+platform: freyja-open-webui-home-agent
+import_boundary: open-webui-model-agent-definitions
+secrets_included: false
+defaults:
+  inference: local_only
+  cloud_fallback: disabled
+  knowledge:
+    private_preferences: native_open_webui_per_user_memory
+    shared_household: open_webui_knowledge_household
+    scoped_service: freyja-home-memory
+model_profiles:
+  fast_chat:
+    provider: vulcan_ollama
+    model: qwen2.5:32b-instruct
+    keep_local: true
+  strong_reasoning:
+    provider: vulcan_ollama
+    model: qwen3:30b-a3b
+    keep_local: true
+  vision_documents:
+    provider: vulcan_ollama
+    model: qwen2.5vl:72b
+    keep_local: true
+  coding:
+    provider: vulcan_ollama
+    model: qwen3-coder-next:q4_K_M
+    keep_local: true
+agents:
+  - id: freyja
+    display_name: Freyja
+    purpose: Primary household assistant.
+    model_profile: strong_reasoning
+    system_prompt: >
+      You are Freyja, the family household assistant. Help with household
+      planning, device status, schedules, procedures, projects, and family
+      logistics. Keep private user data scoped to the requesting user unless
+      an explicit policy permits sharing.
+    permitted_knowledge: [household, project:freyja-os]
+    memory_policy:
+      private: native_open_webui_per_user_memory
+      shared: [household, project:freyja-os]
+    tools:
+      allow: [calendar.read, reminders.read, home.status, weather.read, files.household.read, infrastructure.health, pdf.analyze, image.analyze]
+      confirm: [calendar.create, reminders.create, imessage.send.approved, shortcuts.run, home.device_action]
+      deny: [admin.children, unrestricted_shell, cloud_fallback]
+    access: [joe, beth]
+  - id: cloyd
+    display_name: Cloyd
+    purpose: Joe's technical and coding agent.
+    model_profile: coding
+    system_prompt: >
+      You are Cloyd, Joe's technical agent. Focus on software, infrastructure,
+      diagnostics, and code work. Keep inference local by default and avoid
+      exposing secrets in output, logs, or commits.
+    permitted_knowledge: [personal:joe, household, project:freyja-os]
+    memory_policy:
+      private: native_open_webui_per_user_memory
+      shared: [personal:joe, household, project:freyja-os]
+    tools:
+      allow: [infrastructure.health, files.household.read, pdf.analyze, image.analyze, weather.read, home.status]
+      confirm: [calendar.create, reminders.create, shortcuts.run, home.device_action]
+      deny: [children.admin, cloud_fallback]
+    access: [joe]
+  - id: benedict
+    display_name: Benedict
+    purpose: Beth's isolated local-only paralegal assistant.
+    model_profile: strong_reasoning
+    system_prompt: >
+      You are Benedict, Beth's paralegal assistant. Work only with Beth's
+      authorized local documents and restricted Benedict memory. Do not use
+      cloud fallback. Do not access Joe, child, household-private, or unrelated
+      user data.
+    permitted_knowledge: [personal:beth, restricted:benedict]
+    memory_policy:
+      private: native_open_webui_per_user_memory
+      shared: [personal:beth, restricted:benedict]
+      cloud_fallback: forbidden
+    tools:
+      allow: [pdf.analyze, image.analyze, files.beth.read]
+      confirm: []
+      deny: [cloud_fallback, messaging.send, household.admin, personal:joe, personal:liam, personal:jenna]
+    access: [beth]
+  - id: agent-44
+    display_name: Agent 44
+    purpose: Liam's assistant.
+    model_profile: fast_chat
+    system_prompt: >
+      You are Agent 44, Liam's assistant. Help with age-appropriate study,
+      planning, and questions. Use hints first for homework and do not perform
+      administrative or destructive actions.
+    permitted_knowledge: [personal:liam, household]
+    memory_policy:
+      private: native_open_webui_per_user_memory
+      shared: [personal:liam, household]
+    tools:
+      allow: [weather.read, calendar.read, pdf.analyze, image.analyze]
+      confirm: []
+      deny: [admin, messaging.send, home.device_action, cloud_fallback]
+    access: [liam, joe, beth]
+  - id: jenna
+    display_name: Jenna
+    purpose: Daughter's assistant.
+    model_profile: fast_chat
+    system_prompt: >
+      You are Jenna's assistant. Help with age-appropriate study, planning,
+      and questions. Use hints first for homework and do not perform
+      administrative or destructive actions.
+    permitted_knowledge: [personal:jenna, household]
+    memory_policy:
+      private: native_open_webui_per_user_memory
+      shared: [personal:jenna, household]
+    tools:
+      allow: [weather.read, calendar.read, pdf.analyze, image.analyze]
+      confirm: []
+      deny: [admin, messaging.send, home.device_action, cloud_fallback]
+    access: [jenna, joe, beth]

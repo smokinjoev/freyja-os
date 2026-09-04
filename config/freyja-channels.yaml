@@ -1,0 +1,84 @@
+schema_version: 1
+service: freyja-channels
+host: atlas
+secrets_included: false
+principle: deterministic_gateway_only
+pipeline:
+  - receive_message
+  - verify_allowlist
+  - resolve_family_identity
+  - select_permitted_agent
+  - forward_to_open_webui_or_freyja_api
+  - return_response
+prohibitions:
+  model_routing: true
+  independent_agent_intelligence: true
+  empty_allowlist_public_access: false
+  children_admin_tools: false
+shared_controls:
+  conversation_persistence: required
+  attachment_forwarding: required
+  audit_logging: required
+  rate_limits: required
+  secrets_in_source_control: forbidden
+identities:
+  joe:
+    permitted_agents: [freyja, cloyd]
+    default_agent: freyja
+  beth:
+    permitted_agents: [freyja, benedict]
+    default_agent: benedict
+  liam:
+    permitted_agents: [agent-44]
+    default_agent: agent-44
+  jenna:
+    permitted_agents: [jenna]
+    default_agent: jenna
+channels:
+  telegram:
+    status: pilot
+    build_order: 1
+    transport: bot_api_long_polling
+    sender_allowlist_env: TELEGRAM_ALLOWED_USER_IDS
+    identity_mapping: numeric_user_id_to_family_member
+    empty_allowlist: deny_all
+    default_agent_for_joe: freyja
+    rate_limit:
+      per_sender_per_minute: 20
+      burst: 5
+    thread_persistence:
+      key: telegram:{agent}:{hashed_chat_id}
+      raw_sender_in_thread_id: false
+    attachments:
+      images: forward_base64
+      documents: forward_metadata_and_supported_payloads
+    audit:
+      log_message_body: false
+      log_raw_sender: false
+      log_sender_hash: true
+  signal:
+    status: configured_when_registered
+    build_order: 2
+    transport: signal-cli-rest-api
+    sender_allowlist_env: SIGNAL_ALLOWED_SENDERS
+    identity_mapping: e164_or_alias_to_family_member
+    empty_allowlist: deny_all
+    rate_limit:
+      per_sender_per_minute: 20
+      burst: 5
+    thread_persistence:
+      key: signal-conv:{hashed_sender_or_alias}
+      raw_sender_in_thread_id: false
+    attachments:
+      images: forward_base64_when_available
+      pdf: extract_text_and_forward_payload_when_available
+    audit:
+      log_message_body: false
+      log_raw_sender: false
+      log_sender_hash: true
+  whatsapp:
+    status: disabled
+    build_order: 3
+    reason: secured_public_webhook_not_approved
+    empty_allowlist: deny_all
+    webhook_public_access: forbidden_until_approved

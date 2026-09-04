@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(os.environ.get("REPOSITORY_ROOT") or Path(__file__).resolve().parents[2])
 FREYJA5_LIVE_BLOCKERS_PATH = REPO_ROOT / "config" / "freyja-5.0-live-blockers.yaml"
 FREYJA5_SEMANTIC_ROUTES_PATH = REPO_ROOT / "config" / "freyja-5.0-semantic-routes.yaml"
 FREYJA5_WEBGUI_PATH = REPO_ROOT / "config" / "freyja-5.0-webgui.yaml"
@@ -15,6 +16,14 @@ FREYJA5_PLANES_PATH = REPO_ROOT / "config" / "freyja-5.0-planes.yaml"
 FREYJA5_GATEWAY_PATH = REPO_ROOT / "config" / "freyja-5.0-gateway.yaml"
 FREYJA5_CERTIFICATION_TARGETS_PATH = REPO_ROOT / "config" / "freyja-5.0-certification-targets.yaml"
 FREYJA5_CERTIFICATION_SUITE_PATH = REPO_ROOT / "certification" / "suites" / "routing" / "freyja5_architecture.yaml"
+FREYJA5_OPEN_WEBUI_AGENT_MODELS = {
+    "agent/freyja": {"agent_id": "freyja", "default_route": "general"},
+    "agent/cloyd-gibbler": {"agent_id": "cloyd-gibbler", "default_route": "code"},
+    "agent/benedict": {"agent_id": "benedict", "default_route": "general"},
+    "agent/benedict-paralegal": {"agent_id": "benedict-paralegal", "default_route": "private"},
+    "agent/agent-47": {"agent_id": "agent-47", "default_route": "fast"},
+    "agent/jennacide": {"agent_id": "jennacide", "default_route": "fast"},
+}
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -93,6 +102,36 @@ def freyja5_webgui_evidence() -> dict[str, Any]:
         "cloud_fallback": bool(data.get("cloud_fallback") is True),
         "live_inference_default": bool(data.get("live_inference_default") is True),
     }
+
+
+def freyja5_open_webui_agent_model_evidence() -> list[dict[str, Any]]:
+    from freyja.foundation_seed import PERSISTENT_AGENTS
+
+    semantic_routes = freyja5_semantic_route_evidence()["routes"]
+    agents_by_id = {agent.agent_id: agent for agent in PERSISTENT_AGENTS}
+    entries: list[dict[str, Any]] = []
+    for model_id, model_config in FREYJA5_OPEN_WEBUI_AGENT_MODELS.items():
+        agent_id = str(model_config["agent_id"])
+        agent = agents_by_id[agent_id]
+        route = str(model_config["default_route"])
+        route_details = semantic_routes.get(route, {})
+        entries.append(
+            {
+                "model_id": model_id,
+                "agent_id": agent.agent_id,
+                "display_name": agent.display_name,
+                "logical_display_name": agent.logical_display_name or agent.display_name,
+                "owner": agent.owner,
+                "security_domain": agent.security_domain_id.value,
+                "memory_scopes": [agent.private_memory_scope, *sorted(agent.shared_memory_scopes)],
+                "default_route": route,
+                "default_nexus_endpoint": route_details.get("preferred_runtime", ""),
+                "egress_policy": agent.cloud_egress_policy_id,
+                "cloud_fallback": False,
+                "channel": "open-webui",
+            }
+        )
+    return entries
 
 
 def freyja5_traceability_evidence() -> dict[str, Any]:
