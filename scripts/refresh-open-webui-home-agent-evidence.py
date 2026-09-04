@@ -57,6 +57,25 @@ def _run(args: list[str], *, allowed_returncodes: set[int] | None = None, stdout
     }
 
 
+def _run_with_retry(
+    args: list[str],
+    *,
+    attempts: int,
+    allowed_returncodes: set[int] | None = None,
+    stdout_path: Path | None = None,
+) -> dict[str, Any]:
+    runs = []
+    for _ in range(max(1, attempts)):
+        run = _run(args, allowed_returncodes=allowed_returncodes, stdout_path=stdout_path)
+        runs.append(run)
+        if run["ok"]:
+            break
+    result = dict(runs[-1])
+    result["attempt_count"] = len(runs)
+    result["attempt_returncodes"] = [run["returncode"] for run in runs]
+    return result
+
+
 def _snapshot_open_webui_database(container: str, target_dir: Path) -> Path | None:
     target_dir.mkdir(parents=True, exist_ok=True)
     copied_main = False
@@ -153,7 +172,7 @@ def refresh(container: str) -> dict[str, Any]:
                 _run([py, "scripts/run-freyja-channels-signal-pilot.py", "--dry-run"]),
                 _run([py, "scripts/check-freyja-proactive-readiness.py"]),
                 _run([py, "scripts/dry-run-freyja-proactive.py"]),
-                _run([py, "scripts/audit-freyja41-preservation.py"]),
+                _run_with_retry([py, "scripts/audit-freyja41-preservation.py"], attempts=2),
                 _run([py, "scripts/audit-open-webui-backup-rollback.py"]),
                 _run([py, "scripts/audit-open-webui-home-agent-secret-safety.py"]),
                 _run([py, "scripts/summarize-open-webui-home-agent-readiness.py"], allowed_returncodes={0, 1}),

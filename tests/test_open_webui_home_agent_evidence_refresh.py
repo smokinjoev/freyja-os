@@ -80,6 +80,38 @@ def test_refresh_report_fails_when_snapshot_and_step_fail(monkeypatch) -> None:
     assert report["failed_steps"][0]["step"] == "snapshot_open_webui_database"
 
 
+def test_retry_runner_reports_attempts_after_transient_failure(monkeypatch) -> None:
+    module = _module()
+    outcomes = [
+        {
+            "command": "cmd",
+            "returncode": 1,
+            "ok": False,
+            "allowed_returncodes": [0],
+            "elapsed_seconds": 0.001,
+            "stdout_path": None,
+            "stderr_present": False,
+        },
+        {
+            "command": "cmd",
+            "returncode": 0,
+            "ok": True,
+            "allowed_returncodes": [0],
+            "elapsed_seconds": 0.001,
+            "stdout_path": None,
+            "stderr_present": False,
+        },
+    ]
+
+    monkeypatch.setattr(module, "_run", lambda *args, **kwargs: outcomes.pop(0))
+
+    result = module._run_with_retry(["cmd"], attempts=2)
+
+    assert result["ok"] is True
+    assert result["attempt_count"] == 2
+    assert result["attempt_returncodes"] == [1, 0]
+
+
 def test_refresh_main_writes_report(tmp_path: Path, monkeypatch, capsys) -> None:
     module = _module()
     output = tmp_path / "refresh.json"
