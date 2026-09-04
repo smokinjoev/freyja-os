@@ -56,6 +56,7 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
             "path": str((DEFAULT_STATE_DIR / "audit.jsonl").relative_to(Path(__file__).resolve().parents[1])),
             "message_body_logged": False,
             "raw_sender_logged": False,
+            "denied_attempts_logged": True,
         },
         "telegram": {
             "status": telegram.get("status"),

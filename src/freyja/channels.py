@@ -115,20 +115,24 @@ class FreyjaChannels:
         self._rate_windows: dict[tuple[str, str], deque[float]] = defaultdict(deque)
 
     def route(self, message: ChannelMessage) -> ChannelRoute:
-        channel_policy = self._channel_policy(message.channel)
-        if str(channel_policy.get("status")) == "disabled":
-            raise ChannelPolicyError(f"{message.channel} is disabled")
-        allowed = self.allowlists.get(message.channel, set())
-        if not allowed:
-            raise ChannelPolicyError("allowlist is empty")
-        if message.sender not in allowed:
-            raise ChannelPolicyError("sender is not allowlisted")
-        identity = self.identity_maps.get(message.channel, {}).get(message.sender)
-        if not identity:
-            raise ChannelPolicyError("sender identity is not mapped")
-        agent = self._select_agent(identity, message.requested_agent)
-        self._check_rate(message.channel, message.sender, channel_policy)
         sender_hash = self._hash(message.sender)
+        try:
+            channel_policy = self._channel_policy(message.channel)
+            if str(channel_policy.get("status")) == "disabled":
+                raise ChannelPolicyError(f"{message.channel} is disabled")
+            allowed = self.allowlists.get(message.channel, set())
+            if not allowed:
+                raise ChannelPolicyError("allowlist is empty")
+            if message.sender not in allowed:
+                raise ChannelPolicyError("sender is not allowlisted")
+            identity = self.identity_maps.get(message.channel, {}).get(message.sender)
+            if not identity:
+                raise ChannelPolicyError("sender identity is not mapped")
+            agent = self._select_agent(identity, message.requested_agent)
+            self._check_rate(message.channel, message.sender, channel_policy)
+        except ChannelPolicyError as exc:
+            self._write_denial_audit(message, sender_hash=sender_hash, reason=str(exc))
+            raise
         thread_key = self.store.get_thread(channel=message.channel, sender_hash=sender_hash, agent=agent) or self._thread_key(
             channel_policy,
             agent=agent,
@@ -157,6 +161,19 @@ class FreyjaChannels:
             }
         )
         return route
+
+    def _write_denial_audit(self, message: ChannelMessage, *, sender_hash: str, reason: str) -> None:
+        self.store.write_audit(
+            {
+                "event": "freyja_channels_denied",
+                "channel": message.channel,
+                "sender_hash": sender_hash,
+                "reason": reason,
+                "attachment_count": len(message.attachments),
+                "message_body_logged": False,
+                "raw_sender_logged": False,
+            }
+        )
 
     def handle(self, message: ChannelMessage) -> str:
         if self.client is None:

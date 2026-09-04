@@ -416,6 +416,7 @@ signal.transport_adapter=SignalCliRestTransport
 signal.ready_for_live_round_trip=false
 thread_persistence_store.path="data/freyja-channels/threads.json"
 audit_store.path="data/freyja-channels/audit.jsonl"
+audit_store.denied_attempts_logged=true
 whatsapp.status=disabled
 ```
 
@@ -428,7 +429,8 @@ or allowlists are absent.
 The channel gateway persists hashed sender/agent thread mappings in
 `data/freyja-channels/threads.json` and reuses them across service instances.
 Audit events append to `data/freyja-channels/audit.jsonl`; raw senders and
-message bodies are not logged.
+message bodies are not logged. Denied attempts are audited with only a sender
+hash, denial reason, channel, and attachment count.
 
 It remains deterministic:
 

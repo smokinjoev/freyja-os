@@ -50,34 +50,53 @@ def test_signal_beth_can_route_to_benedict() -> None:
 
 
 def test_empty_allowlist_denies_all() -> None:
-    svc = FreyjaChannels(allowlists={"telegram": set()}, identity_maps={"telegram": {"1001": "joe"}})
+    store = MemoryChannelStore()
+    svc = FreyjaChannels(allowlists={"telegram": set()}, identity_maps={"telegram": {"1001": "joe"}}, store=store)
 
     with pytest.raises(ChannelPolicyError, match="allowlist is empty"):
         svc.route(ChannelMessage(channel="telegram", sender="1001", text="hello"))
+    assert store.events[-1]["event"] == "freyja_channels_denied"
+    assert store.events[-1]["reason"] == "allowlist is empty"
+    assert store.events[-1]["raw_sender_logged"] is False
+    assert store.events[-1]["message_body_logged"] is False
+    assert "1001" not in str(store.events[-1])
 
 
 def test_unmapped_sender_is_denied() -> None:
-    svc = FreyjaChannels(allowlists={"telegram": {"1001"}}, identity_maps={"telegram": {}})
+    store = MemoryChannelStore()
+    svc = FreyjaChannels(allowlists={"telegram": {"1001"}}, identity_maps={"telegram": {}}, store=store)
 
     with pytest.raises(ChannelPolicyError, match="identity is not mapped"):
         svc.route(ChannelMessage(channel="telegram", sender="1001", text="hello"))
+    assert store.events[-1]["event"] == "freyja_channels_denied"
+    assert store.events[-1]["reason"] == "sender identity is not mapped"
+    assert "hello" not in str(store.events[-1])
 
 
 def test_identity_cannot_request_unpermitted_agent() -> None:
+    store = MemoryChannelStore()
     with pytest.raises(ChannelPolicyError, match="not permitted"):
-        _service().route(ChannelMessage(channel="signal", sender="+15550001002", text="code", requested_agent="cloyd"))
+        _service(store=store).route(ChannelMessage(channel="signal", sender="+15550001002", text="code", requested_agent="cloyd"))
+    assert store.events[-1]["event"] == "freyja_channels_denied"
+    assert store.events[-1]["reason"] == "requested agent is not permitted for identity"
+    assert "+15550001002" not in str(store.events[-1])
 
 
 def test_whatsapp_is_documented_but_disabled() -> None:
+    store = MemoryChannelStore()
     with pytest.raises(ChannelPolicyError, match="disabled"):
-        _service().route(ChannelMessage(channel="whatsapp", sender="wa-1", text="hello"))
+        _service(store=store).route(ChannelMessage(channel="whatsapp", sender="wa-1", text="hello"))
+    assert store.events[-1]["event"] == "freyja_channels_denied"
+    assert store.events[-1]["reason"] == "whatsapp is disabled"
 
 
 def test_rate_limit_is_per_sender() -> None:
     now = iter([1.0, 2.0, 3.0])
+    store = MemoryChannelStore()
     svc = FreyjaChannels(
         allowlists={"telegram": {"1001"}},
         identity_maps={"telegram": {"1001": "joe"}},
+        store=store,
         now=lambda: next(now),
     )
     svc.policy["channels"]["telegram"]["rate_limit"]["per_sender_per_minute"] = 2
@@ -86,6 +105,8 @@ def test_rate_limit_is_per_sender() -> None:
 
     with pytest.raises(RateLimitExceeded):
         svc.route(ChannelMessage(channel="telegram", sender="1001", text="three"))
+    assert store.events[-1]["event"] == "freyja_channels_denied"
+    assert store.events[-1]["reason"] == "rate limit exceeded"
 
 
 def test_handle_forwards_only_to_open_webui_client() -> None:
