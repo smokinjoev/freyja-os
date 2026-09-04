@@ -8,6 +8,7 @@ from freyja.channel_transports import (
     SignalCliRestTransport,
     TelegramLongPollingTransport,
     TelegramPilotConfig,
+    _env_int,
     parse_signal_event,
     parse_telegram_update,
 )
@@ -90,3 +91,20 @@ def test_signal_transport_fails_closed_without_registration() -> None:
 
     with pytest.raises(ChannelTransportError, match="SIGNAL_ACCOUNT_NUMBER"):
         transport.receive()
+
+
+def test_telegram_timeout_env_parser_falls_back_on_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("TELEGRAM_LONG_POLL_TIMEOUT_SECONDS", "not-a-number")
+
+    assert TelegramPilotConfig.from_env().timeout_seconds == 25
+
+
+def test_env_int_rejects_non_positive_values(monkeypatch) -> None:
+    monkeypatch.setenv("FREYJA_TEST_TIMEOUT", "0")
+    assert _env_int("FREYJA_TEST_TIMEOUT", 25) == 25
+
+    monkeypatch.setenv("FREYJA_TEST_TIMEOUT", "-3")
+    assert _env_int("FREYJA_TEST_TIMEOUT", 25) == 25
+
+    monkeypatch.setenv("FREYJA_TEST_TIMEOUT", "7")
+    assert _env_int("FREYJA_TEST_TIMEOUT", 25) == 7
