@@ -581,7 +581,7 @@ Result:
 Full local test suite result:
 
 ```text
-1554 passed, 1 skipped, 1 warning
+1566 passed, 1 skipped, 1 warning
 ```
 
 Covered:

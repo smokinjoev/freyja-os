@@ -23,7 +23,7 @@ def test_secret_safety_audit_scans_current_home_agent_artifacts() -> None:
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
     assert report["ok"] is True
-    assert report["artifact_count"] == 51
+    assert report["artifact_count"] == 55
     assert report["missing_artifacts"] == []
     assert report["secret_pattern_findings"] == []
     assert report["json_flag_failures"] == []
