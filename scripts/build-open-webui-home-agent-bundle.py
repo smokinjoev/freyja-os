@@ -121,6 +121,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     proactive = _load_json(REPORTS / "freyja-proactive-readiness.json")
     proactive_dry_run_path = REPORTS / "freyja-proactive-dry-run.json"
     proactive_dry_run = _load_json(REPORTS / "freyja-proactive-dry-run.json")
+    freyja41_path = REPORTS / "freyja41-preservation-audit.json"
     freyja41 = _load_json(REPORTS / "freyja41-preservation-audit.json")
     completion = _load_json(REPORTS / "open-webui-home-agent-completion-audit.json")
     inventory_path = REPORTS / "open-webui-home-agent-platform-inventory.json"
@@ -325,6 +326,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "proactive_dry_run_generated_at_unix": proactive_dry_run.get("generated_at_unix") or proactive_dry_run.get("timestamp_unix") or _mtime(proactive_dry_run_path),
             "proactive_dry_run_git_head": proactive_dry_run.get("git_head") or "unknown",
             "freyja41_pending": freyja41.get("pending") or [],
+            "freyja41_generated_at_unix": freyja41.get("generated_at_unix") or _mtime(freyja41_path),
+            "freyja41_git_head": freyja41.get("git_head") or "unknown",
             "freyja41_legacy_endpoint_check": _check_ok(freyja41, "protected_legacy_endpoints_respond"),
             "freyja41_legacy_inference_endpoint_count": ((freyja3_inference or {}).get("evidence") or {}).get("endpoint_count"),
             "completion_status_counts": completion_status_counts,

@@ -55,6 +55,8 @@ def test_preservation_audit_marks_secret_free_and_tracks_baseline(monkeypatch) -
 
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
+    assert report["generated_at_unix"] == 1
+    assert report["git_head"] == "abc123"
     assert report["baseline_tag"] == module.BASELINE_TAG
     assert report["ok"] is True
     assert report["pending"] == []
@@ -99,3 +101,5 @@ def test_preservation_audit_script_writes_report(tmp_path: Path, capsys, monkeyp
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "freyja41-preservation-audit"
+    assert isinstance(written["generated_at_unix"], int)
+    assert "git_head" in written

@@ -44,6 +44,11 @@ def _command(args: list[str]) -> tuple[int, str]:
     return proc.returncode, proc.stdout.strip()
 
 
+def _git_head() -> str | None:
+    code, out = _command(["git", "rev-parse", "--short", "HEAD"])
+    return out if code == 0 and out else None
+
+
 def _docker_status() -> dict[str, str]:
     code, out = _command(["docker", "ps", "--format", "{{.Names}}\t{{.Status}}"])
     if code != 0:
@@ -143,6 +148,7 @@ def build_report(now: int | None = None) -> dict[str, Any]:
     return {
         "report_type": "freyja41-preservation-audit",
         "generated_at_unix": int(now or time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "baseline_tag": BASELINE_TAG,
