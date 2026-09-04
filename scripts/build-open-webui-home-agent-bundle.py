@@ -140,12 +140,16 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "freyja_4_1_preservation": "baseline tag, rollback artifacts, side-by-side Freyja 5, protected services, and legacy gateway/inference surface verified",
         "rollback": "documented with source and volume backups",
     }
+    git_head = _command(["git", "rev-parse", "--short", "HEAD"])
+    completion_status_counts = completion.get("status_counts") or {}
     return {
         "report_type": "open-webui-home-agent-consolidated-deliverable",
         "generated_at_unix": int(now or time.time()),
         "secrets_included": False,
         "private_content_included": False,
         "status": "maximally_completed_pending_external_auth",
+        "git_head": git_head,
+        "completion_status_counts": completion_status_counts,
         "endpoint_map": endpoint_map,
         "rollback": rollback,
         "tests": tests,
@@ -188,7 +192,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "backup_contains_webui_db": (backup.get("backup") or {}).get("contains_webui_db"),
             "secret_safety_artifact_count": secret_safety.get("artifact_count"),
             "secret_safety_findings": len(secret_safety.get("secret_pattern_findings") or []),
-            "git_head": _command(["git", "rev-parse", "--short", "HEAD"]),
+            "git_head": git_head,
             "live_auth_required_pending": live.get("auth_required_checks_pending") or [],
             "live_optional_pending": live.get("optional_checks_pending") or [],
             "model_count": model_apply.get("model_count"),
@@ -206,7 +210,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "freyja41_pending": freyja41.get("pending") or [],
             "freyja41_legacy_endpoint_check": _check_ok(freyja41, "protected_legacy_endpoints_respond"),
             "freyja41_legacy_inference_endpoint_count": ((freyja3_inference or {}).get("evidence") or {}).get("endpoint_count"),
-            "completion_status_counts": completion.get("status_counts") or {},
+            "completion_status_counts": completion_status_counts,
             "inventory_hosts": sorted((inventory.get("hosts") or {}).keys()),
             "post_auth_activation_ready": activation.get("ready"),
             "inference_model_profiles": inference.get("model_profiles") or {},

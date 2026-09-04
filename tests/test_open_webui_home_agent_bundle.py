@@ -25,6 +25,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["secrets_included"] is False
     assert bundle["private_content_included"] is False
     assert bundle["status"] == "maximally_completed_pending_external_auth"
+    assert bundle["git_head"]
+    assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 9, "credential_gated": 1, "partial": 2}
     assert bundle["endpoint_map"]["open_webui_local"] == "http://127.0.0.1:3001"
     assert bundle["rollback"]["open_webui_volume_backup"].endswith("open-webui-data-volume.tgz")
     assert bundle["tests"]["focused_pytest"] == "117 passed, 1 warning"
@@ -55,6 +57,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0
     assert bundle["evidence_summary"]["chat_smoke_status"] == "pending"
+    assert bundle["evidence_summary"]["completion_status_counts"] == bundle["completion_status_counts"]
+    assert bundle["evidence_summary"]["git_head"] == bundle["git_head"]
     assert bundle["evidence_summary"]["live_optional_pending"] == []
     assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20
     assert bundle["evidence_summary"]["tools_openapi_paths"] == ["/open-webui-tools", "/open-webui-tools/invoke"]

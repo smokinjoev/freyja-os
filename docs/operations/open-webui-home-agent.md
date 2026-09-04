@@ -509,7 +509,7 @@ Latest completion audit:
 
 ```text
 complete=false
-status_counts={"complete":7,"auth_gated":3,"credential_gated":1,"partial":3}
+status_counts={"complete":9,"auth_gated":3,"credential_gated":1,"partial":2}
 ```
 
 Focused verification added on 2026-09-04:
