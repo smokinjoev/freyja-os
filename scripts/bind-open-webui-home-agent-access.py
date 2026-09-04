@@ -4,13 +4,18 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import subprocess
+import tempfile
 import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path("/app/backend/data/webui.db")
+DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-access-bind-dry-run.json"
+DEFAULT_OPEN_WEBUI_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
 GROUPS = {"joe": "Joe", "beth": "Beth", "liam": "Liam", "jenna": "Jenna"}
 MODEL_GROUPS = {
     "agent/freyja": ["joe", "beth"],
@@ -26,6 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--apply", action="store_true", help="Write changes. Default is dry-run.")
     parser.add_argument("--backup-dir", type=Path)
+    parser.add_argument("--open-webui-container", default=DEFAULT_OPEN_WEBUI_CONTAINER)
+    parser.add_argument("--no-container-snapshot", action="store_true")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     return parser
 
 
@@ -74,6 +82,22 @@ def _backup_database(db_path: Path, backup_dir: Path | None) -> Path:
         target.close()
         source.close()
     return backup
+
+
+def snapshot_open_webui_database(container: str, target_dir: Path) -> Path | None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    copied_main = False
+    for filename in ("webui.db", "webui.db-wal", "webui.db-shm"):
+        proc = subprocess.run(
+            ["docker", "cp", f"{container}:/app/backend/data/{filename}", str(target_dir / filename)],
+            cwd=REPO_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if filename == "webui.db":
+            copied_main = proc.returncode == 0
+    return target_dir / "webui.db" if copied_main else None
 
 
 def plan(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -181,24 +205,62 @@ def apply_plan(conn: sqlite3.Connection, report: dict[str, Any]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    conn = sqlite3.connect(args.db)
+    snapshot_source = None
+    db = args.db
+    tmp_context = tempfile.TemporaryDirectory(prefix="open-webui-home-access-db-")
     try:
-        report = plan(conn)
-        report["mode"] = "apply" if args.apply else "dry-run"
-        report["db"] = str(args.db)
-        if args.apply:
-            if not report["ready"]:
-                report["applied"] = False
-                report["reason"] = "missing required Open WebUI users or models"
+        if not args.apply and not args.no_container_snapshot and not db.exists():
+            snapshot = snapshot_open_webui_database(args.open_webui_container, Path(tmp_context.name))
+            if snapshot is not None:
+                db = snapshot
+                snapshot_source = {
+                    "container": args.open_webui_container,
+                    "source": "/app/backend/data/webui.db",
+                    "wal_and_shm_attempted": True,
+                }
+        if not db.exists():
+            report = {
+                "report_type": "open-webui-home-agent-access-bind",
+                "secrets_included": False,
+                "private_content_included": False,
+                "mode": "apply" if args.apply else "dry-run",
+                "db": str(args.db),
+                "ready": False,
+                "applied": False,
+                "reason": "Open WebUI database is not available at the requested path",
+            }
+            rendered = json.dumps(report, indent=2, sort_keys=True)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+            print(rendered)
+            return 0
+        conn = sqlite3.connect(db)
+        try:
+            report = plan(conn)
+            report["mode"] = "apply" if args.apply else "dry-run"
+            report["db"] = str(args.db)
+            if snapshot_source is not None:
+                report["dry_run_snapshot"] = snapshot_source
+            if args.apply:
+                if not report["ready"]:
+                    report["applied"] = False
+                    report["reason"] = "missing required Open WebUI users or models"
+                else:
+                    backup = _backup_database(args.db, args.backup_dir)
+                    apply_plan(conn, report)
+                    conn.commit()
+                    report["backup"] = str(backup)
+                    report["applied"] = True
             else:
-                backup = _backup_database(args.db, args.backup_dir)
-                apply_plan(conn, report)
-                conn.commit()
-                report["backup"] = str(backup)
-                report["applied"] = True
-        print(json.dumps(report, indent=2, sort_keys=True))
+                report["applied"] = False
+            rendered = json.dumps(report, indent=2, sort_keys=True)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+            print(rendered)
+        finally:
+            conn.close()
     finally:
-        conn.close()
+        tmp_context.cleanup()
     return 0
 
 

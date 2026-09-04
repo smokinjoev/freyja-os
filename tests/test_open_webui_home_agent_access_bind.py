@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sqlite3
+import subprocess
 from pathlib import Path
 
 
@@ -117,6 +118,83 @@ def test_access_bind_dry_run_waits_for_real_users(tmp_path: Path) -> None:
     assert report["missing_users"] == ["beth", "jenna", "joe", "liam"]
     assert report["group_inserts"] == ["joe", "beth", "liam", "jenna"]
     assert report["grant_insert_count"] == 10
+
+
+def test_access_bind_main_writes_dry_run_output(tmp_path: Path, capsys) -> None:
+    db_path = tmp_path / "webui.db"
+    output = tmp_path / "access-bind.json"
+    _db(db_path)
+    _import_agents(db_path, tmp_path)
+    capsys.readouterr()
+
+    assert _module(BIND_SCRIPT).main(["--db", str(db_path), "--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert report["ready"] is False
+    assert report["applied"] is False
+    assert report["mode"] == "dry-run"
+    assert report["missing_users"] == ["beth", "jenna", "joe", "liam"]
+
+
+def test_access_bind_fails_closed_when_database_is_missing(tmp_path: Path, capsys) -> None:
+    output = tmp_path / "access-bind.json"
+
+    assert _module(BIND_SCRIPT).main(["--db", str(tmp_path / "missing.db"), "--output", str(output), "--apply"]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert report["ready"] is False
+    assert report["applied"] is False
+    assert report["reason"] == "Open WebUI database is not available at the requested path"
+    assert "dry_run_snapshot" not in report
+
+
+def test_access_bind_can_dry_run_from_container_snapshot(tmp_path: Path, monkeypatch, capsys) -> None:
+    source_db = tmp_path / "source-webui.db"
+    output = tmp_path / "access-bind.json"
+    _db(source_db)
+    _import_agents(source_db, tmp_path)
+    capsys.readouterr()
+    module = _module(BIND_SCRIPT)
+
+    def fake_run(args, **kwargs):
+        destination = Path(args[-1])
+        source = str(args[2])
+        if source.endswith("/webui.db"):
+            destination.write_bytes(source_db.read_bytes())
+            return subprocess.CompletedProcess(args, 0)
+        if source.endswith("/webui.db-wal") or source.endswith("/webui.db-shm"):
+            return subprocess.CompletedProcess(args, 1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    assert module.main(["--db", str(tmp_path / "missing.db"), "--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert report["dry_run_snapshot"]["container"] == module.DEFAULT_OPEN_WEBUI_CONTAINER
+    assert report["ready"] is False
+    assert report["missing_users"] == ["beth", "jenna", "joe", "liam"]
+
+
+def test_access_bind_apply_does_not_use_container_snapshot(tmp_path: Path, monkeypatch, capsys) -> None:
+    output = tmp_path / "access-bind.json"
+    module = _module(BIND_SCRIPT)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("snapshot should not be used in apply mode")
+
+    monkeypatch.setattr(module.subprocess, "run", fail_if_called)
+
+    assert module.main(["--db", str(tmp_path / "missing.db"), "--output", str(output), "--apply"]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert report["ready"] is False
+    assert report["applied"] is False
+    assert report["reason"] == "Open WebUI database is not available at the requested path"
 
 
 def test_access_bind_apply_creates_groups_memberships_and_model_grants(tmp_path: Path) -> None:

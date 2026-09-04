@@ -197,8 +197,12 @@ dry-run first:
 
 ```bash
 scripts/bind-open-webui-home-agent-access.py \
-  --db /app/backend/data/webui.db
+  --output certification/reports/open-webui-home-agent-access-bind-dry-run.json
 ```
+
+When the local `/app/backend/data/webui.db` path is not available, the dry-run
+snapshots `webui.db`, `webui.db-wal`, and `webui.db-shm` from
+`freyja-open-webui-atlas-open-webui-1`. It does not mutate the running database.
 
 Current dry-run evidence:
 
@@ -215,8 +219,9 @@ grant_insert_count=10
 mode=dry-run
 ```
 
-Only after the dry-run shows `ready=true`, apply with `--apply`; the binder
-creates a database backup before writing.
+Only after the dry-run shows `ready=true`, apply with an explicit writable
+`--db` and `--apply`; the binder creates a database backup before writing. Apply
+mode does not use a container snapshot.
 
 After Joe signs in or provides an authenticated Open WebUI owner/admin session,
 the dry-run post-auth activation sequence can inspect a temporary snapshot of
