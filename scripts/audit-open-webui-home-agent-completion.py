@@ -29,8 +29,9 @@ def _exists(path: str) -> bool:
     return (REPO_ROOT / path).exists()
 
 
-def _item(requirement: str, status: str, evidence: list[str], blocker: str | None = None) -> dict[str, Any]:
+def _item(requirement_id: str, requirement: str, status: str, evidence: list[str], blocker: str | None = None) -> dict[str, Any]:
     return {
+        "requirement_id": requirement_id,
         "requirement": requirement,
         "status": status,
         "evidence": evidence,
@@ -61,6 +62,7 @@ def build_audit() -> dict[str, Any]:
 
     items = [
         _item(
+            "preflight_inventory",
             "Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config",
             "complete" if set((inventory.get("hosts") or {})) == {"atlas", "vulcan", "iris", "hera"} else "partial",
             [
@@ -70,11 +72,13 @@ def build_audit() -> dict[str, Any]:
             ],
         ),
         _item(
+            "open_webui_host_and_vulcan_path",
             "Identify Open WebUI host and Vulcan path",
             "complete" if live.get("open_webui_url") and proxy.get("ok") is True else "partial",
             ["certification/reports/open-webui-home-agent-live.json", "certification/reports/open-webui-model-proxy-catalog.json"],
         ),
         _item(
+            "open_webui_backup_and_rollback",
             "Back up Open WebUI data/config/version/image/volumes/database and rollback",
             "complete" if backup.get("ok") else "partial",
             [
@@ -84,11 +88,13 @@ def build_audit() -> dict[str, Any]:
             ],
         ),
         _item(
+            "git_checkpoint",
             "Create recoverable git checkpoint before repo modifications",
             "complete" if _exists(".codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch") else "missing",
             [".codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch"],
         ),
         _item(
+            "secret_safety",
             "Never print or commit secrets, tokens, private messages, or private documents",
             "complete" if secret_safety.get("ok") else "partial",
             [
@@ -98,6 +104,7 @@ def build_audit() -> dict[str, Any]:
             ],
         ),
         _item(
+            "local_inference",
             "Keep inference local by default and connect Open WebUI to Vulcan",
             "complete" if inference.get("ok") and chat_smoke.get("status") == "complete" else "partial",
             [
@@ -109,23 +116,27 @@ def build_audit() -> dict[str, Any]:
             "Authenticated model/chat proof requires Open WebUI API key or session.",
         ),
         _item(
+            "model_profiles",
             "Define model profiles for fast chat, reasoning, vision/document analysis, and coding",
             "complete" if _exists("config/open-webui-home-agents.yaml") else "missing",
             ["config/open-webui-home-agents.yaml"],
         ),
         _item(
+            "five_agents",
             "Create/import five Open WebUI agents",
             "auth_gated" if model_apply.get("model_count") == 5 and access_audit.get("ok") else "partial",
             ["certification/reports/open-webui-home-agents-offline-apply.json", "certification/reports/open-webui-home-agent-access-audit.json"],
             "Imported into model table; authenticated UI/API and real group binding require users/session.",
         ),
         _item(
+            "memory_layers",
             "Implement three-layer memory with scoped freyja-home-memory service",
             "auth_gated" if resource_import.get("applied") is not True and live.get("ok") else "complete",
             ["src/freyja/home_memory.py", "certification/reports/open-webui-home-resources-offline-dry-run.json", "certification/reports/open-webui-home-agent-live.json"],
             "Native Open WebUI per-user memory rows require an owner user/authenticated import.",
         ),
         _item(
+            "tools",
             "Expose narrow MCP/OpenAPI tools and assign per agent",
             "auth_gated"
             if resources.get("ok") and tools_gateway.get("ok") and tools_openapi.get("ok") and resource_import.get("applied") is not True
@@ -140,12 +151,14 @@ def build_audit() -> dict[str, Any]:
             "Open WebUI tool rows/enablement require owner user or authenticated admin session.",
         ),
         _item(
+            "messaging_channels",
             "Implement deterministic Telegram/Signal channel gateway with WhatsApp disabled",
             "credential_gated" if channels.get("deterministic_gateway_only") else "partial",
             ["src/freyja/channels.py", "certification/reports/freyja-channels-readiness.json"],
             "Telegram/Signal live round trips require allowlists and credentials.",
         ),
         _item(
+            "proactive_behavior",
             "Add proactive behavior disabled by default",
             "complete" if proactive.get("all_disabled_by_default") and not proactive.get("ready_schedule_ids") and proactive_dry_run.get("all_sends_suppressed") else "partial",
             [
@@ -155,6 +168,7 @@ def build_audit() -> dict[str, Any]:
             ],
         ),
         _item(
+            "verification",
             "Create repeatable verification",
             "partial",
             [
@@ -165,12 +179,14 @@ def build_audit() -> dict[str, Any]:
             "Credentialed Open WebUI, Telegram, and Signal round trips remain pending.",
         ),
         _item(
+            "freyja41_preservation",
             "Preserve Freyja 4.1 fallback",
             "partial" if freyja41.get("pending") else "complete",
             ["certification/reports/freyja41-preservation-audit.json"],
             "Dedicated Freyja 4.1 endpoint contract is not defined in current repo evidence." if freyja41.get("pending") else None,
         ),
         _item(
+            "final_deliverable",
             "Deliver endpoint map, config inventory, test results, blockers, rollback, and exact next action",
             "complete",
             ["certification/reports/open-webui-home-agent-deliverable.json", "docs/operations/open-webui-home-agent.md"],

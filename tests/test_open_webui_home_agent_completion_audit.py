@@ -28,6 +28,12 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert audit["status_counts"]["complete"] >= 5
     assert audit["status_counts"]["auth_gated"] >= 3
     assert audit["status_counts"]["credential_gated"] >= 1
+    ids = [item["requirement_id"] for item in audit["items"]]
+    assert len(ids) == len(set(ids))
+    assert {"five_agents", "memory_layers", "tools"}.issubset(
+        {item["requirement_id"] for item in audit["items"] if item["status"] == "auth_gated"}
+    )
+    assert {"messaging_channels"} == {item["requirement_id"] for item in audit["items"] if item["status"] == "credential_gated"}
     statuses = {item["requirement"]: item["status"] for item in audit["items"]}
     assert statuses["Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config"] == "complete"
     assert statuses["Identify Open WebUI host and Vulcan path"] == "complete"
