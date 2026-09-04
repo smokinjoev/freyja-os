@@ -58,6 +58,7 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
             "message_body_logged": False,
             "raw_sender_logged": False,
             "denied_attempts_logged": True,
+            "response_failures_logged": True,
         },
         "open_webui_client": {
             "endpoint": f"{open_webui_client.base_url}/openai/v1/chat/completions",

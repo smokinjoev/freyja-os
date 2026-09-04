@@ -26,6 +26,17 @@ CHANNEL_AGENT_MODEL_IDS = {
 }
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "")
+    if not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 @dataclasses.dataclass(frozen=True)
 class ChannelMessage:
     channel: str
@@ -67,7 +78,7 @@ class OpenWebUIChatClient:
     def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_seconds: float | None = None) -> None:
         self.base_url = (base_url or os.environ.get("OPEN_WEBUI_URL") or "http://127.0.0.1:3001").rstrip("/")
         self.api_key = api_key if api_key is not None else os.environ.get("OPEN_WEBUI_API_KEY", "")
-        self.timeout_seconds = float(timeout_seconds or os.environ.get("FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT", "120"))
+        self.timeout_seconds = float(timeout_seconds) if timeout_seconds is not None else _env_float("FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT", 120.0)
 
     @property
     def configured(self) -> bool:
@@ -244,7 +255,22 @@ class FreyjaChannels:
         if self.client is None:
             raise ChannelPolicyError("Open WebUI client is not configured")
         route = self.route(message)
-        response = self.client.send(agent=route.agent, thread_key=route.thread_key, message=message.text, attachments=message.attachments)
+        try:
+            response = self.client.send(agent=route.agent, thread_key=route.thread_key, message=message.text, attachments=message.attachments)
+        except Exception as exc:
+            self.store.write_audit(
+                {
+                    "event": "freyja_channels_response_failed",
+                    "channel": route.channel,
+                    "identity": route.identity,
+                    "agent": route.agent,
+                    "sender_hash": route.sender_hash,
+                    "error_class": exc.__class__.__name__,
+                    "message_body_logged": False,
+                    "raw_sender_logged": False,
+                }
+            )
+            raise
         self.store.write_audit(
             {
                 "event": "freyja_channels_response",

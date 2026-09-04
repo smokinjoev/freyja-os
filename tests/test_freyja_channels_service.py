@@ -23,6 +23,11 @@ class FakeOpenWebUIClient:
         return f"response from {agent}"
 
 
+class FailingOpenWebUIClient:
+    def send(self, *, agent, thread_key, message, attachments):
+        raise ChannelClientError("simulated Open WebUI failure")
+
+
 def _service(**kwargs) -> FreyjaChannels:
     allowlists = {
         "telegram": {"1001"},
@@ -133,6 +138,22 @@ def test_handle_forwards_only_to_open_webui_client() -> None:
     ]
 
 
+def test_handle_audits_open_webui_client_failure_without_message_or_sender() -> None:
+    store = MemoryChannelStore()
+    with pytest.raises(ChannelClientError):
+        _service(client=FailingOpenWebUIClient(), store=store).handle(
+            ChannelMessage(channel="telegram", sender="1001", text="private message body")
+        )
+
+    event = store.events[-1]
+    assert event["event"] == "freyja_channels_response_failed"
+    assert event["error_class"] == "ChannelClientError"
+    assert event["raw_sender_logged"] is False
+    assert event["message_body_logged"] is False
+    assert "1001" not in str(event)
+    assert "private message body" not in str(event)
+
+
 def test_file_store_reuses_thread_key_across_service_instances(tmp_path) -> None:
     first_store = FileChannelStore(tmp_path)
     first_route = _service(store=first_store).route(ChannelMessage(channel="telegram", sender="1001", text="first", chat_id="chat-1001"))
@@ -188,3 +209,11 @@ def test_open_webui_chat_client_fails_closed_without_api_key(monkeypatch) -> Non
 
     with pytest.raises(ChannelClientError, match="OPEN_WEBUI_API_KEY"):
         client.send(agent="freyja", thread_key="telegram:freyja:abc", message="hello", attachments=())
+
+
+def test_open_webui_chat_client_timeout_env_defaults_on_invalid_values(monkeypatch) -> None:
+    monkeypatch.setenv("FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT", "not-a-number")
+    assert OpenWebUIChatClient(api_key="token").timeout_seconds == 120.0
+
+    monkeypatch.setenv("FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT", "0")
+    assert OpenWebUIChatClient(api_key="token").timeout_seconds == 120.0
