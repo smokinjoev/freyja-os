@@ -16,7 +16,13 @@ if VENV_PYTHON.exists() and Path(sys.executable).resolve() != VENV_PYTHON.resolv
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from freyja.open_webui_tools import ToolInvocationRequest, authorize_tool_invocation, load_agent_tool_policies, load_operation_policies
+from freyja.open_webui_tools import (
+    ToolInvocationRequest,
+    authorize_tool_invocation,
+    invoke_policy_boundary,
+    load_agent_tool_policies,
+    load_operation_policies,
+)
 
 
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-tools-gateway-readiness.json"
@@ -65,6 +71,13 @@ def build_report() -> dict[str, Any]:
     extra = sorted(set(operations) - REQUIRED_OPERATIONS)
     confirmation_required = sorted(operation for operation, policy in operations.items() if policy.confirmation_required)
     child_allowed = sorted(operation for operation, policy in operations.items() if policy.children_allowed)
+    weather_policy = authorize_tool_invocation(ToolInvocationRequest(operation="weather.read", agent_id="jenna"))
+    calendar_policy = authorize_tool_invocation(ToolInvocationRequest(operation="calendar.create", agent_id="freyja", confirmed=True))
+    dry_run_status = invoke_policy_boundary(weather_policy, ToolInvocationRequest(operation="weather.read", agent_id="jenna")).status
+    confirmed_status = invoke_policy_boundary(
+        calendar_policy,
+        ToolInvocationRequest(operation="calendar.create", agent_id="freyja", confirmed=True),
+    ).status
     report = {
         "report_type": "open-webui-tools-gateway-readiness",
         "timestamp_unix": int(time.time()),
@@ -77,6 +90,10 @@ def build_report() -> dict[str, Any]:
         "destructive_default_all_deny": all(policy.destructive_default == "deny" for policy in operations.values()),
         "confirmation_required": confirmation_required,
         "child_allowed_operations": child_allowed,
+        "execution_statuses": {
+            "read_only": dry_run_status,
+            "confirmed_write": confirmed_status,
+        },
         "checks": {
             "unknown_operation_denied": not _allowed("shell.run", "cloyd"),
             "calendar_create_requires_confirmation": not _allowed("calendar.create", "freyja") and _allowed("calendar.create", "freyja", confirmed=True),
@@ -86,6 +103,8 @@ def build_report() -> dict[str, Any]:
             "benedict_can_read_beth_files": _allowed("files.beth.read", "benedict"),
             "cloyd_cannot_read_beth_files": not _allowed("files.beth.read", "cloyd"),
             "iris_write_requires_confirmation": not _allowed("shortcuts.run", "freyja") and _allowed("shortcuts.run", "freyja", confirmed=True),
+            "read_only_operations_are_dry_run_only": dry_run_status == "dry_run_available",
+            "confirmed_writes_do_not_execute_without_adapter": confirmed_status == "confirmed_not_configured",
         },
         "live_side_effects_invoked": False,
     }

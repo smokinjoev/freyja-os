@@ -93,8 +93,24 @@ def test_open_webui_tool_router_redacts_arguments_and_does_not_execute_live_side
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "stubbed"
-    assert body["result"]["execution"] == "not_configured"
+    assert body["status"] == "dry_run_available"
+    assert body["result"]["execution"] == "dry_run_only"
     assert body["audit"]["secrets_included"] is False
     assert "do-not-log" not in str(body)
     assert body["audit"]["argument_summary"]["keys"] == ["api_token", "location"]
+
+    confirmed = client.post(
+        "/open-webui-tools/invoke",
+        json={
+            "operation": "calendar.create",
+            "agent_id": "freyja",
+            "actor": "person:joe",
+            "arguments": {"title": "redacted", "calendar": "family"},
+            "confirmed": True,
+            "request_id": "test-calendar-create",
+        },
+    )
+    assert confirmed.status_code == 200
+    confirmed_body = confirmed.json()
+    assert confirmed_body["status"] == "confirmed_not_configured"
+    assert confirmed_body["result"]["execution"] == "not_configured"

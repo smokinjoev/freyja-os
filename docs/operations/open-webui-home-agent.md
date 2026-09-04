@@ -582,6 +582,8 @@ Latest result:
 ```text
 ok=true
 operation_count=20
+execution_statuses.read_only="dry_run_available"
+execution_statuses.confirmed_write="confirmed_not_configured"
 live_side_effects_invoked=false
 openapi.paths=["/open-webui-tools","/open-webui-tools/invoke"]
 ```

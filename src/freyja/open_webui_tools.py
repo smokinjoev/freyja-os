@@ -151,14 +151,14 @@ def authorize_tool_invocation(
     return policy
 
 
-def invoke_policy_stub(policy: OperationPolicy, request: ToolInvocationRequest) -> ToolInvocationResponse:
-    status = "authorized"
+def invoke_policy_boundary(policy: OperationPolicy, request: ToolInvocationRequest) -> ToolInvocationResponse:
+    status = "authorized_not_configured"
     result: dict[str, Any] = {
         "boundary": policy.boundary,
         "resource_id": policy.resource_id,
         "execution": "not_configured",
     }
-    read_only_status = {
+    dry_run_operations = {
         "search",
         "recent-events",
         "calendar.read",
@@ -171,8 +171,11 @@ def invoke_policy_stub(policy: OperationPolicy, request: ToolInvocationRequest) 
         "pdf.analyze",
         "image.analyze",
     }
-    if policy.operation in read_only_status:
-        status = "stubbed"
+    if policy.operation in dry_run_operations:
+        status = "dry_run_available"
+        result["execution"] = "dry_run_only"
+    elif request.confirmed:
+        status = "confirmed_not_configured"
     return ToolInvocationResponse(
         ok=True,
         status=status,
@@ -201,4 +204,4 @@ async def open_webui_tool_catalog() -> ToolCatalogResponse:
 @open_webui_tools_router.post("/invoke", response_model=ToolInvocationResponse)
 async def invoke_open_webui_tool(body: ToolInvocationRequest, _: Request) -> ToolInvocationResponse:
     policy = authorize_tool_invocation(body)
-    return invoke_policy_stub(policy, body)
+    return invoke_policy_boundary(policy, body)
