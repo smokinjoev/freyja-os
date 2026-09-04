@@ -104,8 +104,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "runbook": "docs/operations/open-webui-home-agent.md",
     }
     tests = {
-        "focused_pytest": "132 passed, 1 warning",
-        "full_pytest": "1581 passed, 1 skipped, 1 warning",
+        "focused_pytest": "133 passed, 1 warning",
+        "full_pytest": "1582 passed, 1 skipped, 1 warning",
         "live_verifier_ok": live.get("ok"),
         "backup_rollback_audit_ok": backup.get("ok"),
         "secret_safety_audit_ok": secret_safety.get("ok"),
@@ -288,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     bundle = build_bundle()
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
+    args.output_md.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     args.output_md.write_text(render_markdown(bundle), encoding="utf-8")
     print(json.dumps({"ok": True, "json": str(args.output_json), "markdown": str(args.output_md), "secrets_included": False}, indent=2))

@@ -29,8 +29,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 9, "credential_gated": 1, "partial": 2}
     assert bundle["endpoint_map"]["open_webui_local"] == "http://127.0.0.1:3001"
     assert bundle["rollback"]["open_webui_volume_backup"].endswith("open-webui-data-volume.tgz")
-    assert bundle["tests"]["focused_pytest"] == "132 passed, 1 warning"
-    assert bundle["tests"]["full_pytest"] == "1581 passed, 1 skipped, 1 warning"
+    assert bundle["tests"]["focused_pytest"] == "133 passed, 1 warning"
+    assert bundle["tests"]["full_pytest"] == "1582 passed, 1 skipped, 1 warning"
     assert bundle["tests"]["backup_rollback_audit_ok"] is True
     assert bundle["tests"]["secret_safety_audit_ok"] is True
     assert bundle["tests"]["channels_deterministic"] is True
@@ -110,6 +110,18 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "readiness_summary" in text
     assert "Exact Next Action" in text
     assert "Open WebUI owner/user rows are missing" in text
+
+
+def test_bundle_main_creates_distinct_output_directories(tmp_path: Path, capsys) -> None:
+    output_json = tmp_path / "json" / "deliverable.json"
+    output_md = tmp_path / "markdown" / "deliverable.md"
+
+    assert _module().main(["--output-json", str(output_json), "--output-md", str(output_md)]) == 0
+
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["ok"] is True
+    assert json.loads(output_json.read_text(encoding="utf-8"))["report_type"] == "open-webui-home-agent-consolidated-deliverable"
+    assert "Open WebUI Home-Agent Deliverable" in output_md.read_text(encoding="utf-8")
 
 
 def test_loader_rejects_reports_not_marked_secret_free(tmp_path: Path) -> None:
