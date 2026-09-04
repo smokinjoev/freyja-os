@@ -121,13 +121,15 @@ def build_audit() -> dict[str, Any]:
         ),
         _item(
             "Implement three-layer memory with scoped freyja-home-memory service",
-            "auth_gated" if resource_import.get("ready") is False and live.get("ok") else "partial",
+            "auth_gated" if resource_import.get("applied") is not True and live.get("ok") else "complete",
             ["src/freyja/home_memory.py", "certification/reports/open-webui-home-resources-offline-dry-run.json", "certification/reports/open-webui-home-agent-live.json"],
             "Native Open WebUI per-user memory rows require an owner user/authenticated import.",
         ),
         _item(
             "Expose narrow MCP/OpenAPI tools and assign per agent",
-            "auth_gated" if resources.get("ok") and tools_gateway.get("ok") and tools_openapi.get("ok") and resource_import.get("ready") is False else "partial",
+            "auth_gated"
+            if resources.get("ok") and tools_gateway.get("ok") and tools_openapi.get("ok") and resource_import.get("applied") is not True
+            else "complete",
             [
                 "config/open-webui-home-resources.yaml",
                 "src/freyja/open_webui_tools.py",

@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_IMPORT = REPO_ROOT / "certification" / "reports" / "open-webui-home-resources-export.json"
 DEFAULT_DB = Path("/app/backend/data/webui.db")
+DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-resources-offline-dry-run.json"
+DEFAULT_OPEN_WEBUI_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
 REQUIRED_COLUMNS = {
     "knowledge": {"id", "user_id", "name", "description", "meta", "created_at", "updated_at", "data"},
     "tool": {"id", "user_id", "name", "content", "specs", "meta", "valves", "updated_at", "created_at"},
@@ -26,7 +30,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--owner-user-id", help="Existing Open WebUI user ID that should own shared Knowledge/tool rows.")
     parser.add_argument("--apply", action="store_true", help="Write changes. Default is dry-run.")
+    parser.add_argument("--open-webui-container", default=DEFAULT_OPEN_WEBUI_CONTAINER)
+    parser.add_argument("--no-container-snapshot", action="store_true")
     parser.add_argument("--backup-dir", type=Path)
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     return parser
 
 
@@ -133,6 +140,22 @@ def _backup_database(db_path: Path, backup_dir: Path | None) -> Path:
     return backup
 
 
+def snapshot_open_webui_database(container: str, target_dir: Path) -> Path | None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    copied_main = False
+    for filename in ("webui.db", "webui.db-wal", "webui.db-shm"):
+        proc = subprocess.run(
+            ["docker", "cp", f"{container}:/app/backend/data/{filename}", str(target_dir / filename)],
+            cwd=REPO_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if filename == "webui.db":
+            copied_main = proc.returncode == 0
+    return target_dir / "webui.db" if copied_main else None
+
+
 def count_existing(conn: sqlite3.Connection, table: str, ids: list[str]) -> set[str]:
     if not ids:
         return set()
@@ -194,53 +217,94 @@ def upsert(conn: sqlite3.Connection, rows: dict[str, list[dict[str, Any]]]) -> N
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     payload = load_import(args.import_json)
-    conn = sqlite3.connect(args.db)
+    snapshot_source = None
+    db = args.db
+    tmp_context = tempfile.TemporaryDirectory(prefix="open-webui-home-resources-db-")
     try:
-        inspect_schema(conn)
-        owner_user_id = resolve_owner(conn, args.owner_user_id)
-        report: dict[str, Any] = {
-            "report_type": "open-webui-home-resources-offline-import",
-            "mode": "apply" if args.apply else "dry-run",
-            "db": str(args.db),
-            "import_json": str(args.import_json),
-            "secrets_included": False,
-            "private_content_included": False,
-            "owner_user_id_resolved": owner_user_id is not None,
-            "touched_tables": ["knowledge", "tool", "memory"],
-        }
-        if owner_user_id is None:
-            report.update(
-                {
-                    "ready": False,
-                    "applied": False,
-                    "reason": "missing or ambiguous Open WebUI owner user",
-                    "knowledge_count": len(payload.get("knowledge") or []),
-                    "tool_count": len(payload.get("tools") or []),
-                    "memory_policy_count": len((payload.get("native_memory") or {}).get("private_preferences") or {}),
+        if not args.apply and not args.no_container_snapshot and not db.exists():
+            snapshot = snapshot_open_webui_database(args.open_webui_container, Path(tmp_context.name))
+            if snapshot is not None:
+                db = snapshot
+                snapshot_source = {
+                    "container": args.open_webui_container,
+                    "source": "/app/backend/data/webui.db",
+                    "wal_and_shm_attempted": True,
                 }
-            )
-            print(json.dumps(report, indent=2, sort_keys=True))
+        if not db.exists():
+            report = {
+                "report_type": "open-webui-home-resources-offline-import",
+                "mode": "apply" if args.apply else "dry-run",
+                "db": str(args.db),
+                "import_json": str(args.import_json),
+                "secrets_included": False,
+                "private_content_included": False,
+                "ready": False,
+                "applied": False,
+                "reason": "Open WebUI database is not available at the requested path",
+                "touched_tables": ["knowledge", "tool", "memory"],
+            }
+            rendered = json.dumps(report, indent=2, sort_keys=True)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+            print(rendered)
             return 0
+        conn = sqlite3.connect(db)
+        try:
+            inspect_schema(conn)
+            owner_user_id = resolve_owner(conn, args.owner_user_id)
+            report: dict[str, Any] = {
+                "report_type": "open-webui-home-resources-offline-import",
+                "mode": "apply" if args.apply else "dry-run",
+                "db": str(args.db),
+                "import_json": str(args.import_json),
+                "secrets_included": False,
+                "private_content_included": False,
+                "owner_user_id_resolved": owner_user_id is not None,
+                "touched_tables": ["knowledge", "tool", "memory"],
+            }
+            if snapshot_source is not None:
+                report["dry_run_snapshot"] = snapshot_source
+            if owner_user_id is None:
+                report.update(
+                    {
+                        "ready": False,
+                        "applied": False,
+                        "reason": "missing or ambiguous Open WebUI owner user",
+                        "knowledge_count": len(payload.get("knowledge") or []),
+                        "tool_count": len(payload.get("tools") or []),
+                        "memory_policy_count": len((payload.get("native_memory") or {}).get("private_preferences") or {}),
+                    }
+                )
+                rendered = json.dumps(report, indent=2, sort_keys=True)
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(rendered + "\n", encoding="utf-8")
+                print(rendered)
+                return 0
 
-        rows = build_rows(payload, owner_user_id)
-        report["ready"] = True
-        for table, table_rows in rows.items():
-            ids = [row["id"] for row in table_rows]
-            existing = count_existing(conn, table, ids)
-            report[f"{table}_insert_count"] = len([row_id for row_id in ids if row_id not in existing])
-            report[f"{table}_update_count"] = len([row_id for row_id in ids if row_id in existing])
-            report[f"{table}_ids"] = ids
-        if args.apply:
-            backup = _backup_database(args.db, args.backup_dir)
-            upsert(conn, rows)
-            conn.commit()
-            report["backup"] = str(backup)
-            report["applied"] = True
-        else:
-            report["applied"] = False
-        print(json.dumps(report, indent=2, sort_keys=True))
+            rows = build_rows(payload, owner_user_id)
+            report["ready"] = True
+            for table, table_rows in rows.items():
+                ids = [row["id"] for row in table_rows]
+                existing = count_existing(conn, table, ids)
+                report[f"{table}_insert_count"] = len([row_id for row_id in ids if row_id not in existing])
+                report[f"{table}_update_count"] = len([row_id for row_id in ids if row_id in existing])
+                report[f"{table}_ids"] = ids
+            if args.apply:
+                backup = _backup_database(args.db, args.backup_dir)
+                upsert(conn, rows)
+                conn.commit()
+                report["backup"] = str(backup)
+                report["applied"] = True
+            else:
+                report["applied"] = False
+            rendered = json.dumps(report, indent=2, sort_keys=True)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+            print(rendered)
+        finally:
+            conn.close()
     finally:
-        conn.close()
+        tmp_context.cleanup()
     return 0
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sqlite3
+import subprocess
 from pathlib import Path
 
 
@@ -99,10 +100,12 @@ def test_resource_import_dry_run_reports_missing_owner_without_writing(tmp_path:
     db = tmp_path / "webui.db"
     _db(db)
     resource_export = _export(tmp_path)
+    output = tmp_path / "resource-import.json"
 
-    assert _module(SCRIPT).main(["--import-json", str(resource_export), "--db", str(db), "--apply"]) == 0
+    assert _module(SCRIPT).main(["--import-json", str(resource_export), "--db", str(db), "--output", str(output), "--apply"]) == 0
 
     report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
     assert report["ready"] is False
     assert report["applied"] is False
     assert report["reason"] == "missing or ambiguous Open WebUI owner user"
@@ -115,19 +118,93 @@ def test_resource_import_dry_run_reports_missing_owner_without_writing(tmp_path:
         conn.close()
 
 
+def test_resource_import_fails_closed_when_database_is_missing(tmp_path: Path, capsys) -> None:
+    resource_export = _export(tmp_path)
+    output = tmp_path / "resource-import.json"
+
+    assert _module(SCRIPT).main(["--import-json", str(resource_export), "--db", str(tmp_path / "missing.db"), "--output", str(output), "--apply"]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert report["ready"] is False
+    assert report["applied"] is False
+    assert report["reason"] == "Open WebUI database is not available at the requested path"
+
+
+def test_resource_import_can_dry_run_from_container_snapshot(tmp_path: Path, monkeypatch, capsys) -> None:
+    db = tmp_path / "source-webui.db"
+    _db(db)
+    resource_export = _export(tmp_path)
+    output = tmp_path / "resource-import.json"
+    module = _module(SCRIPT)
+
+    def fake_run(args, **kwargs):
+        destination = Path(args[-1])
+        source = str(args[2])
+        if source.endswith("/webui.db"):
+            destination.write_bytes(db.read_bytes())
+            return subprocess.CompletedProcess(args, 0)
+        if source.endswith("/webui.db-wal") or source.endswith("/webui.db-shm"):
+            return subprocess.CompletedProcess(args, 1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    assert module.main(["--import-json", str(resource_export), "--db", str(tmp_path / "missing.db"), "--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert report["dry_run_snapshot"]["container"] == module.DEFAULT_OPEN_WEBUI_CONTAINER
+    assert report["ready"] is False
+    assert report["reason"] == "missing or ambiguous Open WebUI owner user"
+
+
+def test_resource_import_apply_does_not_use_container_snapshot(tmp_path: Path, monkeypatch, capsys) -> None:
+    resource_export = _export(tmp_path)
+    output = tmp_path / "resource-import.json"
+    module = _module(SCRIPT)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("snapshot should not be used in apply mode")
+
+    monkeypatch.setattr(module.subprocess, "run", fail_if_called)
+
+    assert _module(SCRIPT).main(["--import-json", str(resource_export), "--db", str(tmp_path / "missing.db"), "--output", str(output), "--apply"]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert "dry_run_snapshot" not in report
+    assert report["ready"] is False
+    assert report["reason"] == "Open WebUI database is not available at the requested path"
+
+
 def test_resource_import_apply_writes_expected_rows_and_backup(tmp_path: Path, capsys) -> None:
     db = tmp_path / "webui.db"
     _db(db, with_user=True)
     resource_export = _export(tmp_path)
+    output = tmp_path / "resource-import.json"
 
     assert (
         _module(SCRIPT).main(
-            ["--import-json", str(resource_export), "--db", str(db), "--owner-user-id", "owner-1", "--backup-dir", str(tmp_path), "--apply"]
+            [
+                "--import-json",
+                str(resource_export),
+                "--db",
+                str(db),
+                "--owner-user-id",
+                "owner-1",
+                "--backup-dir",
+                str(tmp_path),
+                "--output",
+                str(output),
+                "--apply",
+            ]
         )
         == 0
     )
 
     report = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == report
     assert report["ready"] is True
     assert report["applied"] is True
     assert Path(report["backup"]).exists()

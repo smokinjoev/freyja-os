@@ -347,9 +347,12 @@ Prepare the offline resource rows with a dry-run first:
 
 ```bash
 scripts/apply-open-webui-home-resources-offline.py \
-  --db /app/backend/data/webui.db \
   --import-json certification/reports/open-webui-home-resources-export.json
 ```
+
+When the local `/app/backend/data/webui.db` path is not available, the dry-run
+snapshots `webui.db`, `webui.db-wal`, and `webui.db-shm` from
+`freyja-open-webui-atlas-open-webui-1`. It does not mutate the running database.
 
 Current dry-run evidence:
 
@@ -362,13 +365,15 @@ Latest live dry-run:
 ```text
 ready=false
 applied=false
+dry_run_snapshot.container="freyja-open-webui-atlas-open-webui-1"
 reason="missing or ambiguous Open WebUI owner user"
 knowledge_count=3
 tool_count=6
 memory_policy_count=4
 ```
 
-Only after a real owner user exists, apply with `--owner-user-id <id> --apply`.
+Only after a real owner user exists, apply with an explicit writable `--db`,
+`--owner-user-id <id>`, and `--apply`.
 The importer creates a database backup before writing and touches only
 `knowledge`, `tool`, and `memory`.
 
