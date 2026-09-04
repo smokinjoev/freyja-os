@@ -28,6 +28,7 @@ TEXT_ARTIFACTS = (
     "scripts/audit-open-webui-inference-policy.py",
     "scripts/bind-open-webui-home-agent-access.py",
     "scripts/build-open-webui-home-agent-bundle.py",
+    "scripts/summarize-open-webui-home-agent-readiness.py",
     "scripts/open-webui-home-agent-verify.py",
     "scripts/smoke-open-webui-home-agent-chats.py",
     "scripts/check-freyja-channels-readiness.py",
@@ -69,6 +70,7 @@ JSON_REPORTS = (
     "certification/reports/open-webui-tools-gateway-readiness.json",
     "certification/reports/open-webui-tools-openapi.json",
     "certification/reports/open-webui-home-agent-deliverable.json",
+    "certification/reports/open-webui-home-agent-readiness-summary.json",
 )
 SECRET_PATTERNS = {
     "private_key": re.compile(r"BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY"),

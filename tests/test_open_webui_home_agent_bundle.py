@@ -29,8 +29,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 9, "credential_gated": 1, "partial": 2}
     assert bundle["endpoint_map"]["open_webui_local"] == "http://127.0.0.1:3001"
     assert bundle["rollback"]["open_webui_volume_backup"].endswith("open-webui-data-volume.tgz")
-    assert bundle["tests"]["focused_pytest"] == "126 passed, 1 warning"
-    assert bundle["tests"]["full_pytest"] == "1575 passed, 1 skipped, 1 warning"
+    assert bundle["tests"]["focused_pytest"] == "129 passed, 1 warning"
+    assert bundle["tests"]["full_pytest"] == "1578 passed, 1 skipped, 1 warning"
     assert bundle["tests"]["backup_rollback_audit_ok"] is True
     assert bundle["tests"]["secret_safety_audit_ok"] is True
     assert bundle["tests"]["channels_deterministic"] is True
@@ -52,6 +52,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["chat_smoke"] == "certification/reports/open-webui-home-agent-chat-smoke.json"
     assert bundle["artifacts"]["tools_gateway"] == "certification/reports/open-webui-tools-gateway-readiness.json"
     assert bundle["artifacts"]["tools_openapi"] == "certification/reports/open-webui-tools-openapi.json"
+    assert bundle["artifacts"]["readiness_summary"] == "certification/reports/open-webui-home-agent-readiness-summary.json"
     assert bundle["artifacts"]["proactive_dry_run"] == "certification/reports/freyja-proactive-dry-run.json"
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
     assert bundle["artifacts"]["signal_pilot"] == "certification/reports/freyja-channels-signal-pilot.json"
@@ -64,6 +65,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["live_optional_pending"] == []
     assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20
     assert bundle["evidence_summary"]["tools_openapi_paths"] == ["/open-webui-tools", "/open-webui-tools/invoke"]
+    assert bundle["evidence_summary"]["readiness_summary_status"] == "pending_external_auth_or_credentials"
+    assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
     assert bundle["evidence_summary"]["channel_thread_persistence_store"]["path"] == "data/freyja-channels/threads.json"
     assert bundle["evidence_summary"]["channel_audit_store"]["raw_sender_logged"] is False
     assert bundle["evidence_summary"]["channel_audit_store"]["denied_attempts_logged"] is True

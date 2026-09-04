@@ -84,6 +84,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     chat_smoke = _load_json(REPORTS / "open-webui-home-agent-chat-smoke.json")
     tools_gateway = _load_json(REPORTS / "open-webui-tools-gateway-readiness.json")
     tools_openapi = _load_json(REPORTS / "open-webui-tools-openapi.json")
+    readiness_summary = _load_json(REPORTS / "open-webui-home-agent-readiness-summary.json")
     freyja3_inference = _nested_check(freyja41, "protected_legacy_endpoints_respond", "freyja3_inference_health")
 
     endpoint_map = {
@@ -103,8 +104,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "runbook": "docs/operations/open-webui-home-agent.md",
     }
     tests = {
-        "focused_pytest": "126 passed, 1 warning",
-        "full_pytest": "1575 passed, 1 skipped, 1 warning",
+        "focused_pytest": "129 passed, 1 warning",
+        "full_pytest": "1578 passed, 1 skipped, 1 warning",
         "live_verifier_ok": live.get("ok"),
         "backup_rollback_audit_ok": backup.get("ok"),
         "secret_safety_audit_ok": secret_safety.get("ok"),
@@ -188,6 +189,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "chat_smoke": "certification/reports/open-webui-home-agent-chat-smoke.json",
             "tools_gateway": "certification/reports/open-webui-tools-gateway-readiness.json",
             "tools_openapi": "certification/reports/open-webui-tools-openapi.json",
+            "readiness_summary": "certification/reports/open-webui-home-agent-readiness-summary.json",
         },
         "evidence_summary": {
             "open_webui_version": _text(DIAG / "open-webui-version"),
@@ -230,6 +232,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "tools_gateway_operation_count": tools_gateway.get("operation_count"),
             "tools_gateway_checks": tools_gateway.get("checks") or {},
             "tools_openapi_paths": sorted((tools_openapi.get("schema") or {}).get("paths") or {}),
+            "readiness_summary_status": readiness_summary.get("status"),
+            "readiness_summary_all_ready": readiness_summary.get("all_ready"),
         },
         "requirement_status": requirement_status,
     }

@@ -667,6 +667,17 @@ OPEN_WEBUI_API_KEY=... scripts/smoke-open-webui-home-agent-chats.py \
   --output certification/reports/open-webui-home-agent-chat-smoke.json
 ```
 
+Single readiness summary:
+
+```bash
+scripts/summarize-open-webui-home-agent-readiness.py
+```
+
+This command reads only existing secret-free reports and writes
+`certification/reports/open-webui-home-agent-readiness-summary.json` plus a
+Markdown summary. It exits nonzero until post-auth activation, five-agent chat
+smoke, Telegram, and Signal are all ready.
+
 Without an API key the smoke runner writes a pending, secret-free report:
 
 ```text
