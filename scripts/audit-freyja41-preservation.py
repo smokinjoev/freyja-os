@@ -26,7 +26,9 @@ ROLLBACK_FILES = [
     "logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz",
 ]
 PROTECTED_ENDPOINTS = {
+    "freyja3_agent_gateway_root": {"url": "http://127.0.0.1:8300/", "ok_statuses": {200}, "service": "freyja3-agent-gateway"},
     "freyja3_agent_gateway_health": {"url": "http://127.0.0.1:8300/health", "ok_statuses": {200}, "healthy_json": True},
+    "freyja3_inference_health": {"url": "http://127.0.0.1:8300/freyja3/inference/health", "ok_statuses": {200}, "ok_json": True},
     "freyja3_litellm_health_auth_boundary": {"url": "http://127.0.0.1:4001/health", "ok_statuses": {200, 401}, "healthy_json": False},
 }
 
@@ -78,6 +80,11 @@ def _endpoint_checks() -> list[dict[str, Any]]:
         ok = status in config["ok_statuses"]
         if config.get("healthy_json"):
             ok = ok and (payload or {}).get("status") == "healthy"
+        if config.get("service"):
+            ok = ok and (payload or {}).get("service") == config["service"]
+        if config.get("ok_json"):
+            ok = ok and (payload or {}).get("ok") is True
+        endpoints = (payload or {}).get("endpoints")
         checks.append(
             {
                 "name": name,
@@ -88,6 +95,9 @@ def _endpoint_checks() -> list[dict[str, Any]]:
                     "error": error,
                     "auth_required": status == 401,
                     "healthy": (payload or {}).get("status") == "healthy",
+                    "service": (payload or {}).get("service"),
+                    "ok_json": (payload or {}).get("ok"),
+                    "endpoint_count": len(endpoints) if isinstance(endpoints, list) else None,
                 },
             }
         )

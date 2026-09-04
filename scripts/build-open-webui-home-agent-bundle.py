@@ -50,6 +50,16 @@ def _check_ok(report: dict[str, Any], name: str) -> bool | None:
     return None
 
 
+def _nested_check(report: dict[str, Any], parent: str, child: str) -> dict[str, Any] | None:
+    for check in report.get("checks") or []:
+        if check.get("name") != parent:
+            continue
+        for nested in (check.get("evidence") or {}).get("checks") or []:
+            if nested.get("name") == child:
+                return nested
+    return None
+
+
 def build_bundle(now: int | None = None) -> dict[str, Any]:
     live = _load_json(REPORTS / "open-webui-home-agent-live.json")
     backup = _load_json(REPORTS / "open-webui-backup-rollback-audit.json")
@@ -72,6 +82,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     chat_smoke = _load_json(REPORTS / "open-webui-home-agent-chat-smoke.json")
     tools_gateway = _load_json(REPORTS / "open-webui-tools-gateway-readiness.json")
     tools_openapi = _load_json(REPORTS / "open-webui-tools-openapi.json")
+    freyja3_inference = _nested_check(freyja41, "protected_legacy_endpoints_respond", "freyja3_inference_health")
 
     endpoint_map = {
         "open_webui_local": "http://127.0.0.1:3001",
@@ -195,6 +206,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "proactive_dry_run_would_send_count": proactive_dry_run.get("would_send_count"),
             "freyja41_pending": freyja41.get("pending") or [],
             "freyja41_legacy_endpoint_check": _check_ok(freyja41, "protected_legacy_endpoints_respond"),
+            "freyja41_legacy_inference_endpoint_count": ((freyja3_inference or {}).get("evidence") or {}).get("endpoint_count"),
             "completion_status_counts": completion.get("status_counts") or {},
             "inventory_hosts": sorted((inventory.get("hosts") or {}).keys()),
             "post_auth_activation_ready": activation.get("ready"),

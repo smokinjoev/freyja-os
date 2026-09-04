@@ -59,6 +59,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_openapi_paths"] == ["/open-webui-tools", "/open-webui-tools/invoke"]
     assert bundle["evidence_summary"]["proactive_dry_run_would_send_count"] == 0
     assert bundle["evidence_summary"]["freyja41_legacy_endpoint_check"] is True
+    assert bundle["evidence_summary"]["freyja41_legacy_inference_endpoint_count"] == 7
     assert bundle["requirement_status"]["scoped_memory_service"] == "deployed and live-tested"
 
 

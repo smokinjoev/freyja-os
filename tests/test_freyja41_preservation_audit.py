@@ -43,7 +43,9 @@ def test_preservation_audit_marks_secret_free_and_tracks_baseline(monkeypatch) -
         module,
         "_endpoint_checks",
         lambda: [
+            {"name": "freyja3_agent_gateway_root", "ok": True, "evidence": {"status": 200, "service": "freyja3-agent-gateway"}},
             {"name": "freyja3_agent_gateway_health", "ok": True, "evidence": {"status": 200, "healthy": True}},
+            {"name": "freyja3_inference_health", "ok": True, "evidence": {"status": 200, "ok_json": True, "endpoint_count": 5}},
             {"name": "freyja3_litellm_health_auth_boundary", "ok": True, "evidence": {"status": 401, "auth_required": True}},
         ],
     )
@@ -58,6 +60,8 @@ def test_preservation_audit_marks_secret_free_and_tracks_baseline(monkeypatch) -
     assert report["pending"] == ["dedicated_freyja41_endpoint_contract"]
     endpoint_check = next(check for check in report["checks"] if check["name"] == "protected_legacy_endpoints_respond")
     assert endpoint_check["ok"] is True
+    names = {item["name"] for item in endpoint_check["evidence"]["checks"]}
+    assert {"freyja3_agent_gateway_root", "freyja3_inference_health"} <= names
 
 
 def test_preservation_audit_fails_when_protected_service_missing(monkeypatch) -> None:

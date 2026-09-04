@@ -662,7 +662,7 @@ Live checks completed:
 - `certification/reports/open-webui-inference-policy-audit.json` records local-default Vulcan inference, model profile, guard, and unload policy evidence.
 - `certification/reports/freyja-channels-readiness.json` records deterministic channel readiness without sender values or tokens.
 - `certification/reports/freyja-proactive-readiness.json` records disabled-by-default proactive schedule readiness with no message bodies.
-- `certification/reports/freyja41-preservation-audit.json` records Freyja 4.1 preservation evidence: baseline tag, rollback artifacts, side-by-side Freyja 5, protected running services, `freyja3-agent-gateway` health on `http://127.0.0.1:8300/health`, and `freyja3-litellm` reachability/auth boundary on `http://127.0.0.1:4001/health`.
+- `certification/reports/freyja41-preservation-audit.json` records Freyja 4.1 preservation evidence: baseline tag, rollback artifacts, side-by-side Freyja 5, protected running services, `freyja3-agent-gateway` root identity on `http://127.0.0.1:8300/`, health on `http://127.0.0.1:8300/health`, inference health on `http://127.0.0.1:8300/freyja3/inference/health`, and `freyja3-litellm` reachability/auth boundary on `http://127.0.0.1:4001/health`.
 
 Blocked or still pending:
 
@@ -692,4 +692,4 @@ Blocked or still pending:
 | Messaging channels | Existing Telegram/Signal connectors, `config/freyja-channels.yaml`, `src/freyja/channels.py`, channel readiness report | Deterministic gateway implemented/tested; live Telegram/Signal round trips pending credentials |
 | Proactive behavior disabled by default | `config/freyja-proactive.yaml`, `src/freyja/proactive.py`, proactive readiness report | Implemented/tested as disabled-by-default candidates; live sends pending chat/destination/recipient verification and approval |
 | Repeatable verification | New and existing pytest coverage | Partial; live external tests pending credentials |
-| No regression to Freyja 4.1 | Baseline tag, side-by-side protected service check in live verifier, `freyja41-preservation-audit.json`, protected legacy endpoint probes | Preservation invariants and protected legacy endpoint reachability verified; dedicated Freyja 4.1 endpoint proof pending endpoint contract |
+| No regression to Freyja 4.1 | Baseline tag, side-by-side protected service check in live verifier, `freyja41-preservation-audit.json`, protected legacy endpoint probes including `/freyja3/inference/health` | Preservation invariants, protected legacy endpoint reachability, and legacy inference-health surface verified; dedicated Freyja 4.1 endpoint naming/contract proof pending endpoint contract |
