@@ -180,11 +180,12 @@ def test_post_auth_activation_apply_does_not_use_container_snapshot(tmp_path: Pa
 
     monkeypatch.setattr(module.subprocess, "run", fail_if_called)
 
-    assert module.main(["--apply", "--db", str(tmp_path / "missing.db"), "--resources-json", str(resource_import)]) == 0
+    assert module.main(["--apply", "--db", str(tmp_path / "missing.db"), "--resources-json", str(resource_import)]) == 1
 
     printed = json.loads(capsys.readouterr().out)
     assert "dry_run_snapshot" not in printed
     assert printed["plan"]["reason"] == "Open WebUI database is not available at the requested path"
+    assert printed["apply_result"]["applied"] is False
 
 
 def test_post_auth_activation_plan_is_not_ready_without_users(tmp_path: Path) -> None:
@@ -222,3 +223,38 @@ def test_post_auth_activation_apply_binds_access_and_resources(tmp_path: Path) -
         assert conn.execute("select count(*) from memory").fetchone()[0] == 4
     finally:
         conn.close()
+
+
+def test_post_auth_activation_main_apply_returns_zero_when_applied(tmp_path: Path, monkeypatch, capsys) -> None:
+    db = tmp_path / "webui.db"
+    _db(db, users=True)
+    agent_import, resource_import = _write_imports(tmp_path)
+    _import_agents(db, agent_import, tmp_path)
+    module = _module(SCRIPT)
+    output = tmp_path / "activation.json"
+    monkeypatch.setattr(module, "_run_live_verifier", lambda: {"returncode": 0, "ran": True})
+    capsys.readouterr()
+
+    assert (
+        module.main(
+            [
+                "--apply",
+                "--db",
+                str(db),
+                "--resources-json",
+                str(resource_import),
+                "--owner-user-id",
+                "owner-joe",
+                "--backup-dir",
+                str(tmp_path),
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert json.loads(output.read_text(encoding="utf-8")) == printed
+    assert printed["apply_result"]["applied"] is True
+    assert printed["live_verifier"] == {"returncode": 0, "ran": True}

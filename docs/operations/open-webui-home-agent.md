@@ -257,7 +257,9 @@ Only run with `--apply` after the dry-run shows `ready=true`. Apply mode does
 not use the container snapshot path; run it where `/app/backend/data/webui.db`
 is the real writable Open WebUI database, or pass an explicit writable `--db`
 path. Apply mode creates
-database backups before writing access grants and resource rows.
+database backups before writing access grants and resource rows. Apply mode
+exits nonzero when the plan is not ready or no write was applied, so shell
+automation can fail closed.
 
 Live database state after import:
 

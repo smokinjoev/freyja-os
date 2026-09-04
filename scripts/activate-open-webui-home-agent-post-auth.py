@@ -196,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0
+    return 0 if not args.apply or bool(report.get("apply_result", {}).get("applied")) else 1
 
 
 if __name__ == "__main__":
