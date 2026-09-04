@@ -22,6 +22,8 @@ TEXT_ARTIFACTS = (
     "scripts/export-open-webui-home-resources.py",
     "scripts/apply-open-webui-home-agents-offline.py",
     "scripts/apply-open-webui-home-resources-offline.py",
+    "scripts/check-open-webui-model-proxy-catalog.py",
+    "scripts/count-open-webui-home-resources-live.py",
     "scripts/activate-open-webui-home-agent-post-auth.py",
     "scripts/audit-freyja41-preservation.py",
     "scripts/audit-open-webui-home-agent-access.py",

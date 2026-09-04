@@ -107,9 +107,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     model_apply = _load_json(REPORTS / "open-webui-home-agents-offline-apply.json")
     resources_path = REPORTS / "open-webui-home-resources-export.json"
     resources = _load_json(REPORTS / "open-webui-home-resources-export.json")
+    resource_counts_path = REPORTS / "open-webui-home-resources-live-counts.json"
     resource_counts = _load_json(REPORTS / "open-webui-home-resources-live-counts.json")
     resource_import_path = REPORTS / "open-webui-home-resources-offline-dry-run.json"
     resource_import = _load_json(REPORTS / "open-webui-home-resources-offline-dry-run.json")
+    proxy_catalog_path = REPORTS / "open-webui-model-proxy-catalog.json"
     proxy_catalog = _load_json(REPORTS / "open-webui-model-proxy-catalog.json")
     channels_report_path = REPORTS / "freyja-channels-readiness.json"
     channels = _load_json(REPORTS / "freyja-channels-readiness.json")
@@ -294,6 +296,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "model_apply_generated_at_unix": model_apply.get("generated_at_unix") or _mtime(model_apply_path),
             "model_apply_git_head": model_apply.get("git_head") or "unknown",
             "resource_counts": resource_counts.get("counts"),
+            "resource_counts_generated_at_unix": resource_counts.get("generated_at_unix") or _mtime(resource_counts_path),
+            "resource_counts_git_head": resource_counts.get("git_head") or "unknown",
             "resource_export_generated_at_unix": resources.get("generated_at_unix") or _mtime(resources_path),
             "resource_export_git_head": resources.get("git_head") or "unknown",
             "resource_import_ready": resource_import.get("ready"),
@@ -301,6 +305,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "resource_import_git_head": resource_import.get("git_head") or "unknown",
             "access_bind_ready": access_bind.get("ready"),
             "proxy_missing_models": proxy_catalog.get("missing"),
+            "proxy_catalog_generated_at_unix": proxy_catalog.get("generated_at_unix") or proxy_catalog.get("timestamp_unix") or _mtime(proxy_catalog_path),
+            "proxy_catalog_git_head": proxy_catalog.get("git_head") or "unknown",
             "telegram_ready": channels.get("telegram", {}).get("ready_for_live_round_trip"),
             "telegram_pilot_ready": telegram_pilot.get("ready"),
             "telegram_pilot_checks": telegram_pilot.get("checks") or {},
