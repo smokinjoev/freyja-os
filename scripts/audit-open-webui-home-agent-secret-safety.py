@@ -24,6 +24,7 @@ TEXT_ARTIFACTS = (
     "scripts/apply-open-webui-home-resources-offline.py",
     "scripts/check-open-webui-model-proxy-catalog.py",
     "scripts/count-open-webui-home-resources-live.py",
+    "scripts/refresh-open-webui-home-agent-evidence.py",
     "scripts/activate-open-webui-home-agent-post-auth.py",
     "scripts/audit-freyja41-preservation.py",
     "scripts/audit-open-webui-home-agent-access.py",
@@ -76,6 +77,7 @@ JSON_REPORTS = (
     "certification/reports/open-webui-tools-openapi.json",
     "certification/reports/open-webui-home-agent-deliverable.json",
     "certification/reports/open-webui-home-agent-readiness-summary.json",
+    "certification/reports/open-webui-home-agent-evidence-refresh.json",
 )
 SECRET_PATTERNS = {
     "private_key": re.compile(r"BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY"),

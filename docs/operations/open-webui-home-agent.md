@@ -562,6 +562,20 @@ scripts/audit-open-webui-home-agent-completion.py \
   --output certification/reports/open-webui-home-agent-completion-audit.json
 ```
 
+Refresh all credential-free evidence in dependency order with:
+
+```bash
+scripts/refresh-open-webui-home-agent-evidence.py
+```
+
+This command snapshots the running Open WebUI database, refreshes live inventory,
+model-proxy, agent import, access, resource, tool, channel, proactive,
+Freyja 4.1 preservation, backup/rollback, secret-safety, readiness,
+completion-audit, and final deliverable reports, and writes
+`certification/reports/open-webui-home-agent-evidence-refresh.json`.
+It treats the readiness summary's external-auth/credential pending exit as an
+expected state, but fails on any credential-free evidence failure.
+
 Latest completion audit:
 
 ```text

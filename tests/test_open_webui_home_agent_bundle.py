@@ -87,6 +87,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["tools_gateway"] == "certification/reports/open-webui-tools-gateway-readiness.json"
     assert bundle["artifacts"]["tools_openapi"] == "certification/reports/open-webui-tools-openapi.json"
     assert bundle["artifacts"]["readiness_summary"] == "certification/reports/open-webui-home-agent-readiness-summary.json"
+    assert bundle["artifacts"]["evidence_refresh"] == "certification/reports/open-webui-home-agent-evidence-refresh.json"
     assert bundle["artifacts"]["proactive_dry_run"] == "certification/reports/freyja-proactive-dry-run.json"
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
     assert bundle["artifacts"]["signal_pilot"] == "certification/reports/freyja-channels-signal-pilot.json"
@@ -133,6 +134,9 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
     assert isinstance(bundle["evidence_summary"]["readiness_summary_generated_at_unix"], int)
     assert bundle["evidence_summary"]["readiness_summary_git_head"]
+    assert isinstance(bundle["evidence_summary"]["evidence_refresh_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["evidence_refresh_git_head"]
+    assert isinstance(bundle["evidence_summary"]["evidence_refresh_step_count"], int)
     assert isinstance(bundle["evidence_summary"]["inference_policy_generated_at_unix"], int)
     assert bundle["evidence_summary"]["inference_policy_git_head"]
     assert bundle["evidence_summary"]["channel_thread_persistence_store"]["path"] == "data/freyja-channels/threads.json"
