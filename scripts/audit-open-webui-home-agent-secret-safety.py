@@ -44,6 +44,7 @@ TEXT_ARTIFACTS = (
     "src/freyja/channel_transports.py",
     "src/freyja/proactive.py",
     "src/freyja/open_webui_tools.py",
+    "certification/reports/open-webui-home-agent-deliverable.md",
     "certification/reports/open-webui-home-agent-readiness-summary.md",
 )
 JSON_REPORTS = (
