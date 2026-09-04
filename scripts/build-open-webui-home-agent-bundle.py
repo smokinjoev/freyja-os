@@ -73,6 +73,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     proxy_catalog = _load_json(REPORTS / "open-webui-model-proxy-catalog.json")
     channels = _load_json(REPORTS / "freyja-channels-readiness.json")
     telegram_pilot = _load_json(REPORTS / "freyja-channels-telegram-pilot.json")
+    signal_pilot = _load_json(REPORTS / "freyja-channels-signal-pilot.json")
     proactive = _load_json(REPORTS / "freyja-proactive-readiness.json")
     proactive_dry_run = _load_json(REPORTS / "freyja-proactive-dry-run.json")
     freyja41 = _load_json(REPORTS / "freyja41-preservation-audit.json")
@@ -176,6 +177,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "model_proxy_catalog": "certification/reports/open-webui-model-proxy-catalog.json",
             "channels_readiness": "certification/reports/freyja-channels-readiness.json",
             "telegram_pilot": "certification/reports/freyja-channels-telegram-pilot.json",
+            "signal_pilot": "certification/reports/freyja-channels-signal-pilot.json",
             "proactive_readiness": "certification/reports/freyja-proactive-readiness.json",
             "proactive_dry_run": "certification/reports/freyja-proactive-dry-run.json",
             "freyja41_preservation": "certification/reports/freyja41-preservation-audit.json",
@@ -206,6 +208,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "telegram_pilot_ready": telegram_pilot.get("ready"),
             "telegram_pilot_checks": telegram_pilot.get("checks") or {},
             "signal_ready": channels.get("signal", {}).get("ready_for_live_round_trip"),
+            "signal_pilot_ready": signal_pilot.get("ready"),
+            "signal_pilot_checks": signal_pilot.get("checks") or {},
             "whatsapp_status": channels.get("whatsapp", {}).get("status"),
             "channel_thread_persistence_store": channels.get("thread_persistence_store") or {},
             "channel_audit_store": channels.get("audit_store") or {},

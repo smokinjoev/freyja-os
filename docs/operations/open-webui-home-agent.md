@@ -452,6 +452,19 @@ only boolean readiness checks. In run mode it advances
 `data/freyja-channels/telegram.offset` after each observed update and sends the
 Open WebUI response back with Telegram `sendMessage`.
 
+Signal pilot runner:
+
+```bash
+scripts/run-freyja-channels-signal-pilot.py --dry-run \
+  --output certification/reports/freyja-channels-signal-pilot.json
+```
+
+The runner uses `SIGNAL_ACCOUNT_NUMBER`, `SIGNAL_REST_API_URL`,
+`SIGNAL_ALLOWED_SENDERS`, `SIGNAL_IDENTITY_MAP`, and `OPEN_WEBUI_API_KEY`. Its
+dry-run report records only boolean readiness checks. In run mode it receives
+messages through the existing `signal-cli-rest-api` pathway, routes them
+through `freyja-channels`, and sends the Open WebUI response back through Signal.
+
 It remains deterministic:
 
 ```text
