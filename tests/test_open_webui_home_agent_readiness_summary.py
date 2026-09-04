@@ -28,6 +28,7 @@ def test_readiness_summary_reports_current_external_gates() -> None:
 
     assert summary["secrets_included"] is False
     assert summary["private_content_included"] is False
+    assert isinstance(summary["generated_at_unix"], int)
     assert summary["status"] == "pending_external_auth_or_credentials"
     assert summary["all_ready"] is False
     gates = {gate["gate_id"]: gate for gate in summary["gates"]}

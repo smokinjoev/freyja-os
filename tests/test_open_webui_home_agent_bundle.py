@@ -100,6 +100,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_openapi_paths"] == ["/open-webui-tools", "/open-webui-tools/invoke"]
     assert bundle["evidence_summary"]["readiness_summary_status"] == "pending_external_auth_or_credentials"
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
+    assert isinstance(bundle["evidence_summary"]["readiness_summary_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["readiness_summary_git_head"]
     assert bundle["evidence_summary"]["channel_thread_persistence_store"]["path"] == "data/freyja-channels/threads.json"
     assert bundle["evidence_summary"]["channel_audit_store"]["raw_sender_logged"] is False
     assert bundle["evidence_summary"]["channel_audit_store"]["denied_attempts_logged"] is True

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +106,7 @@ def build_summary() -> dict[str, Any]:
         "report_type": "open-webui-home-agent-readiness-summary",
         "secrets_included": False,
         "private_content_included": False,
+        "generated_at_unix": int(time.time()),
         "status": "ready_for_live_activation" if all(gate["ready"] for gate in gates) else "pending_external_auth_or_credentials",
         "all_ready": all(gate["ready"] for gate in gates),
         "git_head": _git_head() or deliverable.get("git_head"),

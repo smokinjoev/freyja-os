@@ -117,6 +117,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     tools_gateway = _load_json(REPORTS / "open-webui-tools-gateway-readiness.json")
     tools_openapi = _load_json(REPORTS / "open-webui-tools-openapi.json")
     readiness_summary = _load_json(REPORTS / "open-webui-home-agent-readiness-summary.json")
+    readiness_summary_path = REPORTS / "open-webui-home-agent-readiness-summary.json"
     completion_report_path = REPORTS / "open-webui-home-agent-completion-audit.json"
     freyja3_inference = _nested_check(freyja41, "protected_legacy_endpoints_respond", "freyja3_inference_health")
 
@@ -294,6 +295,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "tools_openapi_paths": sorted((tools_openapi.get("schema") or {}).get("paths") or {}),
             "readiness_summary_status": readiness_summary.get("status"),
             "readiness_summary_all_ready": readiness_summary.get("all_ready"),
+            "readiness_summary_generated_at_unix": readiness_summary.get("generated_at_unix") or _mtime(readiness_summary_path),
+            "readiness_summary_git_head": readiness_summary.get("git_head") or "unknown",
         },
         "requirement_status": requirement_status,
         "requirement_audit": requirement_audit,
