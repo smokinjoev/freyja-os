@@ -102,7 +102,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     }
     tests = {
         "focused_pytest": "117 passed, 1 warning",
-        "full_pytest": "1546 passed, 1 skipped, 1 warning",
+        "full_pytest": "1554 passed, 1 skipped, 1 warning",
         "live_verifier_ok": live.get("ok"),
         "backup_rollback_audit_ok": backup.get("ok"),
         "secret_safety_audit_ok": secret_safety.get("ok"),
