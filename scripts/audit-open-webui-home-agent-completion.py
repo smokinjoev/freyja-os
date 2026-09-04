@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,13 @@ def _load(path: Path) -> dict[str, Any]:
 
 def _exists(path: str) -> bool:
     return (REPO_ROOT / path).exists()
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def _item(
@@ -240,6 +249,8 @@ def build_audit() -> dict[str, Any]:
         counts[item["status"]] = counts.get(item["status"], 0) + 1
     return {
         "report_type": "open-webui-home-agent-completion-audit",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "items": items,

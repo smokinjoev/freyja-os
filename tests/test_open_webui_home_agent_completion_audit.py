@@ -24,6 +24,8 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
 
     assert audit["secrets_included"] is False
     assert audit["private_content_included"] is False
+    assert isinstance(audit["generated_at_unix"], int)
+    assert audit["git_head"]
     assert audit["complete"] is False
     assert audit["status_counts"]["complete"] >= 5
     assert audit["status_counts"]["auth_gated"] >= 3
@@ -64,6 +66,15 @@ def test_completion_audit_writes_report(tmp_path: Path, capsys) -> None:
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "open-webui-home-agent-completion-audit"
+
+
+def test_completion_audit_prefers_current_git_head(monkeypatch) -> None:
+    module = _module()
+    monkeypatch.setattr(module, "_git_head", lambda: "current-head")
+
+    audit = module.build_audit()
+
+    assert audit["git_head"] == "current-head"
 
 
 def test_completion_audit_loader_rejects_reports_not_marked_secret_free(tmp_path: Path) -> None:

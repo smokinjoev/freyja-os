@@ -92,6 +92,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0
     assert bundle["evidence_summary"]["chat_smoke_status"] == "pending"
     assert bundle["evidence_summary"]["completion_status_counts"] == bundle["completion_status_counts"]
+    assert isinstance(bundle["evidence_summary"]["completion_audit_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["completion_audit_git_head"]
     assert bundle["evidence_summary"]["git_head"] == bundle["git_head"]
     assert bundle["evidence_summary"]["live_optional_pending"] == []
     assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20

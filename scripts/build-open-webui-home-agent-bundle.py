@@ -64,6 +64,10 @@ def _text(path: Path) -> str | None:
     return path.read_text(encoding="utf-8").strip() if path.exists() else None
 
 
+def _mtime(path: Path) -> int | None:
+    return int(path.stat().st_mtime) if path.exists() else None
+
+
 def _command(args: list[str]) -> str | None:
     try:
         return subprocess.check_output(args, cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
@@ -113,6 +117,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     tools_gateway = _load_json(REPORTS / "open-webui-tools-gateway-readiness.json")
     tools_openapi = _load_json(REPORTS / "open-webui-tools-openapi.json")
     readiness_summary = _load_json(REPORTS / "open-webui-home-agent-readiness-summary.json")
+    completion_report_path = REPORTS / "open-webui-home-agent-completion-audit.json"
     freyja3_inference = _nested_check(freyja41, "protected_legacy_endpoints_respond", "freyja3_inference_health")
 
     endpoint_map = {
@@ -277,6 +282,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "freyja41_legacy_endpoint_check": _check_ok(freyja41, "protected_legacy_endpoints_respond"),
             "freyja41_legacy_inference_endpoint_count": ((freyja3_inference or {}).get("evidence") or {}).get("endpoint_count"),
             "completion_status_counts": completion_status_counts,
+            "completion_audit_generated_at_unix": completion.get("generated_at_unix") or _mtime(completion_report_path),
+            "completion_audit_git_head": completion.get("git_head") or "unknown",
             "inventory_hosts": sorted((inventory.get("hosts") or {}).keys()),
             "post_auth_activation_ready": activation.get("ready"),
             "inference_model_profiles": inference.get("model_profiles") or {},
