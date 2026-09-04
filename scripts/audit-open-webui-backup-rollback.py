@@ -21,6 +21,28 @@ REQUIRED_ROLLBACK_PHRASES = (
     "tar -xzf",
     "http://127.0.0.1:3001/api/version",
 )
+ROLLBACK_STEPS = [
+    {
+        "step": "stop_open_webui",
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/docker-compose.yml down",
+    },
+    {
+        "step": "restore_source_checkpoint",
+        "command": "git apply .codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch",
+    },
+    {
+        "step": "restore_open_webui_volume",
+        "command": "tar -xzf logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz -C <restored-open-webui-data-volume>",
+    },
+    {
+        "step": "start_open_webui",
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/docker-compose.yml up -d",
+    },
+    {
+        "step": "verify_open_webui",
+        "command": "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version",
+    },
+]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -99,6 +121,7 @@ def build_report(backup: Path = DEFAULT_BACKUP, runbook: Path = DEFAULT_RUNBOOK)
             "path": str(runbook.relative_to(REPO_ROOT) if runbook.is_relative_to(REPO_ROOT) else runbook),
             "exists": runbook.exists(),
             "missing_required_phrases": missing_phrases,
+            "steps": ROLLBACK_STEPS,
         },
         "errors": errors,
     }

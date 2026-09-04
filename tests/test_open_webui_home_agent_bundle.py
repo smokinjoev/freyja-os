@@ -29,6 +29,14 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 9, "credential_gated": 1, "partial": 2}
     assert bundle["endpoint_map"]["open_webui_local"] == "http://127.0.0.1:3001"
     assert bundle["rollback"]["open_webui_volume_backup"].endswith("open-webui-data-volume.tgz")
+    assert [step["step"] for step in bundle["rollback"]["steps"]] == [
+        "stop_open_webui",
+        "restore_source_checkpoint",
+        "restore_open_webui_volume",
+        "start_open_webui",
+        "verify_open_webui",
+    ]
+    assert bundle["rollback"]["steps"][-1]["command"] == "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version"
     assert bundle["tests"]["focused_pytest"] == "133 passed, 1 warning"
     assert bundle["tests"]["full_pytest"] == "1582 passed, 1 skipped, 1 warning"
     assert bundle["tests"]["backup_rollback_audit_ok"] is True
@@ -116,6 +124,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Focused tests" in text
     assert "Full tests" in text
     assert "Backup rollback audit ok" in text
+    assert "`restore_open_webui_volume`: `tar -xzf logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz" in text
     assert "Secret safety audit ok" in text
     assert "Channels deterministic" in text
     assert "Proactive all disabled" in text

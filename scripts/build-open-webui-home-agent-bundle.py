@@ -20,6 +20,28 @@ GATE_COMMANDS = {
     "telegram_pilot": "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
     "signal_pilot": "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
 }
+ROLLBACK_STEPS = [
+    {
+        "step": "stop_open_webui",
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/docker-compose.yml down",
+    },
+    {
+        "step": "restore_source_checkpoint",
+        "command": "git apply .codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch",
+    },
+    {
+        "step": "restore_open_webui_volume",
+        "command": "tar -xzf logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz -C <restored-open-webui-data-volume>",
+    },
+    {
+        "step": "start_open_webui",
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/docker-compose.yml up -d",
+    },
+    {
+        "step": "verify_open_webui",
+        "command": "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version",
+    },
+]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -108,6 +130,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "open_webui_volume_backup": "logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz",
         "offline_model_db_backup": model_apply.get("backup"),
         "runbook": "docs/operations/open-webui-home-agent.md",
+        "steps": backup.get("rollback_documentation", {}).get("steps") or ROLLBACK_STEPS,
     }
     tests = {
         "focused_pytest": "133 passed, 1 warning",
@@ -306,7 +329,11 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         lines.append(f"- `{key}`: `{value}`")
     lines += ["", "## Rollback", ""]
     for key, value in bundle["rollback"].items():
+        if key == "steps":
+            continue
         lines.append(f"- `{key}`: `{value}`")
+    for step in bundle["rollback"]["steps"]:
+        lines.append(f"- `{step['step']}`: `{step['command']}`")
     lines += ["", "## Artifacts", "", f"- `readiness_summary`: `{bundle['artifacts']['readiness_summary']}`"]
     lines += ["", "## Blockers", ""]
     for blocker in bundle["blockers"]:

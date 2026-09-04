@@ -58,6 +58,19 @@ def test_backup_rollback_audit_accepts_readable_open_webui_archive(tmp_path: Pat
     assert report["backup"]["member_count"] == 2
     assert len(report["backup"]["sha256"]) == 64
     assert "sqlite-ish" not in json.dumps(report)
+    steps = report["rollback_documentation"]["steps"]
+    assert [step["step"] for step in steps] == [
+        "stop_open_webui",
+        "restore_source_checkpoint",
+        "restore_open_webui_volume",
+        "start_open_webui",
+        "verify_open_webui",
+    ]
+    assert steps[0]["command"].startswith("docker compose --env-file deploy/compose/open-webui/.env")
+    assert "open-webui-data-volume.tgz" in steps[2]["command"]
+    assert steps[-1]["command"] == "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version"
+    assert "TOKEN" not in json.dumps(steps)
+    assert "PASSWORD" not in json.dumps(steps)
 
 
 def test_backup_rollback_audit_rejects_missing_rollback_step(tmp_path: Path) -> None:
@@ -70,6 +83,7 @@ def test_backup_rollback_audit_rejects_missing_rollback_step(tmp_path: Path) -> 
 
     assert report["ok"] is False
     assert report["rollback_documentation"]["missing_required_phrases"]
+    assert report["rollback_documentation"]["steps"]
 
 
 def test_backup_rollback_audit_writes_report(tmp_path: Path, capsys) -> None:
