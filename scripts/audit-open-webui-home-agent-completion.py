@@ -29,14 +29,27 @@ def _exists(path: str) -> bool:
     return (REPO_ROOT / path).exists()
 
 
-def _item(requirement_id: str, requirement: str, status: str, evidence: list[str], blocker: str | None = None) -> dict[str, Any]:
-    return {
+def _item(
+    requirement_id: str,
+    requirement: str,
+    status: str,
+    evidence: list[str],
+    blocker: str | None = None,
+    next_action: str | None = None,
+    command: str | None = None,
+) -> dict[str, Any]:
+    item = {
         "requirement_id": requirement_id,
         "requirement": requirement,
         "status": status,
         "evidence": evidence,
         "blocker": blocker,
     }
+    if next_action:
+        item["next_action"] = next_action
+    if command:
+        item["command"] = command
+    return item
 
 
 def build_audit() -> dict[str, Any]:
@@ -60,6 +73,11 @@ def build_audit() -> dict[str, Any]:
     tools_gateway = _load(REPORTS / "open-webui-tools-gateway-readiness.json")
     tools_openapi = _load(REPORTS / "open-webui-tools-openapi.json")
     readiness_summary = _load(REPORTS / "open-webui-home-agent-readiness-summary.json")
+    gates = {gate.get("gate_id"): gate for gate in readiness_summary.get("gates") or []}
+    post_auth_gate = gates.get("post_auth_activation") or {}
+    chat_gate = gates.get("authenticated_chat_smoke") or {}
+    telegram_gate = gates.get("telegram_pilot") or {}
+    signal_gate = gates.get("signal_pilot") or {}
 
     items = [
         _item(
@@ -115,6 +133,8 @@ def build_audit() -> dict[str, Any]:
                 "certification/reports/open-webui-home-agent-chat-smoke.json",
             ],
             "Authenticated model/chat proof requires Open WebUI API key or session.",
+            chat_gate.get("next_action"),
+            chat_gate.get("command"),
         ),
         _item(
             "model_profiles",
@@ -128,6 +148,8 @@ def build_audit() -> dict[str, Any]:
             "auth_gated" if model_apply.get("model_count") == 5 and access_audit.get("ok") else "partial",
             ["certification/reports/open-webui-home-agents-offline-apply.json", "certification/reports/open-webui-home-agent-access-audit.json"],
             "Imported into model table; authenticated UI/API and real group binding require users/session.",
+            post_auth_gate.get("next_action"),
+            post_auth_gate.get("command"),
         ),
         _item(
             "memory_layers",
@@ -135,6 +157,8 @@ def build_audit() -> dict[str, Any]:
             "auth_gated" if resource_import.get("applied") is not True and live.get("ok") else "complete",
             ["src/freyja/home_memory.py", "certification/reports/open-webui-home-resources-offline-dry-run.json", "certification/reports/open-webui-home-agent-live.json"],
             "Native Open WebUI per-user memory rows require an owner user/authenticated import.",
+            post_auth_gate.get("next_action"),
+            post_auth_gate.get("command"),
         ),
         _item(
             "tools",
@@ -150,6 +174,8 @@ def build_audit() -> dict[str, Any]:
                 "certification/reports/open-webui-tools-openapi.json",
             ],
             "Open WebUI tool rows/enablement require owner user or authenticated admin session.",
+            post_auth_gate.get("next_action"),
+            post_auth_gate.get("command"),
         ),
         _item(
             "messaging_channels",
@@ -157,6 +183,13 @@ def build_audit() -> dict[str, Any]:
             "credential_gated" if channels.get("deterministic_gateway_only") else "partial",
             ["src/freyja/channels.py", "certification/reports/freyja-channels-readiness.json"],
             "Telegram/Signal live round trips require allowlists and credentials.",
+            "Complete the Telegram pilot first, then the Signal pilot when signal-cli-rest-api is registered.",
+            "; ".join(
+                command
+                for command in [telegram_gate.get("command"), signal_gate.get("command")]
+                if command
+            )
+            or None,
         ),
         _item(
             "proactive_behavior",
@@ -179,6 +212,12 @@ def build_audit() -> dict[str, Any]:
                 "certification/reports/open-webui-home-agent-readiness-summary.json",
             ],
             "Credentialed Open WebUI, Telegram, and Signal round trips remain pending."
+            if readiness_summary.get("all_ready") is not True
+            else None,
+            "Clear all external readiness gates, then rerun the completion audit."
+            if readiness_summary.get("all_ready") is not True
+            else None,
+            "scripts/summarize-open-webui-home-agent-readiness.py && scripts/audit-open-webui-home-agent-completion.py"
             if readiness_summary.get("all_ready") is not True
             else None,
         ),

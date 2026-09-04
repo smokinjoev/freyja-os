@@ -36,6 +36,15 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert {"messaging_channels"} == {item["requirement_id"] for item in audit["items"] if item["status"] == "credential_gated"}
     by_id = {item["requirement_id"]: item for item in audit["items"]}
     assert "certification/reports/open-webui-home-agent-readiness-summary.json" in by_id["verification"]["evidence"]
+    assert by_id["local_inference"]["command"].startswith("OPEN_WEBUI_API_KEY=<redacted>")
+    assert by_id["five_agents"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
+    assert by_id["memory_layers"]["command"] == by_id["five_agents"]["command"]
+    assert by_id["tools"]["command"] == by_id["five_agents"]["command"]
+    assert "scripts/run-freyja-channels-telegram-pilot.py" in by_id["messaging_channels"]["command"]
+    assert "scripts/run-freyja-channels-signal-pilot.py" in by_id["messaging_channels"]["command"]
+    assert "TELEGRAM_BOT_TOKEN" not in by_id["messaging_channels"]["command"]
+    assert "SIGNAL_ACCOUNT_NUMBER" not in by_id["messaging_channels"]["command"]
+    assert by_id["verification"]["next_action"] == "Clear all external readiness gates, then rerun the completion audit."
     statuses = {item["requirement"]: item["status"] for item in audit["items"]}
     assert statuses["Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config"] == "complete"
     assert statuses["Identify Open WebUI host and Vulcan path"] == "complete"
