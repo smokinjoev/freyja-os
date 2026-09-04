@@ -79,6 +79,8 @@ def test_proactive_dry_run_dispatches_never_send() -> None:
     report = ProactivePlanner().dry_run_report()
 
     assert report["report_type"] == "freyja-proactive-dry-run"
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["timestamp_unix"] == report["generated_at_unix"]
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
     assert report["dispatch_count"] == 27
@@ -103,6 +105,8 @@ def test_proactive_readiness_script_writes_report(tmp_path: Path, capsys) -> Non
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "freyja-proactive-readiness"
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"]
     assert written["ready_schedule_ids"] == []
 
 
@@ -119,4 +123,7 @@ def test_proactive_dry_run_script_writes_suppressed_report(tmp_path: Path, capsy
     written = json.loads(output.read_text(encoding="utf-8"))
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["timestamp_unix"] == written["generated_at_unix"]
+    assert written["git_head"]
     assert written["all_sends_suppressed"] is True

@@ -123,6 +123,10 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is False
     assert bundle["evidence_summary"]["signal_pilot_checks"]["allowlist_identity_map_complete"] is False
     assert bundle["evidence_summary"]["proactive_dry_run_would_send_count"] == 0
+    assert isinstance(bundle["evidence_summary"]["proactive_readiness_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["proactive_readiness_git_head"]
+    assert isinstance(bundle["evidence_summary"]["proactive_dry_run_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["proactive_dry_run_git_head"]
     assert bundle["evidence_summary"]["freyja41_legacy_endpoint_check"] is True
     assert bundle["evidence_summary"]["freyja41_legacy_inference_endpoint_count"] == 7
     assert bundle["requirement_status"]["scoped_memory_service"] == "deployed and live-tested"

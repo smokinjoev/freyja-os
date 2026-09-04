@@ -87,6 +87,7 @@ class ProactivePlanner:
                 ready.append(schedule_id)
         return {
             "report_type": "freyja-proactive-readiness",
+            "generated_at_unix": int(time.time()),
             "secrets_included": False,
             "private_content_included": False,
             "candidate_count": len(ready) + len(blocked),
@@ -130,9 +131,11 @@ class ProactivePlanner:
 
     def dry_run_report(self) -> dict[str, Any]:
         dispatches = self.dry_run_dispatches()
+        generated_at = int(time.time())
         return {
             "report_type": "freyja-proactive-dry-run",
-            "timestamp_unix": int(time.time()),
+            "generated_at_unix": generated_at,
+            "timestamp_unix": generated_at,
             "secrets_included": False,
             "private_content_included": False,
             "dispatch_count": len(dispatches),

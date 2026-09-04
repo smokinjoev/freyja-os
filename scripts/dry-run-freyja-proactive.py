@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,9 +29,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     report = ProactivePlanner(args.policy).dry_run_report()
+    report["git_head"] = _git_head()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     rendered = json.dumps(report, indent=2, sort_keys=True)
     args.output.write_text(rendered + "\n", encoding="utf-8")
