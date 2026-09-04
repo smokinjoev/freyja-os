@@ -55,6 +55,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0
     assert bundle["evidence_summary"]["chat_smoke_status"] == "pending"
+    assert bundle["evidence_summary"]["live_optional_pending"] == []
     assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20
     assert bundle["evidence_summary"]["tools_openapi_paths"] == ["/open-webui-tools", "/open-webui-tools/invoke"]
     assert bundle["evidence_summary"]["proactive_dry_run_would_send_count"] == 0

@@ -593,13 +593,14 @@ Latest result:
 ```text
 ok=true
 auth_required_checks_pending=["open_webui_authenticated_models"]
-optional_checks_pending=["model_proxy_agent_models"]
+optional_checks_pending=[]
 ```
 
-The optional model-proxy check is pending only when run through Open WebUI's
-authenticated public `/openai` path without an Open WebUI API credential. The
-separate in-network model-proxy catalog report proves the proxy exposes the
-required Freyja agent model IDs inside the compose network.
+Current verifier defaults also probe the running model-proxy container directly,
+so the latest `optional_checks_pending` value is `[]` when
+`freyja-open-webui-atlas-model-proxy-1` is available. The separate in-network
+model-proxy catalog report still records the proxy model inventory as
+independent evidence.
 
 Authenticated five-agent chat smoke:
 

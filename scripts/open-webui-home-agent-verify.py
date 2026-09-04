@@ -36,6 +36,7 @@ PROTECTED_RUNNING_SERVICES = {
     "freyja3-agent-gateway-1",
     "freyja3-litellm-1",
 }
+DEFAULT_MODEL_PROXY_CONTAINER = "freyja-open-webui-atlas-model-proxy-1"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--open-webui-url", default="http://127.0.0.1:3001")
     parser.add_argument("--freyja-url", default="http://127.0.0.1:8500")
     parser.add_argument("--model-proxy-url", default=os.environ.get("OPEN_WEBUI_MODEL_PROXY_URL", ""))
+    parser.add_argument("--model-proxy-container", default=os.environ.get("OPEN_WEBUI_MODEL_PROXY_CONTAINER", DEFAULT_MODEL_PROXY_CONTAINER))
+    parser.add_argument("--no-model-proxy-container", action="store_true")
     parser.add_argument("--open-webui-api-key", default=os.environ.get("OPEN_WEBUI_API_KEY", ""))
     parser.add_argument("--output", type=Path, default=Path("certification/reports/open-webui-home-agent-live.json"))
     return parser
@@ -85,12 +88,44 @@ def auth_headers(api_key: str) -> dict[str, str]:
     return {"authorization": f"Bearer {api_key}"}
 
 
+def required_check_ok(item: dict[str, Any]) -> bool:
+    if item["name"] == "open_webui_authenticated_models":
+        return True
+    if item["name"] == "model_proxy_agent_models" and (item.get("evidence") or {}).get("status") == "skipped":
+        return True
+    return bool(item["ok"])
+
+
 def run_command(args: list[str]) -> tuple[int, str, str]:
     try:
         completed = subprocess.run(args, check=False, text=True, capture_output=True, timeout=10)
     except Exception as exc:
         return 1, "", exc.__class__.__name__
     return completed.returncode, completed.stdout, completed.stderr
+
+
+def request_model_proxy_container(container: str) -> tuple[int, dict[str, Any] | None, str | None]:
+    code, stdout, stderr = run_command(
+        [
+            "docker",
+            "exec",
+            container,
+            "python",
+            "-c",
+            (
+                "import json, urllib.request; "
+                "r=urllib.request.urlopen('http://127.0.0.1:8080/v1/models', timeout=5); "
+                "print(json.dumps({'status': r.status, 'data': json.loads(r.read().decode()).get('data', [])}))"
+            ),
+        ]
+    )
+    if code != 0:
+        return 0, None, stderr.strip() or "container_model_proxy_request_failed"
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return 0, None, "container_model_proxy_invalid_json"
+    return int(payload.get("status") or 0), {"data": payload.get("data") or []}, None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,6 +153,21 @@ def main(argv: list[str] | None = None) -> int:
                 "model_proxy_agent_models",
                 status == 200 and REQUIRED_AGENT_MODELS.issubset(proxy_model_ids),
                 {"status": status, "missing": sorted(REQUIRED_AGENT_MODELS - proxy_model_ids), "error": error},
+            )
+        )
+    elif args.model_proxy_container and not args.no_model_proxy_container:
+        status, data, error = request_model_proxy_container(args.model_proxy_container)
+        proxy_model_ids = {item.get("id") for item in (data or {}).get("data", []) if isinstance(item, dict)}
+        checks.append(
+            check(
+                "model_proxy_agent_models",
+                status == 200 and REQUIRED_AGENT_MODELS.issubset(proxy_model_ids),
+                {
+                    "status": status,
+                    "container": args.model_proxy_container,
+                    "missing": sorted(REQUIRED_AGENT_MODELS - proxy_model_ids),
+                    "error": error,
+                },
             )
         )
     else:
@@ -211,9 +261,10 @@ def main(argv: list[str] | None = None) -> int:
         "open_webui_url": args.open_webui_url,
         "freyja_url": args.freyja_url,
         "model_proxy_url": args.model_proxy_url or None,
+        "model_proxy_container": None if args.no_model_proxy_container else args.model_proxy_container,
         "secrets_included": False,
         "checks": checks,
-        "ok": all(item["ok"] for item in checks if item["name"] not in {"open_webui_authenticated_models", "model_proxy_agent_models"}),
+        "ok": all(required_check_ok(item) for item in checks),
         "auth_required_checks_pending": [
             item["name"]
             for item in checks
