@@ -107,6 +107,8 @@ def test_resource_import_dry_run_reports_missing_owner_without_writing(tmp_path:
     report = json.loads(capsys.readouterr().out)
     assert json.loads(output.read_text(encoding="utf-8")) == report
     assert report["ready"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["applied"] is False
     assert report["reason"] == "missing or ambiguous Open WebUI owner user"
     conn = sqlite3.connect(db)
@@ -127,6 +129,8 @@ def test_resource_import_fails_closed_when_database_is_missing(tmp_path: Path, c
     report = json.loads(capsys.readouterr().out)
     assert json.loads(output.read_text(encoding="utf-8")) == report
     assert report["ready"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["applied"] is False
     assert report["reason"] == "Open WebUI database is not available at the requested path"
 
@@ -206,6 +210,8 @@ def test_resource_import_apply_writes_expected_rows_and_backup(tmp_path: Path, c
     report = json.loads(capsys.readouterr().out)
     assert json.loads(output.read_text(encoding="utf-8")) == report
     assert report["ready"] is True
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["applied"] is True
     assert Path(report["backup"]).exists()
     assert report["knowledge_insert_count"] == 3

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,13 @@ def load_source(path: Path = DEFAULT_SOURCE) -> dict[str, Any]:
     if data.get("secrets_included") is not False:
         raise ValueError("refusing resource manifest that may contain secrets")
     return data
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def build_export(source: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -79,8 +88,11 @@ def build_export(source: dict[str, Any] | None = None) -> dict[str, Any]:
         )
 
     return {
+        "report_type": "open-webui-home-resources-export",
         "export_type": "open-webui-home-resources",
         "schema_version": manifest.get("schema_version"),
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "knowledge": knowledge,

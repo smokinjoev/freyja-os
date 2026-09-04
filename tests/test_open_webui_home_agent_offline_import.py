@@ -55,6 +55,10 @@ def test_offline_import_dry_run_does_not_write(tmp_path: Path, capsys) -> None:
 
     report = json.loads(capsys.readouterr().out)
     assert report["mode"] == "dry-run"
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
+    assert report["private_content_included"] is False
+    assert report["model_count"] == 5
     assert report["insert_count"] == 5
     assert report["touched_tables"] == ["model"]
     conn = sqlite3.connect(db_path)
@@ -76,6 +80,10 @@ def test_offline_import_apply_upserts_models_and_creates_backup(tmp_path: Path, 
 
     report = json.loads(capsys.readouterr().out)
     assert report["mode"] == "apply"
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
+    assert report["private_content_included"] is False
+    assert report["model_count"] == 5
     assert Path(report["backup"]).exists()
     assert "token" not in str(report).lower()
     assert "api_key" not in str(report).lower()

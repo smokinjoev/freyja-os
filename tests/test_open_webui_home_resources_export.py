@@ -22,6 +22,9 @@ def test_home_resources_export_validates_policy() -> None:
     payload = module.build_export()
 
     assert module.validate_export(payload) == []
+    assert payload["report_type"] == "open-webui-home-resources-export"
+    assert isinstance(payload["generated_at_unix"], int)
+    assert payload["git_head"]
     assert payload["secrets_included"] is False
     assert payload["private_content_included"] is False
     assert payload["native_memory"]["mode"] == "per_user"
@@ -60,6 +63,9 @@ def test_exporter_writes_reviewable_payload(tmp_path: Path, capsys) -> None:
     written = json.loads(output.read_text(encoding="utf-8"))
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
+    assert written["report_type"] == "open-webui-home-resources-export"
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"]
     assert written["ok"] is True
     assert len(written["knowledge"]) == 3
     assert len(written["tools"]) == 6

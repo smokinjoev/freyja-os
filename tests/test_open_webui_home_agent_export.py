@@ -22,8 +22,12 @@ def test_open_webui_home_agent_export_is_complete_and_secret_free() -> None:
     records = {record["id"]: record for record in export["records"]}
 
     assert export["export_type"] == "open-webui-home-agent-import"
+    assert export["report_type"] == "open-webui-home-agents-import"
+    assert isinstance(export["generated_at_unix"], int)
+    assert export["git_head"]
     assert export["source_controlled"] is True
     assert export["secrets_included"] is False
+    assert export["private_content_included"] is False
     assert export["open_webui_provider"] == "http://model-proxy:8080/v1"
     assert set(records) == {"agent/freyja", "agent/cloyd-gibbler", "agent/benedict", "agent/agent-47", "agent/jennacide"}
     assert "token" not in str(export).lower()
@@ -63,4 +67,7 @@ def test_open_webui_home_agent_export_cli_writes_json(tmp_path: Path, capsys) ->
     written = json.loads(output.read_text(encoding="utf-8"))
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
+    assert written["report_type"] == "open-webui-home-agents-import"
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"]
     assert written["records"][0]["base_model_id"].startswith("agent/")

@@ -48,6 +48,13 @@ def load_import(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(row[1]) for row in conn.execute(f'pragma table_info("{table}")').fetchall()}
 
@@ -233,6 +240,8 @@ def main(argv: list[str] | None = None) -> int:
         if not db.exists():
             report = {
                 "report_type": "open-webui-home-resources-offline-import",
+                "generated_at_unix": int(time.time()),
+                "git_head": _git_head(),
                 "mode": "apply" if args.apply else "dry-run",
                 "db": str(args.db),
                 "import_json": str(args.import_json),
@@ -254,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
             owner_user_id = resolve_owner(conn, args.owner_user_id)
             report: dict[str, Any] = {
                 "report_type": "open-webui-home-resources-offline-import",
+                "generated_at_unix": int(time.time()),
+                "git_head": _git_head(),
                 "mode": "apply" if args.apply else "dry-run",
                 "db": str(args.db),
                 "import_json": str(args.import_json),

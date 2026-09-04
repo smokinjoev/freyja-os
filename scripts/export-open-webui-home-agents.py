@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -34,6 +36,13 @@ def load_manifest(path: Path = DEFAULT_SOURCE) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("agent manifest must be a mapping")
     return data
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def build_export(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -90,12 +99,16 @@ def build_export(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
         )
 
     return {
+        "report_type": "open-webui-home-agents-import",
         "schema_version": "1",
         "export_type": "open-webui-home-agent-import",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": "config/open-webui-home-agents.yaml",
         "source_controlled": True,
         "secrets_included": False,
+        "private_content_included": False,
         "open_webui_provider": "http://model-proxy:8080/v1",
         "records": records,
         "knowledge_collections": sorted(

@@ -103,9 +103,12 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     access_audit = _load_json(REPORTS / "open-webui-home-agent-access-audit.json")
     access_bind_path = REPORTS / "open-webui-home-agent-access-bind-dry-run.json"
     access_bind = _load_json(REPORTS / "open-webui-home-agent-access-bind-dry-run.json")
+    model_apply_path = REPORTS / "open-webui-home-agents-offline-apply.json"
     model_apply = _load_json(REPORTS / "open-webui-home-agents-offline-apply.json")
+    resources_path = REPORTS / "open-webui-home-resources-export.json"
     resources = _load_json(REPORTS / "open-webui-home-resources-export.json")
     resource_counts = _load_json(REPORTS / "open-webui-home-resources-live-counts.json")
+    resource_import_path = REPORTS / "open-webui-home-resources-offline-dry-run.json"
     resource_import = _load_json(REPORTS / "open-webui-home-resources-offline-dry-run.json")
     proxy_catalog = _load_json(REPORTS / "open-webui-model-proxy-catalog.json")
     channels_report_path = REPORTS / "freyja-channels-readiness.json"
@@ -286,9 +289,15 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "access_audit_git_head": access_audit.get("git_head") or "unknown",
             "access_bind_generated_at_unix": access_bind.get("generated_at_unix") or _mtime(access_bind_path),
             "access_bind_git_head": access_bind.get("git_head") or "unknown",
-            "model_count": model_apply.get("model_count"),
+            "model_count": model_apply.get("model_count") or len(model_apply.get("model_ids") or []),
+            "model_apply_generated_at_unix": model_apply.get("generated_at_unix") or _mtime(model_apply_path),
+            "model_apply_git_head": model_apply.get("git_head") or "unknown",
             "resource_counts": resource_counts.get("counts"),
+            "resource_export_generated_at_unix": resources.get("generated_at_unix") or _mtime(resources_path),
+            "resource_export_git_head": resources.get("git_head") or "unknown",
             "resource_import_ready": resource_import.get("ready"),
+            "resource_import_generated_at_unix": resource_import.get("generated_at_unix") or _mtime(resource_import_path),
+            "resource_import_git_head": resource_import.get("git_head") or "unknown",
             "access_bind_ready": access_bind.get("ready"),
             "proxy_missing_models": proxy_catalog.get("missing"),
             "telegram_ready": channels.get("telegram", {}).get("ready_for_live_round_trip"),

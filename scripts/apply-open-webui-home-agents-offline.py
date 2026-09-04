@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,13 @@ def load_import(path: Path) -> dict[str, Any]:
     if payload.get("secrets_included") is not False:
         raise ValueError("refusing import payload that may contain secrets")
     return payload
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def inspect_model_table(conn: sqlite3.Connection) -> set[str]:
@@ -124,11 +132,15 @@ def main(argv: list[str] | None = None) -> int:
         }
         report = {
             "report_type": "open-webui-home-agent-offline-import",
+            "generated_at_unix": int(time.time()),
+            "git_head": _git_head(),
             "db": str(args.db),
             "import_json": str(args.import_json),
             "secrets_included": False,
+            "private_content_included": False,
             "mode": "apply" if args.apply else "dry-run",
             "model_ids": [row["id"] for row in rows],
+            "model_count": len(rows),
             "insert_count": len([row for row in rows if row["id"] not in existing]),
             "update_count": len([row for row in rows if row["id"] in existing]),
             "touched_tables": ["model"],
