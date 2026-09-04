@@ -34,6 +34,8 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
         {item["requirement_id"] for item in audit["items"] if item["status"] == "auth_gated"}
     )
     assert {"messaging_channels"} == {item["requirement_id"] for item in audit["items"] if item["status"] == "credential_gated"}
+    by_id = {item["requirement_id"]: item for item in audit["items"]}
+    assert "certification/reports/open-webui-home-agent-readiness-summary.json" in by_id["verification"]["evidence"]
     statuses = {item["requirement"]: item["status"] for item in audit["items"]}
     assert statuses["Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config"] == "complete"
     assert statuses["Identify Open WebUI host and Vulcan path"] == "complete"

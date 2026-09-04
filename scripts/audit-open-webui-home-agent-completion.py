@@ -59,6 +59,7 @@ def build_audit() -> dict[str, Any]:
     chat_smoke = _load(REPORTS / "open-webui-home-agent-chat-smoke.json")
     tools_gateway = _load(REPORTS / "open-webui-tools-gateway-readiness.json")
     tools_openapi = _load(REPORTS / "open-webui-tools-openapi.json")
+    readiness_summary = _load(REPORTS / "open-webui-home-agent-readiness-summary.json")
 
     items = [
         _item(
@@ -175,8 +176,11 @@ def build_audit() -> dict[str, Any]:
                 "tests/",
                 "certification/reports/open-webui-home-agent-live.json",
                 "certification/reports/open-webui-home-agent-chat-smoke.json",
+                "certification/reports/open-webui-home-agent-readiness-summary.json",
             ],
-            "Credentialed Open WebUI, Telegram, and Signal round trips remain pending.",
+            "Credentialed Open WebUI, Telegram, and Signal round trips remain pending."
+            if readiness_summary.get("all_ready") is not True
+            else None,
         ),
         _item(
             "freyja41_preservation",
