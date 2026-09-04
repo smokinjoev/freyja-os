@@ -81,6 +81,10 @@ def check(name: str, ok: bool, evidence: dict[str, Any] | None = None) -> dict[s
     return {"name": name, "ok": ok, "evidence": evidence or {}}
 
 
+def auth_headers(api_key: str) -> dict[str, str]:
+    return {"authorization": f"Bearer {api_key}"}
+
+
 def run_command(args: list[str]) -> tuple[int, str, str]:
     try:
         completed = subprocess.run(args, check=False, text=True, capture_output=True, timeout=10)
@@ -195,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
         status, data, error = request_json(
             "GET",
             f"{args.open_webui_url.rstrip('/')}/api/models",
-            headers={"authorization": "Bearer <redacted>"},
+            headers=auth_headers(args.open_webui_api_key),
         )
         checks.append(check("open_webui_authenticated_models", status == 200 and bool((data or {}).get("data")), {"status": status, "error": error}))
     else:
