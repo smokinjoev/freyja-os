@@ -167,6 +167,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "status": str(item.get("status")),
             "evidence": [str(path) for path in item.get("evidence") or []],
             "blocker": item.get("blocker"),
+            "next_action": item.get("next_action"),
+            "command": item.get("command"),
         }
         for item in completion.get("items") or []
     ]
@@ -322,6 +324,10 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         lines.append(f"- `{item['requirement_id']}`: `{item['status']}`")
         if item.get("blocker"):
             lines.append(f"  Blocker: {item['blocker']}")
+        if item.get("next_action"):
+            lines.append(f"  Next: {item['next_action']}")
+        if item.get("command"):
+            lines.append(f"  Command: `{item['command']}`")
     lines += ["", "## Exact Next Action", "", bundle["exact_next_action"], ""]
     return "\n".join(lines)
 
