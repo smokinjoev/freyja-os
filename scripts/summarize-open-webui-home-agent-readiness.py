@@ -126,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     summary = build_summary()
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
+    args.output_md.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     args.output_md.write_text(render_markdown(summary), encoding="utf-8")
     print(json.dumps(summary, indent=2, sort_keys=True))

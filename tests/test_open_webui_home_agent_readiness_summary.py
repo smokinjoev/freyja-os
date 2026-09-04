@@ -63,6 +63,16 @@ def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(t
     assert "`post_auth_activation`: pending" in markdown
 
 
+def test_readiness_summary_main_creates_distinct_output_directories(tmp_path: Path, capsys) -> None:
+    output_json = tmp_path / "json" / "summary.json"
+    output_md = tmp_path / "markdown" / "summary.md"
+
+    assert _module().main(["--output-json", str(output_json), "--output-md", str(output_md)]) == 1
+
+    assert json.loads(output_json.read_text(encoding="utf-8")) == json.loads(capsys.readouterr().out)
+    assert "Open WebUI Home-Agent Readiness Summary" in output_md.read_text(encoding="utf-8")
+
+
 def test_readiness_summary_rejects_reports_not_marked_secret_free(tmp_path: Path) -> None:
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"secrets_included": True}), encoding="utf-8")

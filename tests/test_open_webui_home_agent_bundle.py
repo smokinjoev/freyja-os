@@ -29,8 +29,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 9, "credential_gated": 1, "partial": 2}
     assert bundle["endpoint_map"]["open_webui_local"] == "http://127.0.0.1:3001"
     assert bundle["rollback"]["open_webui_volume_backup"].endswith("open-webui-data-volume.tgz")
-    assert bundle["tests"]["focused_pytest"] == "131 passed, 1 warning"
-    assert bundle["tests"]["full_pytest"] == "1580 passed, 1 skipped, 1 warning"
+    assert bundle["tests"]["focused_pytest"] == "132 passed, 1 warning"
+    assert bundle["tests"]["full_pytest"] == "1581 passed, 1 skipped, 1 warning"
     assert bundle["tests"]["backup_rollback_audit_ok"] is True
     assert bundle["tests"]["secret_safety_audit_ok"] is True
     assert bundle["tests"]["channels_deterministic"] is True
