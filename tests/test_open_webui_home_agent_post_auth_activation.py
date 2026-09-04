@@ -127,6 +127,17 @@ def _import_agents(db: Path, agent_import: Path, tmp_path: Path) -> None:
     assert _module(AGENTS_APPLY).main(["--apply", "--import-json", str(agent_import), "--db", str(db), "--backup-dir", str(tmp_path)]) == 0
 
 
+def test_post_auth_activation_plan_fails_closed_when_database_is_missing(tmp_path: Path) -> None:
+    _, resource_import = _write_imports(tmp_path)
+
+    plan = _module(SCRIPT).build_activation_plan(tmp_path / "missing-webui.db", resource_import, None)
+
+    assert plan["ready"] is False
+    assert plan["reason"] == "Open WebUI database is not available at the requested path"
+    assert plan["access"]["reason"] == "database unavailable"
+    assert plan["resources"]["reason"] == "database unavailable"
+
+
 def test_post_auth_activation_plan_is_not_ready_without_users(tmp_path: Path) -> None:
     db = tmp_path / "webui.db"
     _db(db, users=False)

@@ -64,6 +64,22 @@ def _helpers(script_dir: Path):
 
 
 def build_activation_plan(db: Path, resources_json: Path, owner_user_id: str | None, script_dir: Path = REPO_ROOT / "scripts") -> dict[str, Any]:
+    if not db.exists():
+        return {
+            "ready": False,
+            "reason": "Open WebUI database is not available at the requested path",
+            "db": str(db),
+            "access": {"ready": False, "reason": "database unavailable"},
+            "resources": {"ready": False, "reason": "database unavailable"},
+        }
+    if not resources_json.exists():
+        return {
+            "ready": False,
+            "reason": "Open WebUI resource export is not available at the requested path",
+            "resources_json": str(resources_json),
+            "access": {"ready": False, "reason": "resource export unavailable"},
+            "resources": {"ready": False, "reason": "resource export unavailable"},
+        }
     access_helper, resource_helper = _helpers(script_dir)
     payload = resource_helper.load_import(resources_json)
     conn = sqlite3.connect(db)
