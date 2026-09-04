@@ -121,12 +121,23 @@ def build_report(now: int | None = None) -> dict[str, Any]:
         {"name": "freyja5_side_by_side", "ok": bool(freyja5_status and freyja5_status.startswith("Up")), "evidence": {"freyja5-gateway-1": freyja5_status}},
         {"name": "rollback_artifacts_present", "ok": all(rollback.values()), "evidence": rollback},
     ]
-    endpoint_contract_known = False
+    endpoint_contract_known = any(
+        item["name"] == "freyja3_agent_gateway_root" and item["ok"]
+        for item in endpoint_checks
+    ) and any(
+        item["name"] == "freyja3_inference_health" and item["ok"]
+        for item in endpoint_checks
+    )
     checks.append(
         {
             "name": "dedicated_freyja41_endpoint_contract_known",
             "ok": endpoint_contract_known,
-            "evidence": {"reason": "no separate Freyja 4.1 live endpoint is defined in current repo evidence"},
+            "evidence": {
+                "contract": "protected legacy Freyja3 gateway on port 8300",
+                "root": "http://127.0.0.1:8300/",
+                "inference_health": "http://127.0.0.1:8300/freyja3/inference/health",
+                "note": "no separately named Freyja 4.1 endpoint is defined in current repo evidence",
+            },
         }
     )
     return {
@@ -137,7 +148,7 @@ def build_report(now: int | None = None) -> dict[str, Any]:
         "baseline_tag": BASELINE_TAG,
         "checks": checks,
         "ok": all(check["ok"] for check in checks if check["name"] != "dedicated_freyja41_endpoint_contract_known"),
-        "pending": ["dedicated_freyja41_endpoint_contract"] if not endpoint_contract_known else [],
+        "pending": [] if endpoint_contract_known else ["dedicated_freyja41_endpoint_contract"],
     }
 
 

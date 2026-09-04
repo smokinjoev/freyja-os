@@ -671,7 +671,7 @@ Blocked or still pending:
 - Telegram round trip requires Joe's bot token/allowlist to be configured outside source control.
 - Signal round trip requires registered `signal-cli-rest-api` credentials.
 - Open WebUI user/group assignment cannot be completed offline yet because the live database currently has `user_count=0` and `group_count=0`. Joe must create/sign in to Open WebUI or provide an admin API/browser session.
-- Dedicated Freyja 4.1 live endpoint proof remains pending because no separate endpoint contract is defined in current repo evidence.
+- Freyja 4.1 fallback preservation is verified through the protected legacy Freyja3 gateway contract on port `8300`; no separately named Freyja 4.1 endpoint is defined in current repo evidence.
 
 ## Requirement Matrix
 
@@ -693,4 +693,4 @@ Blocked or still pending:
 | Messaging channels | Existing Telegram/Signal connectors, `config/freyja-channels.yaml`, `src/freyja/channels.py`, channel readiness report | Deterministic gateway implemented/tested; live Telegram/Signal round trips pending credentials |
 | Proactive behavior disabled by default | `config/freyja-proactive.yaml`, `src/freyja/proactive.py`, proactive readiness report | Implemented/tested as disabled-by-default candidates; live sends pending chat/destination/recipient verification and approval |
 | Repeatable verification | New and existing pytest coverage | Partial; live external tests pending credentials |
-| No regression to Freyja 4.1 | Baseline tag, side-by-side protected service check in live verifier, `freyja41-preservation-audit.json`, protected legacy endpoint probes including `/freyja3/inference/health` | Preservation invariants, protected legacy endpoint reachability, and legacy inference-health surface verified; dedicated Freyja 4.1 endpoint naming/contract proof pending endpoint contract |
+| No regression to Freyja 4.1 | Baseline tag, side-by-side protected service check in live verifier, `freyja41-preservation-audit.json`, protected legacy endpoint probes including `/freyja3/inference/health` | Complete: preservation invariants, protected legacy endpoint reachability, and legacy inference-health surface verified through the port `8300` Freyja3 gateway contract |

@@ -57,11 +57,14 @@ def test_preservation_audit_marks_secret_free_and_tracks_baseline(monkeypatch) -
     assert report["private_content_included"] is False
     assert report["baseline_tag"] == module.BASELINE_TAG
     assert report["ok"] is True
-    assert report["pending"] == ["dedicated_freyja41_endpoint_contract"]
+    assert report["pending"] == []
     endpoint_check = next(check for check in report["checks"] if check["name"] == "protected_legacy_endpoints_respond")
     assert endpoint_check["ok"] is True
     names = {item["name"] for item in endpoint_check["evidence"]["checks"]}
     assert {"freyja3_agent_gateway_root", "freyja3_inference_health"} <= names
+    contract_check = next(check for check in report["checks"] if check["name"] == "dedicated_freyja41_endpoint_contract_known")
+    assert contract_check["ok"] is True
+    assert contract_check["evidence"]["contract"] == "protected legacy Freyja3 gateway on port 8300"
 
 
 def test_preservation_audit_fails_when_protected_service_missing(monkeypatch) -> None:

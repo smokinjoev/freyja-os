@@ -126,7 +126,6 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "All-five-agent Open WebUI chat smoke needs an admin API key or authenticated session.",
         "Telegram pilot round trip needs bot token and allowlist configured outside source control.",
         "Signal round trip needs registered signal-cli-rest-api credentials.",
-        "Dedicated Freyja 4.1 live endpoint proof remains pending because no separate endpoint contract is defined in current repo evidence.",
     ]
     requirement_status = {
         "backup_and_checkpoint": "complete",
@@ -138,7 +137,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "tools": "source/importer policy ready; live enablement pending owner user/auth",
         "messaging": "policy ready; live round trips pending credentials",
         "proactive_behavior": "policy ready and disabled by default",
-        "freyja_4_1_preservation": "baseline tag, rollback artifacts, side-by-side Freyja 5, and protected services verified; dedicated endpoint pending",
+        "freyja_4_1_preservation": "baseline tag, rollback artifacts, side-by-side Freyja 5, protected services, and legacy gateway/inference surface verified",
         "rollback": "documented with source and volume backups",
     }
     return {

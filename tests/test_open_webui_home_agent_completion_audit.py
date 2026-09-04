@@ -35,6 +35,7 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert statuses["Create/import five Open WebUI agents"] == "auth_gated"
     assert statuses["Implement deterministic Telegram/Signal channel gateway with WhatsApp disabled"] == "credential_gated"
     assert statuses["Add proactive behavior disabled by default"] == "complete"
+    assert statuses["Preserve Freyja 4.1 fallback"] == "complete"
 
 
 def test_completion_audit_writes_report(tmp_path: Path, capsys) -> None:
