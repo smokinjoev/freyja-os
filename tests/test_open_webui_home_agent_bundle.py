@@ -53,6 +53,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["tools_gateway"] == "certification/reports/open-webui-tools-gateway-readiness.json"
     assert bundle["artifacts"]["tools_openapi"] == "certification/reports/open-webui-tools-openapi.json"
     assert bundle["artifacts"]["proactive_dry_run"] == "certification/reports/freyja-proactive-dry-run.json"
+    assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
     assert bundle["evidence_summary"]["inventory_hosts"] == ["atlas", "hera", "iris", "vulcan"]
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0
@@ -68,6 +69,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["channel_audit_store"]["response_failures_logged"] is True
     assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/openai/v1/chat/completions")
     assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
+    assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
+    assert bundle["evidence_summary"]["telegram_pilot_checks"]["telegram_bot_token_configured"] is False
     assert bundle["evidence_summary"]["proactive_dry_run_would_send_count"] == 0
     assert bundle["evidence_summary"]["freyja41_legacy_endpoint_check"] is True
     assert bundle["evidence_summary"]["freyja41_legacy_inference_endpoint_count"] == 7

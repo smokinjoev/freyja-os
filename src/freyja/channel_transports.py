@@ -45,6 +45,12 @@ class TelegramPilotConfig:
 
 
 @dataclass(frozen=True)
+class TelegramInbound:
+    update_id: int
+    message: ChannelMessage
+
+
+@dataclass(frozen=True)
 class SignalCliRestConfig:
     account_number: str = ""
     rest_api_url: str = ""
@@ -142,6 +148,9 @@ class TelegramLongPollingTransport:
         self.config = config or TelegramPilotConfig.from_env()
 
     def get_updates(self, *, offset: int | None = None) -> list[ChannelMessage]:
+        return [item.message for item in self.get_update_messages(offset=offset)]
+
+    def get_update_messages(self, *, offset: int | None = None) -> list[TelegramInbound]:
         if not self.config.configured:
             raise ChannelTransportError("TELEGRAM_BOT_TOKEN is not configured")
         query = {"timeout": str(self.config.timeout_seconds)}
@@ -150,12 +159,13 @@ class TelegramLongPollingTransport:
         response = self._request("getUpdates", query=query)
         if response.get("ok") is not True:
             raise ChannelTransportError("Telegram getUpdates failed")
-        messages: list[ChannelMessage] = []
+        messages: list[TelegramInbound] = []
         for update in response.get("result") or []:
             if isinstance(update, dict):
+                update_id = update.get("update_id")
                 message = parse_telegram_update(update)
-                if message is not None:
-                    messages.append(message)
+                if message is not None and update_id is not None:
+                    messages.append(TelegramInbound(update_id=int(update_id), message=message))
         return messages
 
     def send_message(self, *, chat_id: str, text: str) -> None:

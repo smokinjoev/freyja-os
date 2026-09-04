@@ -72,6 +72,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     resource_import = _load_json(REPORTS / "open-webui-home-resources-offline-dry-run.json")
     proxy_catalog = _load_json(REPORTS / "open-webui-model-proxy-catalog.json")
     channels = _load_json(REPORTS / "freyja-channels-readiness.json")
+    telegram_pilot = _load_json(REPORTS / "freyja-channels-telegram-pilot.json")
     proactive = _load_json(REPORTS / "freyja-proactive-readiness.json")
     proactive_dry_run = _load_json(REPORTS / "freyja-proactive-dry-run.json")
     freyja41 = _load_json(REPORTS / "freyja41-preservation-audit.json")
@@ -174,6 +175,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "resource_import_dry_run": "certification/reports/open-webui-home-resources-offline-dry-run.json",
             "model_proxy_catalog": "certification/reports/open-webui-model-proxy-catalog.json",
             "channels_readiness": "certification/reports/freyja-channels-readiness.json",
+            "telegram_pilot": "certification/reports/freyja-channels-telegram-pilot.json",
             "proactive_readiness": "certification/reports/freyja-proactive-readiness.json",
             "proactive_dry_run": "certification/reports/freyja-proactive-dry-run.json",
             "freyja41_preservation": "certification/reports/freyja41-preservation-audit.json",
@@ -201,6 +203,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "access_bind_ready": access_bind.get("ready"),
             "proxy_missing_models": proxy_catalog.get("missing"),
             "telegram_ready": channels.get("telegram", {}).get("ready_for_live_round_trip"),
+            "telegram_pilot_ready": telegram_pilot.get("ready"),
+            "telegram_pilot_checks": telegram_pilot.get("checks") or {},
             "signal_ready": channels.get("signal", {}).get("ready_for_live_round_trip"),
             "whatsapp_status": channels.get("whatsapp", {}).get("status"),
             "channel_thread_persistence_store": channels.get("thread_persistence_store") or {},

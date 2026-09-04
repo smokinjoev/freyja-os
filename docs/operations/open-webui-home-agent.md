@@ -439,6 +439,19 @@ The Open WebUI client maps permitted channel agents to the imported Open WebUI
 model IDs and posts to `/openai/v1/chat/completions` only when
 `OPEN_WEBUI_API_KEY` is configured.
 
+Telegram pilot runner:
+
+```bash
+scripts/run-freyja-channels-telegram-pilot.py --dry-run \
+  --output certification/reports/freyja-channels-telegram-pilot.json
+```
+
+The runner uses `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`,
+`TELEGRAM_IDENTITY_MAP`, and `OPEN_WEBUI_API_KEY`. Its dry-run report records
+only boolean readiness checks. In run mode it advances
+`data/freyja-channels/telegram.offset` after each observed update and sends the
+Open WebUI response back with Telegram `sendMessage`.
+
 It remains deterministic:
 
 ```text
