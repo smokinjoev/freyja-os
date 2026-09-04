@@ -219,14 +219,18 @@ Only after the dry-run shows `ready=true`, apply with `--apply`; the binder
 creates a database backup before writing.
 
 After Joe signs in or provides an authenticated Open WebUI owner/admin session,
-the full post-auth activation sequence is:
+the dry-run post-auth activation sequence can inspect a temporary snapshot of
+the live Open WebUI container database:
 
 ```bash
 scripts/activate-open-webui-home-agent-post-auth.py \
-  --db /app/backend/data/webui.db \
   --resources-json certification/reports/open-webui-home-resources-export.json \
   --owner-user-id <open-webui-owner-user-id>
 ```
+
+The dry-run snapshots `webui.db`, `webui.db-wal`, and `webui.db-shm` from
+`freyja-open-webui-atlas-open-webui-1` when the local default DB path is not
+available. It does not mutate the running container database.
 
 Current dry-run evidence:
 
@@ -238,11 +242,16 @@ Latest dry-run:
 
 ```text
 ready=false
+dry_run_snapshot.container="freyja-open-webui-atlas-open-webui-1"
+access.missing_models=[]
 access.missing_users=["beth","jenna","joe","liam"]
 resources.reason="missing or ambiguous Open WebUI owner user"
 ```
 
-Only run with `--apply` after the dry-run shows `ready=true`. Apply mode creates
+Only run with `--apply` after the dry-run shows `ready=true`. Apply mode does
+not use the container snapshot path; run it where `/app/backend/data/webui.db`
+is the real writable Open WebUI database, or pass an explicit writable `--db`
+path. Apply mode creates
 database backups before writing access grants and resource rows.
 
 Live database state after import:

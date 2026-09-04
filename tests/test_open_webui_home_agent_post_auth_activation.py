@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sqlite3
+import subprocess
 from pathlib import Path
 
 
@@ -136,6 +137,54 @@ def test_post_auth_activation_plan_fails_closed_when_database_is_missing(tmp_pat
     assert plan["reason"] == "Open WebUI database is not available at the requested path"
     assert plan["access"]["reason"] == "database unavailable"
     assert plan["resources"]["reason"] == "database unavailable"
+
+
+def test_post_auth_activation_main_can_dry_run_from_container_snapshot(tmp_path: Path, monkeypatch, capsys) -> None:
+    db = tmp_path / "source-webui.db"
+    _db(db, users=False)
+    agent_import, resource_import = _write_imports(tmp_path)
+    _import_agents(db, agent_import, tmp_path)
+    module = _module(SCRIPT)
+    output = tmp_path / "activation.json"
+    capsys.readouterr()
+
+    def fake_run(args, **kwargs):
+        destination = Path(args[-1])
+        source = str(args[2])
+        if source.endswith("/webui.db"):
+            destination.write_bytes(db.read_bytes())
+            return subprocess.CompletedProcess(args, 0)
+        if source.endswith("/webui.db-wal") or source.endswith("/webui.db-shm"):
+            return subprocess.CompletedProcess(args, 1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    assert module.main(["--db", str(tmp_path / "missing.db"), "--resources-json", str(resource_import), "--output", str(output)]) == 0
+
+    written = json.loads(output.read_text(encoding="utf-8"))
+    printed = json.loads(capsys.readouterr().out)
+    assert written == printed
+    assert written["dry_run_snapshot"]["container"] == module.DEFAULT_OPEN_WEBUI_CONTAINER
+    assert written["plan"]["access"]["missing_models"] == []
+    assert written["plan"]["access"]["missing_users"] == ["beth", "jenna", "joe", "liam"]
+
+
+def test_post_auth_activation_apply_does_not_use_container_snapshot(tmp_path: Path, monkeypatch, capsys) -> None:
+    _, resource_import = _write_imports(tmp_path)
+    module = _module(SCRIPT)
+    capsys.readouterr()
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("snapshot should not be used in apply mode")
+
+    monkeypatch.setattr(module.subprocess, "run", fail_if_called)
+
+    assert module.main(["--apply", "--db", str(tmp_path / "missing.db"), "--resources-json", str(resource_import)]) == 0
+
+    printed = json.loads(capsys.readouterr().out)
+    assert "dry_run_snapshot" not in printed
+    assert printed["plan"]["reason"] == "Open WebUI database is not available at the requested path"
 
 
 def test_post_auth_activation_plan_is_not_ready_without_users(tmp_path: Path) -> None:

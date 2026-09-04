@@ -7,6 +7,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path("/app/backend/data/webui.db")
 DEFAULT_RESOURCES = REPO_ROOT / "certification" / "reports" / "open-webui-home-resources-export.json"
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-post-auth-activation.json"
+DEFAULT_OPEN_WEBUI_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
 
 
 def _load_module(path: Path):
@@ -33,6 +35,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--script-dir", type=Path, default=REPO_ROOT / "scripts")
     parser.add_argument("--owner-user-id", help="Existing Open WebUI owner/admin user ID for resource rows.")
     parser.add_argument("--apply", action="store_true", help="Apply activation. Default is dry-run.")
+    parser.add_argument(
+        "--open-webui-container",
+        default=DEFAULT_OPEN_WEBUI_CONTAINER,
+        help="Open WebUI container to snapshot for dry-run planning when --db is unavailable.",
+    )
+    parser.add_argument(
+        "--no-container-snapshot",
+        action="store_true",
+        help="Do not snapshot the Open WebUI container for dry-run planning.",
+    )
     parser.add_argument("--backup-dir", type=Path)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     return parser
@@ -61,6 +73,22 @@ def _helpers(script_dir: Path):
     access = _load_module(script_dir / "bind-open-webui-home-agent-access.py")
     resources = _load_module(script_dir / "apply-open-webui-home-resources-offline.py")
     return access, resources
+
+
+def snapshot_open_webui_database(container: str, target_dir: Path) -> Path | None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    copied_main = False
+    for filename in ("webui.db", "webui.db-wal", "webui.db-shm"):
+        proc = subprocess.run(
+            ["docker", "cp", f"{container}:/app/backend/data/{filename}", str(target_dir / filename)],
+            cwd=REPO_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if filename == "webui.db":
+            copied_main = proc.returncode == 0
+    return target_dir / "webui.db" if copied_main else None
 
 
 def build_activation_plan(db: Path, resources_json: Path, owner_user_id: str | None, script_dir: Path = REPO_ROOT / "scripts") -> dict[str, Any]:
@@ -134,7 +162,19 @@ def apply_activation(db: Path, resources_json: Path, owner_user_id: str | None, 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    plan = build_activation_plan(args.db, args.resources_json, args.owner_user_id, args.script_dir)
+    snapshot_source = None
+    with tempfile.TemporaryDirectory(prefix="open-webui-home-agent-db-") as tmp:
+        db = args.db
+        if not args.apply and not args.no_container_snapshot and not db.exists():
+            snapshot = snapshot_open_webui_database(args.open_webui_container, Path(tmp))
+            if snapshot is not None:
+                db = snapshot
+                snapshot_source = {
+                    "container": args.open_webui_container,
+                    "source": "/app/backend/data/webui.db",
+                    "wal_and_shm_attempted": True,
+                }
+        plan = build_activation_plan(db, args.resources_json, args.owner_user_id, args.script_dir)
     report: dict[str, Any] = {
         "report_type": "open-webui-home-agent-post-auth-activation",
         "mode": "apply" if args.apply else "dry-run",
@@ -143,8 +183,13 @@ def main(argv: list[str] | None = None) -> int:
         "ready": plan["ready"],
         "plan": plan,
     }
+    if snapshot_source is not None:
+        report["dry_run_snapshot"] = snapshot_source
     if args.apply:
-        result = apply_activation(args.db, args.resources_json, args.owner_user_id, args.backup_dir, args.script_dir)
+        if not plan["ready"]:
+            result = {"applied": False, "reason": plan.get("reason") or "activation plan is not ready"}
+        else:
+            result = apply_activation(args.db, args.resources_json, args.owner_user_id, args.backup_dir, args.script_dir)
         report["apply_result"] = result
         if result.get("applied"):
             report["live_verifier"] = _run_live_verifier()
