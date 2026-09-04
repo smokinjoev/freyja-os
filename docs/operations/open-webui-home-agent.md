@@ -448,9 +448,10 @@ scripts/run-freyja-channels-telegram-pilot.py --dry-run \
 
 The runner uses `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`,
 `TELEGRAM_IDENTITY_MAP`, and `OPEN_WEBUI_API_KEY`. Its dry-run report records
-only boolean readiness checks. In run mode it advances
-`data/freyja-channels/telegram.offset` after each observed update and sends the
-Open WebUI response back with Telegram `sendMessage`.
+only boolean readiness checks, including whether every allowlisted sender has
+an identity mapping. In run mode it advances `data/freyja-channels/telegram.offset`
+after each observed update and sends the Open WebUI response back with Telegram
+`sendMessage`.
 
 Signal pilot runner:
 
@@ -461,9 +462,10 @@ scripts/run-freyja-channels-signal-pilot.py --dry-run \
 
 The runner uses `SIGNAL_ACCOUNT_NUMBER`, `SIGNAL_REST_API_URL`,
 `SIGNAL_ALLOWED_SENDERS`, `SIGNAL_IDENTITY_MAP`, and `OPEN_WEBUI_API_KEY`. Its
-dry-run report records only boolean readiness checks. In run mode it receives
-messages through the existing `signal-cli-rest-api` pathway, routes them
-through `freyja-channels`, and sends the Open WebUI response back through Signal.
+dry-run report records only boolean readiness checks, including whether every
+allowlisted sender has an identity mapping. In run mode it receives messages
+through the existing `signal-cli-rest-api` pathway, routes them through
+`freyja-channels`, and sends the Open WebUI response back through Signal.
 
 It remains deterministic:
 

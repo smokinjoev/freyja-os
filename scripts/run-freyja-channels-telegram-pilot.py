@@ -83,6 +83,7 @@ def readiness(args: argparse.Namespace) -> dict[str, Any]:
         "open_webui_api_key_configured": open_webui.configured,
         "allowlist_configured": bool(allowlist),
         "identity_map_configured": bool(identities),
+        "allowlist_identity_map_complete": bool(allowlist) and allowlist <= set(identities),
     }
     return {
         "report_type": "freyja-channels-telegram-pilot",

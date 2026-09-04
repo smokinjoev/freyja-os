@@ -57,11 +57,30 @@ def test_telegram_pilot_dry_run_fails_closed_without_credentials(tmp_path: Path,
     assert report["ready"] is False
     assert report["checks"] == {
         "allowlist_configured": False,
+        "allowlist_identity_map_complete": False,
         "identity_map_configured": False,
         "open_webui_api_key_configured": False,
         "telegram_bot_token_configured": False,
     }
     assert "TOKEN" not in str(report)
+
+
+def test_telegram_pilot_requires_every_allowlisted_sender_to_have_identity(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "secret-token")
+    monkeypatch.setenv("OPEN_WEBUI_API_KEY", "secret-key")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "1001,1002")
+    monkeypatch.setenv("TELEGRAM_IDENTITY_MAP", "1001:joe")
+    output = tmp_path / "pilot.json"
+
+    assert _module().main(["--dry-run", "--state-dir", str(tmp_path), "--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["ready"] is False
+    assert report["checks"]["allowlist_configured"] is True
+    assert report["checks"]["identity_map_configured"] is True
+    assert report["checks"]["allowlist_identity_map_complete"] is False
+    assert "secret-token" not in str(report)
+    assert "secret-key" not in str(report)
 
 
 def test_telegram_pilot_run_once_sends_replies_and_advances_offset(tmp_path: Path) -> None:

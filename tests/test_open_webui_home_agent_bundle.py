@@ -72,8 +72,10 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
     assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["telegram_bot_token_configured"] is False
+    assert bundle["evidence_summary"]["telegram_pilot_checks"]["allowlist_identity_map_complete"] is False
     assert bundle["evidence_summary"]["signal_pilot_ready"] is False
     assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is False
+    assert bundle["evidence_summary"]["signal_pilot_checks"]["allowlist_identity_map_complete"] is False
     assert bundle["evidence_summary"]["proactive_dry_run_would_send_count"] == 0
     assert bundle["evidence_summary"]["freyja41_legacy_endpoint_check"] is True
     assert bundle["evidence_summary"]["freyja41_legacy_inference_endpoint_count"] == 7
