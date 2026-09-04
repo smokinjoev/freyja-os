@@ -104,8 +104,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     resource_counts = _load_json(REPORTS / "open-webui-home-resources-live-counts.json")
     resource_import = _load_json(REPORTS / "open-webui-home-resources-offline-dry-run.json")
     proxy_catalog = _load_json(REPORTS / "open-webui-model-proxy-catalog.json")
+    channels_report_path = REPORTS / "freyja-channels-readiness.json"
     channels = _load_json(REPORTS / "freyja-channels-readiness.json")
+    telegram_pilot_path = REPORTS / "freyja-channels-telegram-pilot.json"
     telegram_pilot = _load_json(REPORTS / "freyja-channels-telegram-pilot.json")
+    signal_pilot_path = REPORTS / "freyja-channels-signal-pilot.json"
     signal_pilot = _load_json(REPORTS / "freyja-channels-signal-pilot.json")
     proactive = _load_json(REPORTS / "freyja-proactive-readiness.json")
     proactive_dry_run = _load_json(REPORTS / "freyja-proactive-dry-run.json")
@@ -275,6 +278,12 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "signal_pilot_ready": signal_pilot.get("ready"),
             "signal_pilot_checks": signal_pilot.get("checks") or {},
             "whatsapp_status": channels.get("whatsapp", {}).get("status"),
+            "channels_readiness_generated_at_unix": channels.get("generated_at_unix") or _mtime(channels_report_path),
+            "channels_readiness_git_head": channels.get("git_head") or "unknown",
+            "telegram_pilot_generated_at_unix": telegram_pilot.get("generated_at_unix") or _mtime(telegram_pilot_path),
+            "telegram_pilot_git_head": telegram_pilot.get("git_head") or "unknown",
+            "signal_pilot_generated_at_unix": signal_pilot.get("generated_at_unix") or _mtime(signal_pilot_path),
+            "signal_pilot_git_head": signal_pilot.get("git_head") or "unknown",
             "channel_thread_persistence_store": channels.get("thread_persistence_store") or {},
             "channel_audit_store": channels.get("audit_store") or {},
             "channel_open_webui_client": channels.get("open_webui_client") or {},

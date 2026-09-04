@@ -27,6 +27,8 @@ def test_channels_readiness_fails_closed_without_env(monkeypatch) -> None:
     report = _module().build_report()
 
     assert report["secrets_included"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["deterministic_gateway_only"] is True
     assert report["telegram"]["allowlist_configured"] is False
     assert report["telegram"]["transport_adapter"] == "TelegramLongPollingTransport"

@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,7 @@ from freyja.channels import DEFAULT_POLICY, DEFAULT_STATE_DIR, FreyjaChannels, O
 
 
 DEFAULT_OUTPUT = Path("certification/reports/freyja-channels-readiness.json")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,6 +30,13 @@ def build_parser() -> argparse.ArgumentParser:
 def _env_count(name: str) -> int:
     raw = os.environ.get(name, "")
     return len([item for item in raw.replace(";", ",").split(",") if item.strip()])
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
@@ -42,6 +52,8 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
     open_webui_client = OpenWebUIChatClient()
     return {
         "report_type": "freyja-channels-readiness",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "deterministic_gateway_only": service.policy.get("principle") == "deterministic_gateway_only",

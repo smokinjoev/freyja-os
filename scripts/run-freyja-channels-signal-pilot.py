@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -71,6 +72,13 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
 def readiness(args: argparse.Namespace) -> dict[str, object]:
     signal_config = SignalCliRestConfig.from_env()
     open_webui = OpenWebUIChatClient()
@@ -86,6 +94,8 @@ def readiness(args: argparse.Namespace) -> dict[str, object]:
     }
     return {
         "report_type": "freyja-channels-signal-pilot",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "mode": "dry-run" if args.dry_run else "run",
         "secrets_included": False,
         "private_content_included": False,
@@ -129,6 +139,8 @@ def run_loop(args: argparse.Namespace) -> dict[str, object]:
         time.sleep(max(args.poll_interval, 0.1))
     return {
         "report_type": "freyja-channels-signal-pilot",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "mode": "run",
         "secrets_included": False,
         "private_content_included": False,

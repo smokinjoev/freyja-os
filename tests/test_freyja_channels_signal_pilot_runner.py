@@ -52,6 +52,8 @@ def test_signal_pilot_dry_run_fails_closed_without_credentials(tmp_path: Path, m
 
     report = json.loads(capsys.readouterr().out)
     assert json.loads(output.read_text(encoding="utf-8")) == report
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["ready"] is False
     assert report["checks"] == {
         "allowlist_configured": False,

@@ -111,9 +111,15 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/openai/v1/chat/completions")
     assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
     assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
+    assert isinstance(bundle["evidence_summary"]["channels_readiness_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["channels_readiness_git_head"]
+    assert isinstance(bundle["evidence_summary"]["telegram_pilot_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["telegram_pilot_git_head"]
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["telegram_bot_token_configured"] is False
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["allowlist_identity_map_complete"] is False
     assert bundle["evidence_summary"]["signal_pilot_ready"] is False
+    assert isinstance(bundle["evidence_summary"]["signal_pilot_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["signal_pilot_git_head"]
     assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is False
     assert bundle["evidence_summary"]["signal_pilot_checks"]["allowlist_identity_map_complete"] is False
     assert bundle["evidence_summary"]["proactive_dry_run_would_send_count"] == 0
