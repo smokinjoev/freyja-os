@@ -417,6 +417,8 @@ signal.ready_for_live_round_trip=false
 thread_persistence_store.path="data/freyja-channels/threads.json"
 audit_store.path="data/freyja-channels/audit.jsonl"
 audit_store.denied_attempts_logged=true
+open_webui_client.endpoint="http://127.0.0.1:3001/openai/v1/chat/completions"
+open_webui_client.api_key_configured=false
 whatsapp.status=disabled
 ```
 
@@ -431,6 +433,10 @@ The channel gateway persists hashed sender/agent thread mappings in
 Audit events append to `data/freyja-channels/audit.jsonl`; raw senders and
 message bodies are not logged. Denied attempts are audited with only a sender
 hash, denial reason, channel, and attachment count.
+
+The Open WebUI client maps permitted channel agents to the imported Open WebUI
+model IDs and posts to `/openai/v1/chat/completions` only when
+`OPEN_WEBUI_API_KEY` is configured.
 
 It remains deterministic:
 

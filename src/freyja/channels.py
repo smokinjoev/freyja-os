@@ -3,7 +3,10 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import os
 import time
+import urllib.error
+import urllib.request
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any, Protocol
@@ -14,6 +17,13 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_POLICY = REPO_ROOT / "config" / "freyja-channels.yaml"
 DEFAULT_STATE_DIR = REPO_ROOT / "data" / "freyja-channels"
+CHANNEL_AGENT_MODEL_IDS = {
+    "freyja": "agent/freyja",
+    "cloyd": "agent/cloyd-gibbler",
+    "benedict": "agent/benedict",
+    "agent-44": "agent/agent-47",
+    "jenna": "agent/jennacide",
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -47,6 +57,61 @@ class ChannelPolicyError(ValueError):
 
 class RateLimitExceeded(ChannelPolicyError):
     pass
+
+
+class ChannelClientError(RuntimeError):
+    pass
+
+
+class OpenWebUIChatClient:
+    def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_seconds: float | None = None) -> None:
+        self.base_url = (base_url or os.environ.get("OPEN_WEBUI_URL") or "http://127.0.0.1:3001").rstrip("/")
+        self.api_key = api_key if api_key is not None else os.environ.get("OPEN_WEBUI_API_KEY", "")
+        self.timeout_seconds = float(timeout_seconds or os.environ.get("FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT", "120"))
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_key.strip())
+
+    def send(self, *, agent: str, thread_key: str, message: str, attachments: tuple[dict[str, Any], ...]) -> str:
+        if not self.configured:
+            raise ChannelClientError("OPEN_WEBUI_API_KEY is not configured")
+        model_id = CHANNEL_AGENT_MODEL_IDS.get(agent)
+        if not model_id:
+            raise ChannelClientError("channel agent does not map to an Open WebUI model")
+        payload = {
+            "model": model_id,
+            "messages": [{"role": "user", "content": message}],
+            "stream": False,
+            "metadata": {
+                "freyja_channel_thread_key": thread_key,
+                "attachment_count": len(attachments),
+            },
+        }
+        request = urllib.request.Request(
+            f"{self.base_url}/openai/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "authorization": f"Bearer {self.api_key}",
+                "content-type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            exc.read()
+            raise ChannelClientError(f"Open WebUI returned HTTP {exc.code}") from exc
+        except Exception as exc:
+            raise ChannelClientError("Open WebUI request failed") from exc
+        choices = data.get("choices") if isinstance(data, dict) else None
+        if not choices or not isinstance(choices[0], dict):
+            raise ChannelClientError("Open WebUI response did not include choices")
+        content = (choices[0].get("message") or {}).get("content") or ""
+        if not str(content).strip():
+            raise ChannelClientError("Open WebUI response was empty")
+        return str(content)
 
 
 class FileChannelStore:

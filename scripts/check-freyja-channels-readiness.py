@@ -11,7 +11,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from freyja.channel_transports import SignalCliRestConfig, TelegramPilotConfig
-from freyja.channels import DEFAULT_POLICY, DEFAULT_STATE_DIR, FreyjaChannels
+from freyja.channels import DEFAULT_POLICY, DEFAULT_STATE_DIR, FreyjaChannels, OpenWebUIChatClient
 
 
 DEFAULT_OUTPUT = Path("certification/reports/freyja-channels-readiness.json")
@@ -39,6 +39,7 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
     signal_allowed = _env_count(str(signal.get("sender_allowlist_env") or "SIGNAL_ALLOWED_SENDERS"))
     telegram_transport = TelegramPilotConfig.from_env()
     signal_transport = SignalCliRestConfig.from_env()
+    open_webui_client = OpenWebUIChatClient()
     return {
         "report_type": "freyja-channels-readiness",
         "secrets_included": False,
@@ -57,6 +58,11 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
             "message_body_logged": False,
             "raw_sender_logged": False,
             "denied_attempts_logged": True,
+        },
+        "open_webui_client": {
+            "endpoint": f"{open_webui_client.base_url}/openai/v1/chat/completions",
+            "api_key_configured": open_webui_client.configured,
+            "secrets_included": False,
         },
         "telegram": {
             "status": telegram.get("status"),

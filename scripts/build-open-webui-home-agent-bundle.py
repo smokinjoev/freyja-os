@@ -205,6 +205,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "whatsapp_status": channels.get("whatsapp", {}).get("status"),
             "channel_thread_persistence_store": channels.get("thread_persistence_store") or {},
             "channel_audit_store": channels.get("audit_store") or {},
+            "channel_open_webui_client": channels.get("open_webui_client") or {},
             "proactive_candidate_count": proactive.get("candidate_count"),
             "proactive_ready_schedule_count": len(proactive.get("ready_schedule_ids") or []),
             "proactive_dry_run_dispatch_count": proactive_dry_run.get("dispatch_count"),

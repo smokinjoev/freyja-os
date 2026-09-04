@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from freyja.channels import ChannelMessage, ChannelPolicyError, FileChannelStore, FreyjaChannels, MemoryChannelStore, RateLimitExceeded
+from freyja.channels import (
+    ChannelClientError,
+    ChannelMessage,
+    ChannelPolicyError,
+    FileChannelStore,
+    FreyjaChannels,
+    MemoryChannelStore,
+    OpenWebUIChatClient,
+    RateLimitExceeded,
+)
 
 
 class FakeOpenWebUIClient:
@@ -134,3 +143,48 @@ def test_file_store_reuses_thread_key_across_service_instances(tmp_path) -> None
     assert second_route.thread_key == first_route.thread_key
     assert "1001" not in second_route.thread_key
     assert "new-chat-id" not in second_route.thread_key
+
+
+def test_open_webui_chat_client_posts_to_agent_model_without_logging_token(monkeypatch) -> None:
+    captured = {}
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"choices":[{"message":{"content":"channel response"}}]}'
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["headers"] = dict(request.header_items())
+        captured["payload"] = request.data.decode("utf-8")
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("freyja.channels.urllib.request.urlopen", fake_urlopen)
+
+    client = OpenWebUIChatClient(base_url="http://open-webui.local/", api_key="secret-token", timeout_seconds=12)
+    response = client.send(agent="freyja", thread_key="telegram:freyja:abc", message="hello", attachments=({"kind": "image"},))
+
+    payload = captured["payload"]
+    assert response == "channel response"
+    assert captured["url"] == "http://open-webui.local/openai/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer secret-token"
+    assert '"model": "agent/freyja"' in payload
+    assert '"freyja_channel_thread_key": "telegram:freyja:abc"' in payload
+    assert '"attachment_count": 1' in payload
+    assert captured["timeout"] == 12
+
+
+def test_open_webui_chat_client_fails_closed_without_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
+    client = OpenWebUIChatClient(api_key="")
+
+    with pytest.raises(ChannelClientError, match="OPEN_WEBUI_API_KEY"):
+        client.send(agent="freyja", thread_key="telegram:freyja:abc", message="hello", attachments=())
