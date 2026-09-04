@@ -21,6 +21,9 @@ def test_tool_gateway_readiness_report_proves_fail_closed_policy() -> None:
     report = _module().build_report()
 
     assert report["ok"] is True
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["timestamp_unix"] == report["generated_at_unix"]
+    assert report["git_head"]
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
     assert report["operation_count"] == 20

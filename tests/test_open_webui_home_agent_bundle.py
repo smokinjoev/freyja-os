@@ -99,7 +99,11 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["git_head"] == bundle["git_head"]
     assert bundle["evidence_summary"]["live_optional_pending"] == []
     assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20
+    assert isinstance(bundle["evidence_summary"]["tools_gateway_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["tools_gateway_git_head"]
     assert bundle["evidence_summary"]["tools_openapi_paths"] == ["/open-webui-tools", "/open-webui-tools/invoke"]
+    assert isinstance(bundle["evidence_summary"]["tools_openapi_generated_at_unix"], int)
+    assert bundle["evidence_summary"]["tools_openapi_git_head"]
     assert bundle["evidence_summary"]["readiness_summary_status"] == "pending_external_auth_or_credentials"
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
     assert isinstance(bundle["evidence_summary"]["readiness_summary_generated_at_unix"], int)

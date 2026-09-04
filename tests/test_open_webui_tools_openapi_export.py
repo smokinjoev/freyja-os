@@ -39,4 +39,6 @@ def test_open_webui_tools_openapi_export_writes_report(tmp_path: Path, capsys) -
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "open-webui-tools-openapi-export"
+    assert isinstance(written["generated_at_unix"], int)
+    assert written["git_head"]
     assert written["ok"] is True

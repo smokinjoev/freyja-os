@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,13 @@ from freyja.main import app
 
 
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-tools-openapi.json"
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -88,6 +97,8 @@ def main(argv: list[str] | None = None) -> int:
     errors = validate_schema(schema)
     report = {
         "report_type": "open-webui-tools-openapi-export",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "ok": not errors,

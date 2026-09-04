@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -50,6 +51,13 @@ REQUIRED_OPERATIONS = {
 }
 
 
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Audit the Open WebUI tool gateway policy without invoking live side effects.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
@@ -78,9 +86,12 @@ def build_report() -> dict[str, Any]:
         calendar_policy,
         ToolInvocationRequest(operation="calendar.create", agent_id="freyja", confirmed=True),
     ).status
+    generated_at = int(time.time())
     report = {
         "report_type": "open-webui-tools-gateway-readiness",
-        "timestamp_unix": int(time.time()),
+        "generated_at_unix": generated_at,
+        "timestamp_unix": generated_at,
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "operation_count": len(operations),

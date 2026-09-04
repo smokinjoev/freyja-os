@@ -120,7 +120,9 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     activation = _load_json(REPORTS / "open-webui-home-agent-post-auth-activation.json")
     inference = _load_json(REPORTS / "open-webui-inference-policy-audit.json")
     chat_smoke = _load_json(REPORTS / "open-webui-home-agent-chat-smoke.json")
+    tools_gateway_path = REPORTS / "open-webui-tools-gateway-readiness.json"
     tools_gateway = _load_json(REPORTS / "open-webui-tools-gateway-readiness.json")
+    tools_openapi_path = REPORTS / "open-webui-tools-openapi.json"
     tools_openapi = _load_json(REPORTS / "open-webui-tools-openapi.json")
     readiness_summary = _load_json(REPORTS / "open-webui-home-agent-readiness-summary.json")
     readiness_summary_path = REPORTS / "open-webui-home-agent-readiness-summary.json"
@@ -310,7 +312,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "chat_smoke_complete": chat_smoke.get("complete"),
             "tools_gateway_operation_count": tools_gateway.get("operation_count"),
             "tools_gateway_checks": tools_gateway.get("checks") or {},
+            "tools_gateway_generated_at_unix": tools_gateway.get("generated_at_unix") or tools_gateway.get("timestamp_unix") or _mtime(tools_gateway_path),
+            "tools_gateway_git_head": tools_gateway.get("git_head") or "unknown",
             "tools_openapi_paths": sorted((tools_openapi.get("schema") or {}).get("paths") or {}),
+            "tools_openapi_generated_at_unix": tools_openapi.get("generated_at_unix") or _mtime(tools_openapi_path),
+            "tools_openapi_git_head": tools_openapi.get("git_head") or "unknown",
             "readiness_summary_status": readiness_summary.get("status"),
             "readiness_summary_all_ready": readiness_summary.get("all_ready"),
             "readiness_summary_generated_at_unix": readiness_summary.get("generated_at_unix") or _mtime(readiness_summary_path),
