@@ -39,6 +39,10 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert "OPEN_WEBUI_API_KEY" in gates["authenticated_chat_smoke"]["next_action"]
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
     assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]
+    assert gates["post_auth_activation"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
+    assert "OPEN_WEBUI_API_KEY=<redacted>" in gates["authenticated_chat_smoke"]["command"]
+    assert "TELEGRAM_BOT_TOKEN" not in gates["telegram_pilot"]["command"]
+    assert "SIGNAL_ACCOUNT_NUMBER" not in gates["signal_pilot"]["command"]
 
 
 def test_readiness_summary_prefers_current_git_head(monkeypatch) -> None:
@@ -61,6 +65,7 @@ def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(t
     markdown = output_md.read_text(encoding="utf-8")
     assert "Open WebUI Home-Agent Readiness Summary" in markdown
     assert "`post_auth_activation`: pending" in markdown
+    assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in markdown
 
 
 def test_readiness_summary_main_creates_distinct_output_directories(tmp_path: Path, capsys) -> None:

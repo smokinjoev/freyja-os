@@ -28,13 +28,21 @@ def _load(path: Path) -> dict[str, Any]:
     return data
 
 
-def _gate(gate_id: str, label: str, ready: bool, evidence: str, next_action: str | None = None) -> dict[str, Any]:
+def _gate(
+    gate_id: str,
+    label: str,
+    ready: bool,
+    evidence: str,
+    next_action: str | None = None,
+    command: str | None = None,
+) -> dict[str, Any]:
     return {
         "gate_id": gate_id,
         "label": label,
         "ready": bool(ready),
         "evidence": evidence,
         "next_action": next_action,
+        "command": command,
     }
 
 
@@ -62,6 +70,7 @@ def build_summary() -> dict[str, Any]:
             activation.get("ready") is True,
             "certification/reports/open-webui-home-agent-post-auth-activation.json",
             None if activation.get("ready") else "Create/sign in to Open WebUI and rerun activation dry-run with the owner user ID.",
+            "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json --owner-user-id <open-webui-owner-user-id>",
         ),
         _gate(
             "authenticated_chat_smoke",
@@ -69,6 +78,7 @@ def build_summary() -> dict[str, Any]:
             chat_smoke.get("status") == "complete",
             "certification/reports/open-webui-home-agent-chat-smoke.json",
             None if chat_smoke.get("status") == "complete" else "Set OPEN_WEBUI_API_KEY and run the five-agent chat smoke.",
+            "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
         ),
         _gate(
             "telegram_pilot",
@@ -78,6 +88,7 @@ def build_summary() -> dict[str, Any]:
             None
             if telegram.get("ready")
             else "Set TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, TELEGRAM_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
+            "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
         ),
         _gate(
             "signal_pilot",
@@ -87,6 +98,7 @@ def build_summary() -> dict[str, Any]:
             None
             if signal.get("ready")
             else "Register signal-cli-rest-api and set SIGNAL_ACCOUNT_NUMBER, SIGNAL_ALLOWED_SENDERS, SIGNAL_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
+            "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
         ),
     ]
     return {
@@ -118,6 +130,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
         lines.append(f"- `{gate['gate_id']}`: {state} - {gate['label']}")
         if gate.get("next_action"):
             lines.append(f"  Next: {gate['next_action']}")
+        if gate.get("command"):
+            lines.append(f"  Command: `{gate['command']}`")
     lines += ["", "## Exact Next Action", "", str(summary.get("exact_next_action") or ""), ""]
     return "\n".join(lines)
 

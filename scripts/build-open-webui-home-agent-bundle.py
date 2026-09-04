@@ -14,6 +14,12 @@ REPORTS = REPO_ROOT / "certification" / "reports"
 DIAG = REPO_ROOT / "logs" / "open-webui-diagnostics" / "home-agent-20260904T174214Z"
 DEFAULT_JSON = REPORTS / "open-webui-home-agent-deliverable.json"
 DEFAULT_MD = REPORTS / "open-webui-home-agent-deliverable.md"
+GATE_COMMANDS = {
+    "post_auth_activation": "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json --owner-user-id <open-webui-owner-user-id>",
+    "authenticated_chat_smoke": "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
+    "telegram_pilot": "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
+    "signal_pilot": "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -137,6 +143,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "ready": bool(gate.get("ready")),
             "evidence": str(gate.get("evidence")),
             "next_action": gate.get("next_action"),
+            "command": gate.get("command") or GATE_COMMANDS.get(str(gate.get("gate_id"))),
         }
         for gate in readiness_summary.get("gates") or []
     ]
@@ -297,6 +304,8 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         lines.append(f"- `{gate['gate_id']}`: {state} - {gate['label']}")
         if gate.get("next_action"):
             lines.append(f"  Next: {gate['next_action']}")
+        if gate.get("command"):
+            lines.append(f"  Command: `{gate['command']}`")
     lines += ["", "## Exact Next Action", "", bundle["exact_next_action"], ""]
     return "\n".join(lines)
 
