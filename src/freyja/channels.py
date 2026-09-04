@@ -13,6 +13,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_POLICY = REPO_ROOT / "config" / "freyja-channels.yaml"
+DEFAULT_STATE_DIR = REPO_ROOT / "data" / "freyja-channels"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -57,8 +58,15 @@ class FileChannelStore:
 
     def remember_thread(self, route: ChannelRoute) -> None:
         data = self._read_threads()
-        data[f"{route.channel}:{route.sender_hash}:{route.agent}"] = route.thread_key
+        data[self.thread_map_key(route.channel, route.sender_hash, route.agent)] = route.thread_key
         self.threads.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def get_thread(self, *, channel: str, sender_hash: str, agent: str) -> str | None:
+        return self._read_threads().get(self.thread_map_key(channel, sender_hash, agent))
+
+    @staticmethod
+    def thread_map_key(channel: str, sender_hash: str, agent: str) -> str:
+        return f"{channel}:{sender_hash}:{agent}"
 
     def write_audit(self, event: dict[str, Any]) -> None:
         event = {**event, "timestamp_unix": int(time.time())}
@@ -78,7 +86,10 @@ class MemoryChannelStore(FileChannelStore):
         self.thread_map: dict[str, str] = {}
 
     def remember_thread(self, route: ChannelRoute) -> None:
-        self.thread_map[f"{route.channel}:{route.sender_hash}:{route.agent}"] = route.thread_key
+        self.thread_map[self.thread_map_key(route.channel, route.sender_hash, route.agent)] = route.thread_key
+
+    def get_thread(self, *, channel: str, sender_hash: str, agent: str) -> str | None:
+        return self.thread_map.get(self.thread_map_key(channel, sender_hash, agent))
 
     def write_audit(self, event: dict[str, Any]) -> None:
         self.events.append({**event, "timestamp_unix": int(time.time())})
@@ -98,7 +109,7 @@ class FreyjaChannels:
         self.policy = self._load_policy(policy_path)
         self.allowlists = allowlists or {}
         self.identity_maps = identity_maps or {}
-        self.store = store or MemoryChannelStore()
+        self.store = store or FileChannelStore(DEFAULT_STATE_DIR)
         self.client = client
         self._now = now or time.time
         self._rate_windows: dict[tuple[str, str], deque[float]] = defaultdict(deque)
@@ -118,7 +129,12 @@ class FreyjaChannels:
         agent = self._select_agent(identity, message.requested_agent)
         self._check_rate(message.channel, message.sender, channel_policy)
         sender_hash = self._hash(message.sender)
-        thread_key = self._thread_key(channel_policy, agent=agent, sender_hash=sender_hash, chat_id=message.chat_id)
+        thread_key = self.store.get_thread(channel=message.channel, sender_hash=sender_hash, agent=agent) or self._thread_key(
+            channel_policy,
+            agent=agent,
+            sender_hash=sender_hash,
+            chat_id=message.chat_id,
+        )
         route = ChannelRoute(
             channel=message.channel,
             identity=identity,

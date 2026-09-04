@@ -203,6 +203,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "telegram_ready": channels.get("telegram", {}).get("ready_for_live_round_trip"),
             "signal_ready": channels.get("signal", {}).get("ready_for_live_round_trip"),
             "whatsapp_status": channels.get("whatsapp", {}).get("status"),
+            "channel_thread_persistence_store": channels.get("thread_persistence_store") or {},
+            "channel_audit_store": channels.get("audit_store") or {},
             "proactive_candidate_count": proactive.get("candidate_count"),
             "proactive_ready_schedule_count": len(proactive.get("ready_schedule_ids") or []),
             "proactive_dry_run_dispatch_count": proactive_dry_run.get("dispatch_count"),

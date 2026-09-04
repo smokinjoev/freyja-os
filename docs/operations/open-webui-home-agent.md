@@ -414,6 +414,8 @@ telegram.transport_adapter=TelegramLongPollingTransport
 telegram.ready_for_live_round_trip=false
 signal.transport_adapter=SignalCliRestTransport
 signal.ready_for_live_round_trip=false
+thread_persistence_store.path="data/freyja-channels/threads.json"
+audit_store.path="data/freyja-channels/audit.jsonl"
 whatsapp.status=disabled
 ```
 
@@ -422,6 +424,11 @@ into deterministic `ChannelMessage` records. The Signal transport uses the
 existing `signal-cli-rest-api` pathway and converts received data-message
 events into the same `ChannelMessage` shape. Both fail closed when credentials
 or allowlists are absent.
+
+The channel gateway persists hashed sender/agent thread mappings in
+`data/freyja-channels/threads.json` and reuses them across service instances.
+Audit events append to `data/freyja-channels/audit.jsonl`; raw senders and
+message bodies are not logged.
 
 It remains deterministic:
 
@@ -673,7 +680,7 @@ Live checks completed:
 - `certification/reports/open-webui-home-agent-platform-inventory.json` records host roles, endpoint map, running Atlas services, and credential locations without secret values.
 - `certification/reports/open-webui-home-agent-post-auth-activation.json` records the current dry-run post-auth activation plan.
 - `certification/reports/open-webui-inference-policy-audit.json` records local-default Vulcan inference, model profile, guard, and unload policy evidence.
-- `certification/reports/freyja-channels-readiness.json` records deterministic channel readiness without sender values or tokens.
+- `certification/reports/freyja-channels-readiness.json` records deterministic channel readiness, file-backed thread persistence, and audit-log redaction without sender values or tokens.
 - `certification/reports/freyja-proactive-readiness.json` records disabled-by-default proactive schedule readiness with no message bodies.
 - `certification/reports/freyja41-preservation-audit.json` records Freyja 4.1 preservation evidence: baseline tag, rollback artifacts, side-by-side Freyja 5, protected running services, `freyja3-agent-gateway` root identity on `http://127.0.0.1:8300/`, health on `http://127.0.0.1:8300/health`, inference health on `http://127.0.0.1:8300/freyja3/inference/health`, and `freyja3-litellm` reachability/auth boundary on `http://127.0.0.1:4001/health`.
 
@@ -702,7 +709,7 @@ Blocked or still pending:
 | Shared household Knowledge | `config/open-webui-home-resources.yaml`, resource export, resource importer dry-run | Source policy/import path prepared; live collection rows require owner user/authenticated import |
 | Scoped `freyja-home-memory` service | `/freyja-home-memory` router, tests, live `8500` endpoint | Deployed in side-by-side Freyja 5 gateway |
 | Tool boundaries | Agent manifest, resource manifest/export, resource importer dry-run, existing Freyja tools, model-proxy agent forwarding | Source policy/import path prepared; Open WebUI tool enablement pending owner user/auth |
-| Messaging channels | Existing Telegram/Signal connectors, `config/freyja-channels.yaml`, `src/freyja/channels.py`, channel readiness report | Deterministic gateway implemented/tested; live Telegram/Signal round trips pending credentials |
+| Messaging channels | Existing Telegram/Signal connectors, `config/freyja-channels.yaml`, `src/freyja/channels.py`, channel readiness report, file-backed thread persistence test | Deterministic gateway and restart-safe thread persistence implemented/tested; live Telegram/Signal round trips pending credentials |
 | Proactive behavior disabled by default | `config/freyja-proactive.yaml`, `src/freyja/proactive.py`, proactive readiness report | Implemented/tested as disabled-by-default candidates; live sends pending chat/destination/recipient verification and approval |
 | Repeatable verification | New and existing pytest coverage | Partial; live external tests pending credentials |
 | No regression to Freyja 4.1 | Baseline tag, side-by-side protected service check in live verifier, `freyja41-preservation-audit.json`, protected legacy endpoint probes including `/freyja3/inference/health` | Complete: preservation invariants, protected legacy endpoint reachability, and legacy inference-health surface verified through the port `8300` Freyja3 gateway contract |

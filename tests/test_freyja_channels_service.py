@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from freyja.channels import ChannelMessage, ChannelPolicyError, FreyjaChannels, MemoryChannelStore, RateLimitExceeded
+from freyja.channels import ChannelMessage, ChannelPolicyError, FileChannelStore, FreyjaChannels, MemoryChannelStore, RateLimitExceeded
 
 
 class FakeOpenWebUIClient:
@@ -101,3 +101,15 @@ def test_handle_forwards_only_to_open_webui_client() -> None:
             "attachments": ({"kind": "image"},),
         }
     ]
+
+
+def test_file_store_reuses_thread_key_across_service_instances(tmp_path) -> None:
+    first_store = FileChannelStore(tmp_path)
+    first_route = _service(store=first_store).route(ChannelMessage(channel="telegram", sender="1001", text="first", chat_id="chat-1001"))
+
+    second_store = FileChannelStore(tmp_path)
+    second_route = _service(store=second_store).route(ChannelMessage(channel="telegram", sender="1001", text="second", chat_id="new-chat-id"))
+
+    assert second_route.thread_key == first_route.thread_key
+    assert "1001" not in second_route.thread_key
+    assert "new-chat-id" not in second_route.thread_key

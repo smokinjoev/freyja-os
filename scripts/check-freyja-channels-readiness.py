@@ -11,7 +11,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from freyja.channel_transports import SignalCliRestConfig, TelegramPilotConfig
-from freyja.channels import DEFAULT_POLICY, FreyjaChannels
+from freyja.channels import DEFAULT_POLICY, DEFAULT_STATE_DIR, FreyjaChannels
 
 
 DEFAULT_OUTPUT = Path("certification/reports/freyja-channels-readiness.json")
@@ -46,6 +46,17 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
         "deterministic_gateway_only": service.policy.get("principle") == "deterministic_gateway_only",
         "model_routing_prohibited": (service.policy.get("prohibitions") or {}).get("model_routing") is True,
         "independent_agent_intelligence_prohibited": (service.policy.get("prohibitions") or {}).get("independent_agent_intelligence") is True,
+        "thread_persistence_store": {
+            "backend": "file",
+            "path": str((DEFAULT_STATE_DIR / "threads.json").relative_to(Path(__file__).resolve().parents[1])),
+            "raw_sender_logged": False,
+        },
+        "audit_store": {
+            "backend": "jsonl",
+            "path": str((DEFAULT_STATE_DIR / "audit.jsonl").relative_to(Path(__file__).resolve().parents[1])),
+            "message_body_logged": False,
+            "raw_sender_logged": False,
+        },
         "telegram": {
             "status": telegram.get("status"),
             "transport": telegram.get("transport"),
