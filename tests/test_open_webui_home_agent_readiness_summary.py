@@ -19,6 +19,10 @@ def _module():
     return module
 
 
+def test_readiness_summary_script_is_executable() -> None:
+    assert SCRIPT.stat().st_mode & 0o111
+
+
 def test_readiness_summary_reports_current_external_gates() -> None:
     summary = _module().build_summary()
 
