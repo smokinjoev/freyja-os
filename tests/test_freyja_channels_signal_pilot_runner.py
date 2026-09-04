@@ -82,6 +82,30 @@ def test_signal_pilot_requires_every_allowlisted_sender_to_have_identity(tmp_pat
     assert "+15550001002" not in str(report)
 
 
+def test_signal_pilot_invalid_poll_interval_env_uses_default(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("FREYJA_CHANNEL_SIGNAL_POLL_INTERVAL", "not-a-number")
+    monkeypatch.delenv("SIGNAL_ACCOUNT_NUMBER", raising=False)
+    monkeypatch.delenv("SIGNAL_REST_API_URL", raising=False)
+    monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
+    monkeypatch.delenv("SIGNAL_ALLOWED_SENDERS", raising=False)
+    monkeypatch.delenv("SIGNAL_IDENTITY_MAP", raising=False)
+    output = tmp_path / "pilot.json"
+
+    assert _module().main(["--dry-run", "--state-dir", str(tmp_path), "--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["ready"] is False
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+
+
+def test_signal_pilot_nonpositive_poll_interval_env_uses_default(monkeypatch) -> None:
+    monkeypatch.setenv("FREYJA_CHANNEL_SIGNAL_POLL_INTERVAL", "-1")
+
+    args = _module().build_parser().parse_args([])
+
+    assert args.poll_interval == 5.0
+
+
 def test_signal_pilot_run_once_sends_replies() -> None:
     module = _module()
     service = FakeService()

@@ -24,6 +24,18 @@ from freyja.channels import (
 
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "freyja-channels-telegram-pilot.json"
 DEFAULT_STATE_DIR = REPO_ROOT / "data" / "freyja-channels"
+DEFAULT_POLL_INTERVAL_SECONDS = 2.0
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--offset-file", type=Path)
     parser.add_argument("--once", action="store_true", help="Run one polling iteration and exit.")
     parser.add_argument("--dry-run", action="store_true", help="Check configuration without calling Telegram or Open WebUI.")
-    parser.add_argument("--poll-interval", type=float, default=float(os.environ.get("FREYJA_CHANNEL_TELEGRAM_POLL_INTERVAL", "2")))
+    parser.add_argument("--poll-interval", type=float, default=_env_float("FREYJA_CHANNEL_TELEGRAM_POLL_INTERVAL", DEFAULT_POLL_INTERVAL_SECONDS))
     parser.add_argument("--max-iterations", type=int, default=0, help="Limit polling iterations. 0 means no limit.")
     return parser
 
