@@ -105,6 +105,9 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Authenticated chat smoke" in text
     assert "Open WebUI tools gateway ok" in text
     assert "Open WebUI tools OpenAPI ok" in text
+    assert "Readiness summary" in text
+    assert "pending_external_auth_or_credentials" in text
+    assert "readiness_summary" in text
     assert "Exact Next Action" in text
     assert "Open WebUI owner/user rows are missing" in text
 

@@ -265,6 +265,8 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Authenticated chat smoke: `{bundle['tests']['authenticated_chat_smoke']}`",
         f"- Open WebUI tools gateway ok: `{bundle['tests']['open_webui_tools_gateway_ok']}`",
         f"- Open WebUI tools OpenAPI ok: `{bundle['tests']['open_webui_tools_openapi_ok']}`",
+        f"- Readiness summary: `{bundle['evidence_summary']['readiness_summary_status']}`",
+        f"- Readiness all ready: `{bundle['evidence_summary']['readiness_summary_all_ready']}`",
         "",
         "## Endpoints",
         "",
@@ -274,6 +276,7 @@ def render_markdown(bundle: dict[str, Any]) -> str:
     lines += ["", "## Rollback", ""]
     for key, value in bundle["rollback"].items():
         lines.append(f"- `{key}`: `{value}`")
+    lines += ["", "## Artifacts", "", f"- `readiness_summary`: `{bundle['artifacts']['readiness_summary']}`"]
     lines += ["", "## Blockers", ""]
     for blocker in bundle["blockers"]:
         lines.append(f"- {blocker}")
