@@ -51,6 +51,27 @@ def test_chat_smoke_missing_api_key_is_pending(tmp_path: Path, monkeypatch, caps
     assert report["reason"] == "OPEN_WEBUI_API_KEY not supplied"
 
 
+def test_chat_smoke_invalid_timeout_env_uses_default(tmp_path: Path, monkeypatch, capsys) -> None:
+    output = tmp_path / "smoke.json"
+    monkeypatch.setenv("OPEN_WEBUI_CHAT_SMOKE_TIMEOUT", "not-a-number")
+    monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
+
+    assert _module().main(["--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "pending"
+    assert report["reason"] == "OPEN_WEBUI_API_KEY not supplied"
+    assert json.loads(output.read_text(encoding="utf-8")) == report
+
+
+def test_chat_smoke_nonpositive_timeout_env_uses_default(monkeypatch) -> None:
+    monkeypatch.setenv("OPEN_WEBUI_CHAT_SMOKE_TIMEOUT", "-10")
+
+    args = _module().build_parser().parse_args([])
+
+    assert args.timeout == 120.0
+
+
 def test_chat_smoke_live_report_redacts_auth_and_requires_response(monkeypatch) -> None:
     module = _module()
     manifest = module.load_manifest(REPO_ROOT / "config" / "open-webui-home-agents.yaml")

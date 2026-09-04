@@ -16,6 +16,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_AGENTS = REPO_ROOT / "config" / "open-webui-home-agents.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-chat-smoke.json"
+DEFAULT_TIMEOUT_SECONDS = 120.0
 MODEL_IDS = {
     "freyja": "agent/freyja",
     "cloyd": "agent/cloyd-gibbler",
@@ -23,6 +24,17 @@ MODEL_IDS = {
     "agent-44": "agent/agent-47",
     "jenna": "agent/jennacide",
 }
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--open-webui-api-key", default=os.environ.get("OPEN_WEBUI_API_KEY", ""))
     parser.add_argument("--agents", type=Path, default=DEFAULT_AGENTS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--timeout", type=float, default=float(os.environ.get("OPEN_WEBUI_CHAT_SMOKE_TIMEOUT", "120")))
+    parser.add_argument("--timeout", type=float, default=_env_float("OPEN_WEBUI_CHAT_SMOKE_TIMEOUT", DEFAULT_TIMEOUT_SECONDS))
     parser.add_argument("--agent", action="append", choices=sorted(MODEL_IDS), help="Limit to one or more agent ids.")
     parser.add_argument("--dry-run", action="store_true", help="Render the intended checks without calling Open WebUI.")
     return parser
