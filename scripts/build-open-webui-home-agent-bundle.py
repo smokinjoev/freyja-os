@@ -160,6 +160,16 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "freyja_4_1_preservation": "baseline tag, rollback artifacts, side-by-side Freyja 5, protected services, and legacy gateway/inference surface verified",
         "rollback": "documented with source and volume backups",
     }
+    requirement_audit = [
+        {
+            "requirement_id": str(item.get("requirement_id")),
+            "requirement": str(item.get("requirement")),
+            "status": str(item.get("status")),
+            "evidence": [str(path) for path in item.get("evidence") or []],
+            "blocker": item.get("blocker"),
+        }
+        for item in completion.get("items") or []
+    ]
     git_head = _command(["git", "rev-parse", "--short", "HEAD"])
     completion_status_counts = completion.get("status_counts") or {}
     return {
@@ -254,6 +264,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "readiness_summary_all_ready": readiness_summary.get("all_ready"),
         },
         "requirement_status": requirement_status,
+        "requirement_audit": requirement_audit,
     }
 
 
@@ -306,6 +317,11 @@ def render_markdown(bundle: dict[str, Any]) -> str:
             lines.append(f"  Next: {gate['next_action']}")
         if gate.get("command"):
             lines.append(f"  Command: `{gate['command']}`")
+    lines += ["", "## Requirement Audit", ""]
+    for item in bundle["requirement_audit"]:
+        lines.append(f"- `{item['requirement_id']}`: `{item['status']}`")
+        if item.get("blocker"):
+            lines.append(f"  Blocker: {item['blocker']}")
     lines += ["", "## Exact Next Action", "", bundle["exact_next_action"], ""]
     return "\n".join(lines)
 

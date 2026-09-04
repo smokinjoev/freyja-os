@@ -58,6 +58,13 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert "OPEN_WEBUI_API_KEY=<redacted>" in bundle["external_gates"][1]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in bundle["external_gates"][2]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in bundle["external_gates"][3]["command"]
+    requirement_audit = {item["requirement_id"]: item for item in bundle["requirement_audit"]}
+    assert len(requirement_audit) == 15
+    assert requirement_audit["local_inference"]["status"] == "partial"
+    assert requirement_audit["five_agents"]["status"] == "auth_gated"
+    assert requirement_audit["messaging_channels"]["status"] == "credential_gated"
+    assert "certification/reports/open-webui-home-agent-chat-smoke.json" in requirement_audit["local_inference"]["evidence"]
+    assert requirement_audit["final_deliverable"]["status"] == "complete"
     assert bundle["artifacts"]["runbook"] == "docs/operations/open-webui-home-agent.md"
     assert bundle["artifacts"]["backup_rollback_audit"] == "certification/reports/open-webui-backup-rollback-audit.json"
     assert bundle["artifacts"]["secret_safety_audit"] == "certification/reports/open-webui-home-agent-secret-safety.json"
@@ -123,6 +130,9 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`post_auth_activation`: pending" in text
     assert "`telegram_pilot`: pending" in text
     assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in text
+    assert "Requirement Audit" in text
+    assert "`local_inference`: `partial`" in text
+    assert "`messaging_channels`: `credential_gated`" in text
     assert "pending_external_auth_or_credentials" in text
     assert "readiness_summary" in text
     assert "Exact Next Action" in text
