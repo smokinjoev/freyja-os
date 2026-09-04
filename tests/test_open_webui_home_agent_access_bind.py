@@ -115,6 +115,8 @@ def test_access_bind_dry_run_waits_for_real_users(tmp_path: Path) -> None:
         conn.close()
 
     assert report["ready"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["missing_users"] == ["beth", "jenna", "joe", "liam"]
     assert report["group_inserts"] == ["joe", "beth", "liam", "jenna"]
     assert report["grant_insert_count"] == 10
@@ -134,6 +136,8 @@ def test_access_bind_main_writes_dry_run_output(tmp_path: Path, capsys) -> None:
     assert report["ready"] is False
     assert report["applied"] is False
     assert report["mode"] == "dry-run"
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["missing_users"] == ["beth", "jenna", "joe", "liam"]
 
 
@@ -146,6 +150,8 @@ def test_access_bind_fails_closed_when_database_is_missing(tmp_path: Path, capsy
     assert json.loads(output.read_text(encoding="utf-8")) == report
     assert report["ready"] is False
     assert report["applied"] is False
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["reason"] == "Open WebUI database is not available at the requested path"
     assert "dry_run_snapshot" not in report
 

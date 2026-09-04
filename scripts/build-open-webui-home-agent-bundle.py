@@ -99,7 +99,9 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     backup = _load_json(REPORTS / "open-webui-backup-rollback-audit.json")
     secret_safety_path = REPORTS / "open-webui-home-agent-secret-safety.json"
     secret_safety = _load_json(REPORTS / "open-webui-home-agent-secret-safety.json")
+    access_audit_path = REPORTS / "open-webui-home-agent-access-audit.json"
     access_audit = _load_json(REPORTS / "open-webui-home-agent-access-audit.json")
+    access_bind_path = REPORTS / "open-webui-home-agent-access-bind-dry-run.json"
     access_bind = _load_json(REPORTS / "open-webui-home-agent-access-bind-dry-run.json")
     model_apply = _load_json(REPORTS / "open-webui-home-agents-offline-apply.json")
     resources = _load_json(REPORTS / "open-webui-home-resources-export.json")
@@ -280,6 +282,10 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "git_head": git_head,
             "live_auth_required_pending": live.get("auth_required_checks_pending") or [],
             "live_optional_pending": live.get("optional_checks_pending") or [],
+            "access_audit_generated_at_unix": access_audit.get("generated_at_unix") or _mtime(access_audit_path),
+            "access_audit_git_head": access_audit.get("git_head") or "unknown",
+            "access_bind_generated_at_unix": access_bind.get("generated_at_unix") or _mtime(access_bind_path),
+            "access_bind_git_head": access_bind.get("git_head") or "unknown",
             "model_count": model_apply.get("model_count"),
             "resource_counts": resource_counts.get("counts"),
             "resource_import_ready": resource_import.get("ready"),

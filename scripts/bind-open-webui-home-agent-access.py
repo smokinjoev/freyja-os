@@ -100,6 +100,13 @@ def snapshot_open_webui_database(container: str, target_dir: Path) -> Path | Non
     return target_dir / "webui.db" if copied_main else None
 
 
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
 def plan(conn: sqlite3.Connection) -> dict[str, Any]:
     conn.row_factory = sqlite3.Row
     _require_schema(conn)
@@ -143,6 +150,8 @@ def plan(conn: sqlite3.Connection) -> dict[str, Any]:
 
     return {
         "report_type": "open-webui-home-agent-access-bind",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "missing_users": missing_users,
@@ -221,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
         if not db.exists():
             report = {
                 "report_type": "open-webui-home-agent-access-bind",
+                "generated_at_unix": int(time.time()),
+                "git_head": _git_head(),
                 "secrets_included": False,
                 "private_content_included": False,
                 "mode": "apply" if args.apply else "dry-run",

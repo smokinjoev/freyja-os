@@ -90,6 +90,8 @@ def test_access_audit_reports_embedded_groups_and_pending_open_webui_accounts(tm
         conn.close()
 
     assert report["ok"] is True
+    assert isinstance(report["generated_at_unix"], int)
+    assert report["git_head"]
     assert report["user_count"] == 0
     assert report["group_count"] == 0
     assert report["pending"] == ["open_webui_users_missing", "open_webui_groups_missing"]

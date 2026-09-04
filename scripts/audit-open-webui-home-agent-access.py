@@ -4,10 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path("/app/backend/data/webui.db")
 EXPECTED = {
     "agent/freyja": {"groups": {"beth", "joe"}, "name": "Freyja"},
@@ -41,6 +44,13 @@ def _load_meta(raw: str | None) -> dict[str, Any]:
         return {}
     parsed = json.loads(raw)
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _git_head() -> str | None:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
 
 
 def audit(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -93,6 +103,8 @@ def audit(conn: sqlite3.Connection) -> dict[str, Any]:
 
     return {
         "report_type": "open-webui-home-agent-access-audit",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
         "secrets_included": False,
         "private_content_included": False,
         "db": str(DEFAULT_DB),
