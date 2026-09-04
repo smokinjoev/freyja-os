@@ -23,10 +23,11 @@ def test_secret_safety_audit_scans_current_home_agent_artifacts() -> None:
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
     assert report["ok"] is True
-    assert report["artifact_count"] == 57
+    assert report["artifact_count"] == 58
     assert report["missing_artifacts"] == []
     assert report["secret_pattern_findings"] == []
     assert report["json_flag_failures"] == []
+    assert "certification/reports/open-webui-home-agent-readiness-summary.md" in _module().TEXT_ARTIFACTS
 
 
 def test_secret_safety_text_scanner_detects_key_material(tmp_path: Path) -> None:
