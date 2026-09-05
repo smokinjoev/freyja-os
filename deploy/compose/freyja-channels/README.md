@@ -21,6 +21,9 @@ OPEN_WEBUI_API_KEY_FILE=/run/secrets/open_webui_api_key
 ```
 
 Do not put bot tokens, phone numbers, or API keys in source control.
+The containers run as `FREYJA_CHANNELS_UID:FREYJA_CHANNELS_GID` so
+`FREYJA_CHANNEL_STATE_DIR` can persist dry-run reports, thread mappings, and
+audit records.
 
 ## Telegram Pilot
 
@@ -43,6 +46,9 @@ docker compose --env-file deploy/compose/freyja-channels/.env \
   --profile operator run --rm telegram-dry-run
 ```
 
+The dry-run report is written to `/state/telegram-dry-run.json`, backed by
+`data/freyja-channels` by default.
+
 Enable long polling only after dry-run readiness is true:
 
 ```bash
@@ -57,11 +63,14 @@ Signal uses the existing `signal-cli-rest-api` pathway. Configure it only after
 registration/linking is complete:
 
 - `SIGNAL_REST_API_URL`
+- `SIGNAL_PRIVATE_NETWORK`, default `freyja-signal-atlas_signal-private`
 - `SIGNAL_ACCOUNT_NUMBER`
 - `SIGNAL_ALLOWED_SENDERS`
 - `SIGNAL_IDENTITY_MAP`, for example `+15555550100:beth`
 
 An empty allowlist is deny-all.
+The Signal services join the existing `freyja-signal-atlas_signal-private`
+network so `http://signal-api:8080` remains private.
 
 Validate without sending:
 
@@ -70,6 +79,9 @@ docker compose --env-file deploy/compose/freyja-channels/.env \
   -f deploy/compose/freyja-channels/compose.yaml \
   --profile operator run --rm signal-dry-run
 ```
+
+The dry-run report is written to `/state/signal-dry-run.json`, backed by
+`data/freyja-channels` by default.
 
 Enable Signal receive/send only after dry-run readiness is true:
 
@@ -81,6 +93,6 @@ docker compose --env-file deploy/compose/freyja-channels/.env \
 
 ## Persistence and Audit
 
-The `freyja-channel-state` volume stores thread mappings and audit records. The
-service hashes senders in state and audit data and does not log raw sender IDs
-or message bodies.
+The `data/freyja-channels` state directory stores thread mappings and audit
+records. The service hashes senders in state and audit data and does not log raw
+sender IDs or message bodies.

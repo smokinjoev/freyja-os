@@ -304,7 +304,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_next_actions"])
     assert bundle["evidence_summary"]["signal_pilot_ready"] is False
     assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_pilot_missing_configuration"]
-    assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
+    assert not any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
+    assert any("SIGNAL_ACCOUNT_NUMBER" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
     assert isinstance(bundle["evidence_summary"]["signal_pilot_generated_at_unix"], int)
     assert bundle["evidence_summary"]["signal_pilot_git_head"]
     assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is False

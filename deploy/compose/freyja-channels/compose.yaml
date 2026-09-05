@@ -7,6 +7,7 @@ services:
     build:
       context: ../../..
       dockerfile: deploy/docker/freyja-channels.Dockerfile
+    user: "${FREYJA_CHANNELS_UID:-1000}:${FREYJA_CHANNELS_GID:-1000}"
     restart: unless-stopped
     environment:
       OPEN_WEBUI_URL: ${OPEN_WEBUI_URL:-http://100.119.235.114:3001}
@@ -23,8 +24,10 @@ services:
       - scripts/run-freyja-channels-telegram-pilot.py
       - --state-dir
       - /state
+      - --output
+      - /state/telegram-pilot.json
     volumes:
-      - freyja-channel-state:/state
+      - ${FREYJA_CHANNEL_STATE_DIR:-../../../data/freyja-channels}:/state
     secrets:
       - open_webui_api_key
     networks:
@@ -41,6 +44,7 @@ services:
     build:
       context: ../../..
       dockerfile: deploy/docker/freyja-channels.Dockerfile
+    user: "${FREYJA_CHANNELS_UID:-1000}:${FREYJA_CHANNELS_GID:-1000}"
     environment:
       OPEN_WEBUI_URL: ${OPEN_WEBUI_URL:-http://100.119.235.114:3001}
       OPEN_WEBUI_API_KEY: ${OPEN_WEBUI_API_KEY:-}
@@ -56,8 +60,10 @@ services:
       - --dry-run
       - --state-dir
       - /state
+      - --output
+      - /state/telegram-dry-run.json
     volumes:
-      - freyja-channel-state:/state
+      - ${FREYJA_CHANNEL_STATE_DIR:-../../../data/freyja-channels}:/state
     secrets:
       - open_webui_api_key
     networks:
@@ -74,6 +80,7 @@ services:
     build:
       context: ../../..
       dockerfile: deploy/docker/freyja-channels.Dockerfile
+    user: "${FREYJA_CHANNELS_UID:-1000}:${FREYJA_CHANNELS_GID:-1000}"
     restart: unless-stopped
     environment:
       OPEN_WEBUI_URL: ${OPEN_WEBUI_URL:-http://100.119.235.114:3001}
@@ -90,11 +97,14 @@ services:
       - scripts/run-freyja-channels-signal-pilot.py
       - --state-dir
       - /state
+      - --output
+      - /state/signal-pilot.json
     volumes:
-      - freyja-channel-state:/state
+      - ${FREYJA_CHANNEL_STATE_DIR:-../../../data/freyja-channels}:/state
     secrets:
       - open_webui_api_key
     networks:
+      - signal-private
       - atlas-egress
     read_only: true
     tmpfs:
@@ -108,6 +118,7 @@ services:
     build:
       context: ../../..
       dockerfile: deploy/docker/freyja-channels.Dockerfile
+    user: "${FREYJA_CHANNELS_UID:-1000}:${FREYJA_CHANNELS_GID:-1000}"
     environment:
       OPEN_WEBUI_URL: ${OPEN_WEBUI_URL:-http://100.119.235.114:3001}
       OPEN_WEBUI_API_KEY: ${OPEN_WEBUI_API_KEY:-}
@@ -123,11 +134,14 @@ services:
       - --dry-run
       - --state-dir
       - /state
+      - --output
+      - /state/signal-dry-run.json
     volumes:
-      - freyja-channel-state:/state
+      - ${FREYJA_CHANNEL_STATE_DIR:-../../../data/freyja-channels}:/state
     secrets:
       - open_webui_api_key
     networks:
+      - signal-private
       - atlas-egress
     read_only: true
     tmpfs:
@@ -136,10 +150,10 @@ services:
       - no-new-privileges:true
 
 networks:
+  signal-private:
+    external: true
+    name: ${SIGNAL_PRIVATE_NETWORK:-freyja-signal-atlas_signal-private}
   atlas-egress:
-
-volumes:
-  freyja-channel-state:
 
 secrets:
   open_webui_api_key:

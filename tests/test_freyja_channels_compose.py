@@ -36,6 +36,13 @@ def test_freyja_channels_compose_uses_profiles_and_no_published_ports() -> None:
     assert services["telegram-dry-run"]["profiles"] == ["operator"]
     assert services["signal-dry-run"]["profiles"] == ["operator"]
     assert all("ports" not in service for service in services.values())
+    assert all(service["user"] == "${FREYJA_CHANNELS_UID:-1000}:${FREYJA_CHANNELS_GID:-1000}" for service in services.values())
+    assert "signal-private" not in services["telegram-pilot"]["networks"]
+    assert "signal-private" in services["signal-pilot"]["networks"]
+    assert _compose()["networks"]["signal-private"] == {
+        "external": True,
+        "name": "${SIGNAL_PRIVATE_NETWORK:-freyja-signal-atlas_signal-private}",
+    }
     assert compose["secrets"]["open_webui_api_key"]["file"] == "${OPEN_WEBUI_API_KEY_HOST_FILE:-/home/joe/.freyja/open-webui-api-key}"
 
 
@@ -44,11 +51,15 @@ def test_freyja_channels_compose_defaults_to_key_file_and_deny_all_allowlists() 
 
     assert values["OPEN_WEBUI_API_KEY"] == ""
     assert values["OPEN_WEBUI_API_KEY_FILE"] == "/run/secrets/open_webui_api_key"
+    assert values["FREYJA_CHANNELS_UID"] == "1000"
+    assert values["FREYJA_CHANNELS_GID"] == "1000"
+    assert values["FREYJA_CHANNEL_STATE_DIR"] == "../../../data/freyja-channels"
     assert values["TELEGRAM_ENABLED"] == "false"
     assert values["TELEGRAM_ALLOWED_USER_IDS"] == ""
     assert values["TELEGRAM_IDENTITY_MAP"] == ""
     assert values["TELEGRAM_MAX_ATTACHMENT_BYTES"] == "8388608"
     assert values["SIGNAL_ENABLED"] == "false"
+    assert values["SIGNAL_PRIVATE_NETWORK"] == "freyja-signal-atlas_signal-private"
     assert values["SIGNAL_ALLOWED_SENDERS"] == ""
     assert values["SIGNAL_IDENTITY_MAP"] == ""
 
@@ -60,6 +71,7 @@ def test_freyja_channels_compose_defaults_to_key_file_and_deny_all_allowlists() 
     assert telegram_env["TELEGRAM_ALLOWED_USER_IDS"] == "${TELEGRAM_ALLOWED_USER_IDS:-}"
     assert telegram_env["TELEGRAM_MAX_ATTACHMENT_BYTES"] == "${TELEGRAM_MAX_ATTACHMENT_BYTES:-8388608}"
     assert signal_env["SIGNAL_ALLOWED_SENDERS"] == "${SIGNAL_ALLOWED_SENDERS:-}"
+    assert compose["services"]["telegram-pilot"]["volumes"] == ["${FREYJA_CHANNEL_STATE_DIR:-../../../data/freyja-channels}:/state"]
 
 
 def test_freyja_channels_compose_runs_channel_scripts_directly() -> None:
@@ -67,8 +79,10 @@ def test_freyja_channels_compose_runs_channel_scripts_directly() -> None:
 
     assert "scripts/run-freyja-channels-telegram-pilot.py" in compose["services"]["telegram-pilot"]["command"]
     assert "--dry-run" in compose["services"]["telegram-dry-run"]["command"]
+    assert "/state/telegram-dry-run.json" in compose["services"]["telegram-dry-run"]["command"]
     assert "scripts/run-freyja-channels-signal-pilot.py" in compose["services"]["signal-pilot"]["command"]
     assert "--dry-run" in compose["services"]["signal-dry-run"]["command"]
+    assert "/state/signal-dry-run.json" in compose["services"]["signal-dry-run"]["command"]
     assert "COPY scripts/run-freyja-channels-telegram-pilot.py" in DOCKERFILE.read_text(encoding="utf-8")
     assert "COPY scripts/run-freyja-channels-signal-pilot.py" in DOCKERFILE.read_text(encoding="utf-8")
 
