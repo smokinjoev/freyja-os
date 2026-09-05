@@ -346,6 +346,14 @@ The export contains:
 - Atlas-side `/open-webui-tools` policy gateway for Open WebUI tool calls.
 - Secret-free `/open-webui-tools` OpenAPI schema export for Open WebUI tool import.
 
+Iris remote capability contract:
+
+- Read-only remote actions: `calendar.read`, `reminders.read`.
+- Approval-required remote actions: `calendar.create`, `reminders.create`, `imessage.send.approved`, `shortcuts.run`.
+- HomePod-related flows must enter through an approved Apple Shortcut; there is no separate direct HomePod control path.
+- Iris Apple actions require an active macOS user session and are restricted to Tailnet or Atlas-mediated access.
+- Children receive no Iris Apple operations.
+
 Current live Open WebUI resource tables are empty:
 
 ```text

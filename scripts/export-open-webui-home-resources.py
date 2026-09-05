@@ -79,6 +79,7 @@ def build_export(source: dict[str, Any] | None = None) -> dict[str, Any]:
                         "children_allowed_operations": item.get("children_allowed_operations") or [],
                         "host": item.get("host"),
                         "base_url": item.get("base_url"),
+                        "remote_capabilities": item.get("remote_capabilities") or {},
                         "openapi_schema_report": "certification/reports/open-webui-tools-openapi.json"
                         if item.get("boundary") == "openapi"
                         else None,
@@ -126,6 +127,17 @@ def validate_export(payload: dict[str, Any]) -> list[str]:
     iris = tools.get("iris_apple", {})
     if iris.get("boundary") != "mcp" or iris.get("meta", {}).get("freyja", {}).get("host") != "iris":
         errors.append("Iris tool boundary must be MCP on Iris")
+    iris_remote = iris.get("meta", {}).get("freyja", {}).get("remote_capabilities") or {}
+    if set(iris_remote.get("read_only") or []) != {"calendar.read", "reminders.read"}:
+        errors.append("Iris read-only remote capabilities must be Calendar and Reminders reads")
+    if not {"calendar.create", "reminders.create", "imessage.send.approved", "shortcuts.run"} <= set(
+        iris_remote.get("approved_writes") or []
+    ):
+        errors.append("Iris approved remote writes must include Calendar, Reminders, iMessage, and Shortcuts")
+    if iris_remote.get("homepod_path") != "shortcuts.run":
+        errors.append("Iris HomePod path must remain Shortcuts-based")
+    if iris_remote.get("requires_active_macos_user_session") is not True:
+        errors.append("Iris remote actions must require an active macOS user session")
     if tools.get("freyja_home_memory", {}).get("boundary") != "openapi":
         errors.append("home-memory tool boundary must be OpenAPI")
     if payload.get("native_memory", {}).get("mode") != "per_user":

@@ -66,6 +66,12 @@ resources:
       boundary: mcp
       host: iris
       operations: [calendar.read, calendar.create, reminders.read, reminders.create, imessage.send.approved, shortcuts.run]
+      remote_capabilities:
+        read_only: [calendar.read, reminders.read]
+        approved_writes: [calendar.create, reminders.create, imessage.send.approved, shortcuts.run]
+        homepod_path: shortcuts.run
+        requires_active_macos_user_session: true
+        remote_endpoint_policy: tailnet_or_atlas_only
       allowed_agents: [freyja, cloyd]
       confirmation_required: [calendar.create, reminders.create, imessage.send.approved, shortcuts.run]
       destructive_default: deny

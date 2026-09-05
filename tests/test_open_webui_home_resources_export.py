@@ -50,6 +50,17 @@ def test_tool_boundaries_are_narrow_and_children_are_not_admins() -> None:
     assert tools["iris_apple"]["boundary"] == "mcp"
     assert tools["iris_apple"]["meta"]["freyja"]["host"] == "iris"
     assert tools["iris_apple"]["meta"]["freyja"]["children_allowed_operations"] == []
+    iris_remote = tools["iris_apple"]["meta"]["freyja"]["remote_capabilities"]
+    assert iris_remote["read_only"] == ["calendar.read", "reminders.read"]
+    assert iris_remote["approved_writes"] == [
+        "calendar.create",
+        "reminders.create",
+        "imessage.send.approved",
+        "shortcuts.run",
+    ]
+    assert iris_remote["homepod_path"] == "shortcuts.run"
+    assert iris_remote["requires_active_macos_user_session"] is True
+    assert iris_remote["remote_endpoint_policy"] == "tailnet_or_atlas_only"
     assert tools["home_assistant"]["meta"]["freyja"]["confirmation_required"] == ["home.device_action"]
     assert tools["home_assistant"]["meta"]["freyja"]["openapi_schema_report"] == "certification/reports/open-webui-tools-openapi.json"
     assert tools["infrastructure_health"]["meta"]["freyja"]["children_allowed_operations"] == []
