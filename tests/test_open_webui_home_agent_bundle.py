@@ -128,6 +128,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["channels_env_example"] == "deploy/compose/freyja-channels/.env.example"
     assert bundle["artifacts"]["channels_runbook"] == "deploy/compose/freyja-channels/README.md"
     assert bundle["artifacts"]["channels_dockerfile"] == "deploy/docker/freyja-channels.Dockerfile"
+    assert bundle["artifacts"]["channels_atlas_readiness"] == "certification/reports/freyja-channels-readiness-atlas.json"
     assert bundle["artifacts"]["evidence_refresh"] == "certification/reports/open-webui-home-agent-evidence-refresh.json"
     assert bundle["artifacts"]["proactive_dry_run"] == "certification/reports/freyja-proactive-dry-run.json"
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"

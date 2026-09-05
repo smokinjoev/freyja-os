@@ -64,6 +64,7 @@ JSON_REPORTS = (
     "certification/reports/open-webui-home-resources-offline-dry-run.json",
     "certification/reports/open-webui-model-proxy-catalog.json",
     "certification/reports/freyja-channels-readiness.json",
+    "certification/reports/freyja-channels-readiness-atlas.json",
     "certification/reports/freyja-channels-telegram-pilot.json",
     "certification/reports/freyja-channels-signal-pilot.json",
     "certification/reports/freyja-proactive-readiness.json",

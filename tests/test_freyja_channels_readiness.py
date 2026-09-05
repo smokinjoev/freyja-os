@@ -113,6 +113,30 @@ def test_channels_readiness_reports_counts_not_secret_values(monkeypatch) -> Non
     assert "+15550009" not in serialized
 
 
+def test_channels_readiness_accepts_open_webui_api_key_file(tmp_path: Path, monkeypatch) -> None:
+    key_file = tmp_path / "open-webui.key"
+    key_file.write_text("secret-open-webui-key", encoding="utf-8")
+    monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
+    monkeypatch.setenv("OPEN_WEBUI_API_KEY_FILE", str(key_file))
+    monkeypatch.delenv("TELEGRAM_ALLOWED_USER_IDS", raising=False)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_IDENTITY_MAP", raising=False)
+    monkeypatch.delenv("SIGNAL_ALLOWED_SENDERS", raising=False)
+    monkeypatch.delenv("SIGNAL_ACCOUNT_NUMBER", raising=False)
+    monkeypatch.delenv("SIGNAL_REST_API_URL", raising=False)
+    monkeypatch.delenv("SIGNAL_IDENTITY_MAP", raising=False)
+
+    report = _module().build_report()
+    serialized = json.dumps(report)
+
+    assert report["open_webui_client"]["api_key_configured"] is True
+    assert "OPEN_WEBUI_API_KEY" not in report["telegram"]["missing_configuration"]
+    assert "OPEN_WEBUI_API_KEY" not in report["signal"]["missing_configuration"]
+    assert not any("OPEN_WEBUI_API_KEY" in action for action in report["telegram"]["next_actions"])
+    assert not any("OPEN_WEBUI_API_KEY" in action for action in report["signal"]["next_actions"])
+    assert "secret-open-webui-key" not in serialized
+
+
 def test_channels_readiness_reports_incomplete_identity_map_without_sender_values(monkeypatch) -> None:
     monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "1001,1002")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "secret-token-value")

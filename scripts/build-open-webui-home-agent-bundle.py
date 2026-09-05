@@ -571,6 +571,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "channels_env_example": "deploy/compose/freyja-channels/.env.example",
             "channels_runbook": "deploy/compose/freyja-channels/README.md",
             "channels_dockerfile": "deploy/docker/freyja-channels.Dockerfile",
+            "channels_atlas_readiness": "certification/reports/freyja-channels-readiness-atlas.json",
             "telegram_pilot": "certification/reports/freyja-channels-telegram-pilot.json",
             "signal_pilot": "certification/reports/freyja-channels-signal-pilot.json",
             "proactive_readiness": "certification/reports/freyja-proactive-readiness.json",

@@ -58,6 +58,12 @@ def _missing_channel_configuration(*, allowlist_env: str, allowlist_count: int, 
     return missing
 
 
+def _remove_open_webui_key_if_configured(missing: list[str], *, configured: bool) -> list[str]:
+    if not configured:
+        return missing
+    return [item for item in missing if item != "OPEN_WEBUI_API_KEY"]
+
+
 def _channel_next_actions(channel: str, missing: list[str], *, ready: bool) -> list[str]:
     if ready:
         return [f"Run the {channel} live round-trip pilot and archive the generated readiness report."]
@@ -114,11 +120,13 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
         allowlist_count=telegram_allowed,
         transport_envs=["TELEGRAM_BOT_TOKEN", "TELEGRAM_IDENTITY_MAP", "OPEN_WEBUI_API_KEY"],
     )
+    telegram_missing = _remove_open_webui_key_if_configured(telegram_missing, configured=open_webui_client.configured)
     signal_missing = _missing_channel_configuration(
         allowlist_env=str(signal.get("sender_allowlist_env") or "SIGNAL_ALLOWED_SENDERS"),
         allowlist_count=signal_allowed,
         transport_envs=["SIGNAL_ACCOUNT_NUMBER", "SIGNAL_IDENTITY_MAP", "OPEN_WEBUI_API_KEY"],
     )
+    signal_missing = _remove_open_webui_key_if_configured(signal_missing, configured=open_webui_client.configured)
     if not os.environ.get("SIGNAL_REST_API_URL", "").strip() and not signal_transport.configured:
         signal_missing.append("SIGNAL_REST_API_URL")
     if telegram_allowlist and not telegram_allowlist <= set(telegram_identities):
