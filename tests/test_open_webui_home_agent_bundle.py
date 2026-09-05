@@ -155,6 +155,27 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["model_import_ok"] is True
     assert bundle["evidence_summary"]["model_import_validation_errors"] == []
     assert bundle["evidence_summary"]["model_import_record_count"] == 5
+    agent_policy = bundle["evidence_summary"]["agent_policy_summary"]
+    assert agent_policy["agent_ids"] == ["agent-44", "benedict", "cloyd", "freyja", "jenna"]
+    assert agent_policy["runtime_model_ids"] == [
+        "agent/agent-47",
+        "agent/benedict",
+        "agent/cloyd-gibbler",
+        "agent/freyja",
+        "agent/jennacide",
+    ]
+    assert agent_policy["benedict_access_groups"] == ["beth"]
+    assert agent_policy["benedict_cloud_fallback"] == "forbidden"
+    assert agent_policy["benedict_permitted_knowledge"] == ["personal:beth", "restricted:benedict"]
+    assert agent_policy["benedict_confirm_tools"] == []
+    assert "admin" in agent_policy["child_agents"]["agent-44"]["deny"]
+    assert "messaging.send" in agent_policy["child_agents"]["agent-44"]["deny"]
+    assert "home.device_action" in agent_policy["child_agents"]["agent-44"]["deny"]
+    assert agent_policy["child_agents"]["agent-44"]["confirm"] == []
+    assert "admin" in agent_policy["child_agents"]["jenna"]["deny"]
+    assert "messaging.send" in agent_policy["child_agents"]["jenna"]["deny"]
+    assert "home.device_action" in agent_policy["child_agents"]["jenna"]["deny"]
+    assert agent_policy["child_agents"]["jenna"]["confirm"] == []
     assert isinstance(bundle["evidence_summary"]["model_import_generated_at_unix"], int)
     assert bundle["evidence_summary"]["model_import_git_head"]
     assert isinstance(bundle["evidence_summary"]["model_apply_generated_at_unix"], int)

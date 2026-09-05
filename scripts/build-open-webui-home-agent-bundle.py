@@ -143,6 +143,27 @@ def _required_next_actions(report: dict[str, Any]) -> list[str]:
     return _dedupe(actions)
 
 
+def _agent_policy_summary(model_import: dict[str, Any]) -> dict[str, Any]:
+    records = model_import.get("records") or []
+    by_agent = {record.get("freyja", {}).get("agent_id"): record for record in records}
+    benedict = by_agent.get("benedict", {})
+    agent_44 = by_agent.get("agent-44", {})
+    jenna = by_agent.get("jenna", {})
+    benedict_freyja = benedict.get("freyja") or {}
+    return {
+        "agent_ids": sorted(str(record.get("freyja", {}).get("agent_id")) for record in records if record.get("freyja", {}).get("agent_id")),
+        "runtime_model_ids": sorted(str(record.get("id")) for record in records if record.get("id")),
+        "benedict_access_groups": ((benedict.get("access_control") or {}).get("read") or {}).get("group_ids") or [],
+        "benedict_cloud_fallback": (benedict_freyja.get("memory_policy") or {}).get("cloud_fallback"),
+        "benedict_permitted_knowledge": benedict_freyja.get("permitted_knowledge") or [],
+        "benedict_confirm_tools": (benedict_freyja.get("tools") or {}).get("confirm") or [],
+        "child_agents": {
+            "agent-44": (agent_44.get("freyja") or {}).get("tools") or {},
+            "jenna": (jenna.get("freyja") or {}).get("tools") or {},
+        },
+    }
+
+
 def _channel_gate_next_actions(gate_id: str, channels: dict[str, Any]) -> list[str]:
     if gate_id == "telegram_pilot":
         channel = channels.get("telegram") if isinstance(channels.get("telegram"), dict) else {}
@@ -496,6 +517,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "model_import_ok": model_import.get("ok"),
             "model_import_validation_errors": model_import.get("validation_errors") or [],
             "model_import_record_count": len(model_import.get("records") or []),
+            "agent_policy_summary": _agent_policy_summary(model_import),
             "model_import_generated_at_unix": model_import.get("generated_at_unix") or _mtime(model_import_path),
             "model_import_git_head": model_import.get("git_head") or "unknown",
             "model_count": model_apply.get("model_count") or len(model_apply.get("model_ids") or []),
