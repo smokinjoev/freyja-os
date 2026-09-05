@@ -67,6 +67,39 @@ def test_tool_boundaries_are_narrow_and_children_are_not_admins() -> None:
     assert all(tool["meta"]["freyja"]["destructive_default"] == "deny" for tool in tools.values())
 
 
+def test_export_validation_rejects_unsafe_child_tool_access() -> None:
+    module = _module()
+    payload = module.build_export()
+    weather = next(tool for tool in payload["tools"] if tool["id"] == "weather")
+    weather["meta"]["freyja"]["children_allowed_operations"] = ["weather.read", "infrastructure.health"]
+
+    errors = module.validate_export(payload)
+
+    assert "weather exposes unsafe child operations: ['infrastructure.health']" in errors
+
+
+def test_export_validation_rejects_child_operations_outside_tool_operations() -> None:
+    module = _module()
+    payload = module.build_export()
+    weather = next(tool for tool in payload["tools"] if tool["id"] == "weather")
+    weather["meta"]["freyja"]["children_allowed_operations"] = ["weather.read", "pdf.analyze"]
+
+    errors = module.validate_export(payload)
+
+    assert "weather children_allowed_operations must be a subset of operations" in errors
+
+
+def test_export_validation_rejects_child_agents_without_safe_operations() -> None:
+    module = _module()
+    payload = module.build_export()
+    weather = next(tool for tool in payload["tools"] if tool["id"] == "weather")
+    weather["meta"]["freyja"]["children_allowed_operations"] = []
+
+    errors = module.validate_export(payload)
+
+    assert "weather allows child agents but grants no child-safe operations" in errors
+
+
 def test_exporter_writes_reviewable_payload(tmp_path: Path, capsys) -> None:
     output = tmp_path / "resources.json"
     assert _module().main(["--output", str(output)]) == 0

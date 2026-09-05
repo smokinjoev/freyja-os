@@ -14,6 +14,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = REPO_ROOT / "config" / "open-webui-home-resources.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-resources-export.json"
+CHILD_AGENT_IDS = {"agent-44", "jenna"}
+CHILD_SAFE_OPERATIONS = {"search", "recent-events", "pdf.analyze", "image.analyze", "weather.read"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -122,8 +124,17 @@ def validate_export(payload: dict[str, Any]) -> list[str]:
         errors.append("Benedict restricted Knowledge must exclude other agents")
     for tool in tools.values():
         meta = tool.get("meta", {}).get("freyja", {})
+        operations = set(tool.get("operations") or [])
+        child_operations = set(meta.get("children_allowed_operations") or [])
         if meta.get("destructive_default") != "deny":
             errors.append(f"{tool['id']} destructive_default must be deny")
+        if not child_operations <= operations:
+            errors.append(f"{tool['id']} children_allowed_operations must be a subset of operations")
+        unsafe_child_operations = child_operations - CHILD_SAFE_OPERATIONS
+        if unsafe_child_operations:
+            errors.append(f"{tool['id']} exposes unsafe child operations: {sorted(unsafe_child_operations)}")
+        if CHILD_AGENT_IDS & set(meta.get("allowed_agents") or []) and not child_operations:
+            errors.append(f"{tool['id']} allows child agents but grants no child-safe operations")
     iris = tools.get("iris_apple", {})
     if iris.get("boundary") != "mcp" or iris.get("meta", {}).get("freyja", {}).get("host") != "iris":
         errors.append("Iris tool boundary must be MCP on Iris")
