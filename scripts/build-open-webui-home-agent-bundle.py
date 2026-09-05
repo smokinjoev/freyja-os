@@ -668,6 +668,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "inventory_generated_at_unix": inventory.get("generated_at_unix") or _mtime(inventory_path),
             "inventory_git_head": inventory.get("git_head") or "unknown",
             "post_auth_activation_ready": activation.get("ready"),
+            "post_auth_activation_next_actions": _canonical_actions(activation.get("next_actions") or []),
+            "post_auth_activation_access_missing_users": ((activation.get("plan") or {}).get("access") or {}).get("missing_users") or [],
+            "post_auth_activation_access_missing_models": ((activation.get("plan") or {}).get("access") or {}).get("missing_models") or [],
+            "post_auth_activation_resource_owner_resolved": ((activation.get("plan") or {}).get("resources") or {}).get("owner_user_id_resolved"),
+            "post_auth_activation_resource_owner_policy": ((activation.get("plan") or {}).get("resources") or {}).get("owner_resolution_policy"),
             "inference_model_profiles": inference.get("model_profiles") or {},
             "inference_policy_checks": {str(check.get("name")): bool(check.get("ok")) for check in inference.get("checks") or []},
             "inference_policy_generated_at_unix": inference.get("generated_at_unix") or _mtime(inference_path),
@@ -735,6 +740,18 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Open WebUI tools OpenAPI ok: `{bundle['tests']['open_webui_tools_openapi_ok']}`",
         f"- Readiness summary: `{evidence['readiness_summary_status']}`",
         f"- Readiness all ready: `{evidence['readiness_summary_all_ready']}`",
+        "",
+        "## Post-Auth Activation",
+        "",
+        f"- Ready: `{evidence['post_auth_activation_ready']}`",
+        f"- Missing users: `{', '.join(evidence['post_auth_activation_access_missing_users'])}`",
+        f"- Missing models: `{', '.join(evidence['post_auth_activation_access_missing_models'])}`",
+        f"- Resource owner resolved: `{evidence['post_auth_activation_resource_owner_resolved']}`",
+        f"- Resource owner policy: `{evidence['post_auth_activation_resource_owner_policy']}`",
+    ]
+    for action in evidence["post_auth_activation_next_actions"]:
+        lines.append(f"- Activation action: {action}")
+    lines += [
         "",
         "## Endpoints",
         "",

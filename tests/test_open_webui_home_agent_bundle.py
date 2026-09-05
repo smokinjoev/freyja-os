@@ -67,6 +67,14 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["tests"]["open_webui_tools_openapi_ok"] is True
     assert "exact_next_action" in bundle
     assert "Open WebUI" in bundle["exact_next_action"]
+    assert bundle["evidence_summary"]["post_auth_activation_next_actions"] == [
+        "Create/sign in Open WebUI users for: beth, jenna, joe, liam.",
+        "Complete first-account onboarding, or pass --owner-user-id when multiple Open WebUI users exist.",
+    ]
+    assert bundle["evidence_summary"]["post_auth_activation_access_missing_users"] == ["beth", "jenna", "joe", "liam"]
+    assert bundle["evidence_summary"]["post_auth_activation_access_missing_models"] == []
+    assert bundle["evidence_summary"]["post_auth_activation_resource_owner_resolved"] is False
+    assert bundle["evidence_summary"]["post_auth_activation_resource_owner_policy"] == "auto_single_user_only"
     assert [gate["gate_id"] for gate in bundle["external_gates"]] == [
         "post_auth_activation",
         "authenticated_chat_smoke",
@@ -335,6 +343,10 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Open WebUI tools gateway ok" in text
     assert "Open WebUI tools OpenAPI ok" in text
     assert "Readiness summary" in text
+    assert "## Post-Auth Activation" in text
+    assert "Missing users: `beth, jenna, joe, liam`" in text
+    assert "Resource owner policy: `auto_single_user_only`" in text
+    assert "Activation action: Complete first-account onboarding" in text
     assert "## Endpoint Ownership" in text
     assert "`atlas_open_webui`" in text
     assert "nexus_required=False" in text
