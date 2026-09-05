@@ -47,6 +47,17 @@ def test_proactive_readiness_blocks_everything_by_default() -> None:
     assert report["all_disabled_by_default"] is True
     assert report["candidate_count"] == 27
     assert report["ready_schedule_ids"] == []
+    assert report["blocked_reason_counts"]["job_disabled"] == 27
+    assert report["blocked_reason_counts"]["dry_run_required"] == 27
+    assert report["enablement_gate"]["chat_stable"] == "required"
+    assert report["enablement_gate"]["recipients_verified"] == "required"
+    assert report["enablement_gate"]["destinations_verified"] == "required"
+    assert report["enablement_gate"]["per_schedule_approval"] == "required"
+    assert report["enablement_gate"]["dry_run_first"] == "required"
+    assert report["prohibitions"]["enable_globally_by_default"] is True
+    assert report["prohibitions"]["message_children_without_parent_policy"] is True
+    assert report["prohibitions"]["run_destructive_tools"] is True
+    assert report["prohibitions"]["infer_unverified_destination"] is True
     assert all("job_disabled" in item["reasons"] for item in report["blocked"])
     assert any("recipient_not_verified" in item["reasons"] for item in report["blocked"])
 

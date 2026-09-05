@@ -64,8 +64,11 @@ class ProactivePlanner:
         return candidates
 
     def readiness(self, *, chat_stable: bool, recipients_verified: set[str], destinations_verified: set[str], approved_schedule_ids: set[str]) -> dict[str, Any]:
+        gate = self.policy.get("enablement_gate") or {}
+        prohibitions = self.policy.get("prohibitions") or {}
         ready: list[str] = []
         blocked: list[dict[str, Any]] = []
+        blocked_reason_counts: dict[str, int] = {}
         for candidate in self.candidates():
             schedule_id = self.schedule_id(candidate)
             reasons = []
@@ -82,6 +85,8 @@ class ProactivePlanner:
             if candidate.dry_run_required:
                 reasons.append("dry_run_required")
             if reasons:
+                for reason in reasons:
+                    blocked_reason_counts[reason] = blocked_reason_counts.get(reason, 0) + 1
                 blocked.append({"schedule_id": schedule_id, "job_id": candidate.job_id, "recipient": candidate.recipient, "destination": candidate.destination, "reasons": reasons})
             else:
                 ready.append(schedule_id)
@@ -93,7 +98,10 @@ class ProactivePlanner:
             "candidate_count": len(ready) + len(blocked),
             "ready_schedule_ids": ready,
             "blocked": blocked,
+            "blocked_reason_counts": dict(sorted(blocked_reason_counts.items())),
             "all_disabled_by_default": all(candidate.status == "disabled" for candidate in self.candidates()),
+            "enablement_gate": {str(key): str(value) for key, value in sorted(gate.items())},
+            "prohibitions": {str(key): bool(value) for key, value in sorted(prohibitions.items())},
             "ok": not ready,
         }
 

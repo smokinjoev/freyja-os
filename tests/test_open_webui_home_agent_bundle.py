@@ -228,7 +228,25 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["whatsapp_ready"] is False
     assert bundle["evidence_summary"]["whatsapp_status"] == "disabled"
     assert bundle["evidence_summary"]["whatsapp_reason"] == "secured_public_webhook_not_approved"
+    assert bundle["evidence_summary"]["proactive_candidate_count"] == 27
+    assert bundle["evidence_summary"]["proactive_ready_schedule_count"] == 0
+    assert bundle["evidence_summary"]["proactive_blocked_reason_counts"]["job_disabled"] == 27
+    assert bundle["evidence_summary"]["proactive_blocked_reason_counts"]["dry_run_required"] == 27
+    assert bundle["evidence_summary"]["proactive_enablement_gate"] == {
+        "chat_stable": "required",
+        "destinations_verified": "required",
+        "dry_run_first": "required",
+        "per_schedule_approval": "required",
+        "recipients_verified": "required",
+    }
+    assert bundle["evidence_summary"]["proactive_prohibitions"] == {
+        "enable_globally_by_default": True,
+        "infer_unverified_destination": True,
+        "message_children_without_parent_policy": True,
+        "run_destructive_tools": True,
+    }
     assert bundle["evidence_summary"]["proactive_dry_run_would_send_count"] == 0
+    assert bundle["evidence_summary"]["proactive_dry_run_all_sends_suppressed"] is True
     assert isinstance(bundle["evidence_summary"]["proactive_readiness_generated_at_unix"], int)
     assert bundle["evidence_summary"]["proactive_readiness_git_head"]
     assert isinstance(bundle["evidence_summary"]["proactive_dry_run_generated_at_unix"], int)

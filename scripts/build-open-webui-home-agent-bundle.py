@@ -8,12 +8,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REPORTS = REPO_ROOT / "certification" / "reports"
 DIAG = REPO_ROOT / "logs" / "open-webui-diagnostics" / "home-agent-20260904T174214Z"
 DEFAULT_JSON = REPORTS / "open-webui-home-agent-deliverable.json"
 DEFAULT_MD = REPORTS / "open-webui-home-agent-deliverable.md"
+PROACTIVE_POLICY = REPO_ROOT / "config" / "freyja-proactive.yaml"
 GATE_COMMANDS = {
     "post_auth_activation": "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
     "authenticated_chat_smoke": "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
@@ -60,6 +63,17 @@ def _load_json(path: Path) -> dict[str, Any]:
     return data
 
 
+def _load_yaml(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"missing": True, "path": str(path)}
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return {"invalid": True, "path": str(path)}
+    if data.get("secrets_included") is not False:
+        raise ValueError(f"policy is not marked secret-free: {path}")
+    return data
+
+
 def _text(path: Path) -> str | None:
     return path.read_text(encoding="utf-8").strip() if path.exists() else None
 
@@ -101,6 +115,18 @@ def _nested_check(report: dict[str, Any], parent: str, child: str) -> dict[str, 
             if nested.get("name") == child:
                 return nested
     return None
+
+
+def _blocked_reason_counts(report: dict[str, Any]) -> dict[str, int]:
+    explicit = report.get("blocked_reason_counts")
+    if isinstance(explicit, dict):
+        return {str(key): int(value) for key, value in sorted(explicit.items())}
+    counts: dict[str, int] = {}
+    for item in report.get("blocked") or []:
+        for reason in item.get("reasons") or []:
+            reason_text = str(reason)
+            counts[reason_text] = counts.get(reason_text, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _channel_gate_next_actions(gate_id: str, channels: dict[str, Any]) -> list[str]:
@@ -187,6 +213,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     signal_pilot = _load_json(REPORTS / "freyja-channels-signal-pilot.json")
     proactive_path = REPORTS / "freyja-proactive-readiness.json"
     proactive = _load_json(REPORTS / "freyja-proactive-readiness.json")
+    proactive_policy = _load_yaml(PROACTIVE_POLICY)
     proactive_dry_run_path = REPORTS / "freyja-proactive-dry-run.json"
     proactive_dry_run = _load_json(REPORTS / "freyja-proactive-dry-run.json")
     freyja41_path = REPORTS / "freyja41-preservation-audit.json"
@@ -509,10 +536,14 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "channel_open_webui_client": channels.get("open_webui_client") or {},
             "proactive_candidate_count": proactive.get("candidate_count"),
             "proactive_ready_schedule_count": len(proactive.get("ready_schedule_ids") or []),
+            "proactive_blocked_reason_counts": _blocked_reason_counts(proactive),
+            "proactive_enablement_gate": proactive.get("enablement_gate") or proactive_policy.get("enablement_gate") or {},
+            "proactive_prohibitions": proactive.get("prohibitions") or proactive_policy.get("prohibitions") or {},
             "proactive_readiness_generated_at_unix": proactive.get("generated_at_unix") or _mtime(proactive_path),
             "proactive_readiness_git_head": proactive.get("git_head") or "unknown",
             "proactive_dry_run_dispatch_count": proactive_dry_run.get("dispatch_count"),
             "proactive_dry_run_would_send_count": proactive_dry_run.get("would_send_count"),
+            "proactive_dry_run_all_sends_suppressed": proactive_dry_run.get("all_sends_suppressed"),
             "proactive_dry_run_generated_at_unix": proactive_dry_run.get("generated_at_unix") or proactive_dry_run.get("timestamp_unix") or _mtime(proactive_dry_run_path),
             "proactive_dry_run_git_head": proactive_dry_run.get("git_head") or "unknown",
             "freyja41_pending": freyja41.get("pending") or [],
