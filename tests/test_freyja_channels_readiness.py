@@ -113,6 +113,29 @@ def test_channels_readiness_reports_counts_not_secret_values(monkeypatch) -> Non
     assert "+15550009" not in serialized
 
 
+def test_channels_readiness_accepts_signal_alias_allowlist(monkeypatch) -> None:
+    monkeypatch.delenv("TELEGRAM_ALLOWED_USER_IDS", raising=False)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_IDENTITY_MAP", raising=False)
+    monkeypatch.setenv("SIGNAL_ALLOWED_SENDERS", "joe=+15550001,beth=+15550002")
+    monkeypatch.setenv("SIGNAL_ACCOUNT_NUMBER", "+15550009")
+    monkeypatch.setenv("SIGNAL_REST_API_URL", "http://signal.local")
+    monkeypatch.delenv("SIGNAL_IDENTITY_MAP", raising=False)
+    monkeypatch.setenv("OPEN_WEBUI_API_KEY", "secret-open-webui-key")
+
+    report = _module().build_report()
+    serialized = json.dumps(report)
+
+    assert report["signal"]["allowlist_count"] == 2
+    assert report["signal"]["identity_map_configured"] is True
+    assert report["signal"]["identity_map_count"] == 2
+    assert report["signal"]["allowlist_identity_map_complete"] is True
+    assert report["signal"]["ready_for_live_round_trip"] is True
+    assert report["signal"]["missing_configuration"] == []
+    assert "+15550001" not in serialized
+    assert "secret-open-webui-key" not in serialized
+
+
 def test_channels_readiness_accepts_open_webui_api_key_file(tmp_path: Path, monkeypatch) -> None:
     key_file = tmp_path / "open-webui.key"
     key_file.write_text("secret-open-webui-key", encoding="utf-8")

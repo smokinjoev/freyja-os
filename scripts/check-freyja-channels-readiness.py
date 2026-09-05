@@ -48,6 +48,30 @@ def _csv_map(name: str) -> dict[str, str]:
     return mapping
 
 
+def _signal_allowed_senders() -> set[str]:
+    senders: set[str] = set()
+    for item in _csv_set("SIGNAL_ALLOWED_SENDERS"):
+        if "=" in item:
+            _, sender = item.split("=", 1)
+            if sender.strip():
+                senders.add(sender.strip())
+        else:
+            senders.add(item)
+    return senders
+
+
+def _signal_identity_map() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for item in _csv_set("SIGNAL_ALLOWED_SENDERS"):
+        if "=" not in item:
+            continue
+        identity, sender = item.split("=", 1)
+        if sender.strip() and identity.strip():
+            mapping[sender.strip()] = identity.strip()
+    mapping.update(_csv_map("SIGNAL_IDENTITY_MAP"))
+    return mapping
+
+
 def _missing_channel_configuration(*, allowlist_env: str, allowlist_count: int, transport_envs: list[str]) -> list[str]:
     missing = []
     if allowlist_count <= 0:
@@ -107,11 +131,11 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
     signal = channels.get("signal") or {}
     whatsapp = channels.get("whatsapp") or {}
     telegram_allowed = _env_count(str(telegram.get("sender_allowlist_env") or "TELEGRAM_ALLOWED_USER_IDS"))
-    signal_allowed = _env_count(str(signal.get("sender_allowlist_env") or "SIGNAL_ALLOWED_SENDERS"))
+    signal_allowlist = _signal_allowed_senders()
+    signal_allowed = len(signal_allowlist)
     telegram_allowlist = _csv_set(str(telegram.get("sender_allowlist_env") or "TELEGRAM_ALLOWED_USER_IDS"))
-    signal_allowlist = _csv_set(str(signal.get("sender_allowlist_env") or "SIGNAL_ALLOWED_SENDERS"))
     telegram_identities = _csv_map("TELEGRAM_IDENTITY_MAP")
-    signal_identities = _csv_map("SIGNAL_IDENTITY_MAP")
+    signal_identities = _signal_identity_map()
     telegram_transport = TelegramPilotConfig.from_env()
     signal_transport = SignalCliRestConfig.from_env()
     open_webui_client = OpenWebUIChatClient()
@@ -126,6 +150,8 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
         allowlist_count=signal_allowed,
         transport_envs=["SIGNAL_ACCOUNT_NUMBER", "SIGNAL_IDENTITY_MAP", "OPEN_WEBUI_API_KEY"],
     )
+    if signal_identities:
+        signal_missing = [item for item in signal_missing if item != "SIGNAL_IDENTITY_MAP"]
     signal_missing = _remove_open_webui_key_if_configured(signal_missing, configured=open_webui_client.configured)
     if not os.environ.get("SIGNAL_REST_API_URL", "").strip() and not signal_transport.configured:
         signal_missing.append("SIGNAL_REST_API_URL")

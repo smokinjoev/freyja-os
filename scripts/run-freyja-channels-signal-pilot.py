@@ -54,6 +54,18 @@ def _csv_set(name: str) -> set[str]:
     return {item.strip() for item in raw.replace(";", ",").split(",") if item.strip()}
 
 
+def _signal_allowed_senders() -> set[str]:
+    senders: set[str] = set()
+    for item in _csv_set("SIGNAL_ALLOWED_SENDERS"):
+        if "=" in item:
+            _, sender = item.split("=", 1)
+            if sender.strip():
+                senders.add(sender.strip())
+        else:
+            senders.add(item)
+    return senders
+
+
 def _csv_map(name: str) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for item in _csv_set(name):
@@ -62,6 +74,18 @@ def _csv_map(name: str) -> dict[str, str]:
         sender, identity = item.split(":", 1)
         if sender.strip() and identity.strip():
             mapping[sender.strip()] = identity.strip()
+    return mapping
+
+
+def _signal_identity_map() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for item in _csv_set("SIGNAL_ALLOWED_SENDERS"):
+        if "=" not in item:
+            continue
+        identity, sender = item.split("=", 1)
+        if sender.strip() and identity.strip():
+            mapping[sender.strip()] = identity.strip()
+    mapping.update(_csv_map("SIGNAL_IDENTITY_MAP"))
     return mapping
 
 
@@ -118,8 +142,8 @@ def _next_actions(missing: list[str], *, ready: bool) -> list[str]:
 def readiness(args: argparse.Namespace) -> dict[str, object]:
     signal_config = SignalCliRestConfig.from_env()
     open_webui = OpenWebUIChatClient()
-    allowlist = _csv_set("SIGNAL_ALLOWED_SENDERS")
-    identities = _csv_map("SIGNAL_IDENTITY_MAP")
+    allowlist = _signal_allowed_senders()
+    identities = _signal_identity_map()
     checks = {
         "signal_account_configured": bool(signal_config.account_number.strip()),
         "signal_rest_api_configured": bool(signal_config.rest_api_url.strip()),
@@ -163,8 +187,8 @@ def run_once(*, service: FreyjaChannels, transport: SignalCliRestTransport) -> d
 
 
 def run_loop(args: argparse.Namespace) -> dict[str, object]:
-    allowlists = {"signal": _csv_set("SIGNAL_ALLOWED_SENDERS")}
-    identities = {"signal": _csv_map("SIGNAL_IDENTITY_MAP")}
+    allowlists = {"signal": _signal_allowed_senders()}
+    identities = {"signal": _signal_identity_map()}
     service = FreyjaChannels(allowlists=allowlists, identity_maps=identities, store=FileChannelStore(args.state_dir), client=OpenWebUIChatClient())
     transport = SignalCliRestTransport()
     totals = {"messages": 0, "handled": 0, "denied_or_client_failed": 0, "failed": 0}
