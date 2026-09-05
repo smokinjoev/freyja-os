@@ -93,6 +93,39 @@ def _git_head() -> str | None:
         return None
 
 
+def _missing_configuration(checks: dict[str, bool]) -> list[str]:
+    missing: list[str] = []
+    if not checks["telegram_bot_token_configured"]:
+        missing.append("TELEGRAM_BOT_TOKEN")
+    if not checks["allowlist_configured"]:
+        missing.append("TELEGRAM_ALLOWED_USER_IDS")
+    if not checks["identity_map_configured"]:
+        missing.append("TELEGRAM_IDENTITY_MAP")
+    elif not checks["allowlist_identity_map_complete"]:
+        missing.append("TELEGRAM_IDENTITY_MAP:missing_allowlist_entries")
+    if not checks["open_webui_api_key_configured"]:
+        missing.append("OPEN_WEBUI_API_KEY")
+    return missing
+
+
+def _next_actions(missing: list[str], *, ready: bool) -> list[str]:
+    if ready:
+        return ["Run without --dry-run, preferably with --once first, and verify the generated round-trip report."]
+    action_map = {
+        "TELEGRAM_BOT_TOKEN": "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
+        "TELEGRAM_ALLOWED_USER_IDS": "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
+        "TELEGRAM_IDENTITY_MAP": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+        "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+        "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+    }
+    actions: list[str] = []
+    for key, action in action_map.items():
+        if key in missing and action not in actions:
+            actions.append(action)
+    actions.append("Rerun scripts/run-freyja-channels-telegram-pilot.py --dry-run and require ready=true before live polling.")
+    return actions
+
+
 def readiness(args: argparse.Namespace) -> dict[str, Any]:
     telegram_config = TelegramPilotConfig.from_env()
     open_webui = OpenWebUIChatClient()
@@ -105,6 +138,8 @@ def readiness(args: argparse.Namespace) -> dict[str, Any]:
         "identity_map_configured": bool(identities),
         "allowlist_identity_map_complete": bool(allowlist) and allowlist <= set(identities),
     }
+    ready = all(checks.values())
+    missing = _missing_configuration(checks)
     return {
         "report_type": "freyja-channels-telegram-pilot",
         "generated_at_unix": int(time.time()),
@@ -112,8 +147,10 @@ def readiness(args: argparse.Namespace) -> dict[str, Any]:
         "mode": "dry-run" if args.dry_run else "run",
         "secrets_included": False,
         "private_content_included": False,
-        "ready": all(checks.values()),
+        "ready": ready,
         "checks": checks,
+        "missing_configuration": missing,
+        "next_actions": _next_actions(missing, ready=ready),
         "state_dir": _display_path(args.state_dir),
         "offset_file": _display_path(args.offset_file or args.state_dir / "telegram.offset"),
     }

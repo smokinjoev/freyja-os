@@ -64,7 +64,20 @@ def test_telegram_pilot_dry_run_fails_closed_without_credentials(tmp_path: Path,
         "open_webui_api_key_configured": False,
         "telegram_bot_token_configured": False,
     }
-    assert "TOKEN" not in str(report)
+    assert report["missing_configuration"] == [
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_ALLOWED_USER_IDS",
+        "TELEGRAM_IDENTITY_MAP",
+        "OPEN_WEBUI_API_KEY",
+    ]
+    assert report["next_actions"] == [
+        "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
+        "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
+        "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+        "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        "Rerun scripts/run-freyja-channels-telegram-pilot.py --dry-run and require ready=true before live polling.",
+    ]
+    assert "secret-token" not in str(report)
 
 
 def test_telegram_pilot_requires_every_allowlisted_sender_to_have_identity(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -81,6 +94,11 @@ def test_telegram_pilot_requires_every_allowlisted_sender_to_have_identity(tmp_p
     assert report["checks"]["allowlist_configured"] is True
     assert report["checks"]["identity_map_configured"] is True
     assert report["checks"]["allowlist_identity_map_complete"] is False
+    assert report["missing_configuration"] == ["TELEGRAM_IDENTITY_MAP:missing_allowlist_entries"]
+    assert report["next_actions"] == [
+        "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+        "Rerun scripts/run-freyja-channels-telegram-pilot.py --dry-run and require ready=true before live polling.",
+    ]
     assert "secret-token" not in str(report)
     assert "secret-key" not in str(report)
 

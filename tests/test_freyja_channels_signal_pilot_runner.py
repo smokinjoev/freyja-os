@@ -63,6 +63,21 @@ def test_signal_pilot_dry_run_fails_closed_without_credentials(tmp_path: Path, m
         "signal_account_configured": False,
         "signal_rest_api_configured": False,
     }
+    assert report["missing_configuration"] == [
+        "SIGNAL_REST_API_URL",
+        "SIGNAL_ACCOUNT_NUMBER",
+        "SIGNAL_ALLOWED_SENDERS",
+        "SIGNAL_IDENTITY_MAP",
+        "OPEN_WEBUI_API_KEY",
+    ]
+    assert report["next_actions"] == [
+        "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+        "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+        "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
+        "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+        "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        "Rerun scripts/run-freyja-channels-signal-pilot.py --dry-run and require ready=true before live receive/send.",
+    ]
 
 
 def test_signal_pilot_requires_every_allowlisted_sender_to_have_identity(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -80,6 +95,11 @@ def test_signal_pilot_requires_every_allowlisted_sender_to_have_identity(tmp_pat
     assert report["checks"]["allowlist_configured"] is True
     assert report["checks"]["identity_map_configured"] is True
     assert report["checks"]["allowlist_identity_map_complete"] is False
+    assert report["missing_configuration"] == ["SIGNAL_IDENTITY_MAP:missing_allowlist_entries"]
+    assert report["next_actions"] == [
+        "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+        "Rerun scripts/run-freyja-channels-signal-pilot.py --dry-run and require ready=true before live receive/send.",
+    ]
     assert "secret-key" not in str(report)
     assert "+15550001002" not in str(report)
 

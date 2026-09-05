@@ -79,6 +79,42 @@ def _git_head() -> str | None:
         return None
 
 
+def _missing_configuration(checks: dict[str, bool]) -> list[str]:
+    missing: list[str] = []
+    if not checks["signal_rest_api_configured"]:
+        missing.append("SIGNAL_REST_API_URL")
+    if not checks["signal_account_configured"]:
+        missing.append("SIGNAL_ACCOUNT_NUMBER")
+    if not checks["allowlist_configured"]:
+        missing.append("SIGNAL_ALLOWED_SENDERS")
+    if not checks["identity_map_configured"]:
+        missing.append("SIGNAL_IDENTITY_MAP")
+    elif not checks["allowlist_identity_map_complete"]:
+        missing.append("SIGNAL_IDENTITY_MAP:missing_allowlist_entries")
+    if not checks["open_webui_api_key_configured"]:
+        missing.append("OPEN_WEBUI_API_KEY")
+    return missing
+
+
+def _next_actions(missing: list[str], *, ready: bool) -> list[str]:
+    if ready:
+        return ["Run without --dry-run, preferably with --once first, and verify the generated round-trip report."]
+    action_map = {
+        "SIGNAL_REST_API_URL": "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+        "SIGNAL_ACCOUNT_NUMBER": "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+        "SIGNAL_ALLOWED_SENDERS": "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
+        "SIGNAL_IDENTITY_MAP": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+        "SIGNAL_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+        "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+    }
+    actions: list[str] = []
+    for key, action in action_map.items():
+        if key in missing and action not in actions:
+            actions.append(action)
+    actions.append("Rerun scripts/run-freyja-channels-signal-pilot.py --dry-run and require ready=true before live receive/send.")
+    return actions
+
+
 def readiness(args: argparse.Namespace) -> dict[str, object]:
     signal_config = SignalCliRestConfig.from_env()
     open_webui = OpenWebUIChatClient()
@@ -92,6 +128,8 @@ def readiness(args: argparse.Namespace) -> dict[str, object]:
         "identity_map_configured": bool(identities),
         "allowlist_identity_map_complete": bool(allowlist) and allowlist <= set(identities),
     }
+    ready = all(checks.values())
+    missing = _missing_configuration(checks)
     return {
         "report_type": "freyja-channels-signal-pilot",
         "generated_at_unix": int(time.time()),
@@ -99,8 +137,10 @@ def readiness(args: argparse.Namespace) -> dict[str, object]:
         "mode": "dry-run" if args.dry_run else "run",
         "secrets_included": False,
         "private_content_included": False,
-        "ready": all(checks.values()),
+        "ready": ready,
         "checks": checks,
+        "missing_configuration": missing,
+        "next_actions": _next_actions(missing, ready=ready),
         "state_dir": _display_path(args.state_dir),
     }
 
