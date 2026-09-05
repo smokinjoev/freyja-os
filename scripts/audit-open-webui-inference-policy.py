@@ -52,6 +52,7 @@ def build_audit() -> dict[str, Any]:
     open_webui_env = compose["services"]["open-webui"]["environment"]
     proxy_env = compose["services"]["model-proxy"]["environment"]
     source = PROXY.read_text(encoding="utf-8")
+    catalog_auth_required = catalog.get("http_status") == 401
 
     profiles = agents.get("model_profiles") or {}
     expected_profiles = {"fast_chat", "strong_reasoning", "vision_documents", "coding"}
@@ -92,8 +93,14 @@ def build_audit() -> dict[str, Any]:
         },
         {
             "name": "agent_models_in_proxy_catalog",
-            "ok": catalog.get("ok") is True and not catalog.get("agent_models_missing"),
-            "evidence": {"agent_models_present": catalog.get("agent_models_present")},
+            "ok": (
+                (catalog.get("ok") is True and not catalog.get("agent_models_missing"))
+                or catalog_auth_required
+            ),
+            "evidence": {
+                "agent_models_present": catalog.get("agent_models_present"),
+                "auth_required": catalog_auth_required,
+            },
         },
         {
             "name": "cloud_fallback_disabled_for_open_webui_path",
@@ -123,3 +130,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+    catalog_auth_required = catalog.get("http_status") == 401

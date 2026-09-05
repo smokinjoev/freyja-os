@@ -183,7 +183,7 @@ def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(t
     assert "Open WebUI Home-Agent Readiness Summary" in markdown
     assert "`post_auth_activation`: pending" in markdown
     assert "Action: Generate an Atlas Open WebUI admin or service-account API key" in markdown
-    assert "Action: Create/sign in to Open WebUI and generate an admin" in markdown
+    assert "Action: Set OPEN_WEBUI_API_KEY outside source control." in markdown
     assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in markdown
 
 

@@ -21,7 +21,7 @@ REQUIRED_ROLLBACK_PHRASES = (
     "git apply .codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch",
     "open-webui-data-volume.tgz",
     "tar -xzf",
-    "http://127.0.0.1:3001/api/version",
+    "http://100.119.235.114:3001/api/version",
 )
 ROLLBACK_STEPS = [
     {
@@ -42,7 +42,7 @@ ROLLBACK_STEPS = [
     },
     {
         "step": "verify_open_webui",
-        "command": "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version",
+        "command": "curl -fsS --max-time 10 http://100.119.235.114:3001/api/version",
     },
 ]
 

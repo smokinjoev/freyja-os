@@ -16,7 +16,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-model-proxy-catalog.json"
 DEFAULT_MANIFEST = REPO_ROOT / "config" / "open-webui-home-agents.yaml"
-DEFAULT_URL = "http://127.0.0.1:3001/openai/v1/models"
+DEFAULT_URL = "http://100.119.235.114:3001/openai/v1/models"
 DEFAULT_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
 DEFAULT_CONTAINER_URL = "http://model-proxy:8080/v1/models"
 AGENT_MODEL_IDS = {

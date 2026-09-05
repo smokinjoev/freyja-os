@@ -17,6 +17,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_AGENTS = REPO_ROOT / "config" / "open-webui-home-agents.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-chat-smoke.json"
+DEFAULT_OPEN_WEBUI_URL = "http://100.119.235.114:3001"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 MODEL_IDS = {
     "freyja": "agent/freyja",
@@ -49,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Authenticated Open WebUI chat smoke test for Freyja home agents."
     )
-    parser.add_argument("--open-webui-url", default=os.environ.get("OPEN_WEBUI_URL", "http://127.0.0.1:3001"))
+    parser.add_argument("--open-webui-url", default=os.environ.get("OPEN_WEBUI_URL", DEFAULT_OPEN_WEBUI_URL))
     parser.add_argument("--open-webui-api-key", default=os.environ.get("OPEN_WEBUI_API_KEY", ""))
     parser.add_argument("--agents", type=Path, default=DEFAULT_AGENTS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
@@ -150,7 +151,7 @@ def pending_next_actions(reason: str) -> tuple[list[str], list[str]]:
         return (
             ["OPEN_WEBUI_API_KEY"],
             [
-                "Create/sign in to Open WebUI and generate an admin or service-account API key.",
+                "Create/sign in to Atlas Open WebUI and generate an admin or service-account API key.",
                 "Set OPEN_WEBUI_API_KEY outside source control.",
                 "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
             ],

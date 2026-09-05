@@ -59,7 +59,7 @@ def test_chat_smoke_missing_api_key_is_pending(tmp_path: Path, monkeypatch, caps
     assert report["reason"] == "OPEN_WEBUI_API_KEY not supplied"
     assert report["missing_configuration"] == ["OPEN_WEBUI_API_KEY"]
     assert report["next_actions"] == [
-        "Create/sign in to Open WebUI and generate an admin or service-account API key.",
+        "Create/sign in to Atlas Open WebUI and generate an admin or service-account API key.",
         "Set OPEN_WEBUI_API_KEY outside source control.",
         "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
     ]
@@ -86,6 +86,7 @@ def test_chat_smoke_nonpositive_timeout_env_uses_default(monkeypatch) -> None:
     args = _module().build_parser().parse_args([])
 
     assert args.timeout == 120.0
+    assert args.open_webui_url == "http://100.119.235.114:3001"
 
 
 def test_chat_smoke_live_report_redacts_auth_and_requires_response(monkeypatch) -> None:

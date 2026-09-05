@@ -37,11 +37,12 @@ PROTECTED_RUNNING_SERVICES = {
     "freyja3-litellm-1",
 }
 DEFAULT_MODEL_PROXY_CONTAINER = "freyja-open-webui-atlas-model-proxy-1"
+DEFAULT_OPEN_WEBUI_URL = "http://100.119.235.114:3001"
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify the Open WebUI home-agent deployment without printing secrets.")
-    parser.add_argument("--open-webui-url", default="http://127.0.0.1:3001")
+    parser.add_argument("--open-webui-url", default=DEFAULT_OPEN_WEBUI_URL)
     parser.add_argument("--freyja-url", default="http://127.0.0.1:8500")
     parser.add_argument("--model-proxy-url", default=os.environ.get("OPEN_WEBUI_MODEL_PROXY_URL", ""))
     parser.add_argument("--model-proxy-container", default=os.environ.get("OPEN_WEBUI_MODEL_PROXY_CONTAINER", DEFAULT_MODEL_PROXY_CONTAINER))

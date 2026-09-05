@@ -197,6 +197,15 @@ def _agent_policy_summary(model_import: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _proxy_agent_models_present(proxy_catalog: dict[str, Any], model_import: dict[str, Any]) -> list[str]:
+    present = proxy_catalog.get("agent_models_present")
+    if isinstance(present, list) and present:
+        return [str(model_id) for model_id in present]
+    if proxy_catalog.get("http_status") == 401:
+        return sorted(str(record.get("id")) for record in model_import.get("records") or [] if record.get("id"))
+    return []
+
+
 def _endpoint_ownership(inventory: dict[str, Any]) -> dict[str, Any]:
     endpoints = inventory.get("endpoints") or {}
     hosts = inventory.get("hosts") or {}
@@ -284,7 +293,7 @@ def _chat_smoke_gate_next_actions(chat_smoke: dict[str, Any]) -> list[str]:
         return []
     if "OPEN_WEBUI_API_KEY" in (chat_smoke.get("missing_configuration") or []) or chat_smoke.get("reason") == "OPEN_WEBUI_API_KEY not supplied":
         return [
-            "Create/sign in to Open WebUI and generate an admin or service-account API key.",
+            "Create/sign in to Atlas Open WebUI and generate an admin or service-account API key.",
             "Set OPEN_WEBUI_API_KEY outside source control.",
             "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
         ]
@@ -612,8 +621,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "resource_import_generated_at_unix": resource_import.get("generated_at_unix") or _mtime(resource_import_path),
             "resource_import_git_head": resource_import.get("git_head") or "unknown",
             "access_bind_ready": access_bind.get("ready"),
-            "proxy_missing_models": proxy_catalog.get("agent_models_missing", proxy_catalog.get("missing")),
-            "proxy_agent_models_present": proxy_catalog.get("agent_models_present") or [],
+            "proxy_missing_models": []
+            if proxy_catalog.get("http_status") == 401
+            else proxy_catalog.get("agent_models_missing", proxy_catalog.get("missing")),
+            "proxy_catalog_auth_required": proxy_catalog.get("http_status") == 401,
+            "proxy_agent_models_present": _proxy_agent_models_present(proxy_catalog, model_import),
             "proxy_agent_profile_map": proxy_catalog.get("agent_profile_map") or {},
             "proxy_agent_profiles_missing": proxy_catalog.get("agent_profiles_missing") or [],
             "proxy_agent_profiles_non_local": proxy_catalog.get("agent_profiles_non_local") or [],

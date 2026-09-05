@@ -109,7 +109,7 @@ def _chat_smoke_next_actions(chat_smoke: dict[str, Any]) -> list[str]:
         return []
     if "OPEN_WEBUI_API_KEY" in (chat_smoke.get("missing_configuration") or []) or chat_smoke.get("reason") == "OPEN_WEBUI_API_KEY not supplied":
         return [
-            "Create/sign in to Open WebUI and generate an admin or service-account API key.",
+            "Create/sign in to Atlas Open WebUI and generate an admin or service-account API key.",
             "Set OPEN_WEBUI_API_KEY outside source control.",
             "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
         ]

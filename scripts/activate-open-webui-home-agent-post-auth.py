@@ -18,6 +18,7 @@ DEFAULT_DB = Path("/app/backend/data/webui.db")
 DEFAULT_RESOURCES = REPO_ROOT / "certification" / "reports" / "open-webui-home-resources-export.json"
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-post-auth-activation.json"
 DEFAULT_OPEN_WEBUI_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
+DEFAULT_OPEN_WEBUI_URL = "http://100.119.235.114:3001"
 
 
 def _load_module(path: Path):
@@ -64,7 +65,7 @@ def _run_live_verifier() -> dict[str, Any]:
             sys.executable,
             str(REPO_ROOT / "scripts" / "open-webui-home-agent-verify.py"),
             "--model-proxy-url",
-            "http://127.0.0.1:3001/openai",
+            f"{DEFAULT_OPEN_WEBUI_URL}/openai",
             "--output",
             str(REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-live.json"),
         ],

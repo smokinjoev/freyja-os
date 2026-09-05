@@ -221,6 +221,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert isinstance(bundle["evidence_summary"]["proxy_catalog_generated_at_unix"], int)
     assert bundle["evidence_summary"]["proxy_catalog_git_head"]
     assert bundle["evidence_summary"]["proxy_missing_models"] == []
+    assert isinstance(bundle["evidence_summary"]["proxy_catalog_auth_required"], bool)
     assert "agent/freyja" in bundle["evidence_summary"]["proxy_agent_models_present"]
     assert bundle["evidence_summary"]["proxy_agent_profiles_missing"] == []
     assert bundle["evidence_summary"]["proxy_agent_profiles_non_local"] == []
@@ -414,7 +415,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "External Gates" in text
     assert "`post_auth_activation`: pending" in text
     assert "Action: Generate an Atlas Open WebUI admin or service-account API key" in text
-    assert "Action: Create/sign in to Open WebUI and generate an admin" in text
+    assert "Action: Set OPEN_WEBUI_API_KEY outside source control." in text
     assert "`telegram_pilot`: pending" in text
     assert "Action: Create or choose the Telegram bot" in text
     assert "Action: Set SIGNAL_REST_API_URL" in text

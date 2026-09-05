@@ -35,7 +35,7 @@ def _runbook(path: Path) -> None:
                 "git apply .codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch",
                 "open-webui-data-volume.tgz",
                 "tar -xzf",
-                "http://127.0.0.1:3001/api/version",
+                "http://100.119.235.114:3001/api/version",
             ]
         ),
         encoding="utf-8",
@@ -75,7 +75,7 @@ def test_backup_rollback_audit_accepts_readable_open_webui_archive(tmp_path: Pat
     assert "-f deploy/compose/open-webui/compose.yaml down" in steps[0]["command"]
     assert "open-webui-data-volume.tgz" in steps[2]["command"]
     assert "-f deploy/compose/open-webui/compose.yaml up -d" in steps[3]["command"]
-    assert steps[-1]["command"] == "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version"
+    assert steps[-1]["command"] == "curl -fsS --max-time 10 http://100.119.235.114:3001/api/version"
     assert report["rollback_documentation"]["compose_file"] == {
         "path": "deploy/compose/open-webui/compose.yaml",
         "exists": True,
