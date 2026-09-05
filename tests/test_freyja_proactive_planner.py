@@ -47,6 +47,13 @@ def test_proactive_readiness_blocks_everything_by_default() -> None:
     assert report["all_disabled_by_default"] is True
     assert report["candidate_count"] == 27
     assert report["ready_schedule_ids"] == []
+    assert report["job_candidate_counts"] == {
+        "calendar_conflict_warning": 6,
+        "reminder_followup": 12,
+        "scheduled_briefing": 6,
+        "system_health_notification": 3,
+    }
+    assert report["blocked_by_job"] == report["job_candidate_counts"]
     assert report["blocked_reason_counts"]["job_disabled"] == 27
     assert report["blocked_reason_counts"]["dry_run_required"] == 27
     assert report["enablement_gate"]["chat_stable"] == "required"

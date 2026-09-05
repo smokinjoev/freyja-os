@@ -303,6 +303,13 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["whatsapp_reason"] == "secured_public_webhook_not_approved"
     assert bundle["evidence_summary"]["proactive_candidate_count"] == 27
     assert bundle["evidence_summary"]["proactive_ready_schedule_count"] == 0
+    assert bundle["evidence_summary"]["proactive_job_candidate_counts"] == {
+        "calendar_conflict_warning": 6,
+        "reminder_followup": 12,
+        "scheduled_briefing": 6,
+        "system_health_notification": 3,
+    }
+    assert bundle["evidence_summary"]["proactive_blocked_by_job"] == bundle["evidence_summary"]["proactive_job_candidate_counts"]
     assert bundle["evidence_summary"]["proactive_blocked_reason_counts"]["job_disabled"] == 27
     assert bundle["evidence_summary"]["proactive_blocked_reason_counts"]["dry_run_required"] == 27
     assert bundle["evidence_summary"]["proactive_enablement_gate"] == {
@@ -391,6 +398,8 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`signal_allowlist_count`: `0`" in text
     assert "`signal_identity_map_count`: `0`" in text
     assert "## Proactive Safety" in text
+    assert "scheduled_briefing" in text
+    assert "system_health_notification" in text
     assert "dry_run_required" in text
     assert "## Required Next Actions" in text
     assert "Set OPEN_WEBUI_API_KEY outside source control." in text

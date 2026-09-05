@@ -69,8 +69,11 @@ class ProactivePlanner:
         ready: list[str] = []
         blocked: list[dict[str, Any]] = []
         blocked_reason_counts: dict[str, int] = {}
+        job_candidate_counts: dict[str, int] = {}
+        blocked_by_job: dict[str, int] = {}
         for candidate in self.candidates():
             schedule_id = self.schedule_id(candidate)
+            job_candidate_counts[candidate.job_id] = job_candidate_counts.get(candidate.job_id, 0) + 1
             reasons = []
             if candidate.status != "enabled":
                 reasons.append("job_disabled")
@@ -87,6 +90,7 @@ class ProactivePlanner:
             if reasons:
                 for reason in reasons:
                     blocked_reason_counts[reason] = blocked_reason_counts.get(reason, 0) + 1
+                blocked_by_job[candidate.job_id] = blocked_by_job.get(candidate.job_id, 0) + 1
                 blocked.append({"schedule_id": schedule_id, "job_id": candidate.job_id, "recipient": candidate.recipient, "destination": candidate.destination, "reasons": reasons})
             else:
                 ready.append(schedule_id)
@@ -99,6 +103,8 @@ class ProactivePlanner:
             "ready_schedule_ids": ready,
             "blocked": blocked,
             "blocked_reason_counts": dict(sorted(blocked_reason_counts.items())),
+            "job_candidate_counts": dict(sorted(job_candidate_counts.items())),
+            "blocked_by_job": dict(sorted(blocked_by_job.items())),
             "all_disabled_by_default": all(candidate.status == "disabled" for candidate in self.candidates()),
             "enablement_gate": {str(key): str(value) for key, value in sorted(gate.items())},
             "prohibitions": {str(key): bool(value) for key, value in sorted(prohibitions.items())},
