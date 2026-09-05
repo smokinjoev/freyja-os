@@ -566,6 +566,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "backup_sha256": (backup.get("backup") or {}).get("sha256"),
             "backup_contains_webui_db": (backup.get("backup") or {}).get("contains_webui_db"),
             "backup_scope": backup_scope,
+            "backup_rollback_compose_file": (backup.get("rollback_documentation") or {}).get("compose_file") or {},
             "backup_rollback_generated_at_unix": backup.get("generated_at_unix") or _mtime(backup_path),
             "backup_rollback_git_head": backup.get("git_head") or "unknown",
             "secret_safety_artifact_count": secret_safety.get("artifact_count"),
@@ -850,6 +851,7 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         if key == "steps":
             continue
         lines.append(f"- `{key}`: `{value}`")
+    lines.append(f"- `compose_file`: `{evidence['backup_rollback_compose_file']}`")
     for step in bundle["rollback"]["steps"]:
         lines.append(f"- `{step['step']}`: `{step['command']}`")
     lines += ["", "## Artifacts", "", f"- `readiness_summary`: `{bundle['artifacts']['readiness_summary']}`"]

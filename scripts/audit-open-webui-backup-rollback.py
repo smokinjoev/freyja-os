@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BACKUP = REPO_ROOT / "logs" / "open-webui-diagnostics" / "home-agent-20260904T174214Z" / "open-webui-data-volume.tgz"
 DEFAULT_RUNBOOK = REPO_ROOT / "docs" / "operations" / "open-webui-home-agent.md"
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-backup-rollback-audit.json"
+ROLLBACK_COMPOSE = REPO_ROOT / "deploy" / "compose" / "open-webui" / "compose.yaml"
 REQUIRED_ROLLBACK_PHRASES = (
     "docker compose --env-file deploy/compose/open-webui/.env",
     "git apply .codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch",
@@ -69,6 +70,10 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _display_path(path: Path) -> str:
+    return str(path.relative_to(REPO_ROOT) if path.is_relative_to(REPO_ROOT) else path)
+
+
 def _tar_members(path: Path) -> list[tarfile.TarInfo]:
     with tarfile.open(path, "r:gz") as archive:
         return archive.getmembers()
@@ -112,6 +117,8 @@ def build_report(backup: Path = DEFAULT_BACKUP, runbook: Path = DEFAULT_RUNBOOK)
 
     runbook_text = runbook.read_text(encoding="utf-8") if runbook.exists() else ""
     missing_phrases = [phrase for phrase in REQUIRED_ROLLBACK_PHRASES if phrase not in runbook_text]
+    compose_exists = ROLLBACK_COMPOSE.exists()
+    compose_readable = compose_exists and ROLLBACK_COMPOSE.is_file()
     report = {
         "report_type": "open-webui-backup-rollback-audit",
         "generated_at_unix": int(time.time()),
@@ -136,6 +143,11 @@ def build_report(backup: Path = DEFAULT_BACKUP, runbook: Path = DEFAULT_RUNBOOK)
             "path": str(runbook.relative_to(REPO_ROOT) if runbook.is_relative_to(REPO_ROOT) else runbook),
             "exists": runbook.exists(),
             "missing_required_phrases": missing_phrases,
+            "compose_file": {
+                "path": _display_path(ROLLBACK_COMPOSE),
+                "exists": compose_exists,
+                "readable": compose_readable,
+            },
             "steps": ROLLBACK_STEPS,
         },
         "errors": errors,
@@ -147,6 +159,7 @@ def build_report(backup: Path = DEFAULT_BACKUP, runbook: Path = DEFAULT_RUNBOOK)
         and summary.get("regular_file_count", 0) > 0
         and runbook.exists()
         and not missing_phrases
+        and compose_readable
         and not errors
     )
     return report

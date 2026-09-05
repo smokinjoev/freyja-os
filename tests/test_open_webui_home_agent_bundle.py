@@ -155,6 +155,11 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
     assert bundle["evidence_summary"]["backup_scope"]["report_sanitized"] is True
     assert bundle["evidence_summary"]["backup_scope"]["archive_handling"] == "treat_as_sensitive_do_not_commit_or_print_contents"
+    assert bundle["evidence_summary"]["backup_rollback_compose_file"] == {
+        "path": "deploy/compose/open-webui/compose.yaml",
+        "exists": True,
+        "readable": True,
+    }
     assert isinstance(bundle["evidence_summary"]["backup_rollback_generated_at_unix"], int)
     assert bundle["evidence_summary"]["backup_rollback_git_head"]
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0
@@ -347,6 +352,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Focused tests" in text
     assert "Full tests" in text
     assert "Backup rollback audit ok" in text
+    assert "`compose_file`: `{'exists': True, 'path': 'deploy/compose/open-webui/compose.yaml', 'readable': True}`" in text
     assert "`restore_open_webui_volume`: `tar -xzf logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz" in text
     assert "Secret safety audit ok" in text
     assert "Channels deterministic" in text

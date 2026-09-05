@@ -76,6 +76,11 @@ def test_backup_rollback_audit_accepts_readable_open_webui_archive(tmp_path: Pat
     assert "open-webui-data-volume.tgz" in steps[2]["command"]
     assert "-f deploy/compose/open-webui/compose.yaml up -d" in steps[3]["command"]
     assert steps[-1]["command"] == "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version"
+    assert report["rollback_documentation"]["compose_file"] == {
+        "path": "deploy/compose/open-webui/compose.yaml",
+        "exists": True,
+        "readable": True,
+    }
     assert "TOKEN" not in json.dumps(steps)
     assert "PASSWORD" not in json.dumps(steps)
 
@@ -91,6 +96,21 @@ def test_backup_rollback_audit_rejects_missing_rollback_step(tmp_path: Path) -> 
     assert report["ok"] is False
     assert report["rollback_documentation"]["missing_required_phrases"]
     assert report["rollback_documentation"]["steps"]
+
+
+def test_backup_rollback_audit_rejects_missing_compose_file(tmp_path: Path, monkeypatch) -> None:
+    module = _module()
+    backup = tmp_path / "open-webui-data-volume.tgz"
+    runbook = tmp_path / "runbook.md"
+    _tar(backup, {"webui.db": b"sqlite-ish"})
+    _runbook(runbook)
+    monkeypatch.setattr(module, "ROLLBACK_COMPOSE", tmp_path / "missing-compose.yaml")
+
+    report = module.build_report(backup, runbook)
+
+    assert report["ok"] is False
+    assert report["rollback_documentation"]["compose_file"]["exists"] is False
+    assert report["rollback_documentation"]["compose_file"]["readable"] is False
 
 
 def test_backup_rollback_audit_marks_archives_with_upload_or_cache_content_sensitive(tmp_path: Path) -> None:
