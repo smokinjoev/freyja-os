@@ -282,6 +282,24 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "freyja_4_1_preservation": "baseline tag, rollback artifacts, side-by-side Freyja 5, protected services, and legacy gateway/inference surface verified",
         "rollback": "documented with source and volume backups",
     }
+    requirement_next_action_fallbacks = {
+        "local_inference": next(
+            (gate["next_actions"] for gate in external_gates if gate["gate_id"] == "authenticated_chat_smoke"),
+            [],
+        ),
+        "five_agents": next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "post_auth_activation"), []),
+        "memory_layers": next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "post_auth_activation"), []),
+        "tools": next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "post_auth_activation"), []),
+        "messaging_channels": [
+            *next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "telegram_pilot"), []),
+            *next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "signal_pilot"), []),
+        ],
+        "verification": [
+            action
+            for gate in external_gates
+            for action in gate.get("next_actions", [])
+        ],
+    }
     requirement_audit = [
         {
             "requirement_id": str(item.get("requirement_id")),
@@ -290,6 +308,10 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "evidence": [str(path) for path in item.get("evidence") or []],
             "blocker": item.get("blocker"),
             "next_action": item.get("next_action"),
+            "next_actions": [
+                str(action)
+                for action in (item.get("next_actions") or requirement_next_action_fallbacks.get(str(item.get("requirement_id")), []))
+            ],
             "command": item.get("command"),
         }
         for item in completion.get("items") or []

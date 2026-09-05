@@ -91,8 +91,11 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert requirement_audit["messaging_channels"]["status"] == "credential_gated"
     assert "certification/reports/open-webui-home-agent-chat-smoke.json" in requirement_audit["local_inference"]["evidence"]
     assert requirement_audit["local_inference"]["command"].startswith("OPEN_WEBUI_API_KEY=<redacted>")
+    assert any("OPEN_WEBUI_API_KEY" in action for action in requirement_audit["local_inference"]["next_actions"])
     assert requirement_audit["five_agents"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
+    assert any("Open WebUI users" in action for action in requirement_audit["five_agents"]["next_actions"])
     assert "scripts/run-freyja-channels-telegram-pilot.py" in requirement_audit["messaging_channels"]["command"]
+    assert any("TELEGRAM_BOT_TOKEN" in action for action in requirement_audit["messaging_channels"]["next_actions"])
     assert requirement_audit["final_deliverable"]["status"] == "complete"
     assert bundle["artifacts"]["runbook"] == "docs/operations/open-webui-home-agent.md"
     assert bundle["artifacts"]["backup_rollback_audit"] == "certification/reports/open-webui-backup-rollback-audit.json"
