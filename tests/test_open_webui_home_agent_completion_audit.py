@@ -40,6 +40,7 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
         "external_gated_requirements": 4,
         "verified_completion_percent": 60.0,
     }
+    assert audit["exact_next_action"].startswith("Complete first-account Open WebUI onboarding")
     ids = [item["requirement_id"] for item in audit["items"]]
     assert len(ids) == len(set(ids))
     assert {"five_agents", "memory_layers", "tools"}.issubset(
@@ -167,6 +168,51 @@ def test_completion_audit_can_mark_verification_complete_when_all_readiness_gate
     assert by_id["verification"]["blocker"] is None
     assert "next_action" not in by_id["verification"]
     assert "certification/reports/open-webui-home-agent-evidence-refresh.json" in by_id["verification"]["evidence"]
+
+
+def test_completion_audit_prefers_readiness_exact_next_action(monkeypatch) -> None:
+    module = _module()
+
+    reports = {
+        "open-webui-home-agent-live.json": {"secrets_included": False, "ok": True, "open_webui_url": "http://127.0.0.1:3001"},
+        "open-webui-backup-rollback-audit.json": {"secrets_included": False, "ok": True},
+        "open-webui-home-agent-secret-safety.json": {"secrets_included": False, "ok": True},
+        "open-webui-home-agents-offline-apply.json": {"secrets_included": False, "model_count": 5},
+        "open-webui-home-agent-access-audit.json": {"secrets_included": False, "ok": True},
+        "open-webui-home-agent-access-bind-dry-run.json": {"secrets_included": False},
+        "open-webui-home-resources-export.json": {"secrets_included": False, "ok": True},
+        "open-webui-home-resources-live-counts.json": {"secrets_included": False},
+        "open-webui-home-resources-offline-dry-run.json": {"secrets_included": False, "applied": False},
+        "freyja-channels-readiness.json": {"secrets_included": False, "deterministic_gateway_only": True},
+        "freyja-proactive-readiness.json": {
+            "secrets_included": False,
+            "all_disabled_by_default": True,
+            "ready_schedule_ids": [],
+        },
+        "freyja-proactive-dry-run.json": {"secrets_included": False, "all_sends_suppressed": True},
+        "freyja41-preservation-audit.json": {"secrets_included": False, "pending": []},
+        "open-webui-model-proxy-catalog.json": {"secrets_included": False, "ok": True},
+        "open-webui-home-agent-platform-inventory.json": {
+            "secrets_included": False,
+            "hosts": {"atlas": {}, "vulcan": {}, "iris": {}, "hera": {}},
+            "open_webui_next_action_hint": "inventory action",
+        },
+        "open-webui-inference-policy-audit.json": {"secrets_included": False, "ok": True},
+        "open-webui-home-agent-chat-smoke.json": {"secrets_included": False, "status": "pending"},
+        "open-webui-tools-gateway-readiness.json": {"secrets_included": False, "ok": True},
+        "open-webui-tools-openapi.json": {"secrets_included": False, "ok": True},
+        "open-webui-home-agent-readiness-summary.json": {
+            "secrets_included": False,
+            "all_ready": False,
+            "exact_next_action": "readiness action",
+            "gates": [],
+        },
+    }
+
+    monkeypatch.setattr(module, "_load", lambda path: reports[path.name])
+    monkeypatch.setattr(module, "_exists", lambda path: True)
+
+    assert module.build_audit()["exact_next_action"] == "readiness action"
 
 
 def test_completion_audit_loader_rejects_reports_not_marked_secret_free(tmp_path: Path) -> None:

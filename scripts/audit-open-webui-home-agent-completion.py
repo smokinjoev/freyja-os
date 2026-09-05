@@ -117,6 +117,11 @@ def build_audit() -> dict[str, Any]:
     tools_openapi = _load(REPORTS / "open-webui-tools-openapi.json")
     readiness_summary = _load(REPORTS / "open-webui-home-agent-readiness-summary.json")
     gates = {gate.get("gate_id"): gate for gate in readiness_summary.get("gates") or []}
+    exact_next_action = (
+        readiness_summary.get("exact_next_action")
+        or inventory.get("open_webui_next_action_hint")
+        or "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session."
+    )
     post_auth_gate = gates.get("post_auth_activation") or {}
     chat_gate = gates.get("authenticated_chat_smoke") or {}
     telegram_gate = gates.get("telegram_pilot") or {}
@@ -321,7 +326,7 @@ def build_audit() -> dict[str, Any]:
         "status_counts": counts,
         "completion_metrics": completion_metrics,
         "complete": counts.get("missing", 0) == 0 and counts.get("partial", 0) == 0 and counts.get("auth_gated", 0) == 0 and counts.get("credential_gated", 0) == 0,
-        "exact_next_action": "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session.",
+        "exact_next_action": exact_next_action,
     }
 
 
