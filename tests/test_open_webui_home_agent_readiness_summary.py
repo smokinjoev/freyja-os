@@ -43,15 +43,15 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert gates["post_auth_activation"]["next_actions"] == []
     assert gates["authenticated_chat_smoke"]["next_action"] is None
     assert gates["authenticated_chat_smoke"]["next_actions"] == []
-    assert gates["telegram_pilot"]["next_action"].startswith("Send a message from an allowed Telegram sender")
-    assert any("allowed Telegram sender" in action for action in gates["telegram_pilot"]["next_actions"])
+    assert gates["telegram_pilot"]["next_action"].startswith("Stop any other Telegram getUpdates poller")
+    assert any("Telegram getUpdates poller" in action for action in gates["telegram_pilot"]["next_actions"])
     assert gates["signal_pilot"]["next_action"].startswith("Run the Signal live round-trip pilot")
     assert any("signal live round-trip" in action for action in gates["signal_pilot"]["next_actions"])
     assert gates["post_auth_activation"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert "OPEN_WEBUI_API_KEY=<redacted>" in gates["authenticated_chat_smoke"]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in gates["telegram_pilot"]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in gates["signal_pilot"]["command"]
-    assert summary["required_next_actions"][0].startswith("Send a message from an allowed Telegram sender")
+    assert summary["required_next_actions"][0].startswith("Stop any other Telegram getUpdates poller")
     assert not any("OPEN_WEBUI_API_KEY" in action for action in summary["required_next_actions"])
     assert len(summary["required_next_actions"]) == len(set(summary["required_next_actions"]))
 
@@ -151,7 +151,7 @@ def test_readiness_summary_markdown_includes_required_next_actions() -> None:
     text = module.render_markdown(module.build_summary())
 
     assert "## Required Next Actions" in text
-    assert "Send a message from an allowed Telegram sender" in text
+    assert "Stop any other Telegram getUpdates poller" in text
 
 
 def test_home_agent_runbook_documents_required_next_action_queue() -> None:
@@ -183,7 +183,7 @@ def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(t
     assert "Open WebUI Home-Agent Readiness Summary" in markdown
     assert "`post_auth_activation`: ready" in markdown
     assert "`authenticated_chat_smoke`: ready" in markdown
-    assert "Action: Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0." in markdown
+    assert "Action: Stop any other Telegram getUpdates poller or clear the bot webhook, then rerun the live Telegram pilot." in markdown
     assert "Command: `scripts/run-freyja-channels-telegram-pilot.py" in markdown
 
 

@@ -48,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="Check configuration without calling Telegram or Open WebUI.")
     parser.add_argument("--poll-interval", type=float, default=_env_float("FREYJA_CHANNEL_TELEGRAM_POLL_INTERVAL", DEFAULT_POLL_INTERVAL_SECONDS))
     parser.add_argument("--max-iterations", type=int, default=0, help="Limit polling iterations. 0 means no limit.")
+    parser.add_argument("--until-handled", action="store_true", help="Exit as soon as at least one update is handled.")
     return parser
 
 
@@ -197,6 +198,8 @@ def run_loop(args: argparse.Namespace) -> dict[str, Any]:
         for key, value in result.items():
             totals[key] += value
         iterations += 1
+        if args.until_handled and totals["handled"] > 0:
+            break
         if args.once or (args.max_iterations and iterations >= args.max_iterations):
             break
         time.sleep(max(args.poll_interval, 0.1))

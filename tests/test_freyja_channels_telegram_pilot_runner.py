@@ -55,6 +55,16 @@ class FakeTransport:
         self.sent.append({"chat_id": chat_id, "text": text})
 
 
+class SequencedTransport(FakeTransport):
+    def __init__(self, batches) -> None:
+        super().__init__([])
+        self.batches = list(batches)
+
+    def get_update_messages(self, *, offset=None):
+        self.offsets.append(offset)
+        return self.batches.pop(0) if self.batches else []
+
+
 def test_telegram_pilot_dry_run_fails_closed_without_credentials(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
@@ -194,3 +204,32 @@ def test_telegram_pilot_run_once_reuses_existing_offset(tmp_path: Path) -> None:
     assert result == {"updates": 0, "handled": 0, "denied_or_client_failed": 0, "failed": 0}
     assert transport.offsets == [99]
     assert offset.read_text(encoding="utf-8") == "99\n"
+
+
+def test_telegram_pilot_run_loop_until_handled_stops_after_reply(tmp_path: Path, monkeypatch) -> None:
+    module = _module()
+    transport = SequencedTransport(
+        [
+            [],
+            [
+                TelegramInbound(
+                    update_id=41,
+                    message=ChannelMessage(channel="telegram", sender="1001", chat_id="2002", text="hello"),
+                )
+            ],
+        ]
+    )
+    monkeypatch.setattr(module, "TelegramLongPollingTransport", lambda: transport)
+    monkeypatch.setattr(module, "OpenWebUIChatClient", lambda: object())
+    monkeypatch.setattr(module, "FreyjaChannels", lambda **kwargs: FakeService())
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "1001")
+    monkeypatch.setenv("TELEGRAM_IDENTITY_MAP", "1001:joe")
+    args = module.build_parser().parse_args(["--state-dir", str(tmp_path), "--max-iterations", "5", "--until-handled", "--poll-interval", "0.1"])
+
+    report = module.run_loop(args)
+
+    assert report["ready"] is True
+    assert report["live_round_trip_complete"] is True
+    assert report["iterations"] == 2
+    assert report["totals"]["handled"] == 1
+    assert transport.sent == [{"chat_id": "2002", "text": "reply:hello"}]
