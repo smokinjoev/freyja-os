@@ -704,6 +704,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
 
 
 def render_markdown(bundle: dict[str, Any]) -> str:
+    evidence = bundle["evidence_summary"]
     lines = [
         "# Open WebUI Home-Agent Deliverable",
         "",
@@ -732,14 +733,80 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Authenticated chat smoke: `{bundle['tests']['authenticated_chat_smoke']}`",
         f"- Open WebUI tools gateway ok: `{bundle['tests']['open_webui_tools_gateway_ok']}`",
         f"- Open WebUI tools OpenAPI ok: `{bundle['tests']['open_webui_tools_openapi_ok']}`",
-        f"- Readiness summary: `{bundle['evidence_summary']['readiness_summary_status']}`",
-        f"- Readiness all ready: `{bundle['evidence_summary']['readiness_summary_all_ready']}`",
+        f"- Readiness summary: `{evidence['readiness_summary_status']}`",
+        f"- Readiness all ready: `{evidence['readiness_summary_all_ready']}`",
         "",
         "## Endpoints",
         "",
     ]
     for key, value in bundle["endpoint_map"].items():
         lines.append(f"- `{key}`: `{value}`")
+    lines += ["", "## Endpoint Ownership", ""]
+    for key, value in sorted(evidence["endpoint_ownership"].items()):
+        detail = ", ".join(f"{field}={field_value}" for field, field_value in sorted(value.items()))
+        lines.append(f"- `{key}`: {detail}")
+    agent_policy = evidence["agent_policy_summary"]
+    lines += [
+        "",
+        "## Agent Policy",
+        "",
+        f"- Agents: `{', '.join(agent_policy['agent_ids'])}`",
+        f"- Runtime models: `{', '.join(agent_policy['runtime_model_ids'])}`",
+        f"- Benedict: groups=`{', '.join(agent_policy['benedict_access_groups'])}`, "
+        f"cloud_fallback=`{agent_policy['benedict_cloud_fallback']}`, "
+        f"knowledge=`{', '.join(agent_policy['benedict_permitted_knowledge'])}`, "
+        f"confirm_tools=`{agent_policy['benedict_confirm_tools']}`",
+    ]
+    for agent_id, policy in sorted(agent_policy["child_agents"].items()):
+        lines.append(
+            f"- Child `{agent_id}`: allow=`{', '.join(policy['allow'])}`, "
+            f"deny=`{', '.join(policy['deny'])}`, confirm=`{policy['confirm']}`"
+        )
+    lines += [
+        "",
+        "## Memory",
+        "",
+        f"- Native Open WebUI memory: `{evidence['resource_export_native_memory_mode']}`",
+        f"- `home_memory_operations_ok`: `{evidence['home_memory_operations_ok']}`",
+        f"- `home_memory_joe_write_ok`: `{evidence['home_memory_joe_write_ok']}`",
+        f"- `home_memory_joe_read_ok`: `{evidence['home_memory_joe_read_ok']}`",
+        f"- `home_memory_recent_events_ok`: `{evidence['home_memory_recent_events_ok']}`",
+        f"- `home_memory_beth_denied_joe_scope_ok`: `{evidence['home_memory_beth_denied_joe_scope_ok']}`",
+        "",
+        "## Tool Authorization",
+        "",
+        f"- Operation count: `{evidence['tools_gateway_operation_count']}`",
+        f"- `confirmation_required`: `{', '.join(evidence['tools_gateway_confirmation_required'])}`",
+        f"- `child_allowed_operations`: `{', '.join(evidence['tools_gateway_child_allowed_operations'])}`",
+        f"- `destructive_default_all_deny`: `{evidence['tools_gateway_destructive_default_all_deny']}`",
+        f"- `live_side_effects_invoked`: `{evidence['tools_gateway_live_side_effects_invoked']}`",
+        f"- Execution statuses: `{evidence['tools_gateway_execution_statuses']}`",
+        "",
+        "## Channel Safety",
+        "",
+        f"- `deterministic_gateway_only`: `{evidence['channels_deterministic_gateway_only']}`",
+        f"- `model_routing_prohibited`: `{evidence['channels_model_routing_prohibited']}`",
+        f"- `independent_agent_intelligence_prohibited`: "
+        f"`{evidence['channels_independent_agent_intelligence_prohibited']}`",
+        f"- `telegram_empty_allowlist_policy`: `{evidence['telegram_empty_allowlist_policy']}`",
+        f"- `signal_empty_allowlist_policy`: `{evidence['signal_empty_allowlist_policy']}`",
+        f"- `whatsapp_status`: `{evidence['whatsapp_status']}`",
+        "",
+        "## Proactive Safety",
+        "",
+        f"- Candidate schedules: `{evidence['proactive_candidate_count']}`",
+        f"- Ready schedules: `{evidence['proactive_ready_schedule_count']}`",
+        f"- Blocked reasons: `{evidence['proactive_blocked_reason_counts']}`",
+        f"- Enablement gate: `{evidence['proactive_enablement_gate']}`",
+        f"- Prohibitions: `{evidence['proactive_prohibitions']}`",
+        f"- Dry-run would-send count: `{evidence['proactive_dry_run_would_send_count']}`",
+        f"- Dry-run all sends suppressed: `{evidence['proactive_dry_run_all_sends_suppressed']}`",
+        "",
+        "## Required Next Actions",
+        "",
+    ]
+    for action in evidence["readiness_required_next_actions"]:
+        lines.append(f"- {action}")
     lines += ["", "## Rollback", ""]
     for key, value in bundle["rollback"].items():
         if key == "steps":

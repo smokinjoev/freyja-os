@@ -335,6 +335,29 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Open WebUI tools gateway ok" in text
     assert "Open WebUI tools OpenAPI ok" in text
     assert "Readiness summary" in text
+    assert "## Endpoint Ownership" in text
+    assert "`atlas_open_webui`" in text
+    assert "nexus_required=False" in text
+    assert "## Agent Policy" in text
+    assert "Benedict" in text
+    assert "restricted:benedict" in text
+    assert "Child `agent-44`" in text
+    assert "messaging.send" in text
+    assert "## Memory" in text
+    assert "`home_memory_beth_denied_joe_scope_ok`: `True`" in text
+    assert "## Tool Authorization" in text
+    assert "`confirmation_required`" in text
+    assert "imessage.send.approved" in text
+    assert "`child_allowed_operations`" in text
+    assert "weather.read" in text
+    assert "## Channel Safety" in text
+    assert "`telegram_empty_allowlist_policy`: `deny_all`" in text
+    assert "`signal_empty_allowlist_policy`: `deny_all`" in text
+    assert "## Proactive Safety" in text
+    assert "dry_run_required" in text
+    assert "## Required Next Actions" in text
+    assert "Set OPEN_WEBUI_API_KEY outside source control." in text
+    assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in text
     assert "External Gates" in text
     assert "`post_auth_activation`: pending" in text
     assert "Action: Create/sign in Open WebUI users" in text
