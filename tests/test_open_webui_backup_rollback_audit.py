@@ -58,6 +58,9 @@ def test_backup_rollback_audit_accepts_readable_open_webui_archive(tmp_path: Pat
     assert report["backup"]["contains_webui_db"] is True
     assert report["backup"]["tar_gzip_readable"] is True
     assert report["backup"]["member_count"] == 2
+    assert report["backup_scope"]["report_sanitized"] is True
+    assert report["backup_scope"]["archive_may_contain_private_content"] is False
+    assert report["backup_scope"]["archive_handling"] == "treat_as_sensitive_do_not_commit_or_print_contents"
     assert len(report["backup"]["sha256"]) == 64
     assert "sqlite-ish" not in json.dumps(report)
     steps = report["rollback_documentation"]["steps"]
@@ -86,6 +89,22 @@ def test_backup_rollback_audit_rejects_missing_rollback_step(tmp_path: Path) -> 
     assert report["ok"] is False
     assert report["rollback_documentation"]["missing_required_phrases"]
     assert report["rollback_documentation"]["steps"]
+
+
+def test_backup_rollback_audit_marks_archives_with_upload_or_cache_content_sensitive(tmp_path: Path) -> None:
+    backup = tmp_path / "open-webui-data-volume.tgz"
+    runbook = tmp_path / "runbook.md"
+    _tar(backup, {"webui.db": b"sqlite-ish", "uploads/document.pdf": b"private-ish"})
+    _runbook(runbook)
+
+    report = _module().build_report(backup, runbook)
+
+    assert report["ok"] is True
+    assert report["private_content_included"] is False
+    assert report["backup"]["contains_upload_or_cache_dirs"] is True
+    assert report["backup_scope"]["archive_may_contain_private_content"] is True
+    assert report["backup_scope"]["archive_contains_user_uploaded_or_vector_content"] is True
+    assert "private-ish" not in json.dumps(report)
 
 
 def test_backup_rollback_audit_writes_report(tmp_path: Path, capsys) -> None:

@@ -83,6 +83,8 @@ ok=true
 tar_gzip_readable=true
 contains_webui_db=true
 sha256=44b3dd287665387a843e0068e1b69a1e459744b4a23f20cf6fcc311fa5187f21
+archive_may_contain_private_content=true
+archive_handling=treat_as_sensitive_do_not_commit_or_print_contents
 ```
 
 Rollback procedure:

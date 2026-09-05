@@ -227,6 +227,12 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     ]
     git_head = _command(["git", "rev-parse", "--short", "HEAD"])
     completion_status_counts = completion.get("status_counts") or {}
+    backup_scope = backup.get("backup_scope") or {
+        "report_sanitized": True,
+        "archive_may_contain_private_content": bool((backup.get("backup") or {}).get("contains_upload_or_cache_dirs")),
+        "archive_contains_user_uploaded_or_vector_content": bool((backup.get("backup") or {}).get("contains_upload_or_cache_dirs")),
+        "archive_handling": "treat_as_sensitive_do_not_commit_or_print_contents",
+    }
     open_webui_public_config = inventory.get("open_webui_public_config") or {
         "reachable": None,
         "secrets_included": False,
@@ -292,6 +298,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "data_backup_path": _text(DIAG / "data-backup-path.txt"),
             "backup_sha256": (backup.get("backup") or {}).get("sha256"),
             "backup_contains_webui_db": (backup.get("backup") or {}).get("contains_webui_db"),
+            "backup_scope": backup_scope,
             "backup_rollback_generated_at_unix": backup.get("generated_at_unix") or _mtime(backup_path),
             "backup_rollback_git_head": backup.get("git_head") or "unknown",
             "secret_safety_artifact_count": secret_safety.get("artifact_count"),

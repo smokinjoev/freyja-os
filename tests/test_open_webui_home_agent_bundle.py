@@ -102,6 +102,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert isinstance(bundle["evidence_summary"]["live_verifier_generated_at_unix"], int)
     assert bundle["evidence_summary"]["live_verifier_git_head"]
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
+    assert bundle["evidence_summary"]["backup_scope"]["report_sanitized"] is True
+    assert bundle["evidence_summary"]["backup_scope"]["archive_handling"] == "treat_as_sensitive_do_not_commit_or_print_contents"
     assert isinstance(bundle["evidence_summary"]["backup_rollback_generated_at_unix"], int)
     assert bundle["evidence_summary"]["backup_rollback_git_head"]
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0

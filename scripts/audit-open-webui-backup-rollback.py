@@ -126,6 +126,12 @@ def build_report(backup: Path = DEFAULT_BACKUP, runbook: Path = DEFAULT_RUNBOOK)
             "tar_gzip_readable": tar_ok,
             **summary,
         },
+        "backup_scope": {
+            "report_sanitized": True,
+            "archive_may_contain_private_content": bool(summary.get("contains_upload_or_cache_dirs")),
+            "archive_contains_user_uploaded_or_vector_content": bool(summary.get("contains_upload_or_cache_dirs")),
+            "archive_handling": "treat_as_sensitive_do_not_commit_or_print_contents",
+        },
         "rollback_documentation": {
             "path": str(runbook.relative_to(REPO_ROOT) if runbook.is_relative_to(REPO_ROOT) else runbook),
             "exists": runbook.exists(),
