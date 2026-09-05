@@ -249,8 +249,11 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Requirement Audit" in text
     assert "`local_inference`: `partial`" in text
     assert "`messaging_channels`: `credential_gated`" in text
+    assert "Action: Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents." in text
+    assert "Action: Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all." in text
     assert "Command: `OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py" in text
     assert "Command: `scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json`" in text
+    assert text.count("Command: `scripts/summarize-open-webui-home-agent-readiness.py`") == 0
     assert "pending_external_auth_or_credentials" in text
     assert "readiness_summary" in text
     assert "Exact Next Action" in text

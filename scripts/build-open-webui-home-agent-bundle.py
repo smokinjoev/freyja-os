@@ -593,10 +593,12 @@ def render_markdown(bundle: dict[str, Any]) -> str:
             lines.append(f"  Blocker: {item['blocker']}")
         if item.get("next_action"):
             lines.append(f"  Next: {item['next_action']}")
+        for action in item.get("next_actions") or []:
+            lines.append(f"  Action: {action}")
         if item.get("command"):
             lines.append(f"  Command: `{item['command']}`")
         for command in item.get("commands") or []:
-            if command != item.get("command"):
+            if command != item.get("command") and command not in str(item.get("command") or ""):
                 lines.append(f"  Command: `{command}`")
     lines += ["", "## Exact Next Action", "", bundle["exact_next_action"], ""]
     return "\n".join(lines)
