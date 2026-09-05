@@ -167,6 +167,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     access_audit = _load_json(REPORTS / "open-webui-home-agent-access-audit.json")
     access_bind_path = REPORTS / "open-webui-home-agent-access-bind-dry-run.json"
     access_bind = _load_json(REPORTS / "open-webui-home-agent-access-bind-dry-run.json")
+    model_import_path = REPORTS / "open-webui-home-agents-import.json"
+    model_import = _load_json(REPORTS / "open-webui-home-agents-import.json")
     model_apply_path = REPORTS / "open-webui-home-agents-offline-apply.json"
     model_apply = _load_json(REPORTS / "open-webui-home-agents-offline-apply.json")
     resources_path = REPORTS / "open-webui-home-resources-export.json"
@@ -445,6 +447,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "access_audit_git_head": access_audit.get("git_head") or "unknown",
             "access_bind_generated_at_unix": access_bind.get("generated_at_unix") or _mtime(access_bind_path),
             "access_bind_git_head": access_bind.get("git_head") or "unknown",
+            "model_import_ok": model_import.get("ok"),
+            "model_import_validation_errors": model_import.get("validation_errors") or [],
+            "model_import_record_count": len(model_import.get("records") or []),
+            "model_import_generated_at_unix": model_import.get("generated_at_unix") or _mtime(model_import_path),
+            "model_import_git_head": model_import.get("git_head") or "unknown",
             "model_count": model_apply.get("model_count") or len(model_apply.get("model_ids") or []),
             "model_apply_generated_at_unix": model_apply.get("generated_at_unix") or _mtime(model_apply_path),
             "model_apply_git_head": model_apply.get("git_head") or "unknown",
