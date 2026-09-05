@@ -33,6 +33,7 @@ def test_env_example_contains_channel_pilot_identity_placeholders() -> None:
     assert values["TELEGRAM_ALLOWED_USER_IDS"] == ""
     assert values["TELEGRAM_IDENTITY_MAP"] == ""
     assert values["FREYJA_CHANNEL_TELEGRAM_POLL_INTERVAL"] == "2"
+    assert values["TELEGRAM_MAX_ATTACHMENT_BYTES"] == "8388608"
     assert values["SIGNAL_ACCOUNT_NUMBER"] == ""
     assert values["SIGNAL_REST_API_URL"] == "http://127.0.0.1:8080"
     assert values["SIGNAL_ALLOWED_SENDERS"] == ""

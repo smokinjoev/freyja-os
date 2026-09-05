@@ -39,6 +39,18 @@ class FakeTransport:
         self.offsets.append(offset)
         return self.updates
 
+    def enrich_attachments(self, message):
+        if message.attachments:
+            return ChannelMessage(
+                channel=message.channel,
+                sender=message.sender,
+                text=message.text,
+                requested_agent=message.requested_agent,
+                chat_id=message.chat_id,
+                attachments=(*message.attachments, {"kind": "test-enriched"}),
+            )
+        return message
+
     def send_message(self, *, chat_id, text):
         self.sent.append({"chat_id": chat_id, "text": text})
 
@@ -145,6 +157,30 @@ def test_telegram_pilot_run_once_sends_replies_and_advances_offset(tmp_path: Pat
     assert transport.offsets == [None]
     assert transport.sent == [{"chat_id": "2002", "text": "reply:hello"}]
     assert offset.read_text(encoding="utf-8") == "42\n"
+
+
+def test_telegram_pilot_run_once_enriches_attachments_before_routing(tmp_path: Path) -> None:
+    module = _module()
+    service = FakeService()
+    transport = FakeTransport(
+        [
+            TelegramInbound(
+                update_id=41,
+                message=ChannelMessage(
+                    channel="telegram",
+                    sender="1001",
+                    chat_id="2002",
+                    text="see this",
+                    attachments=({"kind": "image", "file_id": "photo"},),
+                ),
+            )
+        ]
+    )
+
+    result = module.run_once(service=service, transport=transport, offset_file=tmp_path / "telegram.offset")
+
+    assert result["handled"] == 1
+    assert service.messages[0].attachments[-1] == {"kind": "test-enriched"}
 
 
 def test_telegram_pilot_run_once_reuses_existing_offset(tmp_path: Path) -> None:

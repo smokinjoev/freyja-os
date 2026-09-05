@@ -86,6 +86,58 @@ def test_telegram_transport_fails_closed_without_token() -> None:
         transport.get_updates()
 
 
+def test_telegram_transport_enriches_small_attachment_payloads() -> None:
+    transport = TelegramLongPollingTransport(TelegramPilotConfig(bot_token="token", max_attachment_bytes=32))
+    transport._request = lambda method, query=None, data=None: {  # type: ignore[method-assign]
+        "ok": True,
+        "result": {"file_path": "photos/file.jpg", "file_size": 5},
+    }
+    transport._download_file = lambda file_path: b"hello"  # type: ignore[method-assign]
+
+    message = parse_telegram_update(
+        {
+            "message": {
+                "from": {"id": 1001},
+                "chat": {"id": 2002},
+                "photo": [{"file_id": "photo", "file_unique_id": "p1", "width": 10, "height": 10}],
+            }
+        }
+    )
+
+    assert message is not None
+    enriched = transport.enrich_attachments(message)
+
+    assert enriched.attachments[0]["payload_status"] == "included_base64"
+    assert enriched.attachments[0]["size_bytes"] == 5
+    assert enriched.attachments[0]["data_base64"] == "aGVsbG8="
+
+
+def test_telegram_transport_skips_oversized_attachment_payloads() -> None:
+    transport = TelegramLongPollingTransport(TelegramPilotConfig(bot_token="token", max_attachment_bytes=4))
+    transport._request = lambda method, query=None, data=None: {  # type: ignore[method-assign]
+        "ok": True,
+        "result": {"file_path": "documents/file.pdf", "file_size": 99},
+    }
+
+    message = parse_telegram_update(
+        {
+            "message": {
+                "from": {"id": 1001},
+                "chat": {"id": 2002},
+                "document": {"file_id": "doc", "file_unique_id": "d1", "file_name": "x.pdf", "mime_type": "application/pdf"},
+            }
+        }
+    )
+
+    assert message is not None
+    enriched = transport.enrich_attachments(message)
+
+    assert enriched.attachments[0]["payload_status"] == "skipped_too_large"
+    assert enriched.attachments[0]["size_bytes"] == 99
+    assert enriched.attachments[0]["max_attachment_bytes"] == 4
+    assert "data_base64" not in enriched.attachments[0]
+
+
 def test_signal_transport_fails_closed_without_registration() -> None:
     transport = SignalCliRestTransport(SignalCliRestConfig(account_number="", rest_api_url="http://signal.local"))
 

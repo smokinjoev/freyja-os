@@ -598,6 +598,8 @@ The runner uses `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`,
 checks, including whether every allowlisted sender has an identity mapping. In
 run mode it advances `data/freyja-channels/telegram.offset` after each observed
 update and sends the Open WebUI response back with Telegram `sendMessage`.
+Telegram image/document attachments under `TELEGRAM_MAX_ATTACHMENT_BYTES`
+default to base64 forwarding; oversized files are skipped with metadata only.
 
 Signal pilot runner:
 

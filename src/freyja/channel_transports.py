@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import base64
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from freyja.channels import ChannelMessage, ChannelPolicyError
@@ -30,6 +31,7 @@ class TelegramPilotConfig:
     bot_token: str = ""
     timeout_seconds: int = 25
     api_base: str = "https://api.telegram.org"
+    max_attachment_bytes: int = 8 * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> "TelegramPilotConfig":
@@ -37,6 +39,7 @@ class TelegramPilotConfig:
             bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
             timeout_seconds=_env_int("TELEGRAM_LONG_POLL_TIMEOUT_SECONDS", 25),
             api_base=os.environ.get("TELEGRAM_API_BASE", "https://api.telegram.org"),
+            max_attachment_bytes=_env_int("TELEGRAM_MAX_ATTACHMENT_BYTES", 8 * 1024 * 1024),
         )
 
     @property
@@ -175,6 +178,48 @@ class TelegramLongPollingTransport:
         if response.get("ok") is not True:
             raise ChannelTransportError("Telegram sendMessage failed")
 
+    def enrich_attachments(self, message: ChannelMessage) -> ChannelMessage:
+        if not message.attachments:
+            return message
+        enriched = []
+        for attachment in message.attachments:
+            enriched.append(self._download_attachment_payload(attachment))
+        return replace(message, attachments=tuple(enriched))
+
+    def _download_attachment_payload(self, attachment: dict[str, Any]) -> dict[str, Any]:
+        file_id = attachment.get("file_id")
+        if not file_id:
+            return attachment
+        metadata = self._request("getFile", query={"file_id": str(file_id)})
+        if metadata.get("ok") is not True or not isinstance(metadata.get("result"), dict):
+            raise ChannelTransportError("Telegram getFile failed")
+        result = metadata["result"]
+        file_size = result.get("file_size")
+        if isinstance(file_size, int) and file_size > self.config.max_attachment_bytes:
+            return {
+                **attachment,
+                "payload_status": "skipped_too_large",
+                "size_bytes": file_size,
+                "max_attachment_bytes": self.config.max_attachment_bytes,
+            }
+        file_path = result.get("file_path")
+        if not file_path:
+            return {**attachment, "payload_status": "metadata_only"}
+        payload = self._download_file(str(file_path))
+        if len(payload) > self.config.max_attachment_bytes:
+            return {
+                **attachment,
+                "payload_status": "skipped_too_large",
+                "size_bytes": len(payload),
+                "max_attachment_bytes": self.config.max_attachment_bytes,
+            }
+        return {
+            **attachment,
+            "payload_status": "included_base64",
+            "size_bytes": len(payload),
+            "data_base64": base64.b64encode(payload).decode("ascii"),
+        }
+
     def _request(self, method: str, *, query: dict[str, str] | None = None, data: dict[str, str] | None = None) -> dict[str, Any]:
         url = f"{self.config.api_base.rstrip('/')}/bot{self.config.bot_token}/{method}"
         if query:
@@ -190,6 +235,16 @@ class TelegramLongPollingTransport:
         if not isinstance(parsed, dict):
             raise ChannelTransportError("Telegram response was not an object")
         return parsed
+
+    def _download_file(self, file_path: str) -> bytes:
+        if not self.config.configured:
+            raise ChannelTransportError("TELEGRAM_BOT_TOKEN is not configured")
+        url = f"{self.config.api_base.rstrip('/')}/file/bot{self.config.bot_token}/{file_path.lstrip('/')}"
+        try:
+            with urllib.request.urlopen(url, timeout=self.config.timeout_seconds + 5) as response:
+                return response.read(self.config.max_attachment_bytes + 1)
+        except urllib.error.URLError as exc:
+            raise ChannelTransportError("Telegram file download failed") from exc
 
 
 class SignalCliRestTransport:

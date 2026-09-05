@@ -47,6 +47,7 @@ def test_freyja_channels_compose_defaults_to_key_file_and_deny_all_allowlists() 
     assert values["TELEGRAM_ENABLED"] == "false"
     assert values["TELEGRAM_ALLOWED_USER_IDS"] == ""
     assert values["TELEGRAM_IDENTITY_MAP"] == ""
+    assert values["TELEGRAM_MAX_ATTACHMENT_BYTES"] == "8388608"
     assert values["SIGNAL_ENABLED"] == "false"
     assert values["SIGNAL_ALLOWED_SENDERS"] == ""
     assert values["SIGNAL_IDENTITY_MAP"] == ""
@@ -57,6 +58,7 @@ def test_freyja_channels_compose_defaults_to_key_file_and_deny_all_allowlists() 
     assert telegram_env["OPEN_WEBUI_API_KEY_FILE"] == "${OPEN_WEBUI_API_KEY_FILE:-/run/secrets/open_webui_api_key}"
     assert signal_env["OPEN_WEBUI_API_KEY_FILE"] == "${OPEN_WEBUI_API_KEY_FILE:-/run/secrets/open_webui_api_key}"
     assert telegram_env["TELEGRAM_ALLOWED_USER_IDS"] == "${TELEGRAM_ALLOWED_USER_IDS:-}"
+    assert telegram_env["TELEGRAM_MAX_ATTACHMENT_BYTES"] == "${TELEGRAM_MAX_ATTACHMENT_BYTES:-8388608}"
     assert signal_env["SIGNAL_ALLOWED_SENDERS"] == "${SIGNAL_ALLOWED_SENDERS:-}"
 
 

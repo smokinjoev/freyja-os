@@ -29,8 +29,11 @@ Telegram is profile-gated and remains off until explicitly started. Configure:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_USER_IDS`
 - `TELEGRAM_IDENTITY_MAP`, for example `123456789:joe`
+- `TELEGRAM_MAX_ATTACHMENT_BYTES`, default `8388608`
 
 An empty allowlist is deny-all.
+Telegram images and documents under the size cap are forwarded to Open WebUI as
+base64 payloads. Oversized files are skipped with metadata only.
 
 Validate without sending:
 

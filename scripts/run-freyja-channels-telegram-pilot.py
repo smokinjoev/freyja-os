@@ -171,7 +171,7 @@ def run_once(
     for update in updates:
         max_update_id = update.update_id if max_update_id is None else max(max_update_id, update.update_id)
         try:
-            response = service.handle(update.message)
+            response = service.handle(transport.enrich_attachments(update.message))
             if update.message.chat_id:
                 transport.send_message(chat_id=update.message.chat_id, text=response)
             handled += 1
