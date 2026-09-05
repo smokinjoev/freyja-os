@@ -22,6 +22,8 @@ AGENT_MODEL_IDS = {
     "agent-44": "agent/agent-47",
     "jenna": "agent/jennacide",
 }
+REQUIRED_AGENT_IDS = {"freyja", "cloyd", "benedict", "agent-44", "jenna"}
+CHILD_AGENT_IDS = {"agent-44", "jenna"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,14 +140,65 @@ def _tool_list(agent: dict[str, Any], key: str) -> list[str]:
     return [str(value) for value in values or []]
 
 
+def validate_export(export: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    records = {record.get("freyja", {}).get("agent_id"): record for record in export.get("records") or []}
+    record_ids = {record.get("id") for record in export.get("records") or []}
+    missing_agents = REQUIRED_AGENT_IDS - set(records)
+    if missing_agents:
+        errors.append(f"missing required agents: {sorted(missing_agents)}")
+    missing_model_ids = set(AGENT_MODEL_IDS.values()) - record_ids
+    if missing_model_ids:
+        errors.append(f"missing required Open WebUI model IDs: {sorted(missing_model_ids)}")
+
+    for agent_id, record in records.items():
+        freyja = record.get("freyja") or {}
+        tools = freyja.get("tools") or {}
+        if freyja.get("provider") != "vulcan_ollama":
+            errors.append(f"{agent_id} provider must be vulcan_ollama")
+        if freyja.get("keep_local") is not True:
+            errors.append(f"{agent_id} must keep inference local")
+        if "cloud_fallback" not in set(tools.get("deny") or []):
+            errors.append(f"{agent_id} must deny cloud_fallback")
+
+    benedict = records.get("benedict") or {}
+    benedict_freyja = benedict.get("freyja") or {}
+    benedict_tools = benedict_freyja.get("tools") or {}
+    benedict_access = ((benedict.get("access_control") or {}).get("read") or {}).get("group_ids") or []
+    if benedict_access != ["beth"]:
+        errors.append("Benedict access must be restricted to Beth")
+    if benedict_freyja.get("memory_policy", {}).get("cloud_fallback") != "forbidden":
+        errors.append("Benedict memory policy must forbid cloud fallback")
+    if set(benedict_freyja.get("permitted_knowledge") or []) != {"personal:beth", "restricted:benedict"}:
+        errors.append("Benedict permitted knowledge must be Beth personal and restricted Benedict only")
+    if set(benedict_tools.get("confirm") or []):
+        errors.append("Benedict must not have confirmable write tools")
+
+    for agent_id in CHILD_AGENT_IDS:
+        child = records.get(agent_id) or {}
+        child_tools = (child.get("freyja") or {}).get("tools") or {}
+        denied = set(child_tools.get("deny") or [])
+        for required in ("admin", "messaging.send", "home.device_action", "cloud_fallback"):
+            if required not in denied:
+                errors.append(f"{agent_id} must deny {required}")
+        if child_tools.get("confirm"):
+            errors.append(f"{agent_id} must not have confirmable tools")
+    if export.get("secrets_included") is not False:
+        errors.append("export must not include secrets")
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     export = build_export(load_manifest(args.source))
+    errors = validate_export(export)
+    export["validation_errors"] = errors
+    export["ok"] = not errors
     rendered = json.dumps(export, indent=2, sort_keys=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered + "\n", encoding="utf-8")
     print(rendered)
-    return 0
+    return 0 if export["ok"] else 1
 
 
 if __name__ == "__main__":
