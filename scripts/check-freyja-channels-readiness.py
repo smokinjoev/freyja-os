@@ -32,6 +32,32 @@ def _env_count(name: str) -> int:
     return len([item for item in raw.replace(";", ",").split(",") if item.strip()])
 
 
+def _csv_set(name: str) -> set[str]:
+    raw = os.environ.get(name, "")
+    return {item.strip() for item in raw.replace(";", ",").split(",") if item.strip()}
+
+
+def _csv_map(name: str) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for item in _csv_set(name):
+        if ":" not in item:
+            continue
+        sender, identity = item.split(":", 1)
+        if sender.strip() and identity.strip():
+            mapping[sender.strip()] = identity.strip()
+    return mapping
+
+
+def _missing_channel_configuration(*, allowlist_env: str, allowlist_count: int, transport_envs: list[str]) -> list[str]:
+    missing = []
+    if allowlist_count <= 0:
+        missing.append(allowlist_env)
+    for name in transport_envs:
+        if not os.environ.get(name, "").strip():
+            missing.append(name)
+    return missing
+
+
 def _git_head() -> str | None:
     try:
         return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL).strip()
@@ -47,9 +73,29 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
     whatsapp = channels.get("whatsapp") or {}
     telegram_allowed = _env_count(str(telegram.get("sender_allowlist_env") or "TELEGRAM_ALLOWED_USER_IDS"))
     signal_allowed = _env_count(str(signal.get("sender_allowlist_env") or "SIGNAL_ALLOWED_SENDERS"))
+    telegram_allowlist = _csv_set(str(telegram.get("sender_allowlist_env") or "TELEGRAM_ALLOWED_USER_IDS"))
+    signal_allowlist = _csv_set(str(signal.get("sender_allowlist_env") or "SIGNAL_ALLOWED_SENDERS"))
+    telegram_identities = _csv_map("TELEGRAM_IDENTITY_MAP")
+    signal_identities = _csv_map("SIGNAL_IDENTITY_MAP")
     telegram_transport = TelegramPilotConfig.from_env()
     signal_transport = SignalCliRestConfig.from_env()
     open_webui_client = OpenWebUIChatClient()
+    telegram_missing = _missing_channel_configuration(
+        allowlist_env=str(telegram.get("sender_allowlist_env") or "TELEGRAM_ALLOWED_USER_IDS"),
+        allowlist_count=telegram_allowed,
+        transport_envs=["TELEGRAM_BOT_TOKEN", "TELEGRAM_IDENTITY_MAP", "OPEN_WEBUI_API_KEY"],
+    )
+    signal_missing = _missing_channel_configuration(
+        allowlist_env=str(signal.get("sender_allowlist_env") or "SIGNAL_ALLOWED_SENDERS"),
+        allowlist_count=signal_allowed,
+        transport_envs=["SIGNAL_ACCOUNT_NUMBER", "SIGNAL_IDENTITY_MAP", "OPEN_WEBUI_API_KEY"],
+    )
+    if not os.environ.get("SIGNAL_REST_API_URL", "").strip() and not signal_transport.configured:
+        signal_missing.append("SIGNAL_REST_API_URL")
+    if telegram_allowlist and not telegram_allowlist <= set(telegram_identities):
+        telegram_missing.append("TELEGRAM_IDENTITY_MAP:missing_allowlist_entries")
+    if signal_allowlist and not signal_allowlist <= set(signal_identities):
+        signal_missing.append("SIGNAL_IDENTITY_MAP:missing_allowlist_entries")
     return {
         "report_type": "freyja-channels-readiness",
         "generated_at_unix": int(time.time()),
@@ -84,8 +130,17 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
             "transport_configured": telegram_transport.configured,
             "allowlist_configured": telegram_allowed > 0,
             "allowlist_count": telegram_allowed,
+            "identity_map_configured": bool(telegram_identities),
+            "allowlist_identity_map_complete": bool(telegram_allowlist) and telegram_allowlist <= set(telegram_identities),
             "empty_allowlist": telegram.get("empty_allowlist"),
-            "ready_for_live_round_trip": telegram_allowed > 0 and telegram_transport.configured,
+            "ready_for_live_round_trip": (
+                telegram_allowed > 0
+                and telegram_transport.configured
+                and open_webui_client.configured
+                and bool(telegram_identities)
+                and telegram_allowlist <= set(telegram_identities)
+            ),
+            "missing_configuration": telegram_missing,
         },
         "signal": {
             "status": signal.get("status"),
@@ -94,8 +149,17 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
             "transport_configured": signal_transport.configured,
             "allowlist_configured": signal_allowed > 0,
             "allowlist_count": signal_allowed,
+            "identity_map_configured": bool(signal_identities),
+            "allowlist_identity_map_complete": bool(signal_allowlist) and signal_allowlist <= set(signal_identities),
             "empty_allowlist": signal.get("empty_allowlist"),
-            "ready_for_live_round_trip": signal_allowed > 0 and signal_transport.configured,
+            "ready_for_live_round_trip": (
+                signal_allowed > 0
+                and signal_transport.configured
+                and open_webui_client.configured
+                and bool(signal_identities)
+                and signal_allowlist <= set(signal_identities)
+            ),
+            "missing_configuration": signal_missing,
         },
         "whatsapp": {
             "status": whatsapp.get("status"),

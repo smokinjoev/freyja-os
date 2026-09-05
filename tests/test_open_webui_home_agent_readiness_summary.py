@@ -72,6 +72,11 @@ def test_readiness_summary_uses_inventory_next_action_for_post_auth_gate(monkeyp
             "secrets_included": False,
             "open_webui_next_action_hint": "Complete first-account Open WebUI onboarding at http://127.0.0.1:3001.",
         },
+        "freyja-channels-readiness.json": {
+            "secrets_included": False,
+            "telegram": {},
+            "signal": {},
+        },
     }
 
     monkeypatch.setattr(module, "_load", lambda path: reports[path.name])
@@ -81,6 +86,35 @@ def test_readiness_summary_uses_inventory_next_action_for_post_auth_gate(monkeyp
 
     assert gates["post_auth_activation"]["next_action"].startswith("Complete first-account Open WebUI onboarding")
     assert summary["exact_next_action"] == gates["post_auth_activation"]["next_action"]
+
+
+def test_readiness_summary_uses_channel_missing_configuration_without_secret_values(monkeypatch) -> None:
+    module = _module()
+
+    reports = {
+        "open-webui-home-agent-post-auth-activation.json": {"secrets_included": False, "ready": False},
+        "open-webui-home-agent-chat-smoke.json": {"secrets_included": False, "status": "pending"},
+        "freyja-channels-telegram-pilot.json": {"secrets_included": False, "ready": False, "checks": {}},
+        "freyja-channels-signal-pilot.json": {"secrets_included": False, "ready": False, "checks": {}},
+        "open-webui-home-agent-deliverable.json": {"secrets_included": False, "exact_next_action": "old action"},
+        "open-webui-home-agent-completion-audit.json": {"secrets_included": False, "status_counts": {}},
+        "open-webui-home-agent-platform-inventory.json": {"secrets_included": False, "open_webui_next_action_hint": "onboard"},
+        "freyja-channels-readiness.json": {
+            "secrets_included": False,
+            "telegram": {"missing_configuration": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries"]},
+            "signal": {"missing_configuration": ["SIGNAL_ACCOUNT_NUMBER", "SIGNAL_REST_API_URL"]},
+        },
+    }
+
+    monkeypatch.setattr(module, "_load", lambda path: reports[path.name])
+
+    summary = module.build_summary()
+    gates = {gate["gate_id"]: gate for gate in summary["gates"]}
+    serialized = json.dumps(summary)
+
+    assert gates["telegram_pilot"]["next_action"] == "Configure: TELEGRAM_BOT_TOKEN, TELEGRAM_IDENTITY_MAP:missing_allowlist_entries."
+    assert gates["signal_pilot"]["next_action"] == "Configure: SIGNAL_ACCOUNT_NUMBER, SIGNAL_REST_API_URL."
+    assert "secret-token-value" not in serialized
 
 
 def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(tmp_path: Path, capsys) -> None:

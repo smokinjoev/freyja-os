@@ -440,8 +440,10 @@ Latest readiness:
 deterministic_gateway_only=true
 telegram.transport_adapter=TelegramLongPollingTransport
 telegram.ready_for_live_round_trip=false
+telegram.missing_configuration=["TELEGRAM_ALLOWED_USER_IDS","TELEGRAM_BOT_TOKEN","TELEGRAM_IDENTITY_MAP","OPEN_WEBUI_API_KEY"]
 signal.transport_adapter=SignalCliRestTransport
 signal.ready_for_live_round_trip=false
+signal.missing_configuration=["SIGNAL_ALLOWED_SENDERS","SIGNAL_ACCOUNT_NUMBER","SIGNAL_IDENTITY_MAP","OPEN_WEBUI_API_KEY","SIGNAL_REST_API_URL"]
 thread_persistence_store.path="data/freyja-channels/threads.json"
 audit_store.path="data/freyja-channels/audit.jsonl"
 audit_store.denied_attempts_logged=true

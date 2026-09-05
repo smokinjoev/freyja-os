@@ -58,6 +58,13 @@ def _git_head() -> str | None:
         return None
 
 
+def _channel_next_action(channel_report: dict[str, Any], *, fallback: str) -> str:
+    missing = channel_report.get("missing_configuration") or []
+    if missing:
+        return "Configure: " + ", ".join(str(item) for item in missing) + "."
+    return fallback
+
+
 def build_summary() -> dict[str, Any]:
     activation = _load(REPORTS / "open-webui-home-agent-post-auth-activation.json")
     chat_smoke = _load(REPORTS / "open-webui-home-agent-chat-smoke.json")
@@ -67,6 +74,9 @@ def build_summary() -> dict[str, Any]:
     completion = _load(REPORTS / "open-webui-home-agent-completion-audit.json")
     inventory = _load(REPORTS / "open-webui-home-agent-platform-inventory.json")
     open_webui_next_action = inventory.get("open_webui_next_action_hint") or deliverable.get("exact_next_action")
+    channels = _load(REPORTS / "freyja-channels-readiness.json")
+    telegram_readiness = channels.get("telegram") if isinstance(channels.get("telegram"), dict) else {}
+    signal_readiness = channels.get("signal") if isinstance(channels.get("signal"), dict) else {}
 
     telegram_checks = telegram.get("checks") or {}
     signal_checks = signal.get("checks") or {}
@@ -98,7 +108,10 @@ def build_summary() -> dict[str, Any]:
             "certification/reports/freyja-channels-telegram-pilot.json",
             None
             if telegram.get("ready")
-            else "Set TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, TELEGRAM_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
+            else _channel_next_action(
+                telegram_readiness,
+                fallback="Set TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, TELEGRAM_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
+            ),
             "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
             telegram.get("generated_at_unix") or telegram.get("timestamp_unix"),
             telegram.get("git_head"),
@@ -110,7 +123,10 @@ def build_summary() -> dict[str, Any]:
             "certification/reports/freyja-channels-signal-pilot.json",
             None
             if signal.get("ready")
-            else "Register signal-cli-rest-api and set SIGNAL_ACCOUNT_NUMBER, SIGNAL_ALLOWED_SENDERS, SIGNAL_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
+            else _channel_next_action(
+                signal_readiness,
+                fallback="Register signal-cli-rest-api and set SIGNAL_ACCOUNT_NUMBER, SIGNAL_ALLOWED_SENDERS, SIGNAL_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
+            ),
             "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
             signal.get("generated_at_unix") or signal.get("timestamp_unix"),
             signal.get("git_head"),

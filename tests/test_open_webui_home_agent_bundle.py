@@ -62,7 +62,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     ]
     assert all(gate["ready"] is False for gate in bundle["external_gates"])
     assert bundle["external_gates"][0]["next_action"].startswith("Complete first-account Open WebUI onboarding")
-    assert bundle["external_gates"][2]["next_action"].startswith("Set TELEGRAM_BOT_TOKEN")
+    assert bundle["external_gates"][2]["next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
     assert bundle["external_gates"][0]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert "OPEN_WEBUI_API_KEY=<redacted>" in bundle["external_gates"][1]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in bundle["external_gates"][2]["command"]
@@ -153,6 +153,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["channel_audit_store"]["response_failures_logged"] is True
     assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/openai/v1/chat/completions")
     assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
+    assert "TELEGRAM_BOT_TOKEN" in bundle["evidence_summary"]["telegram_missing_configuration"]
     assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
     assert isinstance(bundle["evidence_summary"]["channels_readiness_generated_at_unix"], int)
     assert bundle["evidence_summary"]["channels_readiness_git_head"]
@@ -160,6 +161,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["telegram_pilot_git_head"]
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["telegram_bot_token_configured"] is False
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["allowlist_identity_map_complete"] is False
+    assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_missing_configuration"]
     assert bundle["evidence_summary"]["signal_pilot_ready"] is False
     assert isinstance(bundle["evidence_summary"]["signal_pilot_generated_at_unix"], int)
     assert bundle["evidence_summary"]["signal_pilot_git_head"]
