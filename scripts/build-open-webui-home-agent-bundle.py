@@ -741,6 +741,15 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Readiness summary: `{evidence['readiness_summary_status']}`",
         f"- Readiness all ready: `{evidence['readiness_summary_all_ready']}`",
         "",
+        "## Inference",
+        "",
+    ]
+    for profile, model in sorted(evidence["inference_model_profiles"].items()):
+        lines.append(f"- `{profile}`: `{model}`")
+    for check_name, ok in sorted(evidence["inference_policy_checks"].items()):
+        lines.append(f"- `{check_name}`: `{ok}`")
+    lines += [
+        "",
         "## Post-Auth Activation",
         "",
         f"- Ready: `{evidence['post_auth_activation_ready']}`",
