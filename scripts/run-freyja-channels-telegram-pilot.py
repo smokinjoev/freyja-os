@@ -207,9 +207,13 @@ def run_loop(args: argparse.Namespace) -> dict[str, Any]:
         "mode": "run",
         "secrets_included": False,
         "private_content_included": False,
-        "ready": True,
+        "ready": totals["handled"] > 0 and totals["failed"] == 0,
+        "live_round_trip_complete": totals["handled"] > 0 and totals["failed"] == 0,
         "iterations": iterations,
         "totals": totals,
+        "next_actions": []
+        if totals["handled"] > 0 and totals["failed"] == 0
+        else ["Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0."],
     }
 
 

@@ -26,6 +26,17 @@ def _env_int(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
+def _env_nonnegative_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "")
+    if not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
 @dataclass(frozen=True)
 class TelegramPilotConfig:
     bot_token: str = ""
@@ -37,7 +48,7 @@ class TelegramPilotConfig:
     def from_env(cls) -> "TelegramPilotConfig":
         return cls(
             bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
-            timeout_seconds=_env_int("TELEGRAM_LONG_POLL_TIMEOUT_SECONDS", 25),
+            timeout_seconds=_env_nonnegative_int("TELEGRAM_LONG_POLL_TIMEOUT_SECONDS", 25),
             api_base=os.environ.get("TELEGRAM_API_BASE", "https://api.telegram.org"),
             max_attachment_bytes=_env_int("TELEGRAM_MAX_ATTACHMENT_BYTES", 8 * 1024 * 1024),
         )

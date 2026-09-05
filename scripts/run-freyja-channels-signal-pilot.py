@@ -208,9 +208,39 @@ def run_loop(args: argparse.Namespace) -> dict[str, object]:
         "mode": "run",
         "secrets_included": False,
         "private_content_included": False,
-        "ready": True,
+        "ready": totals["handled"] > 0 and totals["failed"] == 0,
+        "live_round_trip_complete": totals["handled"] > 0 and totals["failed"] == 0,
         "iterations": iterations,
         "totals": totals,
+        "next_actions": []
+        if totals["handled"] > 0 and totals["failed"] == 0
+        else ["Send a message from an allowed Signal sender and rerun the live Signal pilot until handled > 0."],
+    }
+
+
+def _failure_report(args: argparse.Namespace, exc: Exception) -> dict[str, object]:
+    cause = exc.__cause__
+    http_status = getattr(cause, "code", None)
+    reason = "signal_rest_bad_request" if http_status == 400 else "signal_live_run_failed"
+    return {
+        "report_type": "freyja-channels-signal-pilot",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
+        "mode": "run",
+        "secrets_included": False,
+        "private_content_included": False,
+        "ready": False,
+        "live_round_trip_complete": False,
+        "failure": {
+            "reason": reason,
+            "exception_type": type(exc).__name__,
+            "http_status": http_status,
+        },
+        "totals": {"messages": 0, "handled": 0, "denied_or_client_failed": 0, "failed": 1},
+        "next_actions": [
+            "Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.",
+            "Send a message from an allowed Signal sender and archive a report with handled > 0.",
+        ],
     }
 
 
@@ -218,7 +248,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     report = readiness(args)
     if report["ready"] and not args.dry_run:
-        report = run_loop(args)
+        try:
+            report = run_loop(args)
+        except ChannelTransportError as exc:
+            report = _failure_report(args, exc)
     rendered = json.dumps(report, indent=2, sort_keys=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered + "\n", encoding="utf-8")

@@ -151,6 +151,12 @@ def test_telegram_timeout_env_parser_falls_back_on_invalid_values(monkeypatch) -
     assert TelegramPilotConfig.from_env().timeout_seconds == 25
 
 
+def test_telegram_timeout_env_parser_accepts_zero_for_one_shot_polling(monkeypatch) -> None:
+    monkeypatch.setenv("TELEGRAM_LONG_POLL_TIMEOUT_SECONDS", "0")
+
+    assert TelegramPilotConfig.from_env().timeout_seconds == 0
+
+
 def test_env_int_rejects_non_positive_values(monkeypatch) -> None:
     monkeypatch.setenv("FREYJA_TEST_TIMEOUT", "0")
     assert _env_int("FREYJA_TEST_TIMEOUT", 25) == 25

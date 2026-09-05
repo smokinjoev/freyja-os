@@ -132,7 +132,7 @@ def _pilot_live_round_trip_ok(report: dict[str, Any], handled_key: str = "handle
 def _pilot_next_actions(channel: str, pilot: dict[str, Any], readiness: dict[str, Any]) -> list[str]:
     if _pilot_live_round_trip_ok(pilot):
         return []
-    if isinstance(pilot.get("next_actions"), list) and pilot.get("failure"):
+    if isinstance(pilot.get("next_actions"), list) and pilot.get("next_actions") and pilot.get("mode") == "run":
         return [_canonical_action(str(action)) for action in pilot["next_actions"]]
     if pilot.get("ready") is True:
         return [f"Run the {channel} live round-trip pilot and archive a report with handled > 0."]
@@ -234,7 +234,7 @@ def build_summary() -> dict[str, Any]:
             if telegram_live_ok
             else (
                 str(telegram["next_actions"][0])
-                if telegram.get("failure") and isinstance(telegram.get("next_actions"), list) and telegram["next_actions"]
+                if telegram.get("mode") == "run" and isinstance(telegram.get("next_actions"), list) and telegram["next_actions"]
                 else
                 "Run the Telegram live round-trip pilot and require handled > 0."
                 if telegram.get("ready") is True
@@ -257,7 +257,7 @@ def build_summary() -> dict[str, Any]:
             if signal_live_ok
             else (
                 str(signal["next_actions"][0])
-                if signal.get("failure") and isinstance(signal.get("next_actions"), list) and signal["next_actions"]
+                if signal.get("mode") == "run" and isinstance(signal.get("next_actions"), list) and signal["next_actions"]
                 else
                 "Run the Signal live round-trip pilot and require handled > 0."
                 if signal.get("ready") is True
