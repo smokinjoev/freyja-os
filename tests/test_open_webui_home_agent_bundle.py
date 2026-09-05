@@ -124,6 +124,10 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["tools_gateway"] == "certification/reports/open-webui-tools-gateway-readiness.json"
     assert bundle["artifacts"]["tools_openapi"] == "certification/reports/open-webui-tools-openapi.json"
     assert bundle["artifacts"]["readiness_summary"] == "certification/reports/open-webui-home-agent-readiness-summary.json"
+    assert bundle["artifacts"]["channels_compose"] == "deploy/compose/freyja-channels/compose.yaml"
+    assert bundle["artifacts"]["channels_env_example"] == "deploy/compose/freyja-channels/.env.example"
+    assert bundle["artifacts"]["channels_runbook"] == "deploy/compose/freyja-channels/README.md"
+    assert bundle["artifacts"]["channels_dockerfile"] == "deploy/docker/freyja-channels.Dockerfile"
     assert bundle["artifacts"]["evidence_refresh"] == "certification/reports/open-webui-home-agent-evidence-refresh.json"
     assert bundle["artifacts"]["proactive_dry_run"] == "certification/reports/freyja-proactive-dry-run.json"
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
@@ -398,6 +402,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "pdf_analysis" in text
     assert "image_analysis" in text
     assert "## Channel Safety" in text
+    assert "`compose`: `deploy/compose/freyja-channels/compose.yaml`" in text
     assert "`telegram_empty_allowlist_policy`: `deny_all`" in text
     assert "`telegram_allowlist_count`: `0`" in text
     assert "`telegram_identity_map_count`: `0`" in text

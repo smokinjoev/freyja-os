@@ -571,8 +571,19 @@ message bodies are not logged. Denied attempts and Open WebUI response failures
 are audited with only hashed sender, channel, routing, and error metadata.
 
 The Open WebUI client maps permitted channel agents to the imported Open WebUI
-model IDs and posts to `/openai/v1/chat/completions` only when
-`OPEN_WEBUI_API_KEY` is configured.
+model IDs and posts to `/api/chat/completions` only when `OPEN_WEBUI_API_KEY`
+or `OPEN_WEBUI_API_KEY_FILE` is configured.
+
+Atlas channel deployment files:
+
+- `deploy/compose/freyja-channels/compose.yaml`
+- `deploy/compose/freyja-channels/.env.example`
+- `deploy/compose/freyja-channels/README.md`
+
+The compose project mounts the Atlas Open WebUI service API key as a Docker
+secret from `/home/joe/.freyja/open-webui-api-key` by default. Telegram and
+Signal services are profile-gated, publish no ports, and keep empty allowlists
+as deny-all.
 
 Telegram pilot runner:
 
@@ -582,11 +593,11 @@ scripts/run-freyja-channels-telegram-pilot.py --dry-run \
 ```
 
 The runner uses `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`,
-`TELEGRAM_IDENTITY_MAP`, and `OPEN_WEBUI_API_KEY`. Its dry-run report records
-only boolean readiness checks, including whether every allowlisted sender has
-an identity mapping. In run mode it advances `data/freyja-channels/telegram.offset`
-after each observed update and sends the Open WebUI response back with Telegram
-`sendMessage`.
+`TELEGRAM_IDENTITY_MAP`, and `OPEN_WEBUI_API_KEY` or
+`OPEN_WEBUI_API_KEY_FILE`. Its dry-run report records only boolean readiness
+checks, including whether every allowlisted sender has an identity mapping. In
+run mode it advances `data/freyja-channels/telegram.offset` after each observed
+update and sends the Open WebUI response back with Telegram `sendMessage`.
 
 Signal pilot runner:
 
@@ -596,11 +607,12 @@ scripts/run-freyja-channels-signal-pilot.py --dry-run \
 ```
 
 The runner uses `SIGNAL_ACCOUNT_NUMBER`, `SIGNAL_REST_API_URL`,
-`SIGNAL_ALLOWED_SENDERS`, `SIGNAL_IDENTITY_MAP`, and `OPEN_WEBUI_API_KEY`. Its
-dry-run report records only boolean readiness checks, including whether every
-allowlisted sender has an identity mapping. In run mode it receives messages
-through the existing `signal-cli-rest-api` pathway, routes them through
-`freyja-channels`, and sends the Open WebUI response back through Signal.
+`SIGNAL_ALLOWED_SENDERS`, `SIGNAL_IDENTITY_MAP`, and `OPEN_WEBUI_API_KEY` or
+`OPEN_WEBUI_API_KEY_FILE`. Its dry-run report records only boolean readiness
+checks, including whether every allowlisted sender has an identity mapping. In
+run mode it receives messages through the existing `signal-cli-rest-api`
+pathway, routes them through `freyja-channels`, and sends the Open WebUI
+response back through Signal.
 
 It remains deterministic:
 

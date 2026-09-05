@@ -44,6 +44,7 @@ def test_platform_inventory_records_endpoint_map_and_credential_locations_only()
     assert inventory["credential_policy"]["values_recorded"] is False
     assert inventory["credential_policy"]["locations_only"] is True
     assert "deploy/compose/open-webui/.env" in inventory["hosts"]["atlas"]["credential_locations"]
+    assert "deploy/compose/freyja-channels/.env" in inventory["hosts"]["atlas"]["credential_locations"]
     assert inventory["hosts"]["iris"]["duplicate_open_webui"]["status"] == "disabled_expected"
 
 

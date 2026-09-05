@@ -110,6 +110,7 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
             "credential_locations": [
                 "deploy/compose/open-webui/.env",
                 "deploy/compose/freyja5/.env",
+                "deploy/compose/freyja-channels/.env",
                 "deploy/compose/signal/.env",
             ],
         },

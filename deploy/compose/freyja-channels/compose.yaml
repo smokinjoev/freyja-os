@@ -1,0 +1,144 @@
+name: freyja-channels-atlas
+
+services:
+  telegram-pilot:
+    profiles:
+      - telegram
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/freyja-channels.Dockerfile
+    restart: unless-stopped
+    environment:
+      OPEN_WEBUI_URL: ${OPEN_WEBUI_URL:-http://100.119.235.114:3001}
+      OPEN_WEBUI_API_KEY: ${OPEN_WEBUI_API_KEY:-}
+      OPEN_WEBUI_API_KEY_FILE: ${OPEN_WEBUI_API_KEY_FILE:-/run/secrets/open_webui_api_key}
+      FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT: ${FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT:-120}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
+      TELEGRAM_IDENTITY_MAP: ${TELEGRAM_IDENTITY_MAP:-}
+      FREYJA_CHANNEL_TELEGRAM_POLL_INTERVAL: ${FREYJA_CHANNEL_TELEGRAM_POLL_INTERVAL:-2}
+    command:
+      - python
+      - scripts/run-freyja-channels-telegram-pilot.py
+      - --state-dir
+      - /state
+    volumes:
+      - freyja-channel-state:/state
+    secrets:
+      - open_webui_api_key
+    networks:
+      - atlas-egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  telegram-dry-run:
+    profiles:
+      - operator
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/freyja-channels.Dockerfile
+    environment:
+      OPEN_WEBUI_URL: ${OPEN_WEBUI_URL:-http://100.119.235.114:3001}
+      OPEN_WEBUI_API_KEY: ${OPEN_WEBUI_API_KEY:-}
+      OPEN_WEBUI_API_KEY_FILE: ${OPEN_WEBUI_API_KEY_FILE:-/run/secrets/open_webui_api_key}
+      FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT: ${FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT:-120}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-}
+      TELEGRAM_IDENTITY_MAP: ${TELEGRAM_IDENTITY_MAP:-}
+    command:
+      - python
+      - scripts/run-freyja-channels-telegram-pilot.py
+      - --dry-run
+      - --state-dir
+      - /state
+    volumes:
+      - freyja-channel-state:/state
+    secrets:
+      - open_webui_api_key
+    networks:
+      - atlas-egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  signal-pilot:
+    profiles:
+      - signal
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/freyja-channels.Dockerfile
+    restart: unless-stopped
+    environment:
+      OPEN_WEBUI_URL: ${OPEN_WEBUI_URL:-http://100.119.235.114:3001}
+      OPEN_WEBUI_API_KEY: ${OPEN_WEBUI_API_KEY:-}
+      OPEN_WEBUI_API_KEY_FILE: ${OPEN_WEBUI_API_KEY_FILE:-/run/secrets/open_webui_api_key}
+      FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT: ${FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT:-120}
+      SIGNAL_ACCOUNT_NUMBER: ${SIGNAL_ACCOUNT_NUMBER:-}
+      SIGNAL_REST_API_URL: ${SIGNAL_REST_API_URL:-http://signal-api:8080}
+      SIGNAL_ALLOWED_SENDERS: ${SIGNAL_ALLOWED_SENDERS:-}
+      SIGNAL_IDENTITY_MAP: ${SIGNAL_IDENTITY_MAP:-}
+      FREYJA_CHANNEL_SIGNAL_POLL_INTERVAL: ${FREYJA_CHANNEL_SIGNAL_POLL_INTERVAL:-5}
+    command:
+      - python
+      - scripts/run-freyja-channels-signal-pilot.py
+      - --state-dir
+      - /state
+    volumes:
+      - freyja-channel-state:/state
+    secrets:
+      - open_webui_api_key
+    networks:
+      - atlas-egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  signal-dry-run:
+    profiles:
+      - operator
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/freyja-channels.Dockerfile
+    environment:
+      OPEN_WEBUI_URL: ${OPEN_WEBUI_URL:-http://100.119.235.114:3001}
+      OPEN_WEBUI_API_KEY: ${OPEN_WEBUI_API_KEY:-}
+      OPEN_WEBUI_API_KEY_FILE: ${OPEN_WEBUI_API_KEY_FILE:-/run/secrets/open_webui_api_key}
+      FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT: ${FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT:-120}
+      SIGNAL_ACCOUNT_NUMBER: ${SIGNAL_ACCOUNT_NUMBER:-}
+      SIGNAL_REST_API_URL: ${SIGNAL_REST_API_URL:-http://signal-api:8080}
+      SIGNAL_ALLOWED_SENDERS: ${SIGNAL_ALLOWED_SENDERS:-}
+      SIGNAL_IDENTITY_MAP: ${SIGNAL_IDENTITY_MAP:-}
+    command:
+      - python
+      - scripts/run-freyja-channels-signal-pilot.py
+      - --dry-run
+      - --state-dir
+      - /state
+    volumes:
+      - freyja-channel-state:/state
+    secrets:
+      - open_webui_api_key
+    networks:
+      - atlas-egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  atlas-egress:
+
+volumes:
+  freyja-channel-state:
+
+secrets:
+  open_webui_api_key:
+    file: ${OPEN_WEBUI_API_KEY_HOST_FILE:-/home/joe/.freyja/open-webui-api-key}
