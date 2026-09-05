@@ -145,8 +145,30 @@ def agent_checks(
     return checks
 
 
+def pending_next_actions(reason: str) -> tuple[list[str], list[str]]:
+    if reason == "OPEN_WEBUI_API_KEY not supplied":
+        return (
+            ["OPEN_WEBUI_API_KEY"],
+            [
+                "Create/sign in to Open WebUI and generate an admin or service-account API key.",
+                "Set OPEN_WEBUI_API_KEY outside source control.",
+                "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
+            ],
+        )
+    if reason == "dry run":
+        return (
+            [],
+            [
+                "Set OPEN_WEBUI_API_KEY when ready to perform the authenticated five-agent chat smoke.",
+                "Rerun without --dry-run and require status=complete for all selected agents.",
+            ],
+        )
+    return ([], ["Resolve the reported pending reason, then rerun the authenticated chat smoke."])
+
+
 def build_pending_report(args: argparse.Namespace, manifest: dict[str, Any], reason: str) -> dict[str, Any]:
     generated_at = int(time.time())
+    missing_configuration, next_actions = pending_next_actions(reason)
     return {
         "report_type": "open-webui-home-agent-chat-smoke",
         "generated_at_unix": generated_at,
@@ -158,6 +180,8 @@ def build_pending_report(args: argparse.Namespace, manifest: dict[str, Any], rea
         "complete": False,
         "status": "pending",
         "reason": reason,
+        "missing_configuration": missing_configuration,
+        "next_actions": next_actions,
         "checks": agent_checks(manifest, selected_agents=set(args.agent or []) or None),
     }
 

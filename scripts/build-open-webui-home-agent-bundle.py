@@ -130,6 +130,21 @@ def _channel_gate_next_actions(gate_id: str, channels: dict[str, Any]) -> list[s
     return derived
 
 
+def _chat_smoke_gate_next_actions(chat_smoke: dict[str, Any]) -> list[str]:
+    actions = chat_smoke.get("next_actions")
+    if isinstance(actions, list) and actions:
+        return [str(action) for action in actions]
+    if chat_smoke.get("status") == "complete":
+        return []
+    if "OPEN_WEBUI_API_KEY" in (chat_smoke.get("missing_configuration") or []) or chat_smoke.get("reason") == "OPEN_WEBUI_API_KEY not supplied":
+        return [
+            "Create/sign in to Open WebUI and generate an admin or service-account API key.",
+            "Set OPEN_WEBUI_API_KEY outside source control.",
+            "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
+        ]
+    return []
+
+
 def build_bundle(now: int | None = None) -> dict[str, Any]:
     live = _load_json(REPORTS / "open-webui-home-agent-live.json")
     live_report_path = REPORTS / "open-webui-home-agent-live.json"
@@ -242,7 +257,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
                         activation.get("next_actions")
                         if str(gate.get("gate_id")) == "post_auth_activation"
                         and isinstance(activation.get("next_actions"), list)
-                        else _channel_gate_next_actions(str(gate.get("gate_id")), channels)
+                        else (
+                            _chat_smoke_gate_next_actions(chat_smoke)
+                            if str(gate.get("gate_id")) == "authenticated_chat_smoke"
+                            else _channel_gate_next_actions(str(gate.get("gate_id")), channels)
+                        )
                     )
                 )
             ],

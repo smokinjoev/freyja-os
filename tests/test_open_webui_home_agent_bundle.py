@@ -73,6 +73,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert all(gate["ready"] is False for gate in bundle["external_gates"])
     assert bundle["external_gates"][0]["next_action"].startswith("Complete first-account Open WebUI onboarding")
     assert any("Open WebUI users" in action for action in bundle["external_gates"][0]["next_actions"])
+    assert any("generate an admin" in action for action in bundle["external_gates"][1]["next_actions"])
     assert bundle["external_gates"][2]["next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["external_gates"][2]["next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["external_gates"][3]["next_actions"])
@@ -221,6 +222,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "External Gates" in text
     assert "`post_auth_activation`: pending" in text
     assert "Action: Create/sign in Open WebUI users" in text
+    assert "Action: Create/sign in to Open WebUI and generate an admin" in text
     assert "`telegram_pilot`: pending" in text
     assert "Action: Create or choose the Telegram bot" in text
     assert "Action: Set SIGNAL_REST_API_URL" in text

@@ -42,6 +42,7 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert "Open WebUI" in gates["post_auth_activation"]["next_action"]
     assert any("Open WebUI users" in action for action in gates["post_auth_activation"]["next_actions"])
     assert "OPEN_WEBUI_API_KEY" in gates["authenticated_chat_smoke"]["next_action"]
+    assert any("generate an admin" in action for action in gates["authenticated_chat_smoke"]["next_actions"])
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in gates["telegram_pilot"]["next_actions"])
     assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]
@@ -70,7 +71,11 @@ def test_readiness_summary_uses_inventory_next_action_for_post_auth_gate(monkeyp
             "ready": False,
             "next_actions": ["Create/sign in Open WebUI users for: joe."],
         },
-        "open-webui-home-agent-chat-smoke.json": {"secrets_included": False, "status": "pending"},
+        "open-webui-home-agent-chat-smoke.json": {
+            "secrets_included": False,
+            "status": "pending",
+            "reason": "OPEN_WEBUI_API_KEY not supplied",
+        },
         "freyja-channels-telegram-pilot.json": {"secrets_included": False, "ready": False, "checks": {}},
         "freyja-channels-signal-pilot.json": {"secrets_included": False, "ready": False, "checks": {}},
         "open-webui-home-agent-deliverable.json": {"secrets_included": False, "exact_next_action": "old action"},
@@ -147,6 +152,7 @@ def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(t
     assert "Open WebUI Home-Agent Readiness Summary" in markdown
     assert "`post_auth_activation`: pending" in markdown
     assert "Action: Create/sign in Open WebUI users" in markdown
+    assert "Action: Create/sign in to Open WebUI and generate an admin" in markdown
     assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in markdown
 
 

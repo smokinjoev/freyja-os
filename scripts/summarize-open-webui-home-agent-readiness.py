@@ -101,6 +101,21 @@ def _channel_next_actions(channel: str, channel_report: dict[str, Any]) -> list[
     return actions
 
 
+def _chat_smoke_next_actions(chat_smoke: dict[str, Any]) -> list[str]:
+    configured = chat_smoke.get("next_actions")
+    if isinstance(configured, list) and configured:
+        return [str(action) for action in configured]
+    if chat_smoke.get("status") == "complete":
+        return []
+    if "OPEN_WEBUI_API_KEY" in (chat_smoke.get("missing_configuration") or []) or chat_smoke.get("reason") == "OPEN_WEBUI_API_KEY not supplied":
+        return [
+            "Create/sign in to Open WebUI and generate an admin or service-account API key.",
+            "Set OPEN_WEBUI_API_KEY outside source control.",
+            "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
+        ]
+    return ["Resolve the reported chat-smoke readiness issue and rerun the authenticated five-agent chat smoke."]
+
+
 def build_summary() -> dict[str, Any]:
     activation = _load(REPORTS / "open-webui-home-agent-post-auth-activation.json")
     chat_smoke = _load(REPORTS / "open-webui-home-agent-chat-smoke.json")
@@ -134,7 +149,7 @@ def build_summary() -> dict[str, Any]:
             chat_smoke.get("status") == "complete",
             "certification/reports/open-webui-home-agent-chat-smoke.json",
             None if chat_smoke.get("status") == "complete" else "Set OPEN_WEBUI_API_KEY and run the five-agent chat smoke.",
-            [],
+            _chat_smoke_next_actions(chat_smoke),
             "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
             chat_smoke.get("generated_at_unix") or chat_smoke.get("timestamp_unix"),
             chat_smoke.get("git_head"),
