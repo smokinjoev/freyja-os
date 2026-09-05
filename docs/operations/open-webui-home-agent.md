@@ -482,7 +482,7 @@ telegram.next_actions=[
   "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
   "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
   "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
-  "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+  "Set OPEN_WEBUI_API_KEY outside source control.",
   "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
 ]
 signal.next_actions=[
@@ -490,7 +490,7 @@ signal.next_actions=[
   "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
   "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
   "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
-  "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+  "Set OPEN_WEBUI_API_KEY outside source control.",
   "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy."
 ]
 thread_persistence_store.path="data/freyja-channels/threads.json"

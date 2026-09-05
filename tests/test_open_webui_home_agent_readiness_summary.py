@@ -162,6 +162,8 @@ def test_home_agent_runbook_documents_required_next_action_queue() -> None:
     assert "Current operator sequence" in text
     assert "Complete first-account Open WebUI onboarding" in text
     assert "OPEN_WEBUI_API_KEY" in text
+    assert "Set OPEN_WEBUI_API_KEY outside source control." in text
+    assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in text
     assert "TELEGRAM_BOT_TOKEN" in text
     assert "SIGNAL_REST_API_URL" in text
     assert "keep empty allowlists as deny-all" in text
