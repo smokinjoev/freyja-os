@@ -164,6 +164,47 @@ def _agent_policy_summary(model_import: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _endpoint_ownership(inventory: dict[str, Any]) -> dict[str, Any]:
+    endpoints = inventory.get("endpoints") or {}
+    hosts = inventory.get("hosts") or {}
+    atlas_services = (hosts.get("atlas") or {}).get("current_services") or {}
+    vulcan = hosts.get("vulcan") or {}
+    iris = hosts.get("iris") or {}
+    return {
+        "atlas_open_webui": {
+            "endpoint": endpoints.get("open_webui"),
+            "tailnet_endpoint": endpoints.get("open_webui_tailnet"),
+            "container": "freyja-open-webui-atlas-open-webui-1",
+            "status": (atlas_services.get("freyja-open-webui-atlas-open-webui-1") or {}).get("status"),
+            "role": "central multi-user agent/chat/permissions platform",
+        },
+        "atlas_model_proxy": {
+            "endpoint": endpoints.get("model_proxy_internal"),
+            "container": "freyja-open-webui-atlas-model-proxy-1",
+            "status": (atlas_services.get("freyja-open-webui-atlas-model-proxy-1") or {}).get("status"),
+            "role": "Open WebUI to Freyja/Vulcan routing boundary",
+        },
+        "atlas_freyja5_gateway": {
+            "endpoint": endpoints.get("freyja5_gateway"),
+            "container": "freyja5-gateway-1",
+            "status": (atlas_services.get("freyja5-gateway-1") or {}).get("status"),
+            "role": "home memory and Open WebUI tool gateway host",
+        },
+        "vulcan_inference": {
+            "ollama_endpoint": endpoints.get("vulcan_ollama"),
+            "openai_endpoint": endpoints.get("vulcan_openai"),
+            "nexus_required": vulcan.get("nexus_required"),
+            "role": vulcan.get("role"),
+        },
+        "iris_apple_capabilities": {
+            "endpoint": endpoints.get("iris_fallback") or iris.get("endpoint"),
+            "mcp_host": iris.get("mcp_host"),
+            "role": iris.get("role"),
+            "fallback_only_for_inference": True,
+        },
+    }
+
+
 def _channel_gate_next_actions(gate_id: str, channels: dict[str, Any]) -> list[str]:
     if gate_id == "telegram_pilot":
         channel = channels.get("telegram") if isinstance(channels.get("telegram"), dict) else {}
@@ -597,6 +638,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "completion_audit_generated_at_unix": completion.get("generated_at_unix") or _mtime(completion_report_path),
             "completion_audit_git_head": completion.get("git_head") or "unknown",
             "inventory_hosts": sorted((inventory.get("hosts") or {}).keys()),
+            "endpoint_ownership": _endpoint_ownership(inventory),
             "open_webui_public_config": open_webui_public_config,
             "open_webui_next_action_hint": open_webui_next_action_hint,
             "inventory_generated_at_unix": inventory.get("generated_at_unix") or _mtime(inventory_path),

@@ -118,6 +118,16 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
     assert bundle["artifacts"]["signal_pilot"] == "certification/reports/freyja-channels-signal-pilot.json"
     assert bundle["evidence_summary"]["inventory_hosts"] == ["atlas", "hera", "iris", "vulcan"]
+    endpoint_ownership = bundle["evidence_summary"]["endpoint_ownership"]
+    assert endpoint_ownership["atlas_open_webui"]["endpoint"] == "http://127.0.0.1:3001"
+    assert endpoint_ownership["atlas_open_webui"]["container"] == "freyja-open-webui-atlas-open-webui-1"
+    assert "healthy" in endpoint_ownership["atlas_open_webui"]["status"]
+    assert endpoint_ownership["atlas_model_proxy"]["endpoint"] == "http://model-proxy:8080/v1"
+    assert endpoint_ownership["atlas_freyja5_gateway"]["endpoint"] == "http://127.0.0.1:8500"
+    assert endpoint_ownership["vulcan_inference"]["ollama_endpoint"] == "http://100.94.80.21:11434"
+    assert endpoint_ownership["vulcan_inference"]["nexus_required"] is False
+    assert endpoint_ownership["iris_apple_capabilities"]["mcp_host"] == "iris"
+    assert endpoint_ownership["iris_apple_capabilities"]["fallback_only_for_inference"] is True
     assert isinstance(bundle["evidence_summary"]["open_webui_public_config"], dict)
     assert bundle["evidence_summary"]["open_webui_public_config"].get("secrets_included") is False
     assert "token=" not in json.dumps(bundle["evidence_summary"]["open_webui_public_config"]).lower()
