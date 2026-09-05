@@ -187,6 +187,13 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert isinstance(bundle["evidence_summary"]["evidence_refresh_step_count"], int)
     assert isinstance(bundle["evidence_summary"]["inference_policy_generated_at_unix"], int)
     assert bundle["evidence_summary"]["inference_policy_git_head"]
+    inference_checks = bundle["evidence_summary"]["inference_policy_checks"]
+    assert inference_checks["open_webui_uses_model_proxy"] is True
+    assert inference_checks["primary_vulcan_endpoint_configured"] is True
+    assert inference_checks["vulcan_ollama_unload_endpoint_configured"] is True
+    assert inference_checks["nexus_not_required"] is True
+    assert inference_checks["unloads_other_primary_models"] is True
+    assert inference_checks["cloud_fallback_disabled_for_open_webui_path"] is True
     assert bundle["evidence_summary"]["channel_thread_persistence_store"]["path"] == "data/freyja-channels/threads.json"
     assert bundle["evidence_summary"]["channel_audit_store"]["raw_sender_logged"] is False
     assert bundle["evidence_summary"]["channel_audit_store"]["denied_attempts_logged"] is True

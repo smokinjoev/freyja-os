@@ -524,6 +524,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "inventory_git_head": inventory.get("git_head") or "unknown",
             "post_auth_activation_ready": activation.get("ready"),
             "inference_model_profiles": inference.get("model_profiles") or {},
+            "inference_policy_checks": {str(check.get("name")): bool(check.get("ok")) for check in inference.get("checks") or []},
             "inference_policy_generated_at_unix": inference.get("generated_at_unix") or _mtime(inference_path),
             "inference_policy_git_head": inference.get("git_head") or "unknown",
             "chat_smoke_status": chat_smoke.get("status"),
