@@ -10,20 +10,23 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-model-proxy-catalog.json"
+DEFAULT_MANIFEST = REPO_ROOT / "config" / "open-webui-home-agents.yaml"
 DEFAULT_URL = "http://127.0.0.1:3001/openai/v1/models"
 DEFAULT_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
 DEFAULT_CONTAINER_URL = "http://model-proxy:8080/v1/models"
-EXPECTED_AGENT_MODELS = {
-    "agent/freyja",
-    "agent/cloyd-gibbler",
-    "agent/benedict",
-    "agent/benedict-paralegal",
-    "agent/agent-47",
-    "agent/jennacide",
+AGENT_MODEL_IDS = {
+    "freyja": "agent/freyja",
+    "cloyd": "agent/cloyd-gibbler",
+    "benedict": "agent/benedict",
+    "agent-44": "agent/agent-47",
+    "jenna": "agent/jennacide",
 }
+EXPECTED_AGENT_MODELS = set(AGENT_MODEL_IDS.values()) | {"agent/benedict-paralegal"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--container", default=DEFAULT_CONTAINER)
     parser.add_argument("--container-url", default=DEFAULT_CONTAINER_URL)
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--no-container-probe", action="store_true")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--timeout", type=float, default=10.0)
@@ -91,9 +95,54 @@ def fetch_model_ids_from_container(container: str, url: str, timeout: float) -> 
         return [], 0, exc.__class__.__name__
 
 
-def build_report(model_ids: list[str], *, status: int = 200, error: str | None = None, url: str = DEFAULT_URL) -> dict[str, Any]:
+def load_manifest(path: Path = DEFAULT_MANIFEST) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict) or data.get("secrets_included") is not False:
+        raise ValueError("agent manifest must be a secret-free mapping")
+    return data
+
+
+def manifest_agent_profiles(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    profiles = manifest.get("model_profiles") if isinstance(manifest.get("model_profiles"), dict) else {}
+    result: dict[str, dict[str, Any]] = {}
+    for agent in manifest.get("agents") or []:
+        if not isinstance(agent, dict):
+            continue
+        agent_id = str(agent.get("id") or "")
+        model_id = AGENT_MODEL_IDS.get(agent_id)
+        profile_id = str(agent.get("model_profile") or "")
+        profile = profiles.get(profile_id) if isinstance(profiles.get(profile_id), dict) else {}
+        if not model_id:
+            continue
+        result[model_id] = {
+            "agent_id": agent_id,
+            "model_profile": profile_id,
+            "provider": profile.get("provider"),
+            "local_model": profile.get("model"),
+            "keep_local": bool(profile.get("keep_local")),
+        }
+    if "agent/benedict" in result:
+        result["agent/benedict-paralegal"] = {**result["agent/benedict"], "agent_id": "benedict-paralegal"}
+    return result
+
+
+def build_report(
+    model_ids: list[str],
+    *,
+    status: int = 200,
+    error: str | None = None,
+    url: str = DEFAULT_URL,
+    manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     present = sorted(EXPECTED_AGENT_MODELS & set(model_ids))
     missing = sorted(EXPECTED_AGENT_MODELS - set(model_ids))
+    agent_profiles = manifest_agent_profiles(manifest or load_manifest())
+    profile_missing = sorted(model_id for model_id in EXPECTED_AGENT_MODELS if model_id not in agent_profiles)
+    non_local_profiles = sorted(
+        model_id
+        for model_id, profile in agent_profiles.items()
+        if model_id in EXPECTED_AGENT_MODELS and (profile.get("provider") != "vulcan_ollama" or profile.get("keep_local") is not True)
+    )
     generated_at = int(time.time())
     return {
         "report_type": "open-webui-model-proxy-catalog",
@@ -108,7 +157,10 @@ def build_report(model_ids: list[str], *, status: int = 200, error: str | None =
         "model_count": len(model_ids),
         "agent_models_present": present,
         "agent_models_missing": missing,
-        "ok": status == 200 and not missing,
+        "agent_profile_map": {model_id: agent_profiles.get(model_id) for model_id in sorted(EXPECTED_AGENT_MODELS)},
+        "agent_profiles_missing": profile_missing,
+        "agent_profiles_non_local": non_local_profiles,
+        "ok": status == 200 and not missing and not profile_missing and not non_local_profiles,
     }
 
 
@@ -121,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
         probe = "container"
         model_ids, status, error = fetch_model_ids_from_container(args.container, args.container_url, args.timeout)
         url = args.container_url
-    report = build_report(model_ids, status=status, error=error, url=url)
+    report = build_report(model_ids, status=status, error=error, url=url, manifest=load_manifest(args.manifest))
     report["probe"] = probe
     if probe == "container":
         report["container"] = args.container

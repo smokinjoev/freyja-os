@@ -61,7 +61,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
         "signal_pilot",
     ]
     assert all(gate["ready"] is False for gate in bundle["external_gates"])
-    assert bundle["external_gates"][0]["next_action"].startswith("Create/sign in to Open WebUI")
+    assert bundle["external_gates"][0]["next_action"].startswith("Complete first-account Open WebUI onboarding")
     assert bundle["external_gates"][2]["next_action"].startswith("Set TELEGRAM_BOT_TOKEN")
     assert bundle["external_gates"][0]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert "OPEN_WEBUI_API_KEY=<redacted>" in bundle["external_gates"][1]["command"]
@@ -129,6 +129,9 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["proxy_catalog_git_head"]
     assert bundle["evidence_summary"]["proxy_missing_models"] == []
     assert "agent/freyja" in bundle["evidence_summary"]["proxy_agent_models_present"]
+    assert bundle["evidence_summary"]["proxy_agent_profiles_missing"] == []
+    assert bundle["evidence_summary"]["proxy_agent_profiles_non_local"] == []
+    assert bundle["evidence_summary"]["proxy_agent_profile_map"]["agent/freyja"]["provider"] == "vulcan_ollama"
     assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20
     assert isinstance(bundle["evidence_summary"]["tools_gateway_generated_at_unix"], int)
     assert bundle["evidence_summary"]["tools_gateway_git_head"]

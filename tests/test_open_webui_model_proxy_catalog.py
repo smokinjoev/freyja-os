@@ -28,6 +28,12 @@ def test_model_proxy_catalog_report_tracks_agent_models() -> None:
     assert report["timestamp_unix"] == report["generated_at_unix"]
     assert report["git_head"]
     assert report["agent_models_missing"] == []
+    assert report["agent_profiles_missing"] == []
+    assert report["agent_profiles_non_local"] == []
+    assert report["agent_profile_map"]["agent/freyja"]["model_profile"] == "strong_reasoning"
+    assert report["agent_profile_map"]["agent/freyja"]["provider"] == "vulcan_ollama"
+    assert report["agent_profile_map"]["agent/freyja"]["keep_local"] is True
+    assert report["agent_profile_map"]["agent/benedict-paralegal"]["agent_id"] == "benedict-paralegal"
     assert report["model_count"] == 7
 
 
@@ -37,6 +43,21 @@ def test_model_proxy_catalog_report_fails_when_agent_missing() -> None:
 
     assert report["ok"] is False
     assert "agent/benedict" in report["agent_models_missing"]
+
+
+def test_model_proxy_catalog_report_fails_when_manifest_profile_is_not_local() -> None:
+    module = _module()
+    manifest = module.load_manifest()
+    manifest["model_profiles"]["strong_reasoning"] = {
+        **manifest["model_profiles"]["strong_reasoning"],
+        "provider": "cloud",
+    }
+
+    report = module.build_report(sorted(module.EXPECTED_AGENT_MODELS), manifest=manifest)
+
+    assert report["ok"] is False
+    assert "agent/freyja" in report["agent_profiles_non_local"]
+    assert "agent/benedict" in report["agent_profiles_non_local"]
 
 
 def test_model_proxy_catalog_main_writes_report(tmp_path: Path, monkeypatch, capsys) -> None:
