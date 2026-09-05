@@ -92,6 +92,44 @@ def _nested_check(report: dict[str, Any], parent: str, child: str) -> dict[str, 
     return None
 
 
+def _channel_gate_next_actions(gate_id: str, channels: dict[str, Any]) -> list[str]:
+    if gate_id == "telegram_pilot":
+        channel = channels.get("telegram") if isinstance(channels.get("telegram"), dict) else {}
+        action_map = {
+            "TELEGRAM_BOT_TOKEN": "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
+            "TELEGRAM_ALLOWED_USER_IDS": "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
+            "TELEGRAM_IDENTITY_MAP": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+            "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        }
+        final_action = "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
+    elif gate_id == "signal_pilot":
+        channel = channels.get("signal") if isinstance(channels.get("signal"), dict) else {}
+        action_map = {
+            "SIGNAL_REST_API_URL": "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+            "SIGNAL_ACCOUNT_NUMBER": "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+            "SIGNAL_ALLOWED_SENDERS": "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
+            "SIGNAL_IDENTITY_MAP": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+            "SIGNAL_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        }
+        final_action = "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy."
+    else:
+        return []
+    actions = channel.get("next_actions") if isinstance(channel, dict) else None
+    if isinstance(actions, list) and actions:
+        return [str(action) for action in actions]
+    missing = channel.get("missing_configuration") if isinstance(channel, dict) else []
+    if not isinstance(missing, list) or not missing:
+        return []
+    derived: list[str] = []
+    for key, action in action_map.items():
+        if key in missing and action not in derived:
+            derived.append(action)
+    derived.append(final_action)
+    return derived
+
+
 def build_bundle(now: int | None = None) -> dict[str, Any]:
     live = _load_json(REPORTS / "open-webui-home-agent-live.json")
     live_report_path = REPORTS / "open-webui-home-agent-live.json"
@@ -204,7 +242,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
                         activation.get("next_actions")
                         if str(gate.get("gate_id")) == "post_auth_activation"
                         and isinstance(activation.get("next_actions"), list)
-                        else []
+                        else _channel_gate_next_actions(str(gate.get("gate_id")), channels)
                     )
                 )
             ],

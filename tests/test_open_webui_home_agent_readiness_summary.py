@@ -43,7 +43,9 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert any("Open WebUI users" in action for action in gates["post_auth_activation"]["next_actions"])
     assert "OPEN_WEBUI_API_KEY" in gates["authenticated_chat_smoke"]["next_action"]
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
+    assert any("TELEGRAM_BOT_TOKEN" in action for action in gates["telegram_pilot"]["next_actions"])
     assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]
+    assert any("SIGNAL_REST_API_URL" in action for action in gates["signal_pilot"]["next_actions"])
     assert gates["post_auth_activation"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert "OPEN_WEBUI_API_KEY=<redacted>" in gates["authenticated_chat_smoke"]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in gates["telegram_pilot"]["command"]
@@ -120,6 +122,16 @@ def test_readiness_summary_uses_channel_missing_configuration_without_secret_val
 
     assert gates["telegram_pilot"]["next_action"] == "Configure: TELEGRAM_BOT_TOKEN, TELEGRAM_IDENTITY_MAP:missing_allowlist_entries."
     assert gates["signal_pilot"]["next_action"] == "Configure: SIGNAL_ACCOUNT_NUMBER, SIGNAL_REST_API_URL."
+    assert gates["telegram_pilot"]["next_actions"] == [
+        "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
+        "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+        "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot.",
+    ]
+    assert gates["signal_pilot"]["next_actions"] == [
+        "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+        "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+        "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy.",
+    ]
     assert "secret-token-value" not in serialized
 
 

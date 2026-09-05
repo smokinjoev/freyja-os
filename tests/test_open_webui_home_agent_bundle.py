@@ -74,6 +74,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["external_gates"][0]["next_action"].startswith("Complete first-account Open WebUI onboarding")
     assert any("Open WebUI users" in action for action in bundle["external_gates"][0]["next_actions"])
     assert bundle["external_gates"][2]["next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["external_gates"][2]["next_actions"])
+    assert any("SIGNAL_REST_API_URL" in action for action in bundle["external_gates"][3]["next_actions"])
     assert bundle["external_gates"][0]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert "OPEN_WEBUI_API_KEY=<redacted>" in bundle["external_gates"][1]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in bundle["external_gates"][2]["command"]
@@ -220,6 +222,8 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`post_auth_activation`: pending" in text
     assert "Action: Create/sign in Open WebUI users" in text
     assert "`telegram_pilot`: pending" in text
+    assert "Action: Create or choose the Telegram bot" in text
+    assert "Action: Set SIGNAL_REST_API_URL" in text
     assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in text
     assert "Requirement Audit" in text
     assert "`local_inference`: `partial`" in text

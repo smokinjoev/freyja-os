@@ -67,6 +67,40 @@ def _channel_next_action(channel_report: dict[str, Any], *, fallback: str) -> st
     return fallback
 
 
+def _channel_next_actions(channel: str, channel_report: dict[str, Any]) -> list[str]:
+    configured = channel_report.get("next_actions")
+    if isinstance(configured, list) and configured:
+        return [str(action) for action in configured]
+    missing = channel_report.get("missing_configuration") or []
+    if not missing:
+        return []
+    if channel == "telegram":
+        action_map = {
+            "TELEGRAM_BOT_TOKEN": "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
+            "TELEGRAM_ALLOWED_USER_IDS": "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
+            "TELEGRAM_IDENTITY_MAP": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+            "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        }
+        final_action = "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
+    else:
+        action_map = {
+            "SIGNAL_REST_API_URL": "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+            "SIGNAL_ACCOUNT_NUMBER": "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+            "SIGNAL_ALLOWED_SENDERS": "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
+            "SIGNAL_IDENTITY_MAP": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+            "SIGNAL_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        }
+        final_action = "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy."
+    actions = []
+    for key, action in action_map.items():
+        if key in missing and action not in actions:
+            actions.append(action)
+    actions.append(final_action)
+    return actions
+
+
 def build_summary() -> dict[str, Any]:
     activation = _load(REPORTS / "open-webui-home-agent-post-auth-activation.json")
     chat_smoke = _load(REPORTS / "open-webui-home-agent-chat-smoke.json")
@@ -116,7 +150,7 @@ def build_summary() -> dict[str, Any]:
                 telegram_readiness,
                 fallback="Set TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, TELEGRAM_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
             ),
-            [],
+            _channel_next_actions("telegram", telegram_readiness),
             "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
             telegram.get("generated_at_unix") or telegram.get("timestamp_unix"),
             telegram.get("git_head"),
@@ -132,7 +166,7 @@ def build_summary() -> dict[str, Any]:
                 signal_readiness,
                 fallback="Register signal-cli-rest-api and set SIGNAL_ACCOUNT_NUMBER, SIGNAL_ALLOWED_SENDERS, SIGNAL_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
             ),
-            [],
+            _channel_next_actions("signal", signal_readiness),
             "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
             signal.get("generated_at_unix") or signal.get("timestamp_unix"),
             signal.get("git_head"),

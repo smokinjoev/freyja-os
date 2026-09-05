@@ -20,9 +20,12 @@ def _module():
 def test_channels_readiness_fails_closed_without_env(monkeypatch) -> None:
     monkeypatch.delenv("TELEGRAM_ALLOWED_USER_IDS", raising=False)
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_IDENTITY_MAP", raising=False)
     monkeypatch.delenv("SIGNAL_ALLOWED_SENDERS", raising=False)
     monkeypatch.delenv("SIGNAL_ACCOUNT_NUMBER", raising=False)
     monkeypatch.delenv("SIGNAL_REST_API_URL", raising=False)
+    monkeypatch.delenv("SIGNAL_IDENTITY_MAP", raising=False)
+    monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
 
     report = _module().build_report()
 
@@ -42,6 +45,13 @@ def test_channels_readiness_fails_closed_without_env(monkeypatch) -> None:
         "TELEGRAM_IDENTITY_MAP",
         "OPEN_WEBUI_API_KEY",
     ]
+    assert report["telegram"]["next_actions"] == [
+        "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
+        "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
+        "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+        "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot.",
+    ]
     assert report["signal"]["allowlist_configured"] is False
     assert report["signal"]["transport_adapter"] == "SignalCliRestTransport"
     assert report["signal"]["transport_configured"] is False
@@ -54,6 +64,14 @@ def test_channels_readiness_fails_closed_without_env(monkeypatch) -> None:
         "SIGNAL_IDENTITY_MAP",
         "OPEN_WEBUI_API_KEY",
         "SIGNAL_REST_API_URL",
+    ]
+    assert report["signal"]["next_actions"] == [
+        "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+        "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+        "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
+        "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+        "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy.",
     ]
     assert report["whatsapp"]["status"] == "disabled"
 
@@ -77,12 +95,14 @@ def test_channels_readiness_reports_counts_not_secret_values(monkeypatch) -> Non
     assert report["telegram"]["allowlist_identity_map_complete"] is True
     assert report["telegram"]["ready_for_live_round_trip"] is True
     assert report["telegram"]["missing_configuration"] == []
+    assert report["telegram"]["next_actions"] == ["Run the telegram live round-trip pilot and archive the generated readiness report."]
     assert report["signal"]["allowlist_count"] == 1
     assert report["signal"]["transport_configured"] is True
     assert report["signal"]["identity_map_configured"] is True
     assert report["signal"]["allowlist_identity_map_complete"] is True
     assert report["signal"]["ready_for_live_round_trip"] is True
     assert report["signal"]["missing_configuration"] == []
+    assert report["signal"]["next_actions"] == ["Run the signal live round-trip pilot and archive the generated readiness report."]
     assert "secret-token-value" not in serialized
     assert "secret-open-webui-key" not in serialized
     assert "+15550001" not in serialized
@@ -105,6 +125,10 @@ def test_channels_readiness_reports_incomplete_identity_map_without_sender_value
     assert report["telegram"]["allowlist_identity_map_complete"] is False
     assert report["telegram"]["ready_for_live_round_trip"] is False
     assert "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries" in report["telegram"]["missing_configuration"]
+    assert report["telegram"]["next_actions"] == [
+        "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+        "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot.",
+    ]
     assert "1002" not in serialized
 
 
