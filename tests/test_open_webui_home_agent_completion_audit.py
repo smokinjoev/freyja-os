@@ -65,7 +65,7 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
         "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
     ]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in by_id["messaging_channels"]["next_actions"])
-    assert any("SIGNAL_REST_API_URL" in action for action in by_id["messaging_channels"]["next_actions"])
+    assert not any("SIGNAL_REST_API_URL" in action for action in by_id["messaging_channels"]["next_actions"])
     assert "TELEGRAM_BOT_TOKEN" not in by_id["messaging_channels"]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in by_id["messaging_channels"]["command"]
     assert by_id["verification"]["next_action"] == "Clear all external readiness gates, then rerun the completion audit."

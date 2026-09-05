@@ -68,6 +68,12 @@ def _channel_next_action(channel_report: dict[str, Any], *, fallback: str) -> st
 
 
 def _channel_next_actions(channel: str, channel_report: dict[str, Any]) -> list[str]:
+    if (
+        channel_report.get("ready") is True
+        or channel_report.get("ready_for_live_round_trip") is True
+        or channel_report.get("status") == "complete"
+    ):
+        return []
     configured = channel_report.get("next_actions")
     if isinstance(configured, list) and configured:
         return [_canonical_action(str(action)) for action in configured]
@@ -211,7 +217,7 @@ def build_summary() -> dict[str, Any]:
                 telegram_readiness,
                 fallback="Set TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, TELEGRAM_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
             ),
-            _channel_next_actions("telegram", telegram_readiness),
+            [] if telegram.get("ready") is True else _channel_next_actions("telegram", telegram_readiness),
             "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
             telegram.get("generated_at_unix") or telegram.get("timestamp_unix"),
             telegram.get("git_head"),
@@ -227,26 +233,29 @@ def build_summary() -> dict[str, Any]:
                 signal_readiness,
                 fallback="Register signal-cli-rest-api and set SIGNAL_ACCOUNT_NUMBER, SIGNAL_ALLOWED_SENDERS, SIGNAL_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
             ),
-            _channel_next_actions("signal", signal_readiness),
+            [] if signal.get("ready") is True else _channel_next_actions("signal", signal_readiness),
             "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
             signal.get("generated_at_unix") or signal.get("timestamp_unix"),
             signal.get("git_head"),
         ),
     ]
+    all_ready = all(gate["ready"] for gate in gates)
+    required_next_actions = _required_next_actions(gates)
+    exact_next_action = None if all_ready else (open_webui_next_action or (required_next_actions[0] if required_next_actions else None))
     return {
         "report_type": "open-webui-home-agent-readiness-summary",
         "secrets_included": False,
         "private_content_included": False,
         "generated_at_unix": int(time.time()),
-        "status": "ready_for_live_activation" if all(gate["ready"] for gate in gates) else "pending_external_auth_or_credentials",
-        "all_ready": all(gate["ready"] for gate in gates),
+        "status": "ready_for_live_activation" if all_ready else "pending_external_auth_or_credentials",
+        "all_ready": all_ready,
         "git_head": _git_head() or deliverable.get("git_head"),
         "completion_status_counts": completion.get("status_counts") or {},
         "gates": gates,
         "telegram_checks": telegram_checks,
         "signal_checks": signal_checks,
-        "exact_next_action": open_webui_next_action,
-        "required_next_actions": _required_next_actions(gates),
+        "exact_next_action": exact_next_action,
+        "required_next_actions": required_next_actions,
     }
 
 

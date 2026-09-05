@@ -156,6 +156,18 @@ def build_audit() -> dict[str, Any]:
         if command
     ])
     chat_ready = chat_smoke.get("status") == "complete"
+    telegram_ready = telegram_gate.get("ready") is True
+    signal_ready = signal_gate.get("ready") is True
+    pending_messaging_channels = [
+        channel
+        for channel, ready in (("Telegram", telegram_ready), ("Signal", signal_ready))
+        if not ready
+    ]
+    messaging_blocker = (
+        f"{'/'.join(pending_messaging_channels)} live round trip requires allowlists and credentials."
+        if pending_messaging_channels
+        else None
+    )
     db_models_ready = db_verification.get("ok") is True and all((db_verification.get("models_present") or {}).values())
     db_resources_ready = (
         db_verification.get("ok") is True
@@ -283,10 +295,16 @@ def build_audit() -> dict[str, Any]:
         _item(
             "messaging_channels",
             "Implement deterministic Telegram/Signal channel gateway with WhatsApp disabled",
-            "credential_gated" if channels.get("deterministic_gateway_only") else "partial",
-            ["src/freyja/channels.py", "certification/reports/freyja-channels-readiness.json"],
-            "Telegram/Signal live round trips require allowlists and credentials.",
-            "Complete the Telegram pilot first, then the Signal pilot when signal-cli-rest-api is registered.",
+            "credential_gated" if pending_messaging_channels else ("complete" if channels.get("deterministic_gateway_only") else "partial"),
+            [
+                "src/freyja/channels.py",
+                "certification/reports/freyja-channels-readiness.json",
+                "certification/reports/freyja-channels-readiness-atlas.json",
+                "certification/reports/freyja-channels-signal-pilot.json",
+                "certification/reports/freyja-channels-atlas-deployment.json",
+            ],
+            messaging_blocker,
+            "Complete the Telegram pilot." if pending_messaging_channels == ["Telegram"] else None,
             messaging_next_actions,
             messaging_commands[0] if messaging_commands else None,
             messaging_commands,
@@ -312,7 +330,11 @@ def build_audit() -> dict[str, Any]:
                 "certification/reports/open-webui-home-agent-readiness-summary.json",
                 "certification/reports/open-webui-home-agent-evidence-refresh.json",
             ],
-            "Credentialed Open WebUI, Telegram, and Signal round trips remain pending."
+            (
+                f"{'/'.join(pending_messaging_channels)} round trip remains pending."
+                if pending_messaging_channels
+                else "One or more verification gates remain pending."
+            )
             if readiness_summary.get("all_ready") is not True
             else None,
             "Clear all external readiness gates, then rerun the completion audit."

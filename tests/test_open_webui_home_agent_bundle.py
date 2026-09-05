@@ -83,12 +83,13 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["external_gates"][0]["ready"] is True
     assert bundle["external_gates"][1]["ready"] is True
     assert bundle["external_gates"][2]["ready"] is False
-    assert bundle["external_gates"][3]["ready"] is False
+    assert bundle["external_gates"][3]["ready"] is True
     assert bundle["external_gates"][0]["next_action"] is None
     assert bundle["external_gates"][1]["next_action"] is None
     assert bundle["external_gates"][2]["next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["external_gates"][2]["next_actions"])
-    assert any("SIGNAL_REST_API_URL" in action for action in bundle["external_gates"][3]["next_actions"])
+    assert bundle["external_gates"][3]["next_action"] is None
+    assert bundle["external_gates"][3]["next_actions"] == []
     assert bundle["external_gates"][0]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert "OPEN_WEBUI_API_KEY=<redacted>" in bundle["external_gates"][1]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in bundle["external_gates"][2]["command"]
@@ -261,7 +262,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
     assert not any("OPEN_WEBUI_API_KEY" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
-    assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
+    assert not any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert isinstance(bundle["evidence_summary"]["readiness_summary_generated_at_unix"], int)
     assert bundle["evidence_summary"]["readiness_summary_git_head"]
     assert isinstance(bundle["evidence_summary"]["evidence_refresh_generated_at_unix"], int)
@@ -306,14 +307,14 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["signal_identity_map_count"] == 0
     assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_missing_configuration"]
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_next_actions"])
-    assert bundle["evidence_summary"]["signal_pilot_ready"] is False
-    assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_pilot_missing_configuration"]
+    assert bundle["evidence_summary"]["signal_pilot_ready"] is True
+    assert bundle["evidence_summary"]["signal_pilot_missing_configuration"] == []
     assert not any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
-    assert any("SIGNAL_ACCOUNT_NUMBER" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
+    assert not any("SIGNAL_ACCOUNT_NUMBER" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
     assert isinstance(bundle["evidence_summary"]["signal_pilot_generated_at_unix"], int)
-    assert bundle["evidence_summary"]["signal_pilot_git_head"]
-    assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is False
-    assert bundle["evidence_summary"]["signal_pilot_checks"]["allowlist_identity_map_complete"] is False
+    assert bundle["evidence_summary"]["signal_pilot_git_head"] is None or bundle["evidence_summary"]["signal_pilot_git_head"]
+    assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is True
+    assert bundle["evidence_summary"]["signal_pilot_checks"]["allowlist_identity_map_complete"] is True
     assert bundle["evidence_summary"]["whatsapp_ready"] is False
     assert bundle["evidence_summary"]["whatsapp_status"] == "disabled"
     assert bundle["evidence_summary"]["whatsapp_reason"] == "secured_public_webhook_not_approved"
@@ -428,7 +429,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`authenticated_chat_smoke`: ready" in text
     assert "`telegram_pilot`: pending" in text
     assert "Action: Create or choose the Telegram bot" in text
-    assert "Action: Set SIGNAL_REST_API_URL" in text
+    assert "Action: Set SIGNAL_REST_API_URL" not in text
     assert "Command: `scripts/run-freyja-channels-telegram-pilot.py" in text
     assert "Requirement Audit" in text
     assert "`local_inference`: `complete`" in text

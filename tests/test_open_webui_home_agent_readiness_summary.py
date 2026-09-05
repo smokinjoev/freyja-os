@@ -36,7 +36,7 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert gates["post_auth_activation"]["ready"] is True
     assert gates["authenticated_chat_smoke"]["ready"] is True
     assert gates["telegram_pilot"]["ready"] is False
-    assert gates["signal_pilot"]["ready"] is False
+    assert gates["signal_pilot"]["ready"] is True
     for gate in gates.values():
         assert gate["evidence_generated_at_unix"] is None or isinstance(gate["evidence_generated_at_unix"], int)
     assert gates["post_auth_activation"]["next_action"] is None
@@ -45,8 +45,8 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert gates["authenticated_chat_smoke"]["next_actions"] == []
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in gates["telegram_pilot"]["next_actions"])
-    assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]
-    assert any("SIGNAL_REST_API_URL" in action for action in gates["signal_pilot"]["next_actions"])
+    assert gates["signal_pilot"]["next_action"] is None
+    assert gates["signal_pilot"]["next_actions"] == []
     assert gates["post_auth_activation"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert "OPEN_WEBUI_API_KEY=<redacted>" in gates["authenticated_chat_smoke"]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in gates["telegram_pilot"]["command"]
@@ -54,7 +54,6 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert summary["required_next_actions"][0].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
     assert not any("OPEN_WEBUI_API_KEY" in action for action in summary["required_next_actions"])
     assert any("TELEGRAM_BOT_TOKEN" in action for action in summary["required_next_actions"])
-    assert any("SIGNAL_REST_API_URL" in action for action in summary["required_next_actions"])
     assert len(summary["required_next_actions"]) == len(set(summary["required_next_actions"]))
 
 

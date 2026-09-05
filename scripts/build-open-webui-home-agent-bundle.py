@@ -398,12 +398,15 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "open_webui_tools_openapi_ok": tools_openapi.get("ok"),
         "atlas_db_verification_ok": db_verification.get("ok"),
     }
-    blockers = [
-        "Atlas Open WebUI is reachable and onboarding is complete, but authenticated activation needs an admin API key or a controlled session.",
-        "All-five-agent Open WebUI chat smoke needs an Atlas admin/service API key.",
-        "Telegram pilot round trip needs bot token and allowlist configured outside source control.",
-        "Signal round trip needs registered signal-cli-rest-api credentials.",
-    ]
+    blockers: list[str] = []
+    if activation.get("ready") is not True and not db_verification.get("ok"):
+        blockers.append("Atlas Open WebUI resource/access activation still needs authenticated admin/service access.")
+    if chat_smoke.get("status") != "complete":
+        blockers.append("All-five-agent Open WebUI chat smoke needs authenticated Atlas Open WebUI access.")
+    if telegram_pilot.get("ready") is not True:
+        blockers.append("Telegram pilot round trip needs bot token, allowlist, and identity map configured outside source control.")
+    if signal_pilot.get("ready") is not True:
+        blockers.append("Signal pilot round trip needs signal-cli-rest-api account, allowlist, identity map, and Open WebUI key access.")
     external_gates = [
         {
             "gate_id": str(gate.get("gate_id")),
