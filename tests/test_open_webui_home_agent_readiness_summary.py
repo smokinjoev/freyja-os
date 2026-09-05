@@ -33,16 +33,16 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert summary["all_ready"] is False
     gates = {gate["gate_id"]: gate for gate in summary["gates"]}
     assert set(gates) == {"post_auth_activation", "authenticated_chat_smoke", "telegram_pilot", "signal_pilot"}
-    assert gates["post_auth_activation"]["ready"] is False
-    assert gates["authenticated_chat_smoke"]["ready"] is False
+    assert gates["post_auth_activation"]["ready"] is True
+    assert gates["authenticated_chat_smoke"]["ready"] is True
     assert gates["telegram_pilot"]["ready"] is False
     assert gates["signal_pilot"]["ready"] is False
     for gate in gates.values():
         assert gate["evidence_generated_at_unix"] is None or isinstance(gate["evidence_generated_at_unix"], int)
-    assert "Open WebUI" in gates["post_auth_activation"]["next_action"]
-    assert any("Atlas Open WebUI admin" in action for action in gates["post_auth_activation"]["next_actions"])
-    assert "OPEN_WEBUI_API_KEY" in gates["authenticated_chat_smoke"]["next_action"]
-    assert any("generate an admin" in action for action in gates["authenticated_chat_smoke"]["next_actions"])
+    assert gates["post_auth_activation"]["next_action"] is None
+    assert gates["post_auth_activation"]["next_actions"] == []
+    assert gates["authenticated_chat_smoke"]["next_action"] is None
+    assert gates["authenticated_chat_smoke"]["next_actions"] == []
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in gates["telegram_pilot"]["next_actions"])
     assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]
@@ -51,8 +51,8 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert "OPEN_WEBUI_API_KEY=<redacted>" in gates["authenticated_chat_smoke"]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in gates["telegram_pilot"]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in gates["signal_pilot"]["command"]
-    assert summary["required_next_actions"][0].startswith("Use the existing Atlas Open WebUI admin account")
-    assert any("OPEN_WEBUI_API_KEY" in action for action in summary["required_next_actions"])
+    assert summary["required_next_actions"][0].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert not any("OPEN_WEBUI_API_KEY" in action for action in summary["required_next_actions"])
     assert any("TELEGRAM_BOT_TOKEN" in action for action in summary["required_next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in summary["required_next_actions"])
     assert len(summary["required_next_actions"]) == len(set(summary["required_next_actions"]))
@@ -94,6 +94,7 @@ def test_readiness_summary_uses_inventory_next_action_for_post_auth_gate(monkeyp
             "telegram": {},
             "signal": {},
         },
+        "open-webui-home-agent-db-verification.json": {"secrets_included": False, "ok": False},
     }
 
     monkeypatch.setattr(module, "_load", lambda path: reports[path.name])
@@ -123,6 +124,7 @@ def test_readiness_summary_uses_channel_missing_configuration_without_secret_val
             "telegram": {"missing_configuration": ["TELEGRAM_BOT_TOKEN", "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries"]},
             "signal": {"missing_configuration": ["SIGNAL_ACCOUNT_NUMBER", "SIGNAL_REST_API_URL"]},
         },
+        "open-webui-home-agent-db-verification.json": {"secrets_included": False, "ok": False},
     }
 
     monkeypatch.setattr(module, "_load", lambda path: reports[path.name])
@@ -151,7 +153,7 @@ def test_readiness_summary_markdown_includes_required_next_actions() -> None:
     text = module.render_markdown(module.build_summary())
 
     assert "## Required Next Actions" in text
-    assert "Generate an Atlas Open WebUI admin or service-account API key" in text
+    assert "Create or choose the Telegram bot" in text
 
 
 def test_home_agent_runbook_documents_required_next_action_queue() -> None:
@@ -162,7 +164,7 @@ def test_home_agent_runbook_documents_required_next_action_queue() -> None:
     assert "Current operator sequence" in text
     assert "Atlas Open WebUI admin account" in text
     assert "OPEN_WEBUI_API_KEY" in text
-    assert "Set OPEN_WEBUI_API_KEY outside source control." in text
+    assert "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control." in text
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in text
     assert "TELEGRAM_BOT_TOKEN" in text
     assert "SIGNAL_REST_API_URL" in text
@@ -181,10 +183,10 @@ def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(t
     assert json.loads(output_json.read_text(encoding="utf-8")) == printed
     markdown = output_md.read_text(encoding="utf-8")
     assert "Open WebUI Home-Agent Readiness Summary" in markdown
-    assert "`post_auth_activation`: pending" in markdown
-    assert "Action: Generate an Atlas Open WebUI admin or service-account API key" in markdown
-    assert "Action: Set OPEN_WEBUI_API_KEY outside source control." in markdown
-    assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in markdown
+    assert "`post_auth_activation`: ready" in markdown
+    assert "`authenticated_chat_smoke`: ready" in markdown
+    assert "Action: Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control." in markdown
+    assert "Command: `scripts/run-freyja-channels-telegram-pilot.py" in markdown
 
 
 def test_readiness_summary_main_creates_distinct_output_directories(tmp_path: Path, capsys) -> None:

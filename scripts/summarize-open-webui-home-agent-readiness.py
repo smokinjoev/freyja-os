@@ -80,7 +80,7 @@ def _channel_next_actions(channel: str, channel_report: dict[str, Any]) -> list[
             "TELEGRAM_ALLOWED_USER_IDS": "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
             "TELEGRAM_IDENTITY_MAP": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
             "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
-            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY outside source control.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control.",
         }
         final_action = "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
     else:
@@ -90,7 +90,7 @@ def _channel_next_actions(channel: str, channel_report: dict[str, Any]) -> list[
             "SIGNAL_ALLOWED_SENDERS": "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
             "SIGNAL_IDENTITY_MAP": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
             "SIGNAL_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
-            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY outside source control.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control.",
         }
         final_action = "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy."
     actions = []
@@ -117,8 +117,11 @@ def _chat_smoke_next_actions(chat_smoke: dict[str, Any]) -> list[str]:
 
 
 def _canonical_action(value: str) -> str:
-    if value == "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.":
-        return "Set OPEN_WEBUI_API_KEY outside source control."
+    if value in {
+        "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        "Set OPEN_WEBUI_API_KEY outside source control.",
+    }:
+        return "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control."
     return value
 
 
@@ -147,6 +150,7 @@ def _required_next_actions(gates: list[dict[str, Any]]) -> list[str]:
 
 def build_summary() -> dict[str, Any]:
     activation = _load(REPORTS / "open-webui-home-agent-post-auth-activation.json")
+    db_verification = _load(REPORTS / "open-webui-home-agent-db-verification.json")
     chat_smoke = _load(REPORTS / "open-webui-home-agent-chat-smoke.json")
     telegram = _load(REPORTS / "freyja-channels-telegram-pilot.json")
     signal = _load(REPORTS / "freyja-channels-signal-pilot.json")
@@ -157,7 +161,11 @@ def build_summary() -> dict[str, Any]:
     public_config = inventory.get("open_webui_public_config") if isinstance(inventory.get("open_webui_public_config"), dict) else {}
     atlas_onboarding_complete = public_config.get("reachable") is True and public_config.get("onboarding") is False
     activation_next_actions = activation.get("next_actions") if isinstance(activation.get("next_actions"), list) else []
-    if atlas_onboarding_complete:
+    db_activation_ready = db_verification.get("ok") is True and chat_smoke.get("status") == "complete"
+    if db_activation_ready:
+        activation_next_actions = []
+        open_webui_next_action = None
+    elif atlas_onboarding_complete:
         activation_next_actions = [
             "Generate an Atlas Open WebUI admin or service-account API key.",
             "Set OPEN_WEBUI_API_KEY outside source control.",
@@ -173,13 +181,13 @@ def build_summary() -> dict[str, Any]:
         _gate(
             "post_auth_activation",
             "Open WebUI resource/access activation",
-            activation.get("ready") is True,
-            "certification/reports/open-webui-home-agent-post-auth-activation.json",
-            None if activation.get("ready") else open_webui_next_action,
+            activation.get("ready") is True or db_activation_ready,
+            "certification/reports/open-webui-home-agent-db-verification.json",
+            None if activation.get("ready") or db_activation_ready else open_webui_next_action,
             activation_next_actions,
             "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
-            activation.get("generated_at_unix") or activation.get("timestamp_unix"),
-            activation.get("git_head"),
+            db_verification.get("generated_at_unix") if db_activation_ready else activation.get("generated_at_unix") or activation.get("timestamp_unix"),
+            db_verification.get("git_head") if db_activation_ready else activation.get("git_head"),
         ),
         _gate(
             "authenticated_chat_smoke",

@@ -250,13 +250,14 @@ jq '.required_next_actions' \
 Current operator sequence:
 
 1. Use the existing Atlas Open WebUI admin account at `http://100.119.235.114:3001`.
-2. Generate an admin or service-account API key and set `OPEN_WEBUI_API_KEY` outside source control.
-3. Rerun the post-auth activation dry-run.
-4. Run the five-agent authenticated chat smoke.
-5. Configure Telegram with `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, and `TELEGRAM_IDENTITY_MAP`; keep empty allowlists as deny-all.
-6. Run the Telegram pilot dry-run before enabling long polling.
-7. Configure Signal with `SIGNAL_REST_API_URL`, `SIGNAL_ACCOUNT_NUMBER`, `SIGNAL_ALLOWED_SENDERS`, and `SIGNAL_IDENTITY_MAP`; keep empty allowlists as deny-all.
-8. Run the Signal pilot dry-run after `signal-cli-rest-api` registration is healthy.
+2. Use the Atlas service-account key file at `/home/joe/.freyja/open-webui-api-key` or generate a replacement admin/service-account API key.
+3. Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control.
+4. Rerun the post-auth activation dry-run.
+5. Run the five-agent authenticated chat smoke.
+6. Configure Telegram with `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, `TELEGRAM_IDENTITY_MAP`, and either `OPEN_WEBUI_API_KEY` or `OPEN_WEBUI_API_KEY_FILE`; keep empty allowlists as deny-all.
+7. Run the Telegram pilot dry-run before enabling long polling.
+8. Configure Signal with `SIGNAL_REST_API_URL`, `SIGNAL_ACCOUNT_NUMBER`, `SIGNAL_ALLOWED_SENDERS`, `SIGNAL_IDENTITY_MAP`, and either `OPEN_WEBUI_API_KEY` or `OPEN_WEBUI_API_KEY_FILE`; keep empty allowlists as deny-all.
+9. Run the Signal pilot dry-run after `signal-cli-rest-api` registration is healthy.
 
 Once real Open WebUI users exist, bind the imported models to groups with a
 dry-run first:

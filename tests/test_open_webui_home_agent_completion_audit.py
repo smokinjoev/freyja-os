@@ -28,39 +28,37 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert audit["git_head"]
     assert audit["complete"] is False
     assert audit["status_counts"]["complete"] >= 5
-    assert audit["status_counts"]["auth_gated"] >= 3
+    assert audit["status_counts"].get("auth_gated", 0) == 0
     assert audit["status_counts"]["credential_gated"] >= 1
     assert audit["completion_metrics"] == {
         "total_requirements": 15,
-        "complete_requirements": 8,
-        "incomplete_requirements": 7,
-        "auth_gated_requirements": 3,
+        "complete_requirements": 13,
+        "incomplete_requirements": 2,
+        "auth_gated_requirements": 0,
         "credential_gated_requirements": 1,
-        "partial_requirements": 3,
-        "external_gated_requirements": 4,
-        "verified_completion_percent": 53.3,
+        "partial_requirements": 1,
+        "external_gated_requirements": 1,
+        "verified_completion_percent": 86.7,
     }
-    assert audit["exact_next_action"].startswith("Use the existing Atlas Open WebUI admin account")
-    assert audit["required_next_actions"][0].startswith("Use the existing Atlas Open WebUI admin account")
-    assert "Set OPEN_WEBUI_API_KEY outside source control." in audit["required_next_actions"]
+    assert audit["exact_next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert audit["required_next_actions"][0].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert not any("OPEN_WEBUI_API_KEY" in action for action in audit["required_next_actions"])
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in audit["required_next_actions"]
     assert len(audit["required_next_actions"]) == len(set(audit["required_next_actions"]))
     ids = [item["requirement_id"] for item in audit["items"]]
     assert len(ids) == len(set(ids))
-    assert {"five_agents", "memory_layers", "tools"}.issubset(
-        {item["requirement_id"] for item in audit["items"] if item["status"] == "auth_gated"}
-    )
+    assert not {item["requirement_id"] for item in audit["items"] if item["status"] == "auth_gated"}
     assert {"messaging_channels"} == {item["requirement_id"] for item in audit["items"] if item["status"] == "credential_gated"}
     by_id = {item["requirement_id"]: item for item in audit["items"]}
     assert "certification/reports/open-webui-home-agent-readiness-summary.json" in by_id["verification"]["evidence"]
     assert by_id["local_inference"]["command"].startswith("OPEN_WEBUI_API_KEY=<redacted>")
-    assert any("OPEN_WEBUI_API_KEY" in action for action in by_id["local_inference"]["next_actions"])
+    assert "next_actions" not in by_id["local_inference"]
     assert by_id["five_agents"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
-    assert any("Open WebUI admin" in action for action in by_id["five_agents"]["next_actions"])
+    assert "next_actions" not in by_id["five_agents"]
     assert by_id["memory_layers"]["command"] == by_id["five_agents"]["command"]
-    assert by_id["memory_layers"]["next_actions"] == by_id["five_agents"]["next_actions"]
+    assert "next_actions" not in by_id["memory_layers"]
     assert by_id["tools"]["command"] == by_id["five_agents"]["command"]
-    assert by_id["tools"]["next_actions"] == by_id["five_agents"]["next_actions"]
+    assert "next_actions" not in by_id["tools"]
     assert "scripts/run-freyja-channels-telegram-pilot.py" in by_id["messaging_channels"]["command"]
     assert by_id["messaging_channels"]["commands"] == [
         "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
@@ -75,12 +73,12 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
         "scripts/summarize-open-webui-home-agent-readiness.py",
         "scripts/audit-open-webui-home-agent-completion.py",
     ]
-    assert any("generate an admin" in action for action in by_id["verification"]["next_actions"])
+    assert not any("generate an admin" in action for action in by_id["verification"]["next_actions"])
     statuses = {item["requirement"]: item["status"] for item in audit["items"]}
     assert statuses["Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config"] == "complete"
-    assert statuses["Identify Open WebUI host and Vulcan path"] == "partial"
-    assert statuses["Keep inference local by default and connect Open WebUI to Vulcan"] == "partial"
-    assert statuses["Create/import five Open WebUI agents"] == "auth_gated"
+    assert statuses["Identify Open WebUI host and Vulcan path"] == "complete"
+    assert statuses["Keep inference local by default and connect Open WebUI to Vulcan"] == "complete"
+    assert statuses["Create/import five Open WebUI agents"] == "complete"
     assert statuses["Implement deterministic Telegram/Signal channel gateway with WhatsApp disabled"] == "credential_gated"
     assert statuses["Add proactive behavior disabled by default"] == "complete"
     assert statuses["Preserve Freyja 4.1 fallback"] == "complete"
@@ -183,6 +181,15 @@ def test_completion_audit_can_mark_verification_complete_when_all_readiness_gate
                 {"gate_id": "signal_pilot", "ready": True},
             ],
         },
+        "open-webui-home-agent-db-verification.json": {
+            "secrets_included": False,
+            "ok": True,
+            "models_present": {"agent/freyja": True},
+            "knowledge_present": {"freyja_household": True},
+            "tools_present": {"weather": True},
+            "memory_policies_present": {"freyja_native_memory_policy:joe": True},
+            "managed_tool_specs_are_lists": True,
+        },
     }
 
     monkeypatch.setattr(module, "_load", lambda path: reports[path.name])
@@ -234,6 +241,7 @@ def test_completion_audit_prefers_readiness_exact_next_action(monkeypatch) -> No
             "exact_next_action": "readiness action",
             "gates": [],
         },
+        "open-webui-home-agent-db-verification.json": {"secrets_included": False, "ok": False},
     }
 
     monkeypatch.setattr(module, "_load", lambda path: reports[path.name])

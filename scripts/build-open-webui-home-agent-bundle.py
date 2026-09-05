@@ -413,6 +413,9 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "next_actions": [
                 _canonical_action(str(action))
                 for action in (
+                    []
+                    if gate.get("ready") is True
+                    else
                     gate.get("next_actions")
                     or (
                         activation.get("next_actions")
@@ -524,7 +527,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         inventory.get("open_webui_next_action_hint")
         or "Joe must use the existing Atlas Open WebUI admin account to generate/provide an admin API key or authenticated browser session."
     )
-    exact_next_action = open_webui_next_action_hint
+    exact_next_action = (
+        completion.get("exact_next_action")
+        or readiness_summary.get("exact_next_action")
+        or open_webui_next_action_hint
+    )
     return {
         "report_type": "open-webui-home-agent-consolidated-deliverable",
         "generated_at_unix": int(now or time.time()),
@@ -708,7 +715,14 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "inventory_generated_at_unix": inventory.get("generated_at_unix") or _mtime(inventory_path),
             "inventory_git_head": inventory.get("git_head") or "unknown",
             "post_auth_activation_ready": activation.get("ready"),
-            "post_auth_activation_next_actions": _canonical_actions(activation.get("next_actions") or []),
+            "post_auth_activation_next_actions": next(
+                (
+                    gate.get("next_actions", [])
+                    for gate in external_gates
+                    if gate.get("gate_id") == "post_auth_activation"
+                ),
+                [],
+            ),
             "post_auth_activation_access_missing_users": ((activation.get("plan") or {}).get("access") or {}).get("missing_users") or [],
             "post_auth_activation_access_missing_models": ((activation.get("plan") or {}).get("access") or {}).get("missing_models") or [],
             "post_auth_activation_resource_owner_resolved": ((activation.get("plan") or {}).get("resources") or {}).get("owner_user_id_resolved"),

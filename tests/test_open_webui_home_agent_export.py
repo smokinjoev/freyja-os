@@ -131,4 +131,4 @@ def test_open_webui_home_agent_export_cli_writes_json(tmp_path: Path, capsys) ->
     assert written["validation_errors"] == []
     assert isinstance(written["generated_at_unix"], int)
     assert written["git_head"]
-    assert written["records"][0]["base_model_id"].startswith("agent/")
+    assert written["records"][0]["base_model_id"] == "qwen3:30b-a3b"

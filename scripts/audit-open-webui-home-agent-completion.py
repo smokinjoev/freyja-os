@@ -120,6 +120,7 @@ def build_audit() -> dict[str, Any]:
     backup = _load(REPORTS / "open-webui-backup-rollback-audit.json")
     secret_safety = _load(REPORTS / "open-webui-home-agent-secret-safety.json")
     model_apply = _load(REPORTS / "open-webui-home-agents-offline-apply.json")
+    db_verification = _load(REPORTS / "open-webui-home-agent-db-verification.json")
     access_audit = _load(REPORTS / "open-webui-home-agent-access-audit.json")
     access_bind = _load(REPORTS / "open-webui-home-agent-access-bind-dry-run.json")
     resources = _load(REPORTS / "open-webui-home-resources-export.json")
@@ -138,11 +139,7 @@ def build_audit() -> dict[str, Any]:
     readiness_summary = _load(REPORTS / "open-webui-home-agent-readiness-summary.json")
     required_next_actions = _required_next_actions(readiness_summary)
     gates = {gate.get("gate_id"): gate for gate in readiness_summary.get("gates") or []}
-    exact_next_action = (
-        readiness_summary.get("exact_next_action")
-        or inventory.get("open_webui_next_action_hint")
-        or "Joe must use the existing Atlas Open WebUI admin account to generate/provide an admin API key or authenticated browser session."
-    )
+    explicit_next_action = readiness_summary.get("exact_next_action")
     post_auth_gate = gates.get("post_auth_activation") or {}
     chat_gate = gates.get("authenticated_chat_smoke") or {}
     telegram_gate = gates.get("telegram_pilot") or {}
@@ -158,6 +155,15 @@ def build_audit() -> dict[str, Any]:
         for command in [telegram_gate.get("command"), signal_gate.get("command")]
         if command
     ])
+    chat_ready = chat_smoke.get("status") == "complete"
+    db_models_ready = db_verification.get("ok") is True and all((db_verification.get("models_present") or {}).values())
+    db_resources_ready = (
+        db_verification.get("ok") is True
+        and all((db_verification.get("knowledge_present") or {}).values())
+        and all((db_verification.get("tools_present") or {}).values())
+        and all((db_verification.get("memory_policies_present") or {}).values())
+        and db_verification.get("managed_tool_specs_are_lists") is True
+    )
 
     items = [
         _item(
@@ -173,8 +179,12 @@ def build_audit() -> dict[str, Any]:
         _item(
             "open_webui_host_and_vulcan_path",
             "Identify Open WebUI host and Vulcan path",
-            "complete" if live.get("open_webui_url") and proxy.get("ok") is True else "partial",
-            ["certification/reports/open-webui-home-agent-live.json", "certification/reports/open-webui-model-proxy-catalog.json"],
+            "complete" if inventory.get("open_webui_public_config", {}).get("reachable") is True and proxy.get("ok") is True and chat_ready else "partial",
+            [
+                "certification/reports/open-webui-home-agent-live.json",
+                "certification/reports/open-webui-model-proxy-catalog.json",
+                "certification/reports/open-webui-home-agent-chat-smoke.json",
+            ],
         ),
         _item(
             "open_webui_backup_and_rollback",
@@ -205,16 +215,16 @@ def build_audit() -> dict[str, Any]:
         _item(
             "local_inference",
             "Keep inference local by default and connect Open WebUI to Vulcan",
-            "complete" if inference.get("ok") and chat_smoke.get("status") == "complete" else "partial",
+            "complete" if inference.get("ok") and chat_ready else "partial",
             [
                 "deploy/compose/open-webui/model-proxy.py",
                 "certification/reports/open-webui-home-agent-live.json",
                 "certification/reports/open-webui-inference-policy-audit.json",
                 "certification/reports/open-webui-home-agent-chat-smoke.json",
             ],
-            "Authenticated model/chat proof requires Open WebUI API key or session.",
-            chat_gate.get("next_action"),
-            chat_next_actions,
+            None if inference.get("ok") and chat_ready else "Authenticated model/chat proof requires Open WebUI API key or session.",
+            None if inference.get("ok") and chat_ready else chat_gate.get("next_action"),
+            [] if inference.get("ok") and chat_ready else chat_next_actions,
             chat_gate.get("command"),
         ),
         _item(
@@ -226,39 +236,48 @@ def build_audit() -> dict[str, Any]:
         _item(
             "five_agents",
             "Create/import five Open WebUI agents",
-            "auth_gated" if model_apply.get("model_count") == 5 and access_audit.get("ok") else "partial",
-            ["certification/reports/open-webui-home-agents-offline-apply.json", "certification/reports/open-webui-home-agent-access-audit.json"],
-            "Imported into model table; authenticated UI/API and real group binding require users/session.",
-            post_auth_gate.get("next_action"),
-            post_auth_next_actions,
+            "complete" if db_models_ready and chat_smoke.get("status") == "complete" and access_audit.get("ok") else "partial",
+            [
+                "certification/reports/open-webui-home-agents-offline-apply.json",
+                "certification/reports/open-webui-home-agent-db-verification.json",
+                "certification/reports/open-webui-home-agent-chat-smoke.json",
+                "certification/reports/open-webui-home-agent-access-audit.json",
+            ],
+            None if db_models_ready and chat_smoke.get("status") == "complete" else "Agent rows require live DB/API verification.",
+            None if db_models_ready and chat_smoke.get("status") == "complete" else post_auth_gate.get("next_action"),
+            [] if db_models_ready and chat_smoke.get("status") == "complete" else post_auth_next_actions,
             post_auth_gate.get("command"),
         ),
         _item(
             "memory_layers",
             "Implement three-layer memory with scoped freyja-home-memory service",
-            "auth_gated" if resource_import.get("applied") is not True and live.get("ok") else "complete",
-            ["src/freyja/home_memory.py", "certification/reports/open-webui-home-resources-offline-dry-run.json", "certification/reports/open-webui-home-agent-live.json"],
-            "Native Open WebUI per-user memory rows require an owner user/authenticated import.",
-            post_auth_gate.get("next_action"),
-            post_auth_next_actions,
+            "complete" if db_resources_ready and live.get("ok") else "partial",
+            [
+                "src/freyja/home_memory.py",
+                "certification/reports/open-webui-home-resources-offline-dry-run.json",
+                "certification/reports/open-webui-home-agent-db-verification.json",
+                "certification/reports/open-webui-home-agent-live.json",
+            ],
+            None if db_resources_ready and live.get("ok") else "Native Open WebUI memory/Knowledge rows require live DB verification.",
+            None if db_resources_ready and live.get("ok") else post_auth_gate.get("next_action"),
+            [] if db_resources_ready and live.get("ok") else post_auth_next_actions,
             post_auth_gate.get("command"),
         ),
         _item(
             "tools",
             "Expose narrow MCP/OpenAPI tools and assign per agent",
-            "auth_gated"
-            if resources.get("ok") and tools_gateway.get("ok") and tools_openapi.get("ok") and resource_import.get("applied") is not True
-            else "complete",
+            "complete" if resources.get("ok") and tools_gateway.get("ok") and tools_openapi.get("ok") and db_resources_ready else "partial",
             [
                 "config/open-webui-home-resources.yaml",
                 "src/freyja/open_webui_tools.py",
                 "certification/reports/open-webui-home-resources-export.json",
+                "certification/reports/open-webui-home-agent-db-verification.json",
                 "certification/reports/open-webui-tools-gateway-readiness.json",
                 "certification/reports/open-webui-tools-openapi.json",
             ],
-            "Open WebUI tool rows/enablement require owner user or authenticated admin session.",
-            post_auth_gate.get("next_action"),
-            post_auth_next_actions,
+            None if db_resources_ready else "Open WebUI tool rows/enablement require live DB verification.",
+            None if db_resources_ready else post_auth_gate.get("next_action"),
+            [] if db_resources_ready else post_auth_next_actions,
             post_auth_gate.get("command"),
         ),
         _item(
@@ -337,6 +356,7 @@ def build_audit() -> dict[str, Any]:
     for item in items:
         counts[item["status"]] = counts.get(item["status"], 0) + 1
     completion_metrics = _completion_metrics(items, counts)
+    exact_next_action = explicit_next_action or (required_next_actions[0] if required_next_actions else None)
     return {
         "report_type": "open-webui-home-agent-completion-audit",
         "generated_at_unix": int(time.time()),

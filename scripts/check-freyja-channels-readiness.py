@@ -67,7 +67,7 @@ def _channel_next_actions(channel: str, missing: list[str], *, ready: bool) -> l
             ("TELEGRAM_BOT_TOKEN", "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control."),
             ("TELEGRAM_ALLOWED_USER_IDS", "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all."),
             ("TELEGRAM_IDENTITY_MAP", "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP."),
-            ("OPEN_WEBUI_API_KEY", "Set OPEN_WEBUI_API_KEY outside source control."),
+            ("OPEN_WEBUI_API_KEY", "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control."),
         ]
         final_action = "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
     else:
@@ -76,7 +76,7 @@ def _channel_next_actions(channel: str, missing: list[str], *, ready: bool) -> l
             ("SIGNAL_ACCOUNT_NUMBER", "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account."),
             ("SIGNAL_ALLOWED_SENDERS", "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all."),
             ("SIGNAL_IDENTITY_MAP", "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP."),
-            ("OPEN_WEBUI_API_KEY", "Set OPEN_WEBUI_API_KEY outside source control."),
+            ("OPEN_WEBUI_API_KEY", "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control."),
         ]
         final_action = "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy."
     missing_set = set(missing)
@@ -162,7 +162,7 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
             "response_failures_logged": True,
         },
         "open_webui_client": {
-            "endpoint": f"{open_webui_client.base_url}/openai/v1/chat/completions",
+            "endpoint": f"{open_webui_client.base_url}/api/chat/completions",
             "api_key_configured": open_webui_client.configured,
             "secrets_included": False,
         },

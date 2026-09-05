@@ -60,11 +60,12 @@ def build_export(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
         profile_id = str(agent["model_profile"])
         profile = model_profiles[profile_id]
         model_id = AGENT_MODEL_IDS.get(agent_id, f"agent/{agent_id}")
+        base_model_id = str(profile["model"])
         records.append(
             {
                 "id": model_id,
                 "name": str(agent["display_name"]),
-                "base_model_id": model_id,
+                "base_model_id": base_model_id,
                 "meta": {
                     "profile_image_url": "/static/favicon.png",
                     "description": str(agent["purpose"]),
@@ -88,6 +89,7 @@ def build_export(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
                 "freyja": {
                     "agent_id": agent_id,
                     "runtime_model_id": model_id,
+                    "base_model_id": base_model_id,
                     "model_profile": profile_id,
                     "provider": profile["provider"],
                     "local_model": profile["model"],

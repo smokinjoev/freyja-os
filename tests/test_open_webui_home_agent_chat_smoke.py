@@ -94,26 +94,28 @@ def test_chat_smoke_live_report_redacts_auth_and_requires_response(monkeypatch) 
     manifest = module.load_manifest(REPO_ROOT / "config" / "open-webui-home-agents.yaml")
     calls = []
 
-    def fake_request(base_url, api_key, model_id, display_name, *, timeout):
+    def fake_request(base_url, api_key, model_id, display_name, *, timeout, max_tokens):
         calls.append(
             {
                 "base_url": base_url,
                 "api_key": api_key,
                 "model_id": model_id,
-                "display_name": display_name,
-                "timeout": timeout,
-            }
-        )
+                    "display_name": display_name,
+                    "timeout": timeout,
+                    "max_tokens": max_tokens,
+                }
+            )
         return 200, {"choices": [{"message": {"content": "Freyja home agent online"}}]}, None, 0.25
 
     monkeypatch.setattr(module, "request_chat_completion", fake_request)
     report = module.run_smoke(
         Namespace(
             open_webui_url="http://open-webui.local:3001",
-            open_webui_api_key="secret-token",
-            timeout=10,
-            agent=["benedict"],
-        ),
+                open_webui_api_key="secret-token",
+                timeout=10,
+                max_tokens=32,
+                agent=["benedict"],
+            ),
         manifest,
     )
 
@@ -130,6 +132,7 @@ def test_chat_smoke_live_report_redacts_auth_and_requires_response(monkeypatch) 
             "model_id": "agent/benedict",
             "display_name": "Benedict",
             "timeout": 10,
+            "max_tokens": 32,
         }
     ]
     assert report["checks"][0]["expected_vulcan_model"] == "qwen3:30b-a3b"

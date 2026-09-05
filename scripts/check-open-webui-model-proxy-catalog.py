@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import time
 import urllib.error
@@ -16,7 +17,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-model-proxy-catalog.json"
 DEFAULT_MANIFEST = REPO_ROOT / "config" / "open-webui-home-agents.yaml"
-DEFAULT_URL = "http://100.119.235.114:3001/openai/v1/models"
+DEFAULT_URL = "http://100.119.235.114:3001/api/models"
 DEFAULT_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
 DEFAULT_CONTAINER_URL = "http://model-proxy:8080/v1/models"
 AGENT_MODEL_IDS = {
@@ -26,7 +27,7 @@ AGENT_MODEL_IDS = {
     "agent-44": "agent/agent-47",
     "jenna": "agent/jennacide",
 }
-EXPECTED_AGENT_MODELS = set(AGENT_MODEL_IDS.values()) | {"agent/benedict-paralegal"}
+EXPECTED_AGENT_MODELS = set(AGENT_MODEL_IDS.values())
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--container", default=DEFAULT_CONTAINER)
     parser.add_argument("--container-url", default=DEFAULT_CONTAINER_URL)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument("--open-webui-api-key", default=os.environ.get("OPEN_WEBUI_API_KEY"))
     parser.add_argument("--no-container-probe", action="store_true")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--timeout", type=float, default=10.0)
@@ -48,11 +50,15 @@ def _git_head() -> str | None:
         return None
 
 
-def fetch_model_ids(url: str, timeout: float) -> tuple[list[str], int, str | None]:
+def fetch_model_ids(url: str, timeout: float, api_key: str | None = None) -> tuple[list[str], int, str | None]:
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
+        request = urllib.request.Request(url)
+        if api_key:
+            request.add_header("Authorization", f"Bearer {api_key}")
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
-            ids = [str(item.get("id")) for item in payload.get("data") or [] if isinstance(item, dict) and item.get("id")]
+            raw_models = payload if isinstance(payload, list) else payload.get("data") or []
+            ids = [str(item.get("id")) for item in raw_models if isinstance(item, dict) and item.get("id")]
             return sorted(ids), response.status, None
     except urllib.error.HTTPError as exc:
         exc.read()
@@ -121,8 +127,6 @@ def manifest_agent_profiles(manifest: dict[str, Any]) -> dict[str, dict[str, Any
             "local_model": profile.get("model"),
             "keep_local": bool(profile.get("keep_local")),
         }
-    if "agent/benedict" in result:
-        result["agent/benedict-paralegal"] = {**result["agent/benedict"], "agent_id": "benedict-paralegal"}
     return result
 
 
@@ -167,7 +171,7 @@ def build_report(
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     probe = "http"
-    model_ids, status, error = fetch_model_ids(args.url, args.timeout)
+    model_ids, status, error = fetch_model_ids(args.url, args.timeout, args.open_webui_api_key)
     url = args.url
     if status == 401 and not args.no_container_probe:
         probe = "container"

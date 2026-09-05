@@ -27,16 +27,16 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in json.dumps(bundle)
     assert bundle["status"] == "maximally_completed_pending_external_auth"
     assert bundle["git_head"]
-    assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 8, "credential_gated": 1, "partial": 3}
+    assert bundle["completion_status_counts"] == {"complete": 13, "credential_gated": 1, "partial": 1}
     assert bundle["completion_metrics"] == {
         "total_requirements": 15,
-        "complete_requirements": 8,
-        "incomplete_requirements": 7,
-        "auth_gated_requirements": 3,
+        "complete_requirements": 13,
+        "incomplete_requirements": 2,
+        "auth_gated_requirements": 0,
         "credential_gated_requirements": 1,
-        "partial_requirements": 3,
-        "external_gated_requirements": 4,
-        "verified_completion_percent": 53.3,
+        "partial_requirements": 1,
+        "external_gated_requirements": 1,
+        "verified_completion_percent": 86.7,
     }
     assert bundle["endpoint_map"]["open_webui_atlas"] == "http://100.119.235.114:3001"
     assert bundle["endpoint_map"]["open_webui_iris_duplicate"] == "http://100.115.228.56:3001"
@@ -63,15 +63,12 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["tests"]["completion_audit_complete"] is False
     assert bundle["tests"]["post_auth_activation_ready"] is False
     assert bundle["tests"]["inference_policy_ok"] is True
-    assert bundle["tests"]["authenticated_chat_smoke"] == "pending"
+    assert bundle["tests"]["authenticated_chat_smoke"] == "complete"
     assert bundle["tests"]["open_webui_tools_gateway_ok"] is True
     assert bundle["tests"]["open_webui_tools_openapi_ok"] is True
     assert "exact_next_action" in bundle
-    assert "Open WebUI" in bundle["exact_next_action"]
-    assert bundle["evidence_summary"]["post_auth_activation_next_actions"] == [
-        "Create or verify Atlas Open WebUI users/groups for Beth, Jenna, Joe, and Liam after authenticated access is available.",
-        "Use the existing Atlas Open WebUI admin account and generate an admin/service API key.",
-    ]
+    assert bundle["exact_next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert bundle["evidence_summary"]["post_auth_activation_next_actions"] == []
     assert bundle["evidence_summary"]["post_auth_activation_access_missing_users"] == ["beth", "jenna", "joe", "liam"]
     assert bundle["evidence_summary"]["post_auth_activation_access_missing_models"] == []
     assert bundle["evidence_summary"]["post_auth_activation_resource_owner_resolved"] is False
@@ -82,10 +79,12 @@ def test_bundle_contains_required_deliverable_sections() -> None:
         "telegram_pilot",
         "signal_pilot",
     ]
-    assert all(gate["ready"] is False for gate in bundle["external_gates"])
-    assert bundle["external_gates"][0]["next_action"].startswith("Use the existing Atlas Open WebUI admin account")
-    assert any("Atlas Open WebUI admin" in action for action in bundle["external_gates"][0]["next_actions"])
-    assert any("generate an admin" in action for action in bundle["external_gates"][1]["next_actions"])
+    assert bundle["external_gates"][0]["ready"] is True
+    assert bundle["external_gates"][1]["ready"] is True
+    assert bundle["external_gates"][2]["ready"] is False
+    assert bundle["external_gates"][3]["ready"] is False
+    assert bundle["external_gates"][0]["next_action"] is None
+    assert bundle["external_gates"][1]["next_action"] is None
     assert bundle["external_gates"][2]["next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["external_gates"][2]["next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["external_gates"][3]["next_actions"])
@@ -98,14 +97,14 @@ def test_bundle_contains_required_deliverable_sections() -> None:
         assert "evidence_git_head" in gate
     requirement_audit = {item["requirement_id"]: item for item in bundle["requirement_audit"]}
     assert len(requirement_audit) == 15
-    assert requirement_audit["local_inference"]["status"] == "partial"
-    assert requirement_audit["five_agents"]["status"] == "auth_gated"
+    assert requirement_audit["local_inference"]["status"] == "complete"
+    assert requirement_audit["five_agents"]["status"] == "complete"
     assert requirement_audit["messaging_channels"]["status"] == "credential_gated"
     assert "certification/reports/open-webui-home-agent-chat-smoke.json" in requirement_audit["local_inference"]["evidence"]
     assert requirement_audit["local_inference"]["command"].startswith("OPEN_WEBUI_API_KEY=<redacted>")
-    assert any("OPEN_WEBUI_API_KEY" in action for action in requirement_audit["local_inference"]["next_actions"])
+    assert requirement_audit["local_inference"]["next_actions"] == []
     assert requirement_audit["five_agents"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
-    assert any("Open WebUI" in action for action in requirement_audit["five_agents"]["next_actions"])
+    assert requirement_audit["five_agents"]["next_actions"] == []
     assert "scripts/run-freyja-channels-telegram-pilot.py" in requirement_audit["messaging_channels"]["command"]
     assert requirement_audit["messaging_channels"]["commands"] == [
         "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
@@ -166,9 +165,9 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["secret_safety_findings"] == 0
     assert isinstance(bundle["evidence_summary"]["secret_safety_generated_at_unix"], int)
     assert bundle["evidence_summary"]["secret_safety_git_head"]
-    assert bundle["evidence_summary"]["chat_smoke_status"] == "pending"
-    assert bundle["evidence_summary"]["chat_smoke_missing_configuration"] == ["OPEN_WEBUI_API_KEY"]
-    assert any("generate an admin" in action for action in bundle["evidence_summary"]["chat_smoke_next_actions"])
+    assert bundle["evidence_summary"]["chat_smoke_status"] == "complete"
+    assert bundle["evidence_summary"]["chat_smoke_missing_configuration"] == []
+    assert bundle["evidence_summary"]["chat_smoke_next_actions"] == []
     assert bundle["evidence_summary"]["completion_status_counts"] == bundle["completion_status_counts"]
     assert bundle["evidence_summary"]["completion_metrics"] == bundle["completion_metrics"]
     assert isinstance(bundle["evidence_summary"]["completion_audit_generated_at_unix"], int)
@@ -252,8 +251,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_openapi_git_head"]
     assert bundle["evidence_summary"]["readiness_summary_status"] == "pending_external_auth_or_credentials"
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
-    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Use the existing Atlas Open WebUI admin account")
-    assert any("OPEN_WEBUI_API_KEY" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
+    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert not any("OPEN_WEBUI_API_KEY" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert isinstance(bundle["evidence_summary"]["readiness_summary_generated_at_unix"], int)
@@ -277,8 +276,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["channel_audit_store"]["raw_sender_logged"] is False
     assert bundle["evidence_summary"]["channel_audit_store"]["denied_attempts_logged"] is True
     assert bundle["evidence_summary"]["channel_audit_store"]["response_failures_logged"] is True
-    assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/openai/v1/chat/completions")
-    assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
+    assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/api/chat/completions")
+    assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is True
     assert bundle["evidence_summary"]["telegram_empty_allowlist_policy"] == "deny_all"
     assert bundle["evidence_summary"]["telegram_allowlist_count"] == 0
     assert bundle["evidence_summary"]["telegram_identity_map_count"] == 0
@@ -350,7 +349,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     text = module.render_markdown(module.build_bundle(now=1))
 
     assert "# Open WebUI Home-Agent Deliverable" in text
-    assert "Verified completion: `53.3%` (8/15 requirements)" in text
+    assert "Verified completion: `86.7%` (13/15 requirements)" in text
     assert "Focused tests" in text
     assert "Full tests" in text
     assert "Backup rollback audit ok" in text
@@ -380,7 +379,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "## Post-Auth Activation" in text
     assert "Missing users: `beth, jenna, joe, liam`" in text
     assert "Resource owner policy: `auto_single_user_only`" in text
-    assert "Activation action: Use the existing Atlas Open WebUI admin account" in text
+    assert "## Post-Auth Activation" in text
     assert "## Endpoint Ownership" in text
     assert "`atlas_open_webui`" in text
     assert "nexus_required=False" in text
@@ -410,20 +409,18 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "system_health_notification" in text
     assert "dry_run_required" in text
     assert "## Required Next Actions" in text
-    assert "Set OPEN_WEBUI_API_KEY outside source control." in text
+    assert "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control." not in text
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in text
     assert "External Gates" in text
-    assert "`post_auth_activation`: pending" in text
-    assert "Action: Generate an Atlas Open WebUI admin or service-account API key" in text
-    assert "Action: Set OPEN_WEBUI_API_KEY outside source control." in text
+    assert "`post_auth_activation`: ready" in text
+    assert "`authenticated_chat_smoke`: ready" in text
     assert "`telegram_pilot`: pending" in text
     assert "Action: Create or choose the Telegram bot" in text
     assert "Action: Set SIGNAL_REST_API_URL" in text
-    assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in text
+    assert "Command: `scripts/run-freyja-channels-telegram-pilot.py" in text
     assert "Requirement Audit" in text
-    assert "`local_inference`: `partial`" in text
+    assert "`local_inference`: `complete`" in text
     assert "`messaging_channels`: `credential_gated`" in text
-    assert "Action: Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents." in text
     assert "Action: Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all." in text
     assert "Command: `OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py" in text
     assert "Command: `scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json`" in text
@@ -431,7 +428,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "pending_external_auth_or_credentials" in text
     assert "readiness_summary" in text
     assert "Exact Next Action" in text
-    assert "Atlas Open WebUI is reachable and onboarding is complete" in text
+    assert "Configure: TELEGRAM_ALLOWED_USER_IDS" in text
 
 
 def test_bundle_main_creates_distinct_output_directories(tmp_path: Path, capsys) -> None:

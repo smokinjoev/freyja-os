@@ -19,6 +19,7 @@ DEFAULT_AGENTS = REPO_ROOT / "config" / "open-webui-home-agents.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-chat-smoke.json"
 DEFAULT_OPEN_WEBUI_URL = "http://100.119.235.114:3001"
 DEFAULT_TIMEOUT_SECONDS = 120.0
+DEFAULT_MAX_TOKENS = 256
 MODEL_IDS = {
     "freyja": "agent/freyja",
     "cloyd": "agent/cloyd-gibbler",
@@ -55,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agents", type=Path, default=DEFAULT_AGENTS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--timeout", type=float, default=_env_float("OPEN_WEBUI_CHAT_SMOKE_TIMEOUT", DEFAULT_TIMEOUT_SECONDS))
+    parser.add_argument("--max-tokens", type=int, default=int(os.environ.get("OPEN_WEBUI_CHAT_SMOKE_MAX_TOKENS", DEFAULT_MAX_TOKENS)))
     parser.add_argument("--agent", action="append", choices=sorted(MODEL_IDS), help="Limit to one or more agent ids.")
     parser.add_argument("--dry-run", action="store_true", help="Render the intended checks without calling Open WebUI.")
     return parser
@@ -84,6 +86,7 @@ def request_chat_completion(
     display_name: str,
     *,
     timeout: float,
+    max_tokens: int,
 ) -> tuple[int, dict[str, Any] | None, str | None, float]:
     payload = {
         "model": model_id,
@@ -98,10 +101,10 @@ def request_chat_completion(
         ],
         "stream": False,
         "temperature": 0,
-        "max_tokens": 16,
+        "max_tokens": max_tokens,
     }
     req = urllib.request.Request(
-        f"{base_url.rstrip('/')}/openai/v1/chat/completions",
+        f"{base_url.rstrip('/')}/api/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "authorization": f"Bearer {api_key}",
@@ -196,6 +199,7 @@ def run_smoke(args: argparse.Namespace, manifest: dict[str, Any]) -> dict[str, A
             check["open_webui_model_id"],
             check["display_name"],
             timeout=args.timeout,
+            max_tokens=args.max_tokens,
         )
         choices = (data or {}).get("choices") or []
         content = ""

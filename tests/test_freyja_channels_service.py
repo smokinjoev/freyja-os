@@ -195,7 +195,7 @@ def test_open_webui_chat_client_posts_to_agent_model_without_logging_token(monke
 
     payload = captured["payload"]
     assert response == "channel response"
-    assert captured["url"] == "http://open-webui.local/openai/v1/chat/completions"
+    assert captured["url"] == "http://open-webui.local/api/chat/completions"
     assert captured["headers"]["Authorization"] == "Bearer secret-token"
     assert '"model": "agent/freyja"' in payload
     assert '"freyja_channel_thread_key": "telegram:freyja:abc"' in payload
@@ -205,10 +205,23 @@ def test_open_webui_chat_client_posts_to_agent_model_without_logging_token(monke
 
 def test_open_webui_chat_client_fails_closed_without_api_key(monkeypatch) -> None:
     monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
+    monkeypatch.delenv("OPEN_WEBUI_API_KEY_FILE", raising=False)
     client = OpenWebUIChatClient(api_key="")
 
     with pytest.raises(ChannelClientError, match="OPEN_WEBUI_API_KEY"):
         client.send(agent="freyja", thread_key="telegram:freyja:abc", message="hello", attachments=())
+
+
+def test_open_webui_chat_client_reads_api_key_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("OPEN_WEBUI_API_KEY", raising=False)
+    key_file = tmp_path / "open-webui.key"
+    key_file.write_text("file-token\n", encoding="utf-8")
+    monkeypatch.setenv("OPEN_WEBUI_API_KEY_FILE", str(key_file))
+
+    client = OpenWebUIChatClient()
+
+    assert client.configured is True
+    assert client.api_key == "file-token"
 
 
 def test_open_webui_chat_client_timeout_env_defaults_on_invalid_values(monkeypatch) -> None:

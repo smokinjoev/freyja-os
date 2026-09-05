@@ -74,10 +74,20 @@ class ChannelClientError(RuntimeError):
     pass
 
 
+def _read_api_key_file() -> str:
+    path = os.environ.get("OPEN_WEBUI_API_KEY_FILE", "").strip()
+    if not path:
+        return ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 class OpenWebUIChatClient:
     def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_seconds: float | None = None) -> None:
         self.base_url = (base_url or os.environ.get("OPEN_WEBUI_URL") or "http://127.0.0.1:3001").rstrip("/")
-        self.api_key = api_key if api_key is not None else os.environ.get("OPEN_WEBUI_API_KEY", "")
+        self.api_key = api_key if api_key is not None else os.environ.get("OPEN_WEBUI_API_KEY", "") or _read_api_key_file()
         self.timeout_seconds = float(timeout_seconds) if timeout_seconds is not None else _env_float("FREYJA_CHANNEL_OPEN_WEBUI_TIMEOUT", 120.0)
 
     @property
@@ -100,7 +110,7 @@ class OpenWebUIChatClient:
             },
         }
         request = urllib.request.Request(
-            f"{self.base_url}/openai/v1/chat/completions",
+            f"{self.base_url}/api/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
             headers={
                 "authorization": f"Bearer {self.api_key}",
