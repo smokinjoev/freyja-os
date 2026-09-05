@@ -164,7 +164,7 @@ def build_audit() -> dict[str, Any]:
         if not ready
     ]
     messaging_blocker = (
-        f"{'/'.join(pending_messaging_channels)} live round trip requires allowlists and credentials."
+        f"{'/'.join(pending_messaging_channels)} live round trip is not yet proven with handled > 0."
         if pending_messaging_channels
         else None
     )

@@ -213,11 +213,39 @@ def run_loop(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _failure_report(args: argparse.Namespace, exc: Exception) -> dict[str, Any]:
+    cause = exc.__cause__
+    http_status = getattr(cause, "code", None)
+    reason = "telegram_poll_conflict" if http_status == 409 else "telegram_live_run_failed"
+    return {
+        "report_type": "freyja-channels-telegram-pilot",
+        "generated_at_unix": int(time.time()),
+        "git_head": _git_head(),
+        "mode": "run",
+        "secrets_included": False,
+        "private_content_included": False,
+        "ready": False,
+        "failure": {
+            "reason": reason,
+            "exception_type": type(exc).__name__,
+            "http_status": http_status,
+        },
+        "totals": {"updates": 0, "handled": 0, "denied_or_client_failed": 0, "failed": 1},
+        "next_actions": [
+            "Stop any other Telegram getUpdates poller or clear the bot webhook, then rerun the live Telegram pilot.",
+            "Send a message from an allowed Telegram sender and archive a report with handled > 0.",
+        ],
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     report = readiness(args)
     if report["ready"] and not args.dry_run:
-        report = run_loop(args)
+        try:
+            report = run_loop(args)
+        except ChannelTransportError as exc:
+            report = _failure_report(args, exc)
     rendered = json.dumps(report, indent=2, sort_keys=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered + "\n", encoding="utf-8")

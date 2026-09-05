@@ -68,7 +68,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["tests"]["open_webui_tools_gateway_ok"] is True
     assert bundle["tests"]["open_webui_tools_openapi_ok"] is True
     assert "exact_next_action" in bundle
-    assert bundle["exact_next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert bundle["exact_next_action"].startswith("Stop any other Telegram getUpdates poller")
     assert bundle["evidence_summary"]["post_auth_activation_next_actions"] == []
     assert bundle["evidence_summary"]["post_auth_activation_access_missing_users"] == ["beth", "jenna", "joe", "liam"]
     assert bundle["evidence_summary"]["post_auth_activation_access_missing_models"] == []
@@ -83,13 +83,13 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["external_gates"][0]["ready"] is True
     assert bundle["external_gates"][1]["ready"] is True
     assert bundle["external_gates"][2]["ready"] is False
-    assert bundle["external_gates"][3]["ready"] is True
+    assert bundle["external_gates"][3]["ready"] is False
     assert bundle["external_gates"][0]["next_action"] is None
     assert bundle["external_gates"][1]["next_action"] is None
-    assert bundle["external_gates"][2]["next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
-    assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["external_gates"][2]["next_actions"])
-    assert bundle["external_gates"][3]["next_action"] is None
-    assert bundle["external_gates"][3]["next_actions"] == []
+    assert bundle["external_gates"][2]["next_action"].startswith("Stop any other Telegram getUpdates poller")
+    assert any("allowed Telegram sender" in action for action in bundle["external_gates"][2]["next_actions"])
+    assert bundle["external_gates"][3]["next_action"].startswith("Run the Signal live round-trip pilot")
+    assert any("signal live round-trip" in action for action in bundle["external_gates"][3]["next_actions"])
     assert bundle["external_gates"][0]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert "OPEN_WEBUI_API_KEY=<redacted>" in bundle["external_gates"][1]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in bundle["external_gates"][2]["command"]
@@ -112,7 +112,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
         "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
         "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
     ]
-    assert any("TELEGRAM_BOT_TOKEN" in action for action in requirement_audit["messaging_channels"]["next_actions"])
+    assert any("Telegram getUpdates poller" in action for action in requirement_audit["messaging_channels"]["next_actions"])
     assert requirement_audit["verification"]["commands"] == [
         "scripts/summarize-open-webui-home-agent-readiness.py",
         "scripts/audit-open-webui-home-agent-completion.py",
@@ -259,9 +259,9 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_openapi_git_head"]
     assert bundle["evidence_summary"]["readiness_summary_status"] == "pending_external_auth_or_credentials"
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
-    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Stop any other Telegram getUpdates poller")
     assert not any("OPEN_WEBUI_API_KEY" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
-    assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
+    assert any("allowed Telegram sender" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert not any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert isinstance(bundle["evidence_summary"]["readiness_summary_generated_at_unix"], int)
     assert bundle["evidence_summary"]["readiness_summary_git_head"]
@@ -294,14 +294,13 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert "TELEGRAM_BOT_TOKEN" in bundle["evidence_summary"]["telegram_missing_configuration"]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["telegram_next_actions"])
     assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
-    assert "TELEGRAM_BOT_TOKEN" in bundle["evidence_summary"]["telegram_pilot_missing_configuration"]
-    assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["telegram_pilot_next_actions"])
+    assert bundle["evidence_summary"]["telegram_pilot_missing_configuration"] == []
+    assert any("Telegram getUpdates poller" in action for action in bundle["evidence_summary"]["telegram_pilot_next_actions"])
     assert isinstance(bundle["evidence_summary"]["channels_readiness_generated_at_unix"], int)
     assert bundle["evidence_summary"]["channels_readiness_git_head"]
     assert isinstance(bundle["evidence_summary"]["telegram_pilot_generated_at_unix"], int)
     assert bundle["evidence_summary"]["telegram_pilot_git_head"]
-    assert bundle["evidence_summary"]["telegram_pilot_checks"]["telegram_bot_token_configured"] is False
-    assert bundle["evidence_summary"]["telegram_pilot_checks"]["allowlist_identity_map_complete"] is False
+    assert bundle["evidence_summary"]["telegram_pilot_checks"] == {}
     assert bundle["evidence_summary"]["signal_empty_allowlist_policy"] == "deny_all"
     assert bundle["evidence_summary"]["signal_allowlist_count"] == 0
     assert bundle["evidence_summary"]["signal_identity_map_count"] == 0
@@ -428,20 +427,20 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`post_auth_activation`: ready" in text
     assert "`authenticated_chat_smoke`: ready" in text
     assert "`telegram_pilot`: pending" in text
-    assert "Action: Create or choose the Telegram bot" in text
+    assert "Action: Stop any other Telegram getUpdates poller" in text
     assert "Action: Set SIGNAL_REST_API_URL" not in text
     assert "Command: `scripts/run-freyja-channels-telegram-pilot.py" in text
     assert "Requirement Audit" in text
     assert "`local_inference`: `complete`" in text
     assert "`messaging_channels`: `credential_gated`" in text
-    assert "Action: Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all." in text
+    assert "Action: Send a message from an allowed Telegram sender and archive a report with handled > 0." in text
     assert "Command: `OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py" in text
     assert "Command: `scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json`" in text
     assert text.count("Command: `scripts/summarize-open-webui-home-agent-readiness.py`") == 0
     assert "pending_external_auth_or_credentials" in text
     assert "readiness_summary" in text
     assert "Exact Next Action" in text
-    assert "Configure: TELEGRAM_ALLOWED_USER_IDS" in text
+    assert "Stop any other Telegram getUpdates poller" in text
 
 
 def test_bundle_main_creates_distinct_output_directories(tmp_path: Path, capsys) -> None:

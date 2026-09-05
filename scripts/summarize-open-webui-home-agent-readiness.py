@@ -122,6 +122,23 @@ def _chat_smoke_next_actions(chat_smoke: dict[str, Any]) -> list[str]:
     return ["Resolve the reported chat-smoke readiness issue and rerun the authenticated five-agent chat smoke."]
 
 
+def _pilot_live_round_trip_ok(report: dict[str, Any], handled_key: str = "handled") -> bool:
+    if report.get("mode") != "run":
+        return False
+    totals = report.get("totals") if isinstance(report.get("totals"), dict) else {}
+    return int(totals.get(handled_key) or 0) > 0 and int(totals.get("failed") or 0) == 0
+
+
+def _pilot_next_actions(channel: str, pilot: dict[str, Any], readiness: dict[str, Any]) -> list[str]:
+    if _pilot_live_round_trip_ok(pilot):
+        return []
+    if isinstance(pilot.get("next_actions"), list) and pilot.get("failure"):
+        return [_canonical_action(str(action)) for action in pilot["next_actions"]]
+    if pilot.get("ready") is True:
+        return [f"Run the {channel} live round-trip pilot and archive a report with handled > 0."]
+    return _channel_next_actions(channel, readiness)
+
+
 def _canonical_action(value: str) -> str:
     if value in {
         "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
@@ -183,6 +200,8 @@ def build_summary() -> dict[str, Any]:
 
     telegram_checks = telegram.get("checks") or {}
     signal_checks = signal.get("checks") or {}
+    telegram_live_ok = _pilot_live_round_trip_ok(telegram)
+    signal_live_ok = _pilot_live_round_trip_ok(signal)
     gates = [
         _gate(
             "post_auth_activation",
@@ -209,15 +228,22 @@ def build_summary() -> dict[str, Any]:
         _gate(
             "telegram_pilot",
             "Telegram Joe pilot round trip",
-            telegram.get("ready") is True,
+            telegram_live_ok,
             "certification/reports/freyja-channels-telegram-pilot.json",
             None
-            if telegram.get("ready")
-            else _channel_next_action(
-                telegram_readiness,
-                fallback="Set TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, TELEGRAM_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
+            if telegram_live_ok
+            else (
+                str(telegram["next_actions"][0])
+                if telegram.get("failure") and isinstance(telegram.get("next_actions"), list) and telegram["next_actions"]
+                else
+                "Run the Telegram live round-trip pilot and require handled > 0."
+                if telegram.get("ready") is True
+                else _channel_next_action(
+                    telegram_readiness,
+                    fallback="Run the Telegram live round-trip pilot and require handled > 0.",
+                )
             ),
-            [] if telegram.get("ready") is True else _channel_next_actions("telegram", telegram_readiness),
+            _pilot_next_actions("telegram", telegram, telegram_readiness),
             "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
             telegram.get("generated_at_unix") or telegram.get("timestamp_unix"),
             telegram.get("git_head"),
@@ -225,15 +251,22 @@ def build_summary() -> dict[str, Any]:
         _gate(
             "signal_pilot",
             "Signal round trip",
-            signal.get("ready") is True,
+            signal_live_ok,
             "certification/reports/freyja-channels-signal-pilot.json",
             None
-            if signal.get("ready")
-            else _channel_next_action(
-                signal_readiness,
-                fallback="Register signal-cli-rest-api and set SIGNAL_ACCOUNT_NUMBER, SIGNAL_ALLOWED_SENDERS, SIGNAL_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
+            if signal_live_ok
+            else (
+                str(signal["next_actions"][0])
+                if signal.get("failure") and isinstance(signal.get("next_actions"), list) and signal["next_actions"]
+                else
+                "Run the Signal live round-trip pilot and require handled > 0."
+                if signal.get("ready") is True
+                else _channel_next_action(
+                    signal_readiness,
+                    fallback="Run the Signal live round-trip pilot and require handled > 0.",
+                )
             ),
-            [] if signal.get("ready") is True else _channel_next_actions("signal", signal_readiness),
+            _pilot_next_actions("signal", signal, signal_readiness),
             "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
             signal.get("generated_at_unix") or signal.get("timestamp_unix"),
             signal.get("git_head"),

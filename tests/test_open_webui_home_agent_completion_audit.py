@@ -40,8 +40,8 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
         "external_gated_requirements": 1,
         "verified_completion_percent": 86.7,
     }
-    assert audit["exact_next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
-    assert audit["required_next_actions"][0].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
+    assert audit["exact_next_action"].startswith("Stop any other Telegram getUpdates poller")
+    assert audit["required_next_actions"][0].startswith("Stop any other Telegram getUpdates poller")
     assert not any("OPEN_WEBUI_API_KEY" in action for action in audit["required_next_actions"])
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in audit["required_next_actions"]
     assert len(audit["required_next_actions"]) == len(set(audit["required_next_actions"]))
@@ -64,7 +64,7 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
         "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
         "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
     ]
-    assert any("TELEGRAM_BOT_TOKEN" in action for action in by_id["messaging_channels"]["next_actions"])
+    assert any("allowed Telegram sender" in action for action in by_id["messaging_channels"]["next_actions"])
     assert not any("SIGNAL_REST_API_URL" in action for action in by_id["messaging_channels"]["next_actions"])
     assert "TELEGRAM_BOT_TOKEN" not in by_id["messaging_channels"]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in by_id["messaging_channels"]["command"]
