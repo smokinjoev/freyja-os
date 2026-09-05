@@ -129,6 +129,20 @@ def _blocked_reason_counts(report: dict[str, Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+def _required_next_actions(report: dict[str, Any]) -> list[str]:
+    explicit = report.get("required_next_actions")
+    if isinstance(explicit, list):
+        return [str(action) for action in explicit]
+    actions: list[str] = []
+    for gate in report.get("gates") or []:
+        if gate.get("ready") is True:
+            continue
+        if gate.get("next_action"):
+            actions.append(str(gate["next_action"]))
+        actions.extend(str(action) for action in gate.get("next_actions") or [])
+    return _dedupe(actions)
+
+
 def _channel_gate_next_actions(gate_id: str, channels: dict[str, Any]) -> list[str]:
     if gate_id == "telegram_pilot":
         channel = channels.get("telegram") if isinstance(channels.get("telegram"), dict) else {}
@@ -578,6 +592,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "tools_openapi_git_head": tools_openapi.get("git_head") or "unknown",
             "readiness_summary_status": readiness_summary.get("status"),
             "readiness_summary_all_ready": readiness_summary.get("all_ready"),
+            "readiness_required_next_actions": _required_next_actions(readiness_summary),
             "readiness_summary_generated_at_unix": readiness_summary.get("generated_at_unix") or _mtime(readiness_summary_path),
             "readiness_summary_git_head": readiness_summary.get("git_head") or "unknown",
             "evidence_refresh_generated_at_unix": evidence_refresh.get("generated_at_unix") or _mtime(evidence_refresh_path),

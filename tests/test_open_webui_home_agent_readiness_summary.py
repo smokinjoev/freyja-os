@@ -51,6 +51,11 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert "OPEN_WEBUI_API_KEY=<redacted>" in gates["authenticated_chat_smoke"]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in gates["telegram_pilot"]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in gates["signal_pilot"]["command"]
+    assert summary["required_next_actions"][0].startswith("Complete first-account Open WebUI onboarding")
+    assert any("OPEN_WEBUI_API_KEY" in action for action in summary["required_next_actions"])
+    assert any("TELEGRAM_BOT_TOKEN" in action for action in summary["required_next_actions"])
+    assert any("SIGNAL_REST_API_URL" in action for action in summary["required_next_actions"])
+    assert len(summary["required_next_actions"]) == len(set(summary["required_next_actions"]))
 
 
 def test_readiness_summary_prefers_current_git_head(monkeypatch) -> None:
@@ -99,6 +104,7 @@ def test_readiness_summary_uses_inventory_next_action_for_post_auth_gate(monkeyp
     assert gates["post_auth_activation"]["next_action"].startswith("Complete first-account Open WebUI onboarding")
     assert gates["post_auth_activation"]["next_actions"] == ["Create/sign in Open WebUI users for: joe."]
     assert summary["exact_next_action"] == gates["post_auth_activation"]["next_action"]
+    assert summary["required_next_actions"][0] == gates["post_auth_activation"]["next_action"]
 
 
 def test_readiness_summary_uses_channel_missing_configuration_without_secret_values(monkeypatch) -> None:
@@ -138,6 +144,14 @@ def test_readiness_summary_uses_channel_missing_configuration_without_secret_val
         "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy.",
     ]
     assert "secret-token-value" not in serialized
+
+
+def test_readiness_summary_markdown_includes_required_next_actions() -> None:
+    module = _module()
+    text = module.render_markdown(module.build_summary())
+
+    assert "## Required Next Actions" in text
+    assert "Complete first-account Open WebUI onboarding" in text
 
 
 def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(tmp_path: Path, capsys) -> None:

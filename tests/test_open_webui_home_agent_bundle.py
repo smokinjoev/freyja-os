@@ -180,6 +180,10 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_openapi_git_head"]
     assert bundle["evidence_summary"]["readiness_summary_status"] == "pending_external_auth_or_credentials"
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
+    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Complete first-account Open WebUI onboarding")
+    assert any("OPEN_WEBUI_API_KEY" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
+    assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
+    assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert isinstance(bundle["evidence_summary"]["readiness_summary_generated_at_unix"], int)
     assert bundle["evidence_summary"]["readiness_summary_git_head"]
     assert isinstance(bundle["evidence_summary"]["evidence_refresh_generated_at_unix"], int)

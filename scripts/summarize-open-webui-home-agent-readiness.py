@@ -80,7 +80,7 @@ def _channel_next_actions(channel: str, channel_report: dict[str, Any]) -> list[
             "TELEGRAM_ALLOWED_USER_IDS": "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
             "TELEGRAM_IDENTITY_MAP": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
             "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
-            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY outside source control.",
         }
         final_action = "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
     else:
@@ -90,7 +90,7 @@ def _channel_next_actions(channel: str, channel_report: dict[str, Any]) -> list[
             "SIGNAL_ALLOWED_SENDERS": "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
             "SIGNAL_IDENTITY_MAP": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
             "SIGNAL_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
-            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY outside source control.",
         }
         final_action = "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy."
     actions = []
@@ -114,6 +114,35 @@ def _chat_smoke_next_actions(chat_smoke: dict[str, Any]) -> list[str]:
             "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
         ]
     return ["Resolve the reported chat-smoke readiness issue and rerun the authenticated five-agent chat smoke."]
+
+
+def _canonical_action(value: str) -> str:
+    if value == "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.":
+        return "Set OPEN_WEBUI_API_KEY outside source control."
+    return value
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        action = _canonical_action(value)
+        if action in seen:
+            continue
+        seen.add(action)
+        deduped.append(action)
+    return deduped
+
+
+def _required_next_actions(gates: list[dict[str, Any]]) -> list[str]:
+    actions: list[str] = []
+    for gate in gates:
+        if gate.get("ready") is True:
+            continue
+        if gate.get("next_action"):
+            actions.append(str(gate["next_action"]))
+        actions.extend(str(action) for action in gate.get("next_actions") or [])
+    return _dedupe(actions)
 
 
 def build_summary() -> dict[str, Any]:
@@ -200,6 +229,7 @@ def build_summary() -> dict[str, Any]:
         "telegram_checks": telegram_checks,
         "signal_checks": signal_checks,
         "exact_next_action": open_webui_next_action,
+        "required_next_actions": _required_next_actions(gates),
     }
 
 
@@ -222,6 +252,10 @@ def render_markdown(summary: dict[str, Any]) -> str:
         if gate.get("command"):
             lines.append(f"  Command: `{gate['command']}`")
     lines += ["", "## Exact Next Action", "", str(summary.get("exact_next_action") or ""), ""]
+    lines += ["", "## Required Next Actions", ""]
+    for action in summary.get("required_next_actions") or []:
+        lines.append(f"- {action}")
+    lines.append("")
     return "\n".join(lines)
 
 
