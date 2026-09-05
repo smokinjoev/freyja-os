@@ -151,7 +151,7 @@ def pending_next_actions(reason: str) -> tuple[list[str], list[str]]:
         return (
             ["OPEN_WEBUI_API_KEY"],
             [
-                "Create/sign in to Atlas Open WebUI and generate an admin or service-account API key.",
+                "Use the existing Atlas Open WebUI admin account and generate an admin or service-account API key.",
                 "Set OPEN_WEBUI_API_KEY outside source control.",
                 "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
             ],

@@ -27,16 +27,16 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in json.dumps(bundle)
     assert bundle["status"] == "maximally_completed_pending_external_auth"
     assert bundle["git_head"]
-    assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 9, "credential_gated": 1, "partial": 2}
+    assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 8, "credential_gated": 1, "partial": 3}
     assert bundle["completion_metrics"] == {
         "total_requirements": 15,
-        "complete_requirements": 9,
-        "incomplete_requirements": 6,
+        "complete_requirements": 8,
+        "incomplete_requirements": 7,
         "auth_gated_requirements": 3,
         "credential_gated_requirements": 1,
-        "partial_requirements": 2,
+        "partial_requirements": 3,
         "external_gated_requirements": 4,
-        "verified_completion_percent": 60.0,
+        "verified_completion_percent": 53.3,
     }
     assert bundle["endpoint_map"]["open_webui_atlas"] == "http://100.119.235.114:3001"
     assert bundle["endpoint_map"]["open_webui_iris_duplicate"] == "http://100.115.228.56:3001"
@@ -70,7 +70,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert "Open WebUI" in bundle["exact_next_action"]
     assert bundle["evidence_summary"]["post_auth_activation_next_actions"] == [
         "Create or verify Atlas Open WebUI users/groups for Beth, Jenna, Joe, and Liam after authenticated access is available.",
-        "Use the Atlas Open WebUI admin account and generate an admin/service API key.",
+        "Use the existing Atlas Open WebUI admin account and generate an admin/service API key.",
     ]
     assert bundle["evidence_summary"]["post_auth_activation_access_missing_users"] == ["beth", "jenna", "joe", "liam"]
     assert bundle["evidence_summary"]["post_auth_activation_access_missing_models"] == []
@@ -83,7 +83,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
         "signal_pilot",
     ]
     assert all(gate["ready"] is False for gate in bundle["external_gates"])
-    assert bundle["external_gates"][0]["next_action"].startswith("Sign in to Atlas Open WebUI")
+    assert bundle["external_gates"][0]["next_action"].startswith("Use the existing Atlas Open WebUI admin account")
     assert any("Atlas Open WebUI admin" in action for action in bundle["external_gates"][0]["next_actions"])
     assert any("generate an admin" in action for action in bundle["external_gates"][1]["next_actions"])
     assert bundle["external_gates"][2]["next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
@@ -252,7 +252,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_openapi_git_head"]
     assert bundle["evidence_summary"]["readiness_summary_status"] == "pending_external_auth_or_credentials"
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
-    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Sign in to Atlas Open WebUI")
+    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Use the existing Atlas Open WebUI admin account")
     assert any("OPEN_WEBUI_API_KEY" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
@@ -350,7 +350,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     text = module.render_markdown(module.build_bundle(now=1))
 
     assert "# Open WebUI Home-Agent Deliverable" in text
-    assert "Verified completion: `60.0%` (9/15 requirements)" in text
+    assert "Verified completion: `53.3%` (8/15 requirements)" in text
     assert "Focused tests" in text
     assert "Full tests" in text
     assert "Backup rollback audit ok" in text
@@ -380,7 +380,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "## Post-Auth Activation" in text
     assert "Missing users: `beth, jenna, joe, liam`" in text
     assert "Resource owner policy: `auto_single_user_only`" in text
-    assert "Activation action: Use the Atlas Open WebUI admin account" in text
+    assert "Activation action: Use the existing Atlas Open WebUI admin account" in text
     assert "## Endpoint Ownership" in text
     assert "`atlas_open_webui`" in text
     assert "nexus_required=False" in text

@@ -32,16 +32,16 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert audit["status_counts"]["credential_gated"] >= 1
     assert audit["completion_metrics"] == {
         "total_requirements": 15,
-        "complete_requirements": 9,
-        "incomplete_requirements": 6,
+        "complete_requirements": 8,
+        "incomplete_requirements": 7,
         "auth_gated_requirements": 3,
         "credential_gated_requirements": 1,
-        "partial_requirements": 2,
+        "partial_requirements": 3,
         "external_gated_requirements": 4,
-        "verified_completion_percent": 60.0,
+        "verified_completion_percent": 53.3,
     }
-    assert audit["exact_next_action"].startswith("Complete first-account Open WebUI onboarding")
-    assert audit["required_next_actions"][0].startswith("Complete first-account Open WebUI onboarding")
+    assert audit["exact_next_action"].startswith("Use the existing Atlas Open WebUI admin account")
+    assert audit["required_next_actions"][0].startswith("Use the existing Atlas Open WebUI admin account")
     assert "Set OPEN_WEBUI_API_KEY outside source control." in audit["required_next_actions"]
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in audit["required_next_actions"]
     assert len(audit["required_next_actions"]) == len(set(audit["required_next_actions"]))
@@ -56,7 +56,7 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert by_id["local_inference"]["command"].startswith("OPEN_WEBUI_API_KEY=<redacted>")
     assert any("OPEN_WEBUI_API_KEY" in action for action in by_id["local_inference"]["next_actions"])
     assert by_id["five_agents"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
-    assert any("Open WebUI users" in action for action in by_id["five_agents"]["next_actions"])
+    assert any("Open WebUI admin" in action for action in by_id["five_agents"]["next_actions"])
     assert by_id["memory_layers"]["command"] == by_id["five_agents"]["command"]
     assert by_id["memory_layers"]["next_actions"] == by_id["five_agents"]["next_actions"]
     assert by_id["tools"]["command"] == by_id["five_agents"]["command"]
@@ -78,7 +78,7 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert any("generate an admin" in action for action in by_id["verification"]["next_actions"])
     statuses = {item["requirement"]: item["status"] for item in audit["items"]}
     assert statuses["Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config"] == "complete"
-    assert statuses["Identify Open WebUI host and Vulcan path"] == "complete"
+    assert statuses["Identify Open WebUI host and Vulcan path"] == "partial"
     assert statuses["Keep inference local by default and connect Open WebUI to Vulcan"] == "partial"
     assert statuses["Create/import five Open WebUI agents"] == "auth_gated"
     assert statuses["Implement deterministic Telegram/Signal channel gateway with WhatsApp disabled"] == "credential_gated"

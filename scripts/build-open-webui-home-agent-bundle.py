@@ -111,9 +111,9 @@ def _canonical_action(value: str) -> str:
     if value == "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.":
         return "Set OPEN_WEBUI_API_KEY outside source control."
     if value.startswith("Complete first-account Open WebUI onboarding at http://127.0.0.1:3001"):
-        return "Use the Atlas Open WebUI admin account and generate an admin/service API key."
+        return "Use the existing Atlas Open WebUI admin account and generate an admin/service API key."
     if value == "Complete first-account onboarding, or pass --owner-user-id when multiple Open WebUI users exist.":
-        return "Use the Atlas Open WebUI admin account and generate an admin/service API key."
+        return "Use the existing Atlas Open WebUI admin account and generate an admin/service API key."
     if value == "Create/sign in Open WebUI users for: beth, jenna, joe, liam.":
         return "Create or verify Atlas Open WebUI users/groups for Beth, Jenna, Joe, and Liam after authenticated access is available."
     return value
@@ -293,7 +293,7 @@ def _chat_smoke_gate_next_actions(chat_smoke: dict[str, Any]) -> list[str]:
         return []
     if "OPEN_WEBUI_API_KEY" in (chat_smoke.get("missing_configuration") or []) or chat_smoke.get("reason") == "OPEN_WEBUI_API_KEY not supplied":
         return [
-            "Create/sign in to Atlas Open WebUI and generate an admin or service-account API key.",
+            "Use the existing Atlas Open WebUI admin account and generate an admin or service-account API key.",
             "Set OPEN_WEBUI_API_KEY outside source control.",
             "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
         ]
@@ -519,7 +519,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     }
     open_webui_next_action_hint = (
         inventory.get("open_webui_next_action_hint")
-        or "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session."
+        or "Joe must use the existing Atlas Open WebUI admin account to generate/provide an admin API key or authenticated browser session."
     )
     exact_next_action = open_webui_next_action_hint
     return {

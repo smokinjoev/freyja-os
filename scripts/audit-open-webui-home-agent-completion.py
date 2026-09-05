@@ -141,7 +141,7 @@ def build_audit() -> dict[str, Any]:
     exact_next_action = (
         readiness_summary.get("exact_next_action")
         or inventory.get("open_webui_next_action_hint")
-        or "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session."
+        or "Joe must use the existing Atlas Open WebUI admin account to generate/provide an admin API key or authenticated browser session."
     )
     post_auth_gate = gates.get("post_auth_activation") or {}
     chat_gate = gates.get("authenticated_chat_smoke") or {}

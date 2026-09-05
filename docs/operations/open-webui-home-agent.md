@@ -260,13 +260,27 @@ Current dry-run evidence:
 certification/reports/open-webui-home-agent-access-bind-dry-run.json
 ```
 
-Latest live dry-run:
+Earlier dry-run evidence before Atlas shell access:
 
 ```text
 ready=false
 missing_users=["beth","jenna","joe","liam"]
 grant_insert_count=10
 mode=dry-run
+```
+
+Current Atlas-side database count evidence, collected without reading or
+printing user records, messages, or API key values:
+
+```text
+user_count=3
+auth_count=3
+api_key_count=1
+model_count=2
+tool_count=1
+knowledge_count=0
+memory_count=0
+auth.enable_api_keys=true
 ```
 
 Only after the dry-run shows `ready=true`, apply with an explicit writable
@@ -286,10 +300,10 @@ The dry-run snapshots `webui.db`, `webui.db-wal`, and `webui.db-shm` from
 `freyja-open-webui-atlas-open-webui-1` when the local default DB path is not
 available. It does not mutate the running container database.
 
-If the Open WebUI database has exactly one user after first-account onboarding,
-the activation dry-run resolves that user as the resource owner automatically.
-Use `--owner-user-id <id>` when multiple users exist or when applying against an
-explicit writable database.
+Atlas currently has multiple users, so activation/apply needs an explicit
+owner user ID or authenticated API/session path. If a new single-user Open
+WebUI is ever restored from scratch, the activation dry-run can still resolve
+the only user as owner automatically.
 
 Current dry-run evidence:
 
@@ -297,7 +311,7 @@ Current dry-run evidence:
 certification/reports/open-webui-home-agent-post-auth-activation.json
 ```
 
-Latest dry-run:
+Earlier dry-run evidence before Atlas shell access:
 
 ```text
 ready=false
@@ -852,7 +866,7 @@ Blocked or still pending:
 - Authenticated Open WebUI API tests for all five agents require Joe's Open WebUI API key or browser session.
 - Telegram round trip requires Joe's bot token/allowlist to be configured outside source control.
 - Signal round trip requires registered `signal-cli-rest-api` credentials.
-- Open WebUI user/group assignment cannot be completed offline yet because the live database currently has `user_count=0` and `group_count=0`. Joe must create/sign in to Open WebUI or provide an admin API/browser session.
+- Open WebUI user/group assignment cannot be completed offline yet because Atlas has multiple existing users and needs either an explicit owner/user mapping or an admin API/browser session. Atlas currently has `user_count=3`, with API keys enabled server-side.
 - Freyja 4.1 fallback preservation is verified through the protected legacy Freyja3 gateway contract on port `8300`; no separately named Freyja 4.1 endpoint is defined in current repo evidence.
 
 ## Requirement Matrix

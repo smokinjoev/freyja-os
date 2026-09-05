@@ -159,7 +159,7 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
         "open_webui_next_action_hint": (
             f"Complete first-account Open WebUI onboarding at {ATLAS_OPEN_WEBUI_URL}, then rerun post-auth activation."
             if atlas_public_config.get("onboarding")
-            else "Sign in to Atlas Open WebUI or provide an admin API key/session, then rerun post-auth activation."
+            else "Use the existing Atlas Open WebUI admin account to generate/provide an admin API key or authenticated session, then rerun post-auth activation."
         ),
         "source_topology": {
             "planes": "config/freyja-5.0-planes.yaml",

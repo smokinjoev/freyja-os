@@ -51,7 +51,7 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert "OPEN_WEBUI_API_KEY=<redacted>" in gates["authenticated_chat_smoke"]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in gates["telegram_pilot"]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in gates["signal_pilot"]["command"]
-    assert summary["required_next_actions"][0].startswith("Sign in to Atlas Open WebUI")
+    assert summary["required_next_actions"][0].startswith("Use the existing Atlas Open WebUI admin account")
     assert any("OPEN_WEBUI_API_KEY" in action for action in summary["required_next_actions"])
     assert any("TELEGRAM_BOT_TOKEN" in action for action in summary["required_next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in summary["required_next_actions"])

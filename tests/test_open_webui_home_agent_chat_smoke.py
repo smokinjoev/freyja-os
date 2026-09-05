@@ -59,7 +59,7 @@ def test_chat_smoke_missing_api_key_is_pending(tmp_path: Path, monkeypatch, caps
     assert report["reason"] == "OPEN_WEBUI_API_KEY not supplied"
     assert report["missing_configuration"] == ["OPEN_WEBUI_API_KEY"]
     assert report["next_actions"] == [
-        "Create/sign in to Atlas Open WebUI and generate an admin or service-account API key.",
+        "Use the existing Atlas Open WebUI admin account and generate an admin or service-account API key.",
         "Set OPEN_WEBUI_API_KEY outside source control.",
         "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
     ]
