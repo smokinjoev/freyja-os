@@ -194,12 +194,16 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert inference_checks["nexus_not_required"] is True
     assert inference_checks["unloads_other_primary_models"] is True
     assert inference_checks["cloud_fallback_disabled_for_open_webui_path"] is True
+    assert bundle["evidence_summary"]["channels_deterministic_gateway_only"] is True
+    assert bundle["evidence_summary"]["channels_model_routing_prohibited"] is True
+    assert bundle["evidence_summary"]["channels_independent_agent_intelligence_prohibited"] is True
     assert bundle["evidence_summary"]["channel_thread_persistence_store"]["path"] == "data/freyja-channels/threads.json"
     assert bundle["evidence_summary"]["channel_audit_store"]["raw_sender_logged"] is False
     assert bundle["evidence_summary"]["channel_audit_store"]["denied_attempts_logged"] is True
     assert bundle["evidence_summary"]["channel_audit_store"]["response_failures_logged"] is True
     assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/openai/v1/chat/completions")
     assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
+    assert bundle["evidence_summary"]["telegram_empty_allowlist_policy"] == "deny_all"
     assert "TELEGRAM_BOT_TOKEN" in bundle["evidence_summary"]["telegram_missing_configuration"]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["telegram_next_actions"])
     assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
@@ -211,6 +215,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["telegram_pilot_git_head"]
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["telegram_bot_token_configured"] is False
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["allowlist_identity_map_complete"] is False
+    assert bundle["evidence_summary"]["signal_empty_allowlist_policy"] == "deny_all"
     assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_missing_configuration"]
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_next_actions"])
     assert bundle["evidence_summary"]["signal_pilot_ready"] is False
@@ -220,6 +225,9 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["signal_pilot_git_head"]
     assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is False
     assert bundle["evidence_summary"]["signal_pilot_checks"]["allowlist_identity_map_complete"] is False
+    assert bundle["evidence_summary"]["whatsapp_ready"] is False
+    assert bundle["evidence_summary"]["whatsapp_status"] == "disabled"
+    assert bundle["evidence_summary"]["whatsapp_reason"] == "secured_public_webhook_not_approved"
     assert bundle["evidence_summary"]["proactive_dry_run_would_send_count"] == 0
     assert isinstance(bundle["evidence_summary"]["proactive_readiness_generated_at_unix"], int)
     assert bundle["evidence_summary"]["proactive_readiness_git_head"]
