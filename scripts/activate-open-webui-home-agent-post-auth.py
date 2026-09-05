@@ -150,6 +150,32 @@ def build_activation_plan(db: Path, resources_json: Path, owner_user_id: str | N
         conn.close()
 
 
+def activation_next_actions(plan: dict[str, Any]) -> list[str]:
+    if plan.get("ready"):
+        return [
+            "Run this script again with --apply against the writable Open WebUI database.",
+            "After apply succeeds, run the five-agent authenticated chat smoke with OPEN_WEBUI_API_KEY set.",
+        ]
+    actions: list[str] = []
+    access = plan.get("access") or {}
+    resources = plan.get("resources") or {}
+    if plan.get("reason") == "Open WebUI database is not available at the requested path":
+        actions.append("Make the Open WebUI database available or allow a dry-run container snapshot.")
+    if plan.get("reason") == "Open WebUI resource export is not available at the requested path":
+        actions.append("Generate or provide the Open WebUI resource export JSON.")
+    missing_users = access.get("missing_users") or []
+    if missing_users:
+        actions.append("Create/sign in Open WebUI users for: " + ", ".join(str(user) for user in missing_users) + ".")
+    missing_models = access.get("missing_models") or []
+    if missing_models:
+        actions.append("Apply/import missing Open WebUI agent model rows before binding access.")
+    if resources.get("reason") == "missing or ambiguous Open WebUI owner user":
+        actions.append("Complete first-account onboarding, or pass --owner-user-id when multiple Open WebUI users exist.")
+    if not actions:
+        actions.append("Review the activation plan, fix the reported readiness issue, and rerun the dry-run.")
+    return actions
+
+
 def apply_activation(db: Path, resources_json: Path, owner_user_id: str | None, backup_dir: Path | None, script_dir: Path = REPO_ROOT / "scripts") -> dict[str, Any]:
     access_helper, resource_helper = _helpers(script_dir)
     payload = resource_helper.load_import(resources_json)
@@ -195,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         "private_content_included": False,
         "ready": plan["ready"],
         "plan": plan,
+        "next_actions": activation_next_actions(plan),
     }
     if snapshot_source is not None:
         report["dry_run_snapshot"] = snapshot_source

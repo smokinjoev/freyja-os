@@ -269,6 +269,10 @@ dry_run_snapshot.container="freyja-open-webui-atlas-open-webui-1"
 access.missing_models=[]
 access.missing_users=["beth","jenna","joe","liam"]
 resources.reason="missing or ambiguous Open WebUI owner user"
+next_actions=[
+  "Create/sign in Open WebUI users for: beth, jenna, joe, liam.",
+  "Complete first-account onboarding, or pass --owner-user-id when multiple Open WebUI users exist."
+]
 ```
 
 Only run with `--apply` after the dry-run shows `ready=true`. Apply mode does
@@ -278,6 +282,9 @@ path. Apply mode creates
 database backups before writing access grants and resource rows. Apply mode
 exits nonzero when the plan is not ready or no write was applied, so shell
 automation can fail closed.
+When the dry-run shows `ready=true`, follow the report's `next_actions`: rerun
+with `--apply`, then run the authenticated five-agent chat smoke with
+`OPEN_WEBUI_API_KEY` set.
 
 Live database state after import:
 

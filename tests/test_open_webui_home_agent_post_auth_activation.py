@@ -222,6 +222,10 @@ def test_post_auth_activation_plan_is_not_ready_without_users(tmp_path: Path) ->
     assert plan["resources"]["reason"] == "missing or ambiguous Open WebUI owner user"
     assert plan["resources"]["owner_resolution_policy"] == "auto_single_user_only"
     assert plan["resources"]["user_count"] == 0
+    assert _module(SCRIPT).activation_next_actions(plan) == [
+        "Create/sign in Open WebUI users for: beth, jenna, joe, liam.",
+        "Complete first-account onboarding, or pass --owner-user-id when multiple Open WebUI users exist.",
+    ]
 
 
 def test_post_auth_activation_apply_binds_access_and_resources(tmp_path: Path) -> None:
@@ -268,6 +272,10 @@ def test_post_auth_activation_plan_auto_resolves_single_owner_user(tmp_path: Pat
     assert plan["resources"]["owner_user_id_resolved"] is True
     assert plan["resources"]["owner_resolution_policy"] == "auto_single_user_only"
     assert plan["resources"]["user_count"] == 1
+    assert plan["ready"] is False
+    assert _module(SCRIPT).activation_next_actions(plan) == [
+        "Create/sign in Open WebUI users for: beth, jenna, liam.",
+    ]
 
 
 def test_post_auth_activation_main_apply_returns_zero_when_applied(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -305,3 +313,7 @@ def test_post_auth_activation_main_apply_returns_zero_when_applied(tmp_path: Pat
     assert printed["git_head"]
     assert printed["apply_result"]["applied"] is True
     assert printed["live_verifier"] == {"returncode": 0, "ran": True}
+    assert printed["next_actions"] == [
+        "Run this script again with --apply against the writable Open WebUI database.",
+        "After apply succeeds, run the five-agent authenticated chat smoke with OPEN_WEBUI_API_KEY set.",
+    ]
