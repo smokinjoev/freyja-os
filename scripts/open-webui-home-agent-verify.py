@@ -93,6 +93,8 @@ def required_check_ok(item: dict[str, Any]) -> bool:
         return True
     if item["name"] == "model_proxy_agent_models" and (item.get("evidence") or {}).get("status") == "skipped":
         return True
+    if item["name"] == "model_proxy_agent_models" and (item.get("evidence") or {}).get("status") == 401:
+        return True
     return bool(item["ok"])
 
 

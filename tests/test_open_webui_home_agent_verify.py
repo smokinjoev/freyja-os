@@ -46,6 +46,17 @@ def test_verify_script_knows_required_agents_and_operations() -> None:
     }
 
 
+def test_verify_treats_pre_auth_open_webui_proxy_probe_as_nonblocking() -> None:
+    module = _module()
+
+    assert module.required_check_ok(
+        {"name": "model_proxy_agent_models", "ok": False, "evidence": {"status": 401}}
+    )
+    assert not module.required_check_ok(
+        {"name": "model_proxy_agent_models", "ok": False, "evidence": {"status": 503}}
+    )
+
+
 def test_verify_script_writes_secret_free_report(tmp_path: Path, capsys) -> None:
     module = _module()
 
