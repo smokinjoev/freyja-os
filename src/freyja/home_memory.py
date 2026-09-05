@@ -90,7 +90,7 @@ async def recent_events(
     principal: MemoryPrincipal = Depends(require_memory_principal),
 ) -> HomeMemorySearchResponse:
     _authorize(principal, scope, write=False)
-    return HomeMemorySearchResponse(records=_records_for_scope(principal, scope, q=None, limit=limit, operation="recent-events"))
+    return HomeMemorySearchResponse(records=_records_for_scope(principal, scope, q=None, limit=limit))
 
 
 @home_memory_router.post("/remember", response_model=HomeMemoryRecord)
