@@ -30,6 +30,19 @@ def test_tool_gateway_readiness_report_proves_fail_closed_policy() -> None:
     assert report["missing_operations"] == []
     assert report["destructive_default_all_deny"] is True
     assert report["live_side_effects_invoked"] is False
+    assert report["execution_statuses"]["read_only"] == "dry_run_available"
+    assert report["execution_statuses"]["confirmed_write"] == "confirmed_not_configured"
+    assert "calendar.create" in report["confirmation_required"]
+    assert "home.device_action" in report["confirmation_required"]
+    assert "imessage.send.approved" in report["confirmation_required"]
+    assert "shortcuts.run" in report["confirmation_required"]
+    assert report["child_allowed_operations"] == [
+        "image.analyze",
+        "pdf.analyze",
+        "recent-events",
+        "search",
+        "weather.read",
+    ]
     assert report["checks"]["unknown_operation_denied"] is True
     assert report["checks"]["benedict_cannot_read_household_files"] is True
     assert report["checks"]["children_cannot_use_admin_tools"] is True

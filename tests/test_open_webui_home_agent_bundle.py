@@ -173,6 +173,17 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["proxy_agent_profiles_non_local"] == []
     assert bundle["evidence_summary"]["proxy_agent_profile_map"]["agent/freyja"]["provider"] == "vulcan_ollama"
     assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20
+    assert bundle["evidence_summary"]["tools_gateway_destructive_default_all_deny"] is True
+    assert bundle["evidence_summary"]["tools_gateway_live_side_effects_invoked"] is False
+    assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["read_only"] == "dry_run_available"
+    assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["confirmed_write"] == "confirmed_not_configured"
+    assert "calendar.create" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
+    assert "home.device_action" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
+    assert "imessage.send.approved" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
+    assert "shortcuts.run" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
+    assert "weather.read" in bundle["evidence_summary"]["tools_gateway_child_allowed_operations"]
+    assert "infrastructure.health" not in bundle["evidence_summary"]["tools_gateway_child_allowed_operations"]
+    assert "home.device_action" not in bundle["evidence_summary"]["tools_gateway_child_allowed_operations"]
     assert isinstance(bundle["evidence_summary"]["tools_gateway_generated_at_unix"], int)
     assert bundle["evidence_summary"]["tools_gateway_git_head"]
     assert bundle["evidence_summary"]["tools_openapi_paths"] == ["/open-webui-tools", "/open-webui-tools/invoke"]
