@@ -272,6 +272,10 @@ def test_bundle_main_creates_distinct_output_directories(tmp_path: Path, capsys)
     assert "Open WebUI Home-Agent Deliverable" in output_md.read_text(encoding="utf-8")
 
 
+def test_bundle_dedupes_values_without_reordering() -> None:
+    assert _module()._dedupe(["first", "second", "first", "third", "second"]) == ["first", "second", "third"]
+
+
 def test_loader_rejects_reports_not_marked_secret_free(tmp_path: Path) -> None:
     path = tmp_path / "bad.json"
     path.write_text(json.dumps({"secrets_included": True}), encoding="utf-8")

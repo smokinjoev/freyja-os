@@ -82,6 +82,17 @@ def _check_ok(report: dict[str, Any], name: str) -> bool | None:
     return None
 
 
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
 def _nested_check(report: dict[str, Any], parent: str, child: str) -> dict[str, Any] | None:
     for check in report.get("checks") or []:
         if check.get("name") != parent:
@@ -290,15 +301,15 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "five_agents": next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "post_auth_activation"), []),
         "memory_layers": next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "post_auth_activation"), []),
         "tools": next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "post_auth_activation"), []),
-        "messaging_channels": [
+        "messaging_channels": _dedupe([
             *next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "telegram_pilot"), []),
             *next((gate["next_actions"] for gate in external_gates if gate["gate_id"] == "signal_pilot"), []),
-        ],
-        "verification": [
+        ]),
+        "verification": _dedupe([
             action
             for gate in external_gates
             for action in gate.get("next_actions", [])
-        ],
+        ]),
     }
     requirement_command_fallbacks = {
         "messaging_channels": [
@@ -318,15 +329,15 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "evidence": [str(path) for path in item.get("evidence") or []],
             "blocker": item.get("blocker"),
             "next_action": item.get("next_action"),
-            "next_actions": [
+            "next_actions": _dedupe([
                 str(action)
                 for action in (item.get("next_actions") or requirement_next_action_fallbacks.get(str(item.get("requirement_id")), []))
-            ],
+            ]),
             "command": item.get("command"),
-            "commands": [
+            "commands": _dedupe([
                 str(command)
                 for command in (item.get("commands") or requirement_command_fallbacks.get(str(item.get("requirement_id")), []))
-            ],
+            ]),
         }
         for item in completion.get("items") or []
     ]

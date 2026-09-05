@@ -84,6 +84,17 @@ def _completion_metrics(items: list[dict[str, Any]], counts: dict[str, int]) -> 
     }
 
 
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
 def build_audit() -> dict[str, Any]:
     live = _load(REPORTS / "open-webui-home-agent-live.json")
     backup = _load(REPORTS / "open-webui-backup-rollback-audit.json")
@@ -112,15 +123,15 @@ def build_audit() -> dict[str, Any]:
     signal_gate = gates.get("signal_pilot") or {}
     post_auth_next_actions = [str(action) for action in post_auth_gate.get("next_actions") or []]
     chat_next_actions = [str(action) for action in chat_gate.get("next_actions") or []]
-    messaging_next_actions = [
+    messaging_next_actions = _dedupe([
         *(str(action) for action in telegram_gate.get("next_actions") or []),
         *(str(action) for action in signal_gate.get("next_actions") or []),
-    ]
-    messaging_commands = [
+    ])
+    messaging_commands = _dedupe([
         str(command)
         for command in [telegram_gate.get("command"), signal_gate.get("command")]
         if command
-    ]
+    ])
 
     items = [
         _item(
@@ -262,14 +273,14 @@ def build_audit() -> dict[str, Any]:
             "Clear all external readiness gates, then rerun the completion audit."
             if readiness_summary.get("all_ready") is not True
             else None,
-            [
+            _dedupe([
                 action
                 for action in [
                     *post_auth_next_actions,
                     *chat_next_actions,
                     *messaging_next_actions,
                 ]
-            ]
+            ])
             if readiness_summary.get("all_ready") is not True
             else None,
             "scripts/summarize-open-webui-home-agent-readiness.py && scripts/audit-open-webui-home-agent-completion.py"

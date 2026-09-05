@@ -102,6 +102,10 @@ def test_completion_metrics_round_verified_percent() -> None:
     assert metrics["incomplete_requirements"] == 1
 
 
+def test_completion_audit_dedupes_values_without_reordering() -> None:
+    assert _module()._dedupe(["first", "second", "first", "third", "second"]) == ["first", "second", "third"]
+
+
 def test_completion_audit_prefers_current_git_head(monkeypatch) -> None:
     module = _module()
     monkeypatch.setattr(module, "_git_head", lambda: "current-head")
