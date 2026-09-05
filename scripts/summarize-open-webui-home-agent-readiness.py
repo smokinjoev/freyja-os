@@ -65,6 +65,8 @@ def build_summary() -> dict[str, Any]:
     signal = _load(REPORTS / "freyja-channels-signal-pilot.json")
     deliverable = _load(REPORTS / "open-webui-home-agent-deliverable.json")
     completion = _load(REPORTS / "open-webui-home-agent-completion-audit.json")
+    inventory = _load(REPORTS / "open-webui-home-agent-platform-inventory.json")
+    open_webui_next_action = inventory.get("open_webui_next_action_hint") or deliverable.get("exact_next_action")
 
     telegram_checks = telegram.get("checks") or {}
     signal_checks = signal.get("checks") or {}
@@ -74,7 +76,7 @@ def build_summary() -> dict[str, Any]:
             "Open WebUI resource/access activation",
             activation.get("ready") is True,
             "certification/reports/open-webui-home-agent-post-auth-activation.json",
-            None if activation.get("ready") else "Create/sign in to Open WebUI and rerun activation dry-run with the owner user ID.",
+            None if activation.get("ready") else open_webui_next_action,
             "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json --owner-user-id <open-webui-owner-user-id>",
             activation.get("generated_at_unix") or activation.get("timestamp_unix"),
             activation.get("git_head"),
@@ -126,7 +128,7 @@ def build_summary() -> dict[str, Any]:
         "gates": gates,
         "telegram_checks": telegram_checks,
         "signal_checks": signal_checks,
-        "exact_next_action": deliverable.get("exact_next_action"),
+        "exact_next_action": open_webui_next_action,
     }
 
 

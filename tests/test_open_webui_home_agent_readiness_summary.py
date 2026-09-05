@@ -39,6 +39,7 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert gates["signal_pilot"]["ready"] is False
     for gate in gates.values():
         assert gate["evidence_generated_at_unix"] is None or isinstance(gate["evidence_generated_at_unix"], int)
+    assert "Open WebUI" in gates["post_auth_activation"]["next_action"]
     assert "OPEN_WEBUI_API_KEY" in gates["authenticated_chat_smoke"]["next_action"]
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
     assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]
@@ -55,6 +56,31 @@ def test_readiness_summary_prefers_current_git_head(monkeypatch) -> None:
     summary = module.build_summary()
 
     assert summary["git_head"] == "current-head"
+
+
+def test_readiness_summary_uses_inventory_next_action_for_post_auth_gate(monkeypatch) -> None:
+    module = _module()
+
+    reports = {
+        "open-webui-home-agent-post-auth-activation.json": {"secrets_included": False, "ready": False},
+        "open-webui-home-agent-chat-smoke.json": {"secrets_included": False, "status": "pending"},
+        "freyja-channels-telegram-pilot.json": {"secrets_included": False, "ready": False, "checks": {}},
+        "freyja-channels-signal-pilot.json": {"secrets_included": False, "ready": False, "checks": {}},
+        "open-webui-home-agent-deliverable.json": {"secrets_included": False, "exact_next_action": "old action"},
+        "open-webui-home-agent-completion-audit.json": {"secrets_included": False, "status_counts": {}},
+        "open-webui-home-agent-platform-inventory.json": {
+            "secrets_included": False,
+            "open_webui_next_action_hint": "Complete first-account Open WebUI onboarding at http://127.0.0.1:3001.",
+        },
+    }
+
+    monkeypatch.setattr(module, "_load", lambda path: reports[path.name])
+
+    summary = module.build_summary()
+    gates = {gate["gate_id"]: gate for gate in summary["gates"]}
+
+    assert gates["post_auth_activation"]["next_action"].startswith("Complete first-account Open WebUI onboarding")
+    assert summary["exact_next_action"] == gates["post_auth_activation"]["next_action"]
 
 
 def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(tmp_path: Path, capsys) -> None:
