@@ -327,6 +327,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     proxy_catalog = _load_json(REPORTS / "open-webui-model-proxy-catalog.json")
     channels_report_path = REPORTS / "freyja-channels-readiness.json"
     channels = _load_json(REPORTS / "freyja-channels-readiness.json")
+    channels_deployment_path = REPORTS / "freyja-channels-atlas-deployment.json"
+    channels_deployment = _load_json(channels_deployment_path)
     telegram_pilot_path = REPORTS / "freyja-channels-telegram-pilot.json"
     telegram_pilot = _load_json(REPORTS / "freyja-channels-telegram-pilot.json")
     signal_pilot_path = REPORTS / "freyja-channels-signal-pilot.json"
@@ -383,6 +385,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "access_audit_ok": access_audit.get("ok"),
         "resource_export_ok": resources.get("ok"),
         "channels_deterministic": channels.get("deterministic_gateway_only"),
+        "channels_atlas_deployment_ok": channels_deployment.get("ok"),
         "proactive_all_disabled": proactive.get("all_disabled_by_default"),
         "proactive_dry_run_suppressed": proactive_dry_run.get("all_sends_suppressed"),
         "freyja41_preservation_ok": freyja41.get("ok"),
@@ -572,6 +575,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "channels_runbook": "deploy/compose/freyja-channels/README.md",
             "channels_dockerfile": "deploy/docker/freyja-channels.Dockerfile",
             "channels_atlas_readiness": "certification/reports/freyja-channels-readiness-atlas.json",
+            "channels_atlas_deployment": "certification/reports/freyja-channels-atlas-deployment.json",
             "telegram_pilot": "certification/reports/freyja-channels-telegram-pilot.json",
             "signal_pilot": "certification/reports/freyja-channels-signal-pilot.json",
             "proactive_readiness": "certification/reports/freyja-proactive-readiness.json",
@@ -656,6 +660,10 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "proxy_catalog_generated_at_unix": proxy_catalog.get("generated_at_unix") or proxy_catalog.get("timestamp_unix") or _mtime(proxy_catalog_path),
             "proxy_catalog_git_head": proxy_catalog.get("git_head") or "unknown",
             "channels_deterministic_gateway_only": channels.get("deterministic_gateway_only"),
+            "channels_atlas_deployment_ok": channels_deployment.get("ok"),
+            "channels_atlas_deployment_checks": channels_deployment.get("checks") or {},
+            "channels_atlas_deployment_generated_at_unix": channels_deployment.get("generated_at_unix") or _mtime(channels_deployment_path),
+            "channels_atlas_deployment_git_head": channels_deployment.get("git_head") or "unknown",
             "channels_model_routing_prohibited": channels.get("model_routing_prohibited"),
             "channels_independent_agent_intelligence_prohibited": channels.get("independent_agent_intelligence_prohibited"),
             "telegram_ready": channels.get("telegram", {}).get("ready_for_live_round_trip"),
@@ -787,6 +795,7 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"- Access metadata audit ok: `{bundle['tests']['access_audit_ok']}`",
         f"- Resource export ok: `{bundle['tests']['resource_export_ok']}`",
         f"- Channels deterministic: `{bundle['tests']['channels_deterministic']}`",
+        f"- Channels Atlas deployment ok: `{bundle['tests']['channels_atlas_deployment_ok']}`",
         f"- Proactive all disabled: `{bundle['tests']['proactive_all_disabled']}`",
         f"- Proactive dry-run suppressed: `{bundle['tests']['proactive_dry_run_suppressed']}`",
         f"- Freyja 4.1 preservation ok: `{bundle['tests']['freyja41_preservation_ok']}`",
@@ -871,6 +880,7 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         "",
         f"- `compose`: `{bundle['artifacts']['channels_compose']}`",
         f"- `env_example`: `{bundle['artifacts']['channels_env_example']}`",
+        f"- `atlas_deployment_ok`: `{evidence['channels_atlas_deployment_ok']}`",
         f"- `deterministic_gateway_only`: `{evidence['channels_deterministic_gateway_only']}`",
         f"- `model_routing_prohibited`: `{evidence['channels_model_routing_prohibited']}`",
         f"- `independent_agent_intelligence_prohibited`: "

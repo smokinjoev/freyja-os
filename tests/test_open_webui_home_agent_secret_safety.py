@@ -25,7 +25,7 @@ def test_secret_safety_audit_scans_current_home_agent_artifacts() -> None:
     assert isinstance(report["generated_at_unix"], int)
     assert report["git_head"]
     assert report["ok"] is True
-    assert report["artifact_count"] == 65
+    assert report["artifact_count"] == 67
     assert report["missing_artifacts"] == []
     assert report["secret_pattern_findings"] == []
     assert report["json_flag_failures"] == []
@@ -36,6 +36,7 @@ def test_secret_safety_audit_scans_current_home_agent_artifacts() -> None:
     assert "scripts/refresh-open-webui-home-agent-evidence.py" in _module().TEXT_ARTIFACTS
     assert "certification/reports/open-webui-home-agent-evidence-refresh.json" in _module().JSON_REPORTS
     assert "certification/reports/freyja-channels-readiness-atlas.json" in _module().JSON_REPORTS
+    assert "certification/reports/freyja-channels-atlas-deployment.json" in _module().JSON_REPORTS
 
 
 def test_secret_safety_text_scanner_detects_key_material(tmp_path: Path) -> None:

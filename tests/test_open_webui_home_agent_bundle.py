@@ -56,6 +56,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["tests"]["backup_rollback_audit_ok"] is True
     assert bundle["tests"]["secret_safety_audit_ok"] is True
     assert bundle["tests"]["channels_deterministic"] is True
+    assert bundle["tests"]["channels_atlas_deployment_ok"] is True
     assert bundle["tests"]["proactive_all_disabled"] is True
     assert bundle["tests"]["proactive_dry_run_suppressed"] is True
     assert bundle["tests"]["freyja41_preservation_ok"] is True
@@ -129,6 +130,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["channels_runbook"] == "deploy/compose/freyja-channels/README.md"
     assert bundle["artifacts"]["channels_dockerfile"] == "deploy/docker/freyja-channels.Dockerfile"
     assert bundle["artifacts"]["channels_atlas_readiness"] == "certification/reports/freyja-channels-readiness-atlas.json"
+    assert bundle["artifacts"]["channels_atlas_deployment"] == "certification/reports/freyja-channels-atlas-deployment.json"
     assert bundle["artifacts"]["evidence_refresh"] == "certification/reports/open-webui-home-agent-evidence-refresh.json"
     assert bundle["artifacts"]["proactive_dry_run"] == "certification/reports/freyja-proactive-dry-run.json"
     assert bundle["artifacts"]["telegram_pilot"] == "certification/reports/freyja-channels-telegram-pilot.json"
@@ -275,6 +277,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert inference_checks["unloads_other_primary_models"] is True
     assert inference_checks["cloud_fallback_disabled_for_open_webui_path"] is True
     assert bundle["evidence_summary"]["channels_deterministic_gateway_only"] is True
+    assert bundle["evidence_summary"]["channels_atlas_deployment_ok"] is True
+    assert bundle["evidence_summary"]["channels_atlas_deployment_checks"]["no_published_ports"] is True
     assert bundle["evidence_summary"]["channels_model_routing_prohibited"] is True
     assert bundle["evidence_summary"]["channels_independent_agent_intelligence_prohibited"] is True
     assert bundle["evidence_summary"]["channel_thread_persistence_store"]["path"] == "data/freyja-channels/threads.json"
@@ -405,6 +409,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "image_analysis" in text
     assert "## Channel Safety" in text
     assert "`compose`: `deploy/compose/freyja-channels/compose.yaml`" in text
+    assert "`atlas_deployment_ok`: `True`" in text
     assert "`telegram_empty_allowlist_policy`: `deny_all`" in text
     assert "`telegram_allowlist_count`: `0`" in text
     assert "`telegram_identity_map_count`: `0`" in text

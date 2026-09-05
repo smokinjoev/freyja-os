@@ -10,6 +10,9 @@ Open WebUI remains the agent platform. Vulcan remains the local inference path
 behind Open WebUI. WhatsApp stays disabled until a secured public webhook is
 explicitly approved.
 
+The channel services publish no ports. Telegram uses outbound long polling, and
+Signal reaches `signal-cli-rest-api` on the private Docker network.
+
 ## Secrets
 
 Copy `.env.example` to `.env`, set mode `0600`, and keep it uncommitted. The
