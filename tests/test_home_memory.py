@@ -97,6 +97,23 @@ def test_benedict_can_only_write_restricted_benedict_scope(tmp_path) -> None:
     assert allowed.json()["operation"] == "record-decision"
 
 
+def test_child_agents_cannot_write_household_memory(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    denied = client.post(
+        "/freyja-home-memory/remember",
+        headers=_headers("agent:agent-44"),
+        json={
+            "scope": "household",
+            "owner": "liam",
+            "content": "Do not allow child agents to write shared memory directly.",
+            "provenance": "unit-test",
+        },
+    )
+
+    assert denied.status_code == 403
+
+
 def test_home_memory_records_include_required_metadata_and_recent_events(tmp_path) -> None:
     client = _client(tmp_path)
     first = client.post(

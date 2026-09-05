@@ -35,6 +35,8 @@ _SCOPE_WRITES: dict[str, set[str]] = {
 }
 _SCOPE_WRITES["agent:freyja"] = {"household", "project:freyja-os"}
 _SCOPE_WRITES["agent:benedict"] = {"restricted:benedict"}
+_SCOPE_WRITES["agent:agent-44"] = set()
+_SCOPE_WRITES["agent:jenna"] = set()
 
 
 class HomeMemoryRecord(BaseModel):

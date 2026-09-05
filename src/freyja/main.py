@@ -154,7 +154,7 @@ agent_gateway_v3 = AgentGateway()
 semantic_event_store_v3 = SemanticEventStore()
 
 app.include_router(memory_router)
-app.include_router(home_memory_router)
+app.routes.extend(home_memory_router.routes)
 app.include_router(open_webui_tools_router)
 app.include_router(tools_router)
 
