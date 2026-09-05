@@ -104,6 +104,7 @@ def test_verify_script_writes_secret_free_report(tmp_path: Path, capsys) -> None
     assert any(check["name"] == "freyja41_baseline_tag_present" and check["ok"] for check in report["checks"])
     assert any(check["name"] == "protected_side_by_side_services_running" and check["ok"] for check in report["checks"])
     assert any(check["name"] == "home_memory_recent_events" and check["ok"] for check in report["checks"])
+    assert any(check["name"] == "home_memory_beth_denied_joe_scope" and check["ok"] for check in report["checks"])
     assert "token" not in str(report).lower()
     assert "api_key" not in str(report).lower()
 

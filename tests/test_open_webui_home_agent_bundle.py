@@ -126,6 +126,11 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["inventory_git_head"]
     assert isinstance(bundle["evidence_summary"]["live_verifier_generated_at_unix"], int)
     assert bundle["evidence_summary"]["live_verifier_git_head"]
+    assert bundle["evidence_summary"]["home_memory_operations_ok"] is True
+    assert bundle["evidence_summary"]["home_memory_joe_write_ok"] is True
+    assert bundle["evidence_summary"]["home_memory_joe_read_ok"] is True
+    assert bundle["evidence_summary"]["home_memory_recent_events_ok"] is True
+    assert bundle["evidence_summary"]["home_memory_beth_denied_joe_scope_ok"] is True
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
     assert bundle["evidence_summary"]["backup_scope"]["report_sanitized"] is True
     assert bundle["evidence_summary"]["backup_scope"]["archive_handling"] == "treat_as_sensitive_do_not_commit_or_print_contents"
