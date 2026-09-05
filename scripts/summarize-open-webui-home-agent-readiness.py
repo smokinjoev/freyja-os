@@ -70,7 +70,7 @@ def _channel_next_action(channel_report: dict[str, Any], *, fallback: str) -> st
 def _channel_next_actions(channel: str, channel_report: dict[str, Any]) -> list[str]:
     configured = channel_report.get("next_actions")
     if isinstance(configured, list) and configured:
-        return [str(action) for action in configured]
+        return [_canonical_action(str(action)) for action in configured]
     missing = channel_report.get("missing_configuration") or []
     if not missing:
         return []

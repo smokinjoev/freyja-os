@@ -206,6 +206,26 @@ login_form_enabled=true
 Exact next action: complete first-account Open WebUI onboarding at
 `http://127.0.0.1:3001`, then rerun the post-auth activation dry-run.
 
+Machine-readable readiness queue:
+
+```bash
+scripts/summarize-open-webui-home-agent-readiness.py
+jq '.required_next_actions' \
+  certification/reports/open-webui-home-agent-readiness-summary.json
+```
+
+Current operator sequence:
+
+1. Complete first-account Open WebUI onboarding at `http://127.0.0.1:3001`.
+2. Create or sign in the Open WebUI users for Beth, Jenna, Joe, and Liam.
+3. Rerun the post-auth activation dry-run.
+4. Generate an admin or service-account API key and set `OPEN_WEBUI_API_KEY` outside source control.
+5. Run the five-agent authenticated chat smoke.
+6. Configure Telegram with `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, and `TELEGRAM_IDENTITY_MAP`; keep empty allowlists as deny-all.
+7. Run the Telegram pilot dry-run before enabling long polling.
+8. Configure Signal with `SIGNAL_REST_API_URL`, `SIGNAL_ACCOUNT_NUMBER`, `SIGNAL_ALLOWED_SENDERS`, and `SIGNAL_IDENTITY_MAP`; keep empty allowlists as deny-all.
+9. Run the Signal pilot dry-run after `signal-cli-rest-api` registration is healthy.
+
 Once real Open WebUI users exist, bind the imported models to groups with a
 dry-run first:
 
