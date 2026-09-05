@@ -27,6 +27,16 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["status"] == "maximally_completed_pending_external_auth"
     assert bundle["git_head"]
     assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 9, "credential_gated": 1, "partial": 2}
+    assert bundle["completion_metrics"] == {
+        "total_requirements": 15,
+        "complete_requirements": 9,
+        "incomplete_requirements": 6,
+        "auth_gated_requirements": 3,
+        "credential_gated_requirements": 1,
+        "partial_requirements": 2,
+        "external_gated_requirements": 4,
+        "verified_completion_percent": 60.0,
+    }
     assert bundle["endpoint_map"]["open_webui_local"] == "http://127.0.0.1:3001"
     assert bundle["rollback"]["open_webui_volume_backup"].endswith("open-webui-data-volume.tgz")
     assert [step["step"] for step in bundle["rollback"]["steps"]] == [
@@ -111,6 +121,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["secret_safety_git_head"]
     assert bundle["evidence_summary"]["chat_smoke_status"] == "pending"
     assert bundle["evidence_summary"]["completion_status_counts"] == bundle["completion_status_counts"]
+    assert bundle["evidence_summary"]["completion_metrics"] == bundle["completion_metrics"]
     assert isinstance(bundle["evidence_summary"]["completion_audit_generated_at_unix"], int)
     assert bundle["evidence_summary"]["completion_audit_git_head"]
     assert bundle["evidence_summary"]["git_head"] == bundle["git_head"]
@@ -186,6 +197,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     text = module.render_markdown(module.build_bundle(now=1))
 
     assert "# Open WebUI Home-Agent Deliverable" in text
+    assert "Verified completion: `60.0%` (9/15 requirements)" in text
     assert "Focused tests" in text
     assert "Full tests" in text
     assert "Backup rollback audit ok" in text

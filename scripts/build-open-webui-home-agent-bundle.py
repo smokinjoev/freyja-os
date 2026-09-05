@@ -227,6 +227,22 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     ]
     git_head = _command(["git", "rev-parse", "--short", "HEAD"])
     completion_status_counts = completion.get("status_counts") or {}
+    completion_metrics = completion.get("completion_metrics") or {
+        "total_requirements": sum(int(value) for value in completion_status_counts.values()),
+        "complete_requirements": int(completion_status_counts.get("complete", 0)),
+        "incomplete_requirements": sum(int(value) for key, value in completion_status_counts.items() if key != "complete"),
+        "auth_gated_requirements": int(completion_status_counts.get("auth_gated", 0)),
+        "credential_gated_requirements": int(completion_status_counts.get("credential_gated", 0)),
+        "partial_requirements": int(completion_status_counts.get("partial", 0)),
+        "external_gated_requirements": int(completion_status_counts.get("auth_gated", 0))
+        + int(completion_status_counts.get("credential_gated", 0)),
+        "verified_completion_percent": round(
+            (int(completion_status_counts.get("complete", 0)) / sum(int(value) for value in completion_status_counts.values())) * 100,
+            1,
+        )
+        if completion_status_counts
+        else 0.0,
+    }
     backup_scope = backup.get("backup_scope") or {
         "report_sanitized": True,
         "archive_may_contain_private_content": bool((backup.get("backup") or {}).get("contains_upload_or_cache_dirs")),
@@ -251,6 +267,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "status": "maximally_completed_pending_external_auth",
         "git_head": git_head,
         "completion_status_counts": completion_status_counts,
+        "completion_metrics": completion_metrics,
         "endpoint_map": endpoint_map,
         "rollback": rollback,
         "tests": tests,
@@ -363,6 +380,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "freyja41_legacy_endpoint_check": _check_ok(freyja41, "protected_legacy_endpoints_respond"),
             "freyja41_legacy_inference_endpoint_count": ((freyja3_inference or {}).get("evidence") or {}).get("endpoint_count"),
             "completion_status_counts": completion_status_counts,
+            "completion_metrics": completion_metrics,
             "completion_audit_generated_at_unix": completion.get("generated_at_unix") or _mtime(completion_report_path),
             "completion_audit_git_head": completion.get("git_head") or "unknown",
             "inventory_hosts": sorted((inventory.get("hosts") or {}).keys()),
@@ -402,6 +420,9 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         "# Open WebUI Home-Agent Deliverable",
         "",
         f"Status: `{bundle['status']}`",
+        f"Verified completion: `{bundle['completion_metrics']['verified_completion_percent']}%` "
+        f"({bundle['completion_metrics']['complete_requirements']}/"
+        f"{bundle['completion_metrics']['total_requirements']} requirements)",
         "",
         "## Verification",
         "",

@@ -61,6 +61,23 @@ def _item(
     return item
 
 
+def _completion_metrics(items: list[dict[str, Any]], counts: dict[str, int]) -> dict[str, Any]:
+    total = len(items)
+    complete_count = counts.get("complete", 0)
+    gated_count = counts.get("auth_gated", 0) + counts.get("credential_gated", 0)
+    incomplete_count = total - complete_count
+    return {
+        "total_requirements": total,
+        "complete_requirements": complete_count,
+        "incomplete_requirements": incomplete_count,
+        "auth_gated_requirements": counts.get("auth_gated", 0),
+        "credential_gated_requirements": counts.get("credential_gated", 0),
+        "partial_requirements": counts.get("partial", 0),
+        "external_gated_requirements": gated_count,
+        "verified_completion_percent": round((complete_count / total) * 100, 1) if total else 0.0,
+    }
+
+
 def build_audit() -> dict[str, Any]:
     live = _load(REPORTS / "open-webui-home-agent-live.json")
     backup = _load(REPORTS / "open-webui-backup-rollback-audit.json")
@@ -248,6 +265,7 @@ def build_audit() -> dict[str, Any]:
     counts: dict[str, int] = {}
     for item in items:
         counts[item["status"]] = counts.get(item["status"], 0) + 1
+    completion_metrics = _completion_metrics(items, counts)
     return {
         "report_type": "open-webui-home-agent-completion-audit",
         "generated_at_unix": int(time.time()),
@@ -256,6 +274,7 @@ def build_audit() -> dict[str, Any]:
         "private_content_included": False,
         "items": items,
         "status_counts": counts,
+        "completion_metrics": completion_metrics,
         "complete": counts.get("missing", 0) == 0 and counts.get("partial", 0) == 0 and counts.get("auth_gated", 0) == 0 and counts.get("credential_gated", 0) == 0,
         "exact_next_action": "Joe must create/sign in to Open WebUI or provide an Open WebUI admin API key/authenticated browser session.",
     }

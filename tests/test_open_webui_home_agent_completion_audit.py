@@ -30,6 +30,16 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert audit["status_counts"]["complete"] >= 5
     assert audit["status_counts"]["auth_gated"] >= 3
     assert audit["status_counts"]["credential_gated"] >= 1
+    assert audit["completion_metrics"] == {
+        "total_requirements": 15,
+        "complete_requirements": 9,
+        "incomplete_requirements": 6,
+        "auth_gated_requirements": 3,
+        "credential_gated_requirements": 1,
+        "partial_requirements": 2,
+        "external_gated_requirements": 4,
+        "verified_completion_percent": 60.0,
+    }
     ids = [item["requirement_id"] for item in audit["items"]]
     assert len(ids) == len(set(ids))
     assert {"five_agents", "memory_layers", "tools"}.issubset(
@@ -66,6 +76,16 @@ def test_completion_audit_writes_report(tmp_path: Path, capsys) -> None:
     printed = json.loads(capsys.readouterr().out)
     assert written == printed
     assert written["report_type"] == "open-webui-home-agent-completion-audit"
+
+
+def test_completion_metrics_round_verified_percent() -> None:
+    items = [{"status": "complete"}, {"status": "complete"}, {"status": "partial"}]
+    counts = {"complete": 2, "partial": 1}
+
+    metrics = _module()._completion_metrics(items, counts)
+
+    assert metrics["verified_completion_percent"] == 66.7
+    assert metrics["incomplete_requirements"] == 1
 
 
 def test_completion_audit_prefers_current_git_head(monkeypatch) -> None:
