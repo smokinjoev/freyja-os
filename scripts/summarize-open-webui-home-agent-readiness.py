@@ -35,6 +35,7 @@ def _gate(
     ready: bool,
     evidence: str,
     next_action: str | None = None,
+    next_actions: list[str] | None = None,
     command: str | None = None,
     evidence_generated_at_unix: int | None = None,
     evidence_git_head: str | None = None,
@@ -45,6 +46,7 @@ def _gate(
         "ready": bool(ready),
         "evidence": evidence,
         "next_action": next_action,
+        "next_actions": next_actions or [],
         "command": command,
         "evidence_generated_at_unix": evidence_generated_at_unix,
         "evidence_git_head": evidence_git_head,
@@ -87,6 +89,7 @@ def build_summary() -> dict[str, Any]:
             activation.get("ready") is True,
             "certification/reports/open-webui-home-agent-post-auth-activation.json",
             None if activation.get("ready") else open_webui_next_action,
+            activation.get("next_actions") if isinstance(activation.get("next_actions"), list) else [],
             "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
             activation.get("generated_at_unix") or activation.get("timestamp_unix"),
             activation.get("git_head"),
@@ -97,6 +100,7 @@ def build_summary() -> dict[str, Any]:
             chat_smoke.get("status") == "complete",
             "certification/reports/open-webui-home-agent-chat-smoke.json",
             None if chat_smoke.get("status") == "complete" else "Set OPEN_WEBUI_API_KEY and run the five-agent chat smoke.",
+            [],
             "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
             chat_smoke.get("generated_at_unix") or chat_smoke.get("timestamp_unix"),
             chat_smoke.get("git_head"),
@@ -112,6 +116,7 @@ def build_summary() -> dict[str, Any]:
                 telegram_readiness,
                 fallback="Set TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, TELEGRAM_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
             ),
+            [],
             "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
             telegram.get("generated_at_unix") or telegram.get("timestamp_unix"),
             telegram.get("git_head"),
@@ -127,6 +132,7 @@ def build_summary() -> dict[str, Any]:
                 signal_readiness,
                 fallback="Register signal-cli-rest-api and set SIGNAL_ACCOUNT_NUMBER, SIGNAL_ALLOWED_SENDERS, SIGNAL_IDENTITY_MAP, and OPEN_WEBUI_API_KEY.",
             ),
+            [],
             "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
             signal.get("generated_at_unix") or signal.get("timestamp_unix"),
             signal.get("git_head"),
@@ -162,6 +168,8 @@ def render_markdown(summary: dict[str, Any]) -> str:
         lines.append(f"- `{gate['gate_id']}`: {state} - {gate['label']}")
         if gate.get("next_action"):
             lines.append(f"  Next: {gate['next_action']}")
+        for action in gate.get("next_actions") or []:
+            lines.append(f"  Action: {action}")
         if gate.get("command"):
             lines.append(f"  Command: `{gate['command']}`")
     lines += ["", "## Exact Next Action", "", str(summary.get("exact_next_action") or ""), ""]

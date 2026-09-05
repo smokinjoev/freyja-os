@@ -196,6 +196,18 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "evidence_generated_at_unix": gate.get("evidence_generated_at_unix"),
             "evidence_git_head": gate.get("evidence_git_head"),
             "next_action": gate.get("next_action"),
+            "next_actions": [
+                str(action)
+                for action in (
+                    gate.get("next_actions")
+                    or (
+                        activation.get("next_actions")
+                        if str(gate.get("gate_id")) == "post_auth_activation"
+                        and isinstance(activation.get("next_actions"), list)
+                        else []
+                    )
+                )
+            ],
             "command": gate.get("command") or GATE_COMMANDS.get(str(gate.get("gate_id"))),
         }
         for gate in readiness_summary.get("gates") or []
@@ -469,6 +481,8 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         lines.append(f"- `{gate['gate_id']}`: {state} - {gate['label']}")
         if gate.get("next_action"):
             lines.append(f"  Next: {gate['next_action']}")
+        for action in gate.get("next_actions") or []:
+            lines.append(f"  Action: {action}")
         if gate.get("command"):
             lines.append(f"  Command: `{gate['command']}`")
     lines += ["", "## Requirement Audit", ""]

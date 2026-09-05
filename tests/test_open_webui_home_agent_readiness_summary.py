@@ -40,6 +40,7 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     for gate in gates.values():
         assert gate["evidence_generated_at_unix"] is None or isinstance(gate["evidence_generated_at_unix"], int)
     assert "Open WebUI" in gates["post_auth_activation"]["next_action"]
+    assert any("Open WebUI users" in action for action in gates["post_auth_activation"]["next_actions"])
     assert "OPEN_WEBUI_API_KEY" in gates["authenticated_chat_smoke"]["next_action"]
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
     assert "SIGNAL_IDENTITY_MAP" in gates["signal_pilot"]["next_action"]
@@ -62,7 +63,11 @@ def test_readiness_summary_uses_inventory_next_action_for_post_auth_gate(monkeyp
     module = _module()
 
     reports = {
-        "open-webui-home-agent-post-auth-activation.json": {"secrets_included": False, "ready": False},
+        "open-webui-home-agent-post-auth-activation.json": {
+            "secrets_included": False,
+            "ready": False,
+            "next_actions": ["Create/sign in Open WebUI users for: joe."],
+        },
         "open-webui-home-agent-chat-smoke.json": {"secrets_included": False, "status": "pending"},
         "freyja-channels-telegram-pilot.json": {"secrets_included": False, "ready": False, "checks": {}},
         "freyja-channels-signal-pilot.json": {"secrets_included": False, "ready": False, "checks": {}},
@@ -85,6 +90,7 @@ def test_readiness_summary_uses_inventory_next_action_for_post_auth_gate(monkeyp
     gates = {gate["gate_id"]: gate for gate in summary["gates"]}
 
     assert gates["post_auth_activation"]["next_action"].startswith("Complete first-account Open WebUI onboarding")
+    assert gates["post_auth_activation"]["next_actions"] == ["Create/sign in Open WebUI users for: joe."]
     assert summary["exact_next_action"] == gates["post_auth_activation"]["next_action"]
 
 
@@ -128,6 +134,7 @@ def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(t
     markdown = output_md.read_text(encoding="utf-8")
     assert "Open WebUI Home-Agent Readiness Summary" in markdown
     assert "`post_auth_activation`: pending" in markdown
+    assert "Action: Create/sign in Open WebUI users" in markdown
     assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in markdown
 
 
