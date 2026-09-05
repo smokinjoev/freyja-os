@@ -80,8 +80,18 @@ def build_report() -> dict[str, Any]:
     confirmation_required = sorted(operation for operation, policy in operations.items() if policy.confirmation_required)
     child_allowed = sorted(operation for operation, policy in operations.items() if policy.children_allowed)
     weather_policy = authorize_tool_invocation(ToolInvocationRequest(operation="weather.read", agent_id="jenna"))
+    pdf_policy = authorize_tool_invocation(ToolInvocationRequest(operation="pdf.analyze", agent_id="agent-44"))
+    image_policy = authorize_tool_invocation(ToolInvocationRequest(operation="image.analyze", agent_id="jenna"))
     calendar_policy = authorize_tool_invocation(ToolInvocationRequest(operation="calendar.create", agent_id="freyja", confirmed=True))
     dry_run_status = invoke_policy_boundary(weather_policy, ToolInvocationRequest(operation="weather.read", agent_id="jenna")).status
+    pdf_dry_run_status = invoke_policy_boundary(
+        pdf_policy,
+        ToolInvocationRequest(operation="pdf.analyze", agent_id="agent-44"),
+    ).status
+    image_dry_run_status = invoke_policy_boundary(
+        image_policy,
+        ToolInvocationRequest(operation="image.analyze", agent_id="jenna"),
+    ).status
     confirmed_status = invoke_policy_boundary(
         calendar_policy,
         ToolInvocationRequest(operation="calendar.create", agent_id="freyja", confirmed=True),
@@ -103,6 +113,8 @@ def build_report() -> dict[str, Any]:
         "child_allowed_operations": child_allowed,
         "execution_statuses": {
             "read_only": dry_run_status,
+            "pdf_analysis": pdf_dry_run_status,
+            "image_analysis": image_dry_run_status,
             "confirmed_write": confirmed_status,
         },
         "checks": {
@@ -110,11 +122,17 @@ def build_report() -> dict[str, Any]:
             "calendar_create_requires_confirmation": not _allowed("calendar.create", "freyja") and _allowed("calendar.create", "freyja", confirmed=True),
             "children_cannot_use_admin_tools": not _allowed("infrastructure.health", "jenna"),
             "children_can_use_weather": _allowed("weather.read", "jenna"),
+            "children_can_analyze_pdf": _allowed("pdf.analyze", "agent-44"),
+            "children_can_analyze_image": _allowed("image.analyze", "jenna"),
             "benedict_cannot_read_household_files": not _allowed("files.household.read", "benedict"),
             "benedict_can_read_beth_files": _allowed("files.beth.read", "benedict"),
+            "benedict_can_analyze_pdf": _allowed("pdf.analyze", "benedict"),
+            "benedict_can_analyze_image": _allowed("image.analyze", "benedict"),
             "cloyd_cannot_read_beth_files": not _allowed("files.beth.read", "cloyd"),
             "iris_write_requires_confirmation": not _allowed("shortcuts.run", "freyja") and _allowed("shortcuts.run", "freyja", confirmed=True),
             "read_only_operations_are_dry_run_only": dry_run_status == "dry_run_available",
+            "pdf_image_analysis_are_dry_run_only": pdf_dry_run_status == "dry_run_available"
+            and image_dry_run_status == "dry_run_available",
             "confirmed_writes_do_not_execute_without_adapter": confirmed_status == "confirmed_not_configured",
         },
         "live_side_effects_invoked": False,

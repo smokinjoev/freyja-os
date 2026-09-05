@@ -223,6 +223,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_gateway_destructive_default_all_deny"] is True
     assert bundle["evidence_summary"]["tools_gateway_live_side_effects_invoked"] is False
     assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["read_only"] == "dry_run_available"
+    assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["pdf_analysis"] == "dry_run_available"
+    assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["image_analysis"] == "dry_run_available"
     assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["confirmed_write"] == "confirmed_not_configured"
     assert "calendar.create" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
     assert "home.device_action" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
@@ -231,6 +233,11 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert "weather.read" in bundle["evidence_summary"]["tools_gateway_child_allowed_operations"]
     assert "infrastructure.health" not in bundle["evidence_summary"]["tools_gateway_child_allowed_operations"]
     assert "home.device_action" not in bundle["evidence_summary"]["tools_gateway_child_allowed_operations"]
+    assert bundle["evidence_summary"]["tools_gateway_checks"]["children_can_analyze_pdf"] is True
+    assert bundle["evidence_summary"]["tools_gateway_checks"]["children_can_analyze_image"] is True
+    assert bundle["evidence_summary"]["tools_gateway_checks"]["benedict_can_analyze_pdf"] is True
+    assert bundle["evidence_summary"]["tools_gateway_checks"]["benedict_can_analyze_image"] is True
+    assert bundle["evidence_summary"]["tools_gateway_checks"]["pdf_image_analysis_are_dry_run_only"] is True
     assert isinstance(bundle["evidence_summary"]["tools_gateway_generated_at_unix"], int)
     assert bundle["evidence_summary"]["tools_gateway_git_head"]
     assert bundle["evidence_summary"]["tools_openapi_paths"] == ["/open-webui-tools", "/open-webui-tools/invoke"]
@@ -370,6 +377,8 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "imessage.send.approved" in text
     assert "`child_allowed_operations`" in text
     assert "weather.read" in text
+    assert "pdf_analysis" in text
+    assert "image_analysis" in text
     assert "## Channel Safety" in text
     assert "`telegram_empty_allowlist_policy`: `deny_all`" in text
     assert "`signal_empty_allowlist_policy`: `deny_all`" in text
