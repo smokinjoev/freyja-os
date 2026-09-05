@@ -154,6 +154,11 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["model_import_git_head"]
     assert isinstance(bundle["evidence_summary"]["model_apply_generated_at_unix"], int)
     assert bundle["evidence_summary"]["model_apply_git_head"]
+    assert bundle["evidence_summary"]["resource_export_ok"] is True
+    assert bundle["evidence_summary"]["resource_export_validation_errors"] == []
+    assert bundle["evidence_summary"]["resource_export_knowledge_count"] == 3
+    assert bundle["evidence_summary"]["resource_export_tool_count"] == 6
+    assert bundle["evidence_summary"]["resource_export_native_memory_mode"] == "per_user"
     assert isinstance(bundle["evidence_summary"]["resource_export_generated_at_unix"], int)
     assert bundle["evidence_summary"]["resource_export_git_head"]
     assert isinstance(bundle["evidence_summary"]["resource_import_generated_at_unix"], int)
