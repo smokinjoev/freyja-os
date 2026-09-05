@@ -29,9 +29,12 @@ def test_env_example_contains_open_webui_home_agent_activation_placeholders() ->
 def test_env_example_contains_channel_pilot_identity_placeholders() -> None:
     values = _env_lines()
 
+    assert values["TELEGRAM_BOT_TOKEN"] == ""
     assert values["TELEGRAM_ALLOWED_USER_IDS"] == ""
     assert values["TELEGRAM_IDENTITY_MAP"] == ""
     assert values["FREYJA_CHANNEL_TELEGRAM_POLL_INTERVAL"] == "2"
+    assert values["SIGNAL_ACCOUNT_NUMBER"] == ""
+    assert values["SIGNAL_REST_API_URL"] == "http://127.0.0.1:8080"
     assert values["SIGNAL_ALLOWED_SENDERS"] == ""
     assert values["SIGNAL_IDENTITY_MAP"] == ""
     assert values["FREYJA_CHANNEL_SIGNAL_POLL_INTERVAL"] == "5"
