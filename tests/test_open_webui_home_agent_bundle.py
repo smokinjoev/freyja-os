@@ -46,6 +46,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
         "start_open_webui",
         "verify_open_webui",
     ]
+    assert "-f deploy/compose/open-webui/compose.yaml down" in bundle["rollback"]["steps"][0]["command"]
+    assert "-f deploy/compose/open-webui/compose.yaml up -d" in bundle["rollback"]["steps"][3]["command"]
     assert bundle["rollback"]["steps"][-1]["command"] == "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version"
     assert bundle["tests"]["focused_pytest"] == "133 passed, 1 warning"
     assert bundle["tests"]["full_pytest"] == "1582 passed, 1 skipped, 1 warning"

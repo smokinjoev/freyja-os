@@ -26,7 +26,7 @@ GATE_COMMANDS = {
 ROLLBACK_STEPS = [
     {
         "step": "stop_open_webui",
-        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/docker-compose.yml down",
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/compose.yaml down",
     },
     {
         "step": "restore_source_checkpoint",
@@ -38,7 +38,7 @@ ROLLBACK_STEPS = [
     },
     {
         "step": "start_open_webui",
-        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/docker-compose.yml up -d",
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/compose.yaml up -d",
     },
     {
         "step": "verify_open_webui",
@@ -141,6 +141,20 @@ def _required_next_actions(report: dict[str, Any]) -> list[str]:
             actions.append(str(gate["next_action"]))
         actions.extend(str(action) for action in gate.get("next_actions") or [])
     return _dedupe(actions)
+
+
+def _normalize_rollback_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for step in steps:
+        item = dict(step)
+        command = item.get("command")
+        if isinstance(command, str):
+            item["command"] = command.replace(
+                "deploy/compose/open-webui/docker-compose.yml",
+                "deploy/compose/open-webui/compose.yaml",
+            )
+        normalized.append(item)
+    return normalized
 
 
 def _agent_policy_summary(model_import: dict[str, Any]) -> dict[str, Any]:
@@ -327,7 +341,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "open_webui_volume_backup": "logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz",
         "offline_model_db_backup": model_apply.get("backup"),
         "runbook": "docs/operations/open-webui-home-agent.md",
-        "steps": backup.get("rollback_documentation", {}).get("steps") or ROLLBACK_STEPS,
+        "steps": _normalize_rollback_steps(backup.get("rollback_documentation", {}).get("steps") or ROLLBACK_STEPS),
     }
     tests = {
         "focused_pytest": "133 passed, 1 warning",

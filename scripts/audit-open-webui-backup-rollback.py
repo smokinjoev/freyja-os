@@ -25,7 +25,7 @@ REQUIRED_ROLLBACK_PHRASES = (
 ROLLBACK_STEPS = [
     {
         "step": "stop_open_webui",
-        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/docker-compose.yml down",
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/compose.yaml down",
     },
     {
         "step": "restore_source_checkpoint",
@@ -37,7 +37,7 @@ ROLLBACK_STEPS = [
     },
     {
         "step": "start_open_webui",
-        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/docker-compose.yml up -d",
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/compose.yaml up -d",
     },
     {
         "step": "verify_open_webui",

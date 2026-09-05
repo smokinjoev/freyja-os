@@ -72,7 +72,9 @@ def test_backup_rollback_audit_accepts_readable_open_webui_archive(tmp_path: Pat
         "verify_open_webui",
     ]
     assert steps[0]["command"].startswith("docker compose --env-file deploy/compose/open-webui/.env")
+    assert "-f deploy/compose/open-webui/compose.yaml down" in steps[0]["command"]
     assert "open-webui-data-volume.tgz" in steps[2]["command"]
+    assert "-f deploy/compose/open-webui/compose.yaml up -d" in steps[3]["command"]
     assert steps[-1]["command"] == "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version"
     assert "TOKEN" not in json.dumps(steps)
     assert "PASSWORD" not in json.dumps(steps)
