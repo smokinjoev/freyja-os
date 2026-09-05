@@ -319,6 +319,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     resources = _load_json(REPORTS / "open-webui-home-resources-export.json")
     resource_counts_path = REPORTS / "open-webui-home-resources-live-counts.json"
     resource_counts = _load_json(REPORTS / "open-webui-home-resources-live-counts.json")
+    db_verification_path = REPORTS / "open-webui-home-agent-db-verification.json"
+    db_verification = _load_json(REPORTS / "open-webui-home-agent-db-verification.json")
     resource_import_path = REPORTS / "open-webui-home-resources-offline-dry-run.json"
     resource_import = _load_json(REPORTS / "open-webui-home-resources-offline-dry-run.json")
     proxy_catalog_path = REPORTS / "open-webui-model-proxy-catalog.json"
@@ -391,6 +393,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "authenticated_chat_smoke": chat_smoke.get("status"),
         "open_webui_tools_gateway_ok": tools_gateway.get("ok"),
         "open_webui_tools_openapi_ok": tools_openapi.get("ok"),
+        "atlas_db_verification_ok": db_verification.get("ok"),
     }
     blockers = [
         "Atlas Open WebUI is reachable and onboarding is complete, but authenticated activation needs an admin API key or a controlled session.",
@@ -553,6 +556,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "model_apply": "certification/reports/open-webui-home-agents-offline-apply.json",
             "resource_export": "certification/reports/open-webui-home-resources-export.json",
             "resource_counts": "certification/reports/open-webui-home-resources-live-counts.json",
+            "atlas_db_verification": "certification/reports/open-webui-home-agent-db-verification.json",
             "resource_import_dry_run": "certification/reports/open-webui-home-resources-offline-dry-run.json",
             "model_proxy_catalog": "certification/reports/open-webui-model-proxy-catalog.json",
             "channels_readiness": "certification/reports/freyja-channels-readiness.json",
@@ -610,6 +614,14 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "resource_counts": resource_counts.get("counts"),
             "resource_counts_generated_at_unix": resource_counts.get("generated_at_unix") or _mtime(resource_counts_path),
             "resource_counts_git_head": resource_counts.get("git_head") or "unknown",
+            "atlas_db_counts": db_verification.get("counts") or {},
+            "atlas_db_models_present": db_verification.get("models_present") or {},
+            "atlas_db_knowledge_present": db_verification.get("knowledge_present") or {},
+            "atlas_db_tools_present": db_verification.get("tools_present") or {},
+            "atlas_db_memory_policies_present": db_verification.get("memory_policies_present") or {},
+            "atlas_db_managed_tool_specs_are_lists": db_verification.get("managed_tool_specs_are_lists"),
+            "atlas_db_verification_generated_at_unix": db_verification.get("generated_at_unix") or _mtime(db_verification_path),
+            "atlas_db_verification_git_head": db_verification.get("git_head") or "unknown",
             "resource_export_ok": resources.get("ok"),
             "resource_export_validation_errors": resources.get("validation_errors") or [],
             "resource_export_knowledge_count": len(resources.get("knowledge") or []),

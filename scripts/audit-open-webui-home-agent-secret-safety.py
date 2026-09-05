@@ -60,6 +60,7 @@ JSON_REPORTS = (
     "certification/reports/open-webui-home-agent-access-bind-dry-run.json",
     "certification/reports/open-webui-home-resources-export.json",
     "certification/reports/open-webui-home-resources-live-counts.json",
+    "certification/reports/open-webui-home-agent-db-verification.json",
     "certification/reports/open-webui-home-resources-offline-dry-run.json",
     "certification/reports/open-webui-model-proxy-catalog.json",
     "certification/reports/freyja-channels-readiness.json",

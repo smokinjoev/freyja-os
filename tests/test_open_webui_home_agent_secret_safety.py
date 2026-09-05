@@ -25,7 +25,7 @@ def test_secret_safety_audit_scans_current_home_agent_artifacts() -> None:
     assert isinstance(report["generated_at_unix"], int)
     assert report["git_head"]
     assert report["ok"] is True
-    assert report["artifact_count"] == 63
+    assert report["artifact_count"] == 64
     assert report["missing_artifacts"] == []
     assert report["secret_pattern_findings"] == []
     assert report["json_flag_failures"] == []
