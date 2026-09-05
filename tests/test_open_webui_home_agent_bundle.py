@@ -124,6 +124,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert isinstance(bundle["evidence_summary"]["secret_safety_generated_at_unix"], int)
     assert bundle["evidence_summary"]["secret_safety_git_head"]
     assert bundle["evidence_summary"]["chat_smoke_status"] == "pending"
+    assert bundle["evidence_summary"]["chat_smoke_missing_configuration"] == ["OPEN_WEBUI_API_KEY"]
+    assert any("generate an admin" in action for action in bundle["evidence_summary"]["chat_smoke_next_actions"])
     assert bundle["evidence_summary"]["completion_status_counts"] == bundle["completion_status_counts"]
     assert bundle["evidence_summary"]["completion_metrics"] == bundle["completion_metrics"]
     assert isinstance(bundle["evidence_summary"]["completion_audit_generated_at_unix"], int)
@@ -171,7 +173,10 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/openai/v1/chat/completions")
     assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
     assert "TELEGRAM_BOT_TOKEN" in bundle["evidence_summary"]["telegram_missing_configuration"]
+    assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["telegram_next_actions"])
     assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
+    assert "TELEGRAM_BOT_TOKEN" in bundle["evidence_summary"]["telegram_pilot_missing_configuration"]
+    assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["telegram_pilot_next_actions"])
     assert isinstance(bundle["evidence_summary"]["channels_readiness_generated_at_unix"], int)
     assert bundle["evidence_summary"]["channels_readiness_git_head"]
     assert isinstance(bundle["evidence_summary"]["telegram_pilot_generated_at_unix"], int)
@@ -179,7 +184,10 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["telegram_bot_token_configured"] is False
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["allowlist_identity_map_complete"] is False
     assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_missing_configuration"]
+    assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_next_actions"])
     assert bundle["evidence_summary"]["signal_pilot_ready"] is False
+    assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_pilot_missing_configuration"]
+    assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
     assert isinstance(bundle["evidence_summary"]["signal_pilot_generated_at_unix"], int)
     assert bundle["evidence_summary"]["signal_pilot_git_head"]
     assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is False
