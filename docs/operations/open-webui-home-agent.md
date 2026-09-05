@@ -821,7 +821,7 @@ scripts/check-open-webui-model-proxy-catalog.py
 - `certification/reports/open-webui-home-resources-live-counts.json` records sanitized live Open WebUI Knowledge/tool/native-memory table counts.
 - `certification/reports/open-webui-home-resources-offline-dry-run.json` records the no-write resource importer plan and owner-user blocker.
 - `certification/reports/open-webui-home-agent-deliverable.json` and `.md` consolidate endpoint map, rollback pointers, verification status, blockers, artifacts, and exact next action.
-- `certification/reports/open-webui-backup-rollback-audit.json` records backup tar integrity, checksum, `webui.db` presence, and rollback-doc coverage without private content.
+- `certification/reports/open-webui-backup-rollback-audit.json` records backup tar integrity, checksum, `webui.db` presence, rollback-doc coverage, and the verified `deploy/compose/open-webui/compose.yaml` rollback compose path without private content.
 - `certification/reports/open-webui-home-agent-secret-safety.json` records scoped secret-pattern and private-content flag checks for the current home-agent artifact set.
 - `certification/reports/open-webui-home-agent-completion-audit.json` records requirement-by-requirement completion status from current evidence.
 - `certification/reports/open-webui-home-agent-platform-inventory.json` records host roles, endpoint map, running Atlas services, and credential locations without secret values.

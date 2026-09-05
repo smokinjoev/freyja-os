@@ -167,6 +167,8 @@ def test_home_agent_runbook_documents_required_next_action_queue() -> None:
     assert "TELEGRAM_BOT_TOKEN" in text
     assert "SIGNAL_REST_API_URL" in text
     assert "keep empty allowlists as deny-all" in text
+    assert "certification/reports/open-webui-backup-rollback-audit.json" in text
+    assert "verified `deploy/compose/open-webui/compose.yaml` rollback compose path" in text
 
 
 def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(tmp_path: Path, capsys) -> None:
