@@ -47,6 +47,7 @@ def _item(
     next_action: str | None = None,
     next_actions: list[str] | None = None,
     command: str | None = None,
+    commands: list[str] | None = None,
 ) -> dict[str, Any]:
     item = {
         "requirement_id": requirement_id,
@@ -61,6 +62,8 @@ def _item(
         item["next_actions"] = next_actions
     if command:
         item["command"] = command
+    if commands:
+        item["commands"] = commands
     return item
 
 
@@ -112,6 +115,11 @@ def build_audit() -> dict[str, Any]:
     messaging_next_actions = [
         *(str(action) for action in telegram_gate.get("next_actions") or []),
         *(str(action) for action in signal_gate.get("next_actions") or []),
+    ]
+    messaging_commands = [
+        str(command)
+        for command in [telegram_gate.get("command"), signal_gate.get("command")]
+        if command
     ]
 
     items = [
@@ -224,12 +232,8 @@ def build_audit() -> dict[str, Any]:
             "Telegram/Signal live round trips require allowlists and credentials.",
             "Complete the Telegram pilot first, then the Signal pilot when signal-cli-rest-api is registered.",
             messaging_next_actions,
-            "; ".join(
-                command
-                for command in [telegram_gate.get("command"), signal_gate.get("command")]
-                if command
-            )
-            or None,
+            messaging_commands[0] if messaging_commands else None,
+            messaging_commands,
         ),
         _item(
             "proactive_behavior",
@@ -269,6 +273,12 @@ def build_audit() -> dict[str, Any]:
             if readiness_summary.get("all_ready") is not True
             else None,
             "scripts/summarize-open-webui-home-agent-readiness.py && scripts/audit-open-webui-home-agent-completion.py"
+            if readiness_summary.get("all_ready") is not True
+            else None,
+            [
+                "scripts/summarize-open-webui-home-agent-readiness.py",
+                "scripts/audit-open-webui-home-agent-completion.py",
+            ]
             if readiness_summary.get("all_ready") is not True
             else None,
         ),

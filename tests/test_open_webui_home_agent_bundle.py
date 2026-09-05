@@ -95,7 +95,15 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert requirement_audit["five_agents"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
     assert any("Open WebUI users" in action for action in requirement_audit["five_agents"]["next_actions"])
     assert "scripts/run-freyja-channels-telegram-pilot.py" in requirement_audit["messaging_channels"]["command"]
+    assert requirement_audit["messaging_channels"]["commands"] == [
+        "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
+        "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
+    ]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in requirement_audit["messaging_channels"]["next_actions"])
+    assert requirement_audit["verification"]["commands"] == [
+        "scripts/summarize-open-webui-home-agent-readiness.py",
+        "scripts/audit-open-webui-home-agent-completion.py",
+    ]
     assert requirement_audit["final_deliverable"]["status"] == "complete"
     assert bundle["artifacts"]["runbook"] == "docs/operations/open-webui-home-agent.md"
     assert bundle["artifacts"]["backup_rollback_audit"] == "certification/reports/open-webui-backup-rollback-audit.json"
@@ -242,6 +250,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`local_inference`: `partial`" in text
     assert "`messaging_channels`: `credential_gated`" in text
     assert "Command: `OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py" in text
+    assert "Command: `scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json`" in text
     assert "pending_external_auth_or_credentials" in text
     assert "readiness_summary" in text
     assert "Exact Next Action" in text

@@ -300,6 +300,16 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             for action in gate.get("next_actions", [])
         ],
     }
+    requirement_command_fallbacks = {
+        "messaging_channels": [
+            *next(([gate["command"]] for gate in external_gates if gate["gate_id"] == "telegram_pilot" and gate.get("command")), []),
+            *next(([gate["command"]] for gate in external_gates if gate["gate_id"] == "signal_pilot" and gate.get("command")), []),
+        ],
+        "verification": [
+            "scripts/summarize-open-webui-home-agent-readiness.py",
+            "scripts/audit-open-webui-home-agent-completion.py",
+        ],
+    }
     requirement_audit = [
         {
             "requirement_id": str(item.get("requirement_id")),
@@ -313,6 +323,10 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
                 for action in (item.get("next_actions") or requirement_next_action_fallbacks.get(str(item.get("requirement_id")), []))
             ],
             "command": item.get("command"),
+            "commands": [
+                str(command)
+                for command in (item.get("commands") or requirement_command_fallbacks.get(str(item.get("requirement_id")), []))
+            ],
         }
         for item in completion.get("items") or []
     ]
@@ -581,6 +595,9 @@ def render_markdown(bundle: dict[str, Any]) -> str:
             lines.append(f"  Next: {item['next_action']}")
         if item.get("command"):
             lines.append(f"  Command: `{item['command']}`")
+        for command in item.get("commands") or []:
+            if command != item.get("command"):
+                lines.append(f"  Command: `{command}`")
     lines += ["", "## Exact Next Action", "", bundle["exact_next_action"], ""]
     return "\n".join(lines)
 

@@ -57,12 +57,19 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert by_id["tools"]["command"] == by_id["five_agents"]["command"]
     assert by_id["tools"]["next_actions"] == by_id["five_agents"]["next_actions"]
     assert "scripts/run-freyja-channels-telegram-pilot.py" in by_id["messaging_channels"]["command"]
-    assert "scripts/run-freyja-channels-signal-pilot.py" in by_id["messaging_channels"]["command"]
+    assert by_id["messaging_channels"]["commands"] == [
+        "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
+        "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
+    ]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in by_id["messaging_channels"]["next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in by_id["messaging_channels"]["next_actions"])
     assert "TELEGRAM_BOT_TOKEN" not in by_id["messaging_channels"]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in by_id["messaging_channels"]["command"]
     assert by_id["verification"]["next_action"] == "Clear all external readiness gates, then rerun the completion audit."
+    assert by_id["verification"]["commands"] == [
+        "scripts/summarize-open-webui-home-agent-readiness.py",
+        "scripts/audit-open-webui-home-agent-completion.py",
+    ]
     assert any("generate an admin" in action for action in by_id["verification"]["next_actions"])
     statuses = {item["requirement"]: item["status"] for item in audit["items"]}
     assert statuses["Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config"] == "complete"
