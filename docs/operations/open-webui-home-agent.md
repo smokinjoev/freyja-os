@@ -170,16 +170,32 @@ Output artifact:
 certification/reports/open-webui-home-agents-import.json
 ```
 
-The five agent rows have been prepared as importable Open WebUI model records
-and were tested against the earlier local compose database with the guarded
-offline importer. After Atlas was confirmed as the real Open WebUI host and
-the Iris duplicate was stopped, authenticated Atlas activation remains the
-source of truth for live model/resource presence.
+The five agent rows were prepared as importable Open WebUI model records and
+tested against the earlier local compose database with the guarded offline
+importer. After Atlas was confirmed as the real Open WebUI host and the Iris
+duplicate was stopped, the five managed model rows were inserted directly into
+the Atlas Open WebUI database under an admin owner after taking a fresh
+database backup.
 
 Evidence artifact:
 
 ```text
 certification/reports/open-webui-home-agents-offline-apply.json
+```
+
+Current Atlas direct-activation evidence, collected without reading or printing
+private user records, conversations, or API key values:
+
+```text
+backup=/app/backend/data/webui.db.backup-before-home-agent-direct-activation-20260905T130448Z
+model_insert_count=5
+models_present=[
+  "agent/freyja",
+  "agent/cloyd-gibbler",
+  "agent/benedict",
+  "agent/agent-47",
+  "agent/jennacide"
+]
 ```
 
 Access metadata audit:
@@ -276,11 +292,20 @@ printing user records, messages, or API key values:
 user_count=3
 auth_count=3
 api_key_count=1
-model_count=2
-tool_count=1
-knowledge_count=0
-memory_count=0
+model_count=7
+tool_count=7
+knowledge_count=3
+memory_count=4
 auth.enable_api_keys=true
+```
+
+Managed Atlas resources now present:
+
+```text
+knowledge=["freyja_household","freyja_projects","benedict_restricted"]
+tools=["freyja_home_memory","iris_apple","home_assistant","weather","household_analysis","infrastructure_health"]
+memory_policies=["personal:joe","personal:beth","personal:liam","personal:jenna"]
+managed_tool_specs_are_lists=true
 ```
 
 Only after the dry-run shows `ready=true`, apply with an explicit writable
@@ -844,12 +869,12 @@ scripts/check-open-webui-model-proxy-catalog.py
 - `certification/reports/open-webui-home-agent-live.json` records repeatable live verification evidence without secrets.
 - `certification/reports/open-webui-model-proxy-catalog.json` records the model-proxy catalog evidence without secrets.
 - `certification/reports/open-webui-home-agents-import.json` records reviewable Open WebUI model import payloads without secrets.
-- `certification/reports/open-webui-home-agents-offline-apply.json` records sanitized evidence that the five agent model rows exist in Open WebUI's database.
+- `certification/reports/open-webui-home-agents-offline-apply.json` records sanitized offline importer evidence; Atlas direct DB evidence now confirms the five managed agent model rows exist in the active Open WebUI database.
 - `certification/reports/open-webui-home-agent-access-audit.json` records sanitized evidence that the imported agent rows contain the intended read-group metadata.
 - `certification/reports/open-webui-home-agent-access-bind-dry-run.json` records the current no-write access-binding plan and missing real users.
 - `certification/reports/open-webui-home-resources-export.json` records reviewable Knowledge, native-memory, and tool resource payloads without secrets or private content.
-- `certification/reports/open-webui-home-resources-live-counts.json` records sanitized live Open WebUI Knowledge/tool/native-memory table counts.
-- `certification/reports/open-webui-home-resources-offline-dry-run.json` records the no-write resource importer plan and owner-user blocker.
+- `certification/reports/open-webui-home-resources-live-counts.json` records sanitized Open WebUI Knowledge/tool/native-memory table counts.
+- `certification/reports/open-webui-home-resources-offline-dry-run.json` records the no-write resource importer plan; Atlas direct DB evidence now confirms the managed Knowledge, tool, and memory-policy rows exist in the active Open WebUI database.
 - `certification/reports/open-webui-home-agent-deliverable.json` and `.md` consolidate endpoint map, rollback pointers, verification status, blockers, artifacts, and exact next action.
 - `certification/reports/open-webui-backup-rollback-audit.json` records backup tar integrity, checksum, `webui.db` presence, rollback-doc coverage, and the verified `deploy/compose/open-webui/compose.yaml` rollback compose path without private content.
 - `certification/reports/open-webui-home-agent-secret-safety.json` records scoped secret-pattern and private-content flag checks for the current home-agent artifact set.
@@ -866,7 +891,7 @@ Blocked or still pending:
 - Authenticated Open WebUI API tests for all five agents require Joe's Open WebUI API key or browser session.
 - Telegram round trip requires Joe's bot token/allowlist to be configured outside source control.
 - Signal round trip requires registered `signal-cli-rest-api` credentials.
-- Open WebUI user/group assignment cannot be completed offline yet because Atlas has multiple existing users and needs either an explicit owner/user mapping or an admin API/browser session. Atlas currently has `user_count=3`, with API keys enabled server-side.
+- Open WebUI user/group assignment cannot be completed offline yet because Atlas has multiple existing users and still needs explicit Joe/Beth/Liam/Jenna user mapping or an admin API/browser session. Atlas currently has `user_count=3`, with API keys enabled server-side.
 - Freyja 4.1 fallback preservation is verified through the protected legacy Freyja3 gateway contract on port `8300`; no separately named Freyja 4.1 endpoint is defined in current repo evidence.
 
 ## Requirement Matrix
@@ -880,10 +905,10 @@ Blocked or still pending:
 | Keep secrets out of output/source | Redacted collector output, no-secret manifests, `certification/reports/open-webui-home-agent-secret-safety.json` | Complete for current home-agent artifact set; keep running before commits |
 | Inference local by default through Vulcan | Open WebUI compose/model-proxy, Atlas docs, inference policy audit | Implemented and policy-audited; authenticated live chat response still needs Open WebUI API/session |
 | Explicit model profiles | `config/open-webui-home-agents.yaml` | Complete as source-controlled definitions |
-| Five Open WebUI agents | `config/open-webui-home-agents.yaml`, Freyja 5 `/v1/models`, model-proxy catalog report, import payload export, offline Open WebUI model-table import evidence, access metadata audit | Imported into Open WebUI model table with intended read-group metadata; authenticated API/UI verification and real user/group binding pending |
+| Five Open WebUI agents | `config/open-webui-home-agents.yaml`, Freyja 5 `/v1/models`, model-proxy catalog report, import payload export, offline Open WebUI model-table import evidence, Atlas direct DB evidence, access metadata audit | Inserted into Atlas Open WebUI model table with intended metadata; authenticated API/UI verification and real user/group binding pending |
 | Benedict local-only isolation | Agent manifest, home-memory tests, access metadata audit | Complete at source/API policy layer; real Open WebUI Beth group binding pending account creation/auth |
-| Native per-user Open WebUI memory | `config/open-webui-home-resources.yaml`, resource export, resource importer dry-run | Source policy/import path prepared; live rows require owner user/authenticated import |
-| Shared household Knowledge | `config/open-webui-home-resources.yaml`, resource export, resource importer dry-run | Source policy/import path prepared; live collection rows require owner user/authenticated import |
+| Native per-user Open WebUI memory | `config/open-webui-home-resources.yaml`, resource export, resource importer dry-run, Atlas direct DB evidence | Managed memory policy rows inserted on Atlas; per-user runtime behavior still needs authenticated Open WebUI verification |
+| Shared household Knowledge | `config/open-webui-home-resources.yaml`, resource export, resource importer dry-run, Atlas direct DB evidence | Managed Knowledge rows inserted on Atlas; user/group access still needs authenticated Open WebUI verification |
 | Scoped `freyja-home-memory` service | `/freyja-home-memory` router, tests, live `8500` endpoint | Deployed in side-by-side Freyja 5 gateway |
 | Tool boundaries | Agent manifest, resource manifest/export, resource importer dry-run, existing Freyja tools, model-proxy agent forwarding | Source policy/import path prepared; Open WebUI tool enablement pending owner user/auth |
 | Messaging channels | Existing Telegram/Signal connectors, `config/freyja-channels.yaml`, `src/freyja/channels.py`, channel readiness report, file-backed thread persistence test | Deterministic gateway and restart-safe thread persistence implemented/tested; live Telegram/Signal round trips pending credentials |

@@ -77,6 +77,21 @@ def resolve_owner(conn: sqlite3.Connection, owner_user_id: str | None) -> str | 
     return None
 
 
+def build_tool_specs(item: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": str(operation).replace("-", "_"),
+            "description": f"Freyja managed operation: {operation}.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": True,
+            },
+        }
+        for operation in item.get("operations") or []
+    ]
+
+
 def build_rows(payload: dict[str, Any], owner_user_id: str, now: int | None = None) -> dict[str, list[dict[str, Any]]]:
     timestamp = int(now or time.time())
     knowledge_rows = [
@@ -98,7 +113,7 @@ def build_rows(payload: dict[str, Any], owner_user_id: str, now: int | None = No
             "user_id": owner_user_id,
             "name": str(item["name"]),
             "content": "# Freyja managed tool boundary. Configure the live OpenAPI/MCP adapter in Open WebUI before enabling.",
-            "specs": json.dumps({"operations": item.get("operations") or [], "boundary": item.get("boundary")}, sort_keys=True),
+            "specs": json.dumps(build_tool_specs(item), sort_keys=True),
             "meta": json.dumps(item.get("meta") or {}, sort_keys=True),
             "valves": json.dumps({"enabled": False, "managed_by": "freyja-home-agent"}, sort_keys=True),
             "created_at": timestamp,

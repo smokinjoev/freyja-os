@@ -224,6 +224,10 @@ def test_resource_import_apply_writes_expected_rows_and_backup(tmp_path: Path, c
         assert conn.execute("select count(*) from knowledge").fetchone()[0] == 3
         assert conn.execute("select count(*) from tool").fetchone()[0] == 6
         assert conn.execute("select count(*) from memory").fetchone()[0] == 4
+        specs = conn.execute("select specs from tool where id='freyja_home_memory'").fetchone()[0]
+        parsed_specs = json.loads(specs)
+        assert isinstance(parsed_specs, list)
+        assert parsed_specs[0]["name"] == "search"
         benedict = conn.execute("select meta from knowledge where id='benedict_restricted'").fetchone()[0]
         assert json.loads(benedict)["freyja"]["allowed_agents"] == ["benedict"]
         memory = conn.execute("select meta from memory where id='freyja_native_memory_policy:beth'").fetchone()[0]
