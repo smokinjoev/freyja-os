@@ -15,6 +15,8 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-platform-inventory.json"
+ATLAS_OPEN_WEBUI_URL = "http://100.119.235.114:3001"
+IRIS_DUPLICATE_OPEN_WEBUI_URL = "http://100.115.228.56:3001"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -91,13 +93,19 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
     resources = _load_yaml(REPO_ROOT / "config" / "open-webui-home-resources.yaml")
     docker = _docker_ps()
 
+    atlas_public_config = _open_webui_public_config(ATLAS_OPEN_WEBUI_URL)
+    iris_duplicate_public_config = _open_webui_public_config(IRIS_DUPLICATE_OPEN_WEBUI_URL, timeout=1.0)
+
     hosts = {
         "atlas": {
             "role": "always-on Open WebUI, shared memory, messaging adapters, non-Apple services",
+            "open_webui_url": ATLAS_OPEN_WEBUI_URL,
+            "open_webui_public_config": atlas_public_config,
+            "current_services_note": "Docker service inventory is local to the machine running this script; Atlas service truth is the tailnet HTTP probe unless the script is run on Atlas.",
             "current_services": {
                 name: docker[name]
                 for name in sorted(docker)
-                if name.startswith("freyja-open-webui-atlas") or name.startswith("freyja3-") or name.startswith("freyja5-") or name.startswith("freyja-signal-atlas")
+                if name.startswith("freyja3-") or name.startswith("freyja5-") or name.startswith("freyja-signal-atlas")
             },
             "credential_locations": [
                 "deploy/compose/open-webui/.env",
@@ -117,6 +125,11 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
             "role": "Apple capability server for Calendar, Reminders, iMessage, Shortcuts, HomePod actions",
             "endpoint": "http://100.115.228.56:11434/v1",
             "mcp_host": "iris",
+            "duplicate_open_webui": {
+                "url": IRIS_DUPLICATE_OPEN_WEBUI_URL,
+                "status": "disabled_expected",
+                "public_config": iris_duplicate_public_config,
+            },
         },
         "hera": {
             "role": "future voice/avatar interface",
@@ -124,8 +137,9 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
         },
     }
     endpoints = {
-        "open_webui": "http://127.0.0.1:3001",
-        "open_webui_tailnet": "http://100.119.235.114:3001",
+        "open_webui": ATLAS_OPEN_WEBUI_URL,
+        "open_webui_tailnet": ATLAS_OPEN_WEBUI_URL,
+        "iris_duplicate_open_webui": IRIS_DUPLICATE_OPEN_WEBUI_URL,
         "freyja5_gateway": "http://127.0.0.1:8500",
         "freyja_home_memory": "http://127.0.0.1:8500/freyja-home-memory",
         "model_proxy_internal": "http://model-proxy:8080/v1",
@@ -133,7 +147,6 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
         "vulcan_ollama": "http://100.94.80.21:11434",
         "iris_fallback": "http://100.115.228.56:11434/v1",
     }
-    public_config = _open_webui_public_config(endpoints["open_webui"])
     return {
         "report_type": "open-webui-home-agent-platform-inventory",
         "generated_at_unix": int(now or time.time()),
@@ -142,11 +155,11 @@ def build_inventory(now: int | None = None) -> dict[str, Any]:
         "private_content_included": False,
         "hosts": hosts,
         "endpoints": endpoints,
-        "open_webui_public_config": public_config,
+        "open_webui_public_config": atlas_public_config,
         "open_webui_next_action_hint": (
-            "Complete first-account Open WebUI onboarding at http://127.0.0.1:3001, then rerun post-auth activation."
-            if public_config.get("onboarding")
-            else "Sign in to Open WebUI or provide an admin API key/session, then rerun post-auth activation."
+            f"Complete first-account Open WebUI onboarding at {ATLAS_OPEN_WEBUI_URL}, then rerun post-auth activation."
+            if atlas_public_config.get("onboarding")
+            else "Sign in to Atlas Open WebUI or provide an admin API key/session, then rerun post-auth activation."
         ),
         "source_topology": {
             "planes": "config/freyja-5.0-planes.yaml",

@@ -38,7 +38,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
         "external_gated_requirements": 4,
         "verified_completion_percent": 60.0,
     }
-    assert bundle["endpoint_map"]["open_webui_local"] == "http://127.0.0.1:3001"
+    assert bundle["endpoint_map"]["open_webui_atlas"] == "http://100.119.235.114:3001"
+    assert bundle["endpoint_map"]["open_webui_iris_duplicate"] == "http://100.115.228.56:3001"
     assert bundle["rollback"]["open_webui_volume_backup"].endswith("open-webui-data-volume.tgz")
     assert [step["step"] for step in bundle["rollback"]["steps"]] == [
         "stop_open_webui",
@@ -49,7 +50,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     ]
     assert "-f deploy/compose/open-webui/compose.yaml down" in bundle["rollback"]["steps"][0]["command"]
     assert "-f deploy/compose/open-webui/compose.yaml up -d" in bundle["rollback"]["steps"][3]["command"]
-    assert bundle["rollback"]["steps"][-1]["command"] == "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version"
+    assert bundle["rollback"]["steps"][-1]["command"] == "curl -fsS --max-time 10 http://100.119.235.114:3001/api/version"
     assert bundle["tests"]["focused_pytest"] == "133 passed, 1 warning"
     assert bundle["tests"]["full_pytest"] == "1582 passed, 1 skipped, 1 warning"
     assert bundle["tests"]["backup_rollback_audit_ok"] is True
@@ -68,8 +69,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert "exact_next_action" in bundle
     assert "Open WebUI" in bundle["exact_next_action"]
     assert bundle["evidence_summary"]["post_auth_activation_next_actions"] == [
-        "Create/sign in Open WebUI users for: beth, jenna, joe, liam.",
-        "Complete first-account onboarding, or pass --owner-user-id when multiple Open WebUI users exist.",
+        "Create or verify Atlas Open WebUI users/groups for Beth, Jenna, Joe, and Liam after authenticated access is available.",
+        "Use the Atlas Open WebUI admin account and generate an admin/service API key.",
     ]
     assert bundle["evidence_summary"]["post_auth_activation_access_missing_users"] == ["beth", "jenna", "joe", "liam"]
     assert bundle["evidence_summary"]["post_auth_activation_access_missing_models"] == []
@@ -82,8 +83,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
         "signal_pilot",
     ]
     assert all(gate["ready"] is False for gate in bundle["external_gates"])
-    assert bundle["external_gates"][0]["next_action"].startswith("Complete first-account Open WebUI onboarding")
-    assert any("Open WebUI users" in action for action in bundle["external_gates"][0]["next_actions"])
+    assert bundle["external_gates"][0]["next_action"].startswith("Sign in to Atlas Open WebUI")
+    assert any("Atlas Open WebUI admin" in action for action in bundle["external_gates"][0]["next_actions"])
     assert any("generate an admin" in action for action in bundle["external_gates"][1]["next_actions"])
     assert bundle["external_gates"][2]["next_action"].startswith("Configure: TELEGRAM_ALLOWED_USER_IDS")
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["external_gates"][2]["next_actions"])
@@ -104,7 +105,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert requirement_audit["local_inference"]["command"].startswith("OPEN_WEBUI_API_KEY=<redacted>")
     assert any("OPEN_WEBUI_API_KEY" in action for action in requirement_audit["local_inference"]["next_actions"])
     assert requirement_audit["five_agents"]["command"].startswith("scripts/activate-open-webui-home-agent-post-auth.py")
-    assert any("Open WebUI users" in action for action in requirement_audit["five_agents"]["next_actions"])
+    assert any("Open WebUI" in action for action in requirement_audit["five_agents"]["next_actions"])
     assert "scripts/run-freyja-channels-telegram-pilot.py" in requirement_audit["messaging_channels"]["command"]
     assert requirement_audit["messaging_channels"]["commands"] == [
         "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
@@ -130,9 +131,9 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["artifacts"]["signal_pilot"] == "certification/reports/freyja-channels-signal-pilot.json"
     assert bundle["evidence_summary"]["inventory_hosts"] == ["atlas", "hera", "iris", "vulcan"]
     endpoint_ownership = bundle["evidence_summary"]["endpoint_ownership"]
-    assert endpoint_ownership["atlas_open_webui"]["endpoint"] == "http://127.0.0.1:3001"
+    assert endpoint_ownership["atlas_open_webui"]["endpoint"] == "http://100.119.235.114:3001"
     assert endpoint_ownership["atlas_open_webui"]["container"] == "freyja-open-webui-atlas-open-webui-1"
-    assert "healthy" in endpoint_ownership["atlas_open_webui"]["status"]
+    assert endpoint_ownership["atlas_open_webui"]["status"] is None or "healthy" in endpoint_ownership["atlas_open_webui"]["status"]
     assert endpoint_ownership["atlas_model_proxy"]["endpoint"] == "http://model-proxy:8080/v1"
     assert endpoint_ownership["atlas_freyja5_gateway"]["endpoint"] == "http://127.0.0.1:8500"
     assert endpoint_ownership["vulcan_inference"]["ollama_endpoint"] == "http://100.94.80.21:11434"
@@ -250,7 +251,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_openapi_git_head"]
     assert bundle["evidence_summary"]["readiness_summary_status"] == "pending_external_auth_or_credentials"
     assert bundle["evidence_summary"]["readiness_summary_all_ready"] is False
-    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Complete first-account Open WebUI onboarding")
+    assert bundle["evidence_summary"]["readiness_required_next_actions"][0].startswith("Sign in to Atlas Open WebUI")
     assert any("OPEN_WEBUI_API_KEY" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["readiness_required_next_actions"])
@@ -378,7 +379,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "## Post-Auth Activation" in text
     assert "Missing users: `beth, jenna, joe, liam`" in text
     assert "Resource owner policy: `auto_single_user_only`" in text
-    assert "Activation action: Complete first-account onboarding" in text
+    assert "Activation action: Use the Atlas Open WebUI admin account" in text
     assert "## Endpoint Ownership" in text
     assert "`atlas_open_webui`" in text
     assert "nexus_required=False" in text
@@ -412,7 +413,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in text
     assert "External Gates" in text
     assert "`post_auth_activation`: pending" in text
-    assert "Action: Create/sign in Open WebUI users" in text
+    assert "Action: Generate an Atlas Open WebUI admin or service-account API key" in text
     assert "Action: Create/sign in to Open WebUI and generate an admin" in text
     assert "`telegram_pilot`: pending" in text
     assert "Action: Create or choose the Telegram bot" in text
@@ -429,7 +430,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "pending_external_auth_or_credentials" in text
     assert "readiness_summary" in text
     assert "Exact Next Action" in text
-    assert "Open WebUI owner/user rows are missing" in text
+    assert "Atlas Open WebUI is reachable and onboarding is complete" in text
 
 
 def test_bundle_main_creates_distinct_output_directories(tmp_path: Path, capsys) -> None:

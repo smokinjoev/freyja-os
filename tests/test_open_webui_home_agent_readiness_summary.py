@@ -40,7 +40,7 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     for gate in gates.values():
         assert gate["evidence_generated_at_unix"] is None or isinstance(gate["evidence_generated_at_unix"], int)
     assert "Open WebUI" in gates["post_auth_activation"]["next_action"]
-    assert any("Open WebUI users" in action for action in gates["post_auth_activation"]["next_actions"])
+    assert any("Atlas Open WebUI admin" in action for action in gates["post_auth_activation"]["next_actions"])
     assert "OPEN_WEBUI_API_KEY" in gates["authenticated_chat_smoke"]["next_action"]
     assert any("generate an admin" in action for action in gates["authenticated_chat_smoke"]["next_actions"])
     assert "TELEGRAM_IDENTITY_MAP" in gates["telegram_pilot"]["next_action"]
@@ -51,7 +51,7 @@ def test_readiness_summary_reports_current_external_gates() -> None:
     assert "OPEN_WEBUI_API_KEY=<redacted>" in gates["authenticated_chat_smoke"]["command"]
     assert "TELEGRAM_BOT_TOKEN" not in gates["telegram_pilot"]["command"]
     assert "SIGNAL_ACCOUNT_NUMBER" not in gates["signal_pilot"]["command"]
-    assert summary["required_next_actions"][0].startswith("Complete first-account Open WebUI onboarding")
+    assert summary["required_next_actions"][0].startswith("Sign in to Atlas Open WebUI")
     assert any("OPEN_WEBUI_API_KEY" in action for action in summary["required_next_actions"])
     assert any("TELEGRAM_BOT_TOKEN" in action for action in summary["required_next_actions"])
     assert any("SIGNAL_REST_API_URL" in action for action in summary["required_next_actions"])
@@ -151,7 +151,7 @@ def test_readiness_summary_markdown_includes_required_next_actions() -> None:
     text = module.render_markdown(module.build_summary())
 
     assert "## Required Next Actions" in text
-    assert "Complete first-account Open WebUI onboarding" in text
+    assert "Generate an Atlas Open WebUI admin or service-account API key" in text
 
 
 def test_home_agent_runbook_documents_required_next_action_queue() -> None:
@@ -160,7 +160,7 @@ def test_home_agent_runbook_documents_required_next_action_queue() -> None:
     assert "Machine-readable readiness queue" in text
     assert "jq '.required_next_actions'" in text
     assert "Current operator sequence" in text
-    assert "Complete first-account Open WebUI onboarding" in text
+    assert "Atlas Open WebUI admin account" in text
     assert "OPEN_WEBUI_API_KEY" in text
     assert "Set OPEN_WEBUI_API_KEY outside source control." in text
     assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in text
@@ -182,7 +182,7 @@ def test_readiness_summary_main_writes_reports_and_exits_nonzero_while_pending(t
     markdown = output_md.read_text(encoding="utf-8")
     assert "Open WebUI Home-Agent Readiness Summary" in markdown
     assert "`post_auth_activation`: pending" in markdown
-    assert "Action: Create/sign in Open WebUI users" in markdown
+    assert "Action: Generate an Atlas Open WebUI admin or service-account API key" in markdown
     assert "Action: Create/sign in to Open WebUI and generate an admin" in markdown
     assert "Command: `scripts/activate-open-webui-home-agent-post-auth.py" in markdown
 

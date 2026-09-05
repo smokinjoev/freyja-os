@@ -35,7 +35,8 @@ def test_platform_inventory_contains_required_hosts_and_no_secret_values() -> No
 def test_platform_inventory_records_endpoint_map_and_credential_locations_only() -> None:
     inventory = _module().build_inventory(now=1)
 
-    assert inventory["endpoints"]["open_webui"] == "http://127.0.0.1:3001"
+    assert inventory["endpoints"]["open_webui"] == "http://100.119.235.114:3001"
+    assert inventory["endpoints"]["iris_duplicate_open_webui"] == "http://100.115.228.56:3001"
     assert inventory["endpoints"]["vulcan_ollama"] == "http://100.94.80.21:11434"
     assert inventory["open_webui_public_config"]["secrets_included"] is False
     assert inventory["open_webui_public_config"]["private_content_included"] is False
@@ -43,6 +44,7 @@ def test_platform_inventory_records_endpoint_map_and_credential_locations_only()
     assert inventory["credential_policy"]["values_recorded"] is False
     assert inventory["credential_policy"]["locations_only"] is True
     assert "deploy/compose/open-webui/.env" in inventory["hosts"]["atlas"]["credential_locations"]
+    assert inventory["hosts"]["iris"]["duplicate_open_webui"]["status"] == "disabled_expected"
 
 
 def test_platform_inventory_summarizes_public_open_webui_config(monkeypatch) -> None:
@@ -50,7 +52,7 @@ def test_platform_inventory_summarizes_public_open_webui_config(monkeypatch) -> 
     monkeypatch.setattr(
         module,
         "_open_webui_public_config",
-        lambda url: {
+        lambda url, timeout=5.0: {
             "reachable": True,
             "onboarding": True,
             "status": True,

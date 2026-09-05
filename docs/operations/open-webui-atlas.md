@@ -47,6 +47,12 @@ Do not install separate Open WebUI servers on every client device. Other
 devices should open the Atlas URL in a browser and optionally install it as a
 PWA/Add to Home Screen.
 
+Iris must not be used as the household Open WebUI host. If a compose project
+named `freyja-open-webui-atlas` is found running on Iris, treat it as a
+duplicate local stack and stop it after confirming Atlas is reachable. Host
+identity comes from Tailscale/DNS and service reachability, not from the Docker
+Compose project name alone.
+
 Atlas deployment files live under:
 
 ```text

@@ -42,7 +42,7 @@ ROLLBACK_STEPS = [
     },
     {
         "step": "verify_open_webui",
-        "command": "curl -fsS --max-time 10 http://127.0.0.1:3001/api/version",
+        "command": "curl -fsS --max-time 10 http://100.119.235.114:3001/api/version",
     },
 ]
 
@@ -110,6 +110,12 @@ def _dedupe(values: list[str]) -> list[str]:
 def _canonical_action(value: str) -> str:
     if value == "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.":
         return "Set OPEN_WEBUI_API_KEY outside source control."
+    if value.startswith("Complete first-account Open WebUI onboarding at http://127.0.0.1:3001"):
+        return "Use the Atlas Open WebUI admin account and generate an admin/service API key."
+    if value == "Complete first-account onboarding, or pass --owner-user-id when multiple Open WebUI users exist.":
+        return "Use the Atlas Open WebUI admin account and generate an admin/service API key."
+    if value == "Create/sign in Open WebUI users for: beth, jenna, joe, liam.":
+        return "Create or verify Atlas Open WebUI users/groups for Beth, Jenna, Joe, and Liam after authenticated access is available."
     return value
 
 
@@ -142,7 +148,7 @@ def _blocked_reason_counts(report: dict[str, Any]) -> dict[str, int]:
 def _required_next_actions(report: dict[str, Any]) -> list[str]:
     explicit = report.get("required_next_actions")
     if isinstance(explicit, list):
-        return [str(action) for action in explicit]
+        return _dedupe(_canonical_actions(explicit))
     actions: list[str] = []
     for gate in report.get("gates") or []:
         if gate.get("ready") is True:
@@ -159,9 +165,12 @@ def _normalize_rollback_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any
         item = dict(step)
         command = item.get("command")
         if isinstance(command, str):
-            item["command"] = command.replace(
-                "deploy/compose/open-webui/docker-compose.yml",
-                "deploy/compose/open-webui/compose.yaml",
+            item["command"] = (
+                command.replace(
+                    "deploy/compose/open-webui/docker-compose.yml",
+                    "deploy/compose/open-webui/compose.yaml",
+                )
+                .replace("http://127.0.0.1:3001/api/version", "http://100.119.235.114:3001/api/version")
             )
         normalized.append(item)
     return normalized
@@ -337,8 +346,9 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     freyja3_inference = _nested_check(freyja41, "protected_legacy_endpoints_respond", "freyja3_inference_health")
 
     endpoint_map = {
-        "open_webui_local": "http://127.0.0.1:3001",
+        "open_webui_atlas": "http://100.119.235.114:3001",
         "open_webui_tailnet": "http://100.119.235.114:3001",
+        "open_webui_iris_duplicate": "http://100.115.228.56:3001",
         "freyja5_gateway_local": "http://127.0.0.1:8500",
         "freyja_home_memory": "http://127.0.0.1:8500/freyja-home-memory",
         "vulcan_openai": "http://100.94.80.21:8088/v1",
@@ -374,9 +384,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "open_webui_tools_openapi_ok": tools_openapi.get("ok"),
     }
     blockers = [
-        "Open WebUI owner/user rows are missing, so resource import and access binding cannot be safely applied yet.",
-        "Authenticated Open WebUI API/UI verification needs an admin API key or browser session.",
-        "All-five-agent Open WebUI chat smoke needs an admin API key or authenticated session.",
+        "Atlas Open WebUI is reachable and onboarding is complete, but authenticated activation needs an admin API key or a controlled session.",
+        "All-five-agent Open WebUI chat smoke needs an Atlas admin/service API key.",
         "Telegram pilot round trip needs bot token and allowlist configured outside source control.",
         "Signal round trip needs registered signal-cli-rest-api credentials.",
     ]
@@ -388,7 +397,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "evidence": str(gate.get("evidence")),
             "evidence_generated_at_unix": gate.get("evidence_generated_at_unix"),
             "evidence_git_head": gate.get("evidence_git_head"),
-            "next_action": gate.get("next_action"),
+            "next_action": _canonical_action(str(gate["next_action"])) if gate.get("next_action") else None,
             "next_actions": [
                 _canonical_action(str(action))
                 for action in (
@@ -457,7 +466,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "status": str(item.get("status")),
             "evidence": [str(path) for path in item.get("evidence") or []],
             "blocker": item.get("blocker"),
-            "next_action": item.get("next_action"),
+            "next_action": _canonical_action(str(item["next_action"])) if item.get("next_action") else None,
             "next_actions": _dedupe([
                 _canonical_action(str(action))
                 for action in (item.get("next_actions") or requirement_next_action_fallbacks.get(str(item.get("requirement_id")), []))
@@ -554,7 +563,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "evidence_refresh": "certification/reports/open-webui-home-agent-evidence-refresh.json",
         },
         "evidence_summary": {
-            "open_webui_version": _text(DIAG / "open-webui-version"),
+            "open_webui_version": (open_webui_public_config or {}).get("version") or _text(DIAG / "open-webui-version"),
             "live_verifier_generated_at_unix": live.get("generated_at_unix") or live.get("timestamp_unix") or _mtime(live_report_path),
             "live_verifier_git_head": live.get("git_head") or "unknown",
             "home_memory_operations_ok": _check_ok(live, "home_memory_operations"),

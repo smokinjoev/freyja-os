@@ -154,6 +154,15 @@ def build_summary() -> dict[str, Any]:
     completion = _load(REPORTS / "open-webui-home-agent-completion-audit.json")
     inventory = _load(REPORTS / "open-webui-home-agent-platform-inventory.json")
     open_webui_next_action = inventory.get("open_webui_next_action_hint") or deliverable.get("exact_next_action")
+    public_config = inventory.get("open_webui_public_config") if isinstance(inventory.get("open_webui_public_config"), dict) else {}
+    atlas_onboarding_complete = public_config.get("reachable") is True and public_config.get("onboarding") is False
+    activation_next_actions = activation.get("next_actions") if isinstance(activation.get("next_actions"), list) else []
+    if atlas_onboarding_complete:
+        activation_next_actions = [
+            "Generate an Atlas Open WebUI admin or service-account API key.",
+            "Set OPEN_WEBUI_API_KEY outside source control.",
+            "Rerun scripts/activate-open-webui-home-agent-post-auth.py against the authenticated Atlas Open WebUI context.",
+        ]
     channels = _load(REPORTS / "freyja-channels-readiness.json")
     telegram_readiness = channels.get("telegram") if isinstance(channels.get("telegram"), dict) else {}
     signal_readiness = channels.get("signal") if isinstance(channels.get("signal"), dict) else {}
@@ -167,7 +176,7 @@ def build_summary() -> dict[str, Any]:
             activation.get("ready") is True,
             "certification/reports/open-webui-home-agent-post-auth-activation.json",
             None if activation.get("ready") else open_webui_next_action,
-            activation.get("next_actions") if isinstance(activation.get("next_actions"), list) else [],
+            activation_next_actions,
             "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
             activation.get("generated_at_unix") or activation.get("timestamp_unix"),
             activation.get("git_head"),

@@ -4,18 +4,21 @@ Status date: 2026-09-04.
 
 ## Current Placement
 
-Open WebUI is running as the Atlas household UI:
+Open WebUI is running as the Atlas household UI. Iris previously had a
+duplicate local Open WebUI stack, but that copy is disabled and should stay off
+unless deliberately re-enabled for recovery testing.
 
 ```text
 browser/PWA -> Atlas Open WebUI :3001 -> model-proxy -> Vulcan Ollama/OpenAI-compatible endpoint
 ```
 
-Live local observation on 2026-09-04:
+Current observation:
 
 | Component | Value |
 | --- | --- |
 | Compose project | `freyja-open-webui-atlas` |
-| Open WebUI URL | `http://127.0.0.1:3001` locally, `http://100.119.235.114:3001` on tailnet |
+| Open WebUI URL | `http://100.119.235.114:3001` on tailnet |
+| Iris duplicate Open WebUI | `http://100.115.228.56:3001`, intentionally stopped |
 | Open WebUI version | `0.11.3` |
 | Open WebUI image | `ghcr.io/open-webui/open-webui:main` |
 | Open WebUI data volume | `freyja-open-webui-atlas_open-webui` mounted at `/app/backend/data` |
@@ -119,7 +122,7 @@ docker compose --env-file deploy/compose/open-webui/.env \
   -f deploy/compose/open-webui/compose.yaml up -d
 ```
 
-5. Verify `http://127.0.0.1:3001/api/version` returns `0.11.3` or the intended restored version.
+5. Verify `http://100.119.235.114:3001/api/version` returns `0.11.3` or the intended restored version.
 
 ## Source-Controlled Agent Definitions
 
@@ -167,9 +170,11 @@ Output artifact:
 certification/reports/open-webui-home-agents-import.json
 ```
 
-The five agent rows have also been applied directly to the Open WebUI `model`
-table with the guarded offline importer. The importer created a SQLite backup
-before writing and touched only the `model` table.
+The five agent rows have been prepared as importable Open WebUI model records
+and were tested against the earlier local compose database with the guarded
+offline importer. After Atlas was confirmed as the real Open WebUI host and
+the Iris duplicate was stopped, authenticated Atlas activation remains the
+source of truth for live model/resource presence.
 
 Evidence artifact:
 
@@ -185,7 +190,7 @@ scripts/audit-open-webui-home-agent-access.py \
   --output certification/reports/open-webui-home-agent-access-audit.json
 ```
 
-Latest live audit:
+Latest Iris-duplicate audit before the duplicate was stopped:
 
 ```text
 ok=true
@@ -194,17 +199,18 @@ group_count=0
 pending=["open_webui_users_missing","open_webui_groups_missing"]
 ```
 
-Current public Open WebUI setup status:
+Current Atlas public Open WebUI setup status:
 
 ```text
-onboarding=true
+onboarding=false
 auth_enabled=true
-signup_enabled=true
+signup_enabled=false
 login_form_enabled=true
 ```
 
-Exact next action: complete first-account Open WebUI onboarding at
-`http://127.0.0.1:3001`, then rerun the post-auth activation dry-run.
+Exact next action: use the existing Atlas Open WebUI admin account at
+`http://100.119.235.114:3001`, create an admin/service API key outside source
+control, then rerun the authenticated post-auth activation and smoke checks.
 
 Machine-readable readiness queue:
 
@@ -216,7 +222,7 @@ jq '.required_next_actions' \
 
 Current operator sequence:
 
-1. Complete first-account Open WebUI onboarding at `http://127.0.0.1:3001`.
+1. Use the Atlas Open WebUI admin account at `http://100.119.235.114:3001`.
 2. Create or sign in the Open WebUI users for Beth, Jenna, Joe, and Liam.
 3. Rerun the post-auth activation dry-run.
 4. Generate an admin or service-account API key and set `OPEN_WEBUI_API_KEY` outside source control.
@@ -387,7 +393,7 @@ Iris remote capability contract:
 - Iris Apple actions require an active macOS user session and are restricted to Tailnet or Atlas-mediated access.
 - Children receive no Iris Apple operations.
 
-Current live Open WebUI resource tables are empty:
+The stopped Iris duplicate's local Open WebUI resource tables were empty:
 
 ```text
 knowledge=0
@@ -397,13 +403,13 @@ function=0
 memory=0
 ```
 
-Evidence artifact:
+Evidence artifact from the obsolete local duplicate:
 
 ```text
 certification/reports/open-webui-home-resources-live-counts.json
 ```
 
-Repeatable live count command:
+Repeatable local count command, valid only on the actual Open WebUI host:
 
 ```bash
 scripts/count-open-webui-home-resources-live.py
