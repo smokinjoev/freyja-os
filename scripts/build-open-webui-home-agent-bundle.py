@@ -107,6 +107,16 @@ def _dedupe(values: list[str]) -> list[str]:
     return deduped
 
 
+def _canonical_action(value: str) -> str:
+    if value == "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.":
+        return "Set OPEN_WEBUI_API_KEY outside source control."
+    return value
+
+
+def _canonical_actions(values: list[Any]) -> list[str]:
+    return [_canonical_action(str(value)) for value in values]
+
+
 def _nested_check(report: dict[str, Any], parent: str, child: str) -> dict[str, Any] | None:
     for check in report.get("checks") or []:
         if check.get("name") != parent:
@@ -227,7 +237,7 @@ def _channel_gate_next_actions(gate_id: str, channels: dict[str, Any]) -> list[s
             "TELEGRAM_ALLOWED_USER_IDS": "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
             "TELEGRAM_IDENTITY_MAP": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
             "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
-            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY outside source control.",
         }
         final_action = "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
     elif gate_id == "signal_pilot":
@@ -238,21 +248,21 @@ def _channel_gate_next_actions(gate_id: str, channels: dict[str, Any]) -> list[s
             "SIGNAL_ALLOWED_SENDERS": "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
             "SIGNAL_IDENTITY_MAP": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
             "SIGNAL_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
-            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+            "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY outside source control.",
         }
         final_action = "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy."
     else:
         return []
     actions = channel.get("next_actions") if isinstance(channel, dict) else None
     if isinstance(actions, list) and actions:
-        return [str(action) for action in actions]
+        return [_canonical_action(str(action)) for action in actions]
     missing = channel.get("missing_configuration") if isinstance(channel, dict) else []
     if not isinstance(missing, list) or not missing:
         return []
     derived: list[str] = []
     for key, action in action_map.items():
         if key in missing and action not in derived:
-            derived.append(action)
+            derived.append(_canonical_action(action))
     derived.append(final_action)
     return derived
 
@@ -380,7 +390,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "evidence_git_head": gate.get("evidence_git_head"),
             "next_action": gate.get("next_action"),
             "next_actions": [
-                str(action)
+                _canonical_action(str(action))
                 for action in (
                     gate.get("next_actions")
                     or (
@@ -449,7 +459,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "blocker": item.get("blocker"),
             "next_action": item.get("next_action"),
             "next_actions": _dedupe([
-                str(action)
+                _canonical_action(str(action))
                 for action in (item.get("next_actions") or requirement_next_action_fallbacks.get(str(item.get("requirement_id")), []))
             ]),
             "command": item.get("command"),
@@ -605,19 +615,19 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "telegram_ready": channels.get("telegram", {}).get("ready_for_live_round_trip"),
             "telegram_empty_allowlist_policy": channels.get("telegram", {}).get("empty_allowlist"),
             "telegram_missing_configuration": channels.get("telegram", {}).get("missing_configuration") or [],
-            "telegram_next_actions": channels.get("telegram", {}).get("next_actions") or [],
+            "telegram_next_actions": _canonical_actions(channels.get("telegram", {}).get("next_actions") or []),
             "telegram_pilot_ready": telegram_pilot.get("ready"),
             "telegram_pilot_checks": telegram_pilot.get("checks") or {},
             "telegram_pilot_missing_configuration": telegram_pilot.get("missing_configuration") or [],
-            "telegram_pilot_next_actions": telegram_pilot.get("next_actions") or [],
+            "telegram_pilot_next_actions": _canonical_actions(telegram_pilot.get("next_actions") or []),
             "signal_ready": channels.get("signal", {}).get("ready_for_live_round_trip"),
             "signal_empty_allowlist_policy": channels.get("signal", {}).get("empty_allowlist"),
             "signal_missing_configuration": channels.get("signal", {}).get("missing_configuration") or [],
-            "signal_next_actions": channels.get("signal", {}).get("next_actions") or [],
+            "signal_next_actions": _canonical_actions(channels.get("signal", {}).get("next_actions") or []),
             "signal_pilot_ready": signal_pilot.get("ready"),
             "signal_pilot_checks": signal_pilot.get("checks") or {},
             "signal_pilot_missing_configuration": signal_pilot.get("missing_configuration") or [],
-            "signal_pilot_next_actions": signal_pilot.get("next_actions") or [],
+            "signal_pilot_next_actions": _canonical_actions(signal_pilot.get("next_actions") or []),
             "whatsapp_ready": channels.get("whatsapp", {}).get("ready_for_live_round_trip"),
             "whatsapp_status": channels.get("whatsapp", {}).get("status"),
             "whatsapp_reason": channels.get("whatsapp", {}).get("reason"),
@@ -665,7 +675,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "chat_smoke_status": chat_smoke.get("status"),
             "chat_smoke_complete": chat_smoke.get("complete"),
             "chat_smoke_missing_configuration": chat_smoke.get("missing_configuration") or [],
-            "chat_smoke_next_actions": chat_smoke.get("next_actions") or [],
+            "chat_smoke_next_actions": _canonical_actions(chat_smoke.get("next_actions") or []),
             "tools_gateway_operation_count": tools_gateway.get("operation_count"),
             "tools_gateway_checks": tools_gateway.get("checks") or {},
             "tools_gateway_confirmation_required": tools_gateway.get("confirmation_required") or [],

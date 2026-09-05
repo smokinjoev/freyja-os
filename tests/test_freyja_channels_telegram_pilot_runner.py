@@ -74,7 +74,7 @@ def test_telegram_pilot_dry_run_fails_closed_without_credentials(tmp_path: Path,
         "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
         "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
         "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
-        "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        "Set OPEN_WEBUI_API_KEY outside source control.",
         "Rerun scripts/run-freyja-channels-telegram-pilot.py --dry-run and require ready=true before live polling.",
     ]
     assert "secret-token" not in str(report)

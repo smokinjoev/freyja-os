@@ -75,7 +75,7 @@ def test_signal_pilot_dry_run_fails_closed_without_credentials(tmp_path: Path, m
         "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
         "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
         "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
-        "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        "Set OPEN_WEBUI_API_KEY outside source control.",
         "Rerun scripts/run-freyja-channels-signal-pilot.py --dry-run and require ready=true before live receive/send.",
     ]
 

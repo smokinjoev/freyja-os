@@ -116,7 +116,7 @@ def _next_actions(missing: list[str], *, ready: bool) -> list[str]:
         "TELEGRAM_ALLOWED_USER_IDS": "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
         "TELEGRAM_IDENTITY_MAP": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
         "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries": "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
-        "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+        "OPEN_WEBUI_API_KEY": "Set OPEN_WEBUI_API_KEY outside source control.",
     }
     actions: list[str] = []
     for key, action in action_map.items():

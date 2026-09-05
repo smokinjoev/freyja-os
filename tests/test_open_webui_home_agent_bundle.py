@@ -24,6 +24,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
 
     assert bundle["secrets_included"] is False
     assert bundle["private_content_included"] is False
+    assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in json.dumps(bundle)
     assert bundle["status"] == "maximally_completed_pending_external_auth"
     assert bundle["git_head"]
     assert bundle["completion_status_counts"] == {"auth_gated": 3, "complete": 9, "credential_gated": 1, "partial": 2}
