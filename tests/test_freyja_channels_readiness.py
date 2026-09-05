@@ -37,6 +37,7 @@ def test_channels_readiness_fails_closed_without_env(monkeypatch) -> None:
     assert report["telegram"]["transport_adapter"] == "TelegramLongPollingTransport"
     assert report["telegram"]["transport_configured"] is False
     assert report["telegram"]["identity_map_configured"] is False
+    assert report["telegram"]["identity_map_count"] == 0
     assert report["telegram"]["allowlist_identity_map_complete"] is False
     assert report["telegram"]["ready_for_live_round_trip"] is False
     assert report["telegram"]["missing_configuration"] == [
@@ -56,6 +57,7 @@ def test_channels_readiness_fails_closed_without_env(monkeypatch) -> None:
     assert report["signal"]["transport_adapter"] == "SignalCliRestTransport"
     assert report["signal"]["transport_configured"] is False
     assert report["signal"]["identity_map_configured"] is False
+    assert report["signal"]["identity_map_count"] == 0
     assert report["signal"]["allowlist_identity_map_complete"] is False
     assert report["signal"]["ready_for_live_round_trip"] is False
     assert report["signal"]["missing_configuration"] == [
@@ -92,6 +94,7 @@ def test_channels_readiness_reports_counts_not_secret_values(monkeypatch) -> Non
     assert report["telegram"]["allowlist_count"] == 2
     assert report["telegram"]["transport_configured"] is True
     assert report["telegram"]["identity_map_configured"] is True
+    assert report["telegram"]["identity_map_count"] == 2
     assert report["telegram"]["allowlist_identity_map_complete"] is True
     assert report["telegram"]["ready_for_live_round_trip"] is True
     assert report["telegram"]["missing_configuration"] == []
@@ -99,6 +102,7 @@ def test_channels_readiness_reports_counts_not_secret_values(monkeypatch) -> Non
     assert report["signal"]["allowlist_count"] == 1
     assert report["signal"]["transport_configured"] is True
     assert report["signal"]["identity_map_configured"] is True
+    assert report["signal"]["identity_map_count"] == 1
     assert report["signal"]["allowlist_identity_map_complete"] is True
     assert report["signal"]["ready_for_live_round_trip"] is True
     assert report["signal"]["missing_configuration"] == []
@@ -123,6 +127,7 @@ def test_channels_readiness_reports_incomplete_identity_map_without_sender_value
     serialized = json.dumps(report)
 
     assert report["telegram"]["allowlist_identity_map_complete"] is False
+    assert report["telegram"]["identity_map_count"] == 1
     assert report["telegram"]["ready_for_live_round_trip"] is False
     assert "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries" in report["telegram"]["missing_configuration"]
     assert report["telegram"]["next_actions"] == [

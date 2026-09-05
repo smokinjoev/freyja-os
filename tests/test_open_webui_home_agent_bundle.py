@@ -273,6 +273,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/openai/v1/chat/completions")
     assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
     assert bundle["evidence_summary"]["telegram_empty_allowlist_policy"] == "deny_all"
+    assert bundle["evidence_summary"]["telegram_allowlist_count"] == 0
+    assert bundle["evidence_summary"]["telegram_identity_map_count"] == 0
     assert "TELEGRAM_BOT_TOKEN" in bundle["evidence_summary"]["telegram_missing_configuration"]
     assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["telegram_next_actions"])
     assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
@@ -285,6 +287,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["telegram_bot_token_configured"] is False
     assert bundle["evidence_summary"]["telegram_pilot_checks"]["allowlist_identity_map_complete"] is False
     assert bundle["evidence_summary"]["signal_empty_allowlist_policy"] == "deny_all"
+    assert bundle["evidence_summary"]["signal_allowlist_count"] == 0
+    assert bundle["evidence_summary"]["signal_identity_map_count"] == 0
     assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_missing_configuration"]
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_next_actions"])
     assert bundle["evidence_summary"]["signal_pilot_ready"] is False
@@ -381,7 +385,11 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "image_analysis" in text
     assert "## Channel Safety" in text
     assert "`telegram_empty_allowlist_policy`: `deny_all`" in text
+    assert "`telegram_allowlist_count`: `0`" in text
+    assert "`telegram_identity_map_count`: `0`" in text
     assert "`signal_empty_allowlist_policy`: `deny_all`" in text
+    assert "`signal_allowlist_count`: `0`" in text
+    assert "`signal_identity_map_count`: `0`" in text
     assert "## Proactive Safety" in text
     assert "dry_run_required" in text
     assert "## Required Next Actions" in text
