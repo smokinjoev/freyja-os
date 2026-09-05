@@ -15,7 +15,7 @@ DIAG = REPO_ROOT / "logs" / "open-webui-diagnostics" / "home-agent-20260904T1742
 DEFAULT_JSON = REPORTS / "open-webui-home-agent-deliverable.json"
 DEFAULT_MD = REPORTS / "open-webui-home-agent-deliverable.md"
 GATE_COMMANDS = {
-    "post_auth_activation": "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json --owner-user-id <open-webui-owner-user-id>",
+    "post_auth_activation": "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
     "authenticated_chat_smoke": "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
     "telegram_pilot": "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
     "signal_pilot": "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",

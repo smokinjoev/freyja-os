@@ -87,7 +87,7 @@ def build_summary() -> dict[str, Any]:
             activation.get("ready") is True,
             "certification/reports/open-webui-home-agent-post-auth-activation.json",
             None if activation.get("ready") else open_webui_next_action,
-            "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json --owner-user-id <open-webui-owner-user-id>",
+            "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
             activation.get("generated_at_unix") or activation.get("timestamp_unix"),
             activation.get("git_head"),
         ),

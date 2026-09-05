@@ -241,13 +241,17 @@ the live Open WebUI container database:
 
 ```bash
 scripts/activate-open-webui-home-agent-post-auth.py \
-  --resources-json certification/reports/open-webui-home-resources-export.json \
-  --owner-user-id <open-webui-owner-user-id>
+  --resources-json certification/reports/open-webui-home-resources-export.json
 ```
 
 The dry-run snapshots `webui.db`, `webui.db-wal`, and `webui.db-shm` from
 `freyja-open-webui-atlas-open-webui-1` when the local default DB path is not
 available. It does not mutate the running container database.
+
+If the Open WebUI database has exactly one user after first-account onboarding,
+the activation dry-run resolves that user as the resource owner automatically.
+Use `--owner-user-id <id>` when multiple users exist or when applying against an
+explicit writable database.
 
 Current dry-run evidence:
 
@@ -405,8 +409,9 @@ tool_count=6
 memory_policy_count=4
 ```
 
-Only after a real owner user exists, apply with an explicit writable `--db`,
-`--owner-user-id <id>`, and `--apply`.
+Only after a real owner user exists, apply with an explicit writable `--db` and
+`--apply`. Add `--owner-user-id <id>` when multiple users exist or when you need
+to force a specific owner.
 The importer creates a database backup before writing and touches only
 `knowledge`, `tool`, and `memory`.
 

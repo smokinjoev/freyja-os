@@ -123,10 +123,13 @@ def build_activation_plan(db: Path, resources_json: Path, owner_user_id: str | N
         access = access_helper.plan(conn)
         resource_helper.inspect_schema(conn)
         owner = resource_helper.resolve_owner(conn, owner_user_id)
+        user_count = conn.execute("select count(*) from user").fetchone()[0]
         resource_rows = resource_helper.build_rows(payload, owner) if owner else None
         resource_plan: dict[str, Any] = {
             "ready": owner is not None,
             "owner_user_id_resolved": owner is not None,
+            "owner_resolution_policy": "explicit_owner_user_id" if owner_user_id else "auto_single_user_only",
+            "user_count": int(user_count),
             "reason": None if owner else "missing or ambiguous Open WebUI owner user",
             "knowledge_count": len(payload.get("knowledge") or []),
             "tool_count": len(payload.get("tools") or []),

@@ -220,6 +220,8 @@ def test_post_auth_activation_plan_is_not_ready_without_users(tmp_path: Path) ->
     assert plan["ready"] is False
     assert plan["access"]["missing_users"] == ["beth", "jenna", "joe", "liam"]
     assert plan["resources"]["reason"] == "missing or ambiguous Open WebUI owner user"
+    assert plan["resources"]["owner_resolution_policy"] == "auto_single_user_only"
+    assert plan["resources"]["user_count"] == 0
 
 
 def test_post_auth_activation_apply_binds_access_and_resources(tmp_path: Path) -> None:
@@ -231,6 +233,8 @@ def test_post_auth_activation_apply_binds_access_and_resources(tmp_path: Path) -
 
     plan = module.build_activation_plan(db, resource_import, "owner-joe")
     assert plan["ready"] is True
+    assert plan["resources"]["owner_resolution_policy"] == "explicit_owner_user_id"
+    assert plan["resources"]["user_count"] == 4
     result = module.apply_activation(db, resource_import, "owner-joe", tmp_path)
     assert result["applied"] is True
 
@@ -244,6 +248,26 @@ def test_post_auth_activation_apply_binds_access_and_resources(tmp_path: Path) -
         assert conn.execute("select count(*) from memory").fetchone()[0] == 4
     finally:
         conn.close()
+
+
+def test_post_auth_activation_plan_auto_resolves_single_owner_user(tmp_path: Path) -> None:
+    db = tmp_path / "webui.db"
+    _db(db, users=True)
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute("delete from user where id != 'owner-joe'")
+        conn.commit()
+    finally:
+        conn.close()
+    agent_import, resource_import = _write_imports(tmp_path)
+    _import_agents(db, agent_import, tmp_path)
+
+    plan = _module(SCRIPT).build_activation_plan(db, resource_import, None)
+
+    assert plan["resources"]["ready"] is True
+    assert plan["resources"]["owner_user_id_resolved"] is True
+    assert plan["resources"]["owner_resolution_policy"] == "auto_single_user_only"
+    assert plan["resources"]["user_count"] == 1
 
 
 def test_post_auth_activation_main_apply_returns_zero_when_applied(tmp_path: Path, monkeypatch, capsys) -> None:
