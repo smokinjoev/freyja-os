@@ -64,6 +64,8 @@ def test_verify_script_writes_secret_free_report(tmp_path: Path, capsys) -> None
             return 200, {"id": payload["record_id"]}, None
         if "x-freyja-client-subject" in (headers or {}) and headers["x-freyja-client-subject"] == "person:beth":
             return 403, {"detail": "denied"}, None
+        if "/freyja-home-memory/recent-events" in url:
+            return 200, {"records": [{"id": "live-verify-1"}]}, None
         if "/freyja-home-memory/search" in url:
             return 200, {"records": [{"id": payload["record_id"] if payload else "live-verify-1"}]}, None
         raise AssertionError(url)
@@ -101,6 +103,7 @@ def test_verify_script_writes_secret_free_report(tmp_path: Path, capsys) -> None
     assert report["optional_checks_pending"] == ["model_proxy_agent_models"]
     assert any(check["name"] == "freyja41_baseline_tag_present" and check["ok"] for check in report["checks"])
     assert any(check["name"] == "protected_side_by_side_services_running" and check["ok"] for check in report["checks"])
+    assert any(check["name"] == "home_memory_recent_events" and check["ok"] for check in report["checks"])
     assert "token" not in str(report).lower()
     assert "api_key" not in str(report).lower()
 
@@ -123,6 +126,8 @@ def test_verify_script_can_check_model_proxy_when_url_is_supplied(tmp_path: Path
             return 200, {"id": payload["record_id"]}, None
         if "x-freyja-client-subject" in (headers or {}) and headers["x-freyja-client-subject"] == "person:beth":
             return 403, {"detail": "denied"}, None
+        if "/freyja-home-memory/recent-events" in url:
+            return 200, {"records": [{"id": "live-verify-1"}]}, None
         if "/freyja-home-memory/search" in url:
             return 200, {"records": [{"id": "live-verify-1"}]}, None
         raise AssertionError(url)
@@ -171,6 +176,8 @@ def test_verify_script_can_check_model_proxy_from_container(tmp_path: Path) -> N
             return 200, {"id": payload["record_id"]}, None
         if "x-freyja-client-subject" in (headers or {}) and headers["x-freyja-client-subject"] == "person:beth":
             return 403, {"detail": "denied"}, None
+        if "/freyja-home-memory/recent-events" in url:
+            return 200, {"records": [{"id": "live-verify-1"}]}, None
         if "/freyja-home-memory/search" in url:
             return 200, {"records": [{"id": "live-verify-1"}]}, None
         raise AssertionError(url)
@@ -226,6 +233,8 @@ def test_verify_script_uses_supplied_api_key_without_writing_it_to_report(tmp_pa
             return 200, {"id": payload["record_id"]}, None
         if "x-freyja-client-subject" in (headers or {}) and headers["x-freyja-client-subject"] == "person:beth":
             return 403, {"detail": "denied"}, None
+        if "/freyja-home-memory/recent-events" in url:
+            return 200, {"records": [{"id": "live-verify-1"}]}, None
         if "/freyja-home-memory/search" in url:
             return 200, {"records": [{"id": "live-verify-1"}]}, None
         raise AssertionError(url)

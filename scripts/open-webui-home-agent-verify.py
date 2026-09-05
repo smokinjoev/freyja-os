@@ -208,6 +208,20 @@ def main(argv: list[str] | None = None) -> int:
     records = (data or {}).get("records", [])
     checks.append(check("home_memory_joe_read", status == 200 and any(record.get("id") == record_id for record in records), {"status": status, "record_count": len(records), "error": error}))
 
+    status, data, error = request_json(
+        "GET",
+        f"{args.freyja_url.rstrip('/')}/freyja-home-memory/recent-events?scope=personal:joe&limit=20",
+        headers=joe_headers,
+    )
+    recent_records = (data or {}).get("records", [])
+    checks.append(
+        check(
+            "home_memory_recent_events",
+            status == 200 and any(record.get("id") == record_id for record in recent_records),
+            {"status": status, "record_count": len(recent_records), "error": error},
+        )
+    )
+
     status, _, error = request_json(
         "GET",
         f"{args.freyja_url.rstrip('/')}/freyja-home-memory/search?scope=personal:joe&q=verifier",

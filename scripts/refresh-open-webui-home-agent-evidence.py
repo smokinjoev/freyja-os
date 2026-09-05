@@ -125,6 +125,7 @@ def refresh(container: str) -> dict[str, Any]:
         steps.append(snapshot_step)
         steps.extend(
             [
+                _run([py, "scripts/open-webui-home-agent-verify.py"]),
                 _run([py, "scripts/inventory-open-webui-home-agent-platform.py"]),
                 _run([py, "scripts/check-open-webui-model-proxy-catalog.py"]),
                 _run([py, "scripts/export-open-webui-home-agents.py"]),

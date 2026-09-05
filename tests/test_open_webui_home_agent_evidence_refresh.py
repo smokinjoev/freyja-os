@@ -49,6 +49,7 @@ def test_refresh_report_sequences_credential_free_evidence(monkeypatch, tmp_path
     assert report["git_head"]
     assert report["failed_steps"] == []
     commands = [" ".join(call[0]) for call in calls]
+    assert any("open-webui-home-agent-verify.py" in command for command in commands)
     assert any("check-open-webui-model-proxy-catalog.py" in command for command in commands)
     assert any("count-open-webui-home-resources-live.py" in command for command in commands)
     assert any("audit-open-webui-home-agent-access.py" in command for command in commands)
