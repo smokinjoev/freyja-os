@@ -95,6 +95,26 @@ def _dedupe(values: list[str]) -> list[str]:
     return deduped
 
 
+def _canonical_action(value: str) -> str:
+    if value == "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.":
+        return "Set OPEN_WEBUI_API_KEY outside source control."
+    return value
+
+
+def _required_next_actions(readiness_summary: dict[str, Any]) -> list[str]:
+    explicit = readiness_summary.get("required_next_actions")
+    if isinstance(explicit, list):
+        return _dedupe([_canonical_action(str(action)) for action in explicit])
+    actions: list[str] = []
+    for gate in readiness_summary.get("gates") or []:
+        if gate.get("ready") is True:
+            continue
+        if gate.get("next_action"):
+            actions.append(str(gate["next_action"]))
+        actions.extend(str(action) for action in gate.get("next_actions") or [])
+    return _dedupe([_canonical_action(action) for action in actions])
+
+
 def build_audit() -> dict[str, Any]:
     live = _load(REPORTS / "open-webui-home-agent-live.json")
     backup = _load(REPORTS / "open-webui-backup-rollback-audit.json")
@@ -116,6 +136,7 @@ def build_audit() -> dict[str, Any]:
     tools_gateway = _load(REPORTS / "open-webui-tools-gateway-readiness.json")
     tools_openapi = _load(REPORTS / "open-webui-tools-openapi.json")
     readiness_summary = _load(REPORTS / "open-webui-home-agent-readiness-summary.json")
+    required_next_actions = _required_next_actions(readiness_summary)
     gates = {gate.get("gate_id"): gate for gate in readiness_summary.get("gates") or []}
     exact_next_action = (
         readiness_summary.get("exact_next_action")
@@ -327,6 +348,7 @@ def build_audit() -> dict[str, Any]:
         "completion_metrics": completion_metrics,
         "complete": counts.get("missing", 0) == 0 and counts.get("partial", 0) == 0 and counts.get("auth_gated", 0) == 0 and counts.get("credential_gated", 0) == 0,
         "exact_next_action": exact_next_action,
+        "required_next_actions": required_next_actions,
     }
 
 

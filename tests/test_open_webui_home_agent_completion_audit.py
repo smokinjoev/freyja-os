@@ -41,6 +41,10 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
         "verified_completion_percent": 60.0,
     }
     assert audit["exact_next_action"].startswith("Complete first-account Open WebUI onboarding")
+    assert audit["required_next_actions"][0].startswith("Complete first-account Open WebUI onboarding")
+    assert "Set OPEN_WEBUI_API_KEY outside source control." in audit["required_next_actions"]
+    assert "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account." not in audit["required_next_actions"]
+    assert len(audit["required_next_actions"]) == len(set(audit["required_next_actions"]))
     ids = [item["requirement_id"] for item in audit["items"]]
     assert len(ids) == len(set(ids))
     assert {"five_agents", "memory_layers", "tools"}.issubset(
@@ -105,6 +109,29 @@ def test_completion_metrics_round_verified_percent() -> None:
 
 def test_completion_audit_dedupes_values_without_reordering() -> None:
     assert _module()._dedupe(["first", "second", "first", "third", "second"]) == ["first", "second", "third"]
+
+
+def test_completion_audit_derives_required_next_actions_from_gates() -> None:
+    summary = {
+        "gates": [
+            {"ready": True, "next_action": "already done"},
+            {
+                "ready": False,
+                "next_action": "first",
+                "next_actions": [
+                    "second",
+                    "Set OPEN_WEBUI_API_KEY from an authenticated Open WebUI admin or service account.",
+                    "second",
+                ],
+            },
+        ]
+    }
+
+    assert _module()._required_next_actions(summary) == [
+        "first",
+        "second",
+        "Set OPEN_WEBUI_API_KEY outside source control.",
+    ]
 
 
 def test_completion_audit_prefers_current_git_head(monkeypatch) -> None:
