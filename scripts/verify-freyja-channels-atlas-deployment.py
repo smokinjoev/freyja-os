@@ -97,6 +97,11 @@ def verify(atlas_readiness: Path = ATLAS_READINESS) -> dict[str, Any]:
         "signal_private_network_configured": (networks.get("signal-private") or {}).get("external") is True
         and (networks.get("signal-private") or {}).get("name") == "${SIGNAL_PRIVATE_NETWORK:-freyja-signal-atlas_signal-private}",
         "telegram_not_on_signal_private_network": "signal-private" not in (services.get("telegram-pilot", {}).get("networks") or []),
+        "telegram_timeout_env_passthrough": all(
+            (services.get(name, {}).get("environment") or {}).get("TELEGRAM_LONG_POLL_TIMEOUT_SECONDS")
+            == "${TELEGRAM_LONG_POLL_TIMEOUT_SECONDS:-25}"
+            for name in ("telegram-pilot", "telegram-dry-run")
+        ),
         "signal_on_signal_private_network": "signal-private" in (services.get("signal-pilot", {}).get("networks") or []),
         "env_defaults_disable_live_services": env.get("TELEGRAM_ENABLED") == "false" and env.get("SIGNAL_ENABLED") == "false",
         "env_defaults_deny_all_allowlists": env.get("TELEGRAM_ALLOWED_USER_IDS") == "" and env.get("SIGNAL_ALLOWED_SENDERS") == "",
@@ -106,10 +111,24 @@ def verify(atlas_readiness: Path = ATLAS_READINESS) -> dict[str, Any]:
         "runbook_documents_deny_all": "empty allowlist is deny-all" in readme.lower(),
         "atlas_readiness_secret_free": readiness.get("secrets_included") is False,
         "atlas_readiness_open_webui_key_file_ok": (readiness.get("open_webui_client") or {}).get("api_key_configured") is True,
-        "atlas_readiness_telegram_waits_for_credentials": set((readiness.get("telegram") or {}).get("missing_configuration") or [])
-        == {"TELEGRAM_ALLOWED_USER_IDS", "TELEGRAM_BOT_TOKEN", "TELEGRAM_IDENTITY_MAP"},
-        "atlas_readiness_signal_waits_for_credentials": set((readiness.get("signal") or {}).get("missing_configuration") or [])
-        <= {"SIGNAL_ALLOWED_SENDERS", "SIGNAL_ACCOUNT_NUMBER", "SIGNAL_IDENTITY_MAP", "SIGNAL_REST_API_URL"},
+        "atlas_readiness_telegram_scoped_or_waiting_for_credentials": (
+            set((readiness.get("telegram") or {}).get("missing_configuration") or [])
+            == {"TELEGRAM_ALLOWED_USER_IDS", "TELEGRAM_BOT_TOKEN", "TELEGRAM_IDENTITY_MAP"}
+            or (
+                (readiness.get("telegram") or {}).get("allowlist_configured") is True
+                and (readiness.get("telegram") or {}).get("identity_map_configured") is True
+                and (readiness.get("telegram") or {}).get("allowlist_identity_map_complete") is True
+            )
+        ),
+        "atlas_readiness_signal_scoped_or_waiting_for_credentials": (
+            set((readiness.get("signal") or {}).get("missing_configuration") or [])
+            <= {"SIGNAL_ALLOWED_SENDERS", "SIGNAL_ACCOUNT_NUMBER", "SIGNAL_IDENTITY_MAP", "SIGNAL_REST_API_URL"}
+            or (
+                (readiness.get("signal") or {}).get("allowlist_configured") is True
+                and (readiness.get("signal") or {}).get("identity_map_configured") is True
+                and (readiness.get("signal") or {}).get("allowlist_identity_map_complete") is True
+            )
+        ),
     }
     return {
         "report_type": "freyja-channels-atlas-deployment",

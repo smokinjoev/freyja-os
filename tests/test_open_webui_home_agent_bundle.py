@@ -287,15 +287,15 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["channel_audit_store"]["denied_attempts_logged"] is True
     assert bundle["evidence_summary"]["channel_audit_store"]["response_failures_logged"] is True
     assert bundle["evidence_summary"]["channel_open_webui_client"]["endpoint"].endswith("/api/chat/completions")
-    assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is True
+    assert bundle["evidence_summary"]["channel_open_webui_client"]["api_key_configured"] is False
     assert bundle["evidence_summary"]["telegram_empty_allowlist_policy"] == "deny_all"
-    assert bundle["evidence_summary"]["telegram_allowlist_count"] == 0
+    assert bundle["evidence_summary"]["telegram_allowlist_count"] == 1
     assert bundle["evidence_summary"]["telegram_identity_map_count"] == 0
-    assert "TELEGRAM_BOT_TOKEN" in bundle["evidence_summary"]["telegram_missing_configuration"]
-    assert any("TELEGRAM_BOT_TOKEN" in action for action in bundle["evidence_summary"]["telegram_next_actions"])
+    assert "TELEGRAM_IDENTITY_MAP" in bundle["evidence_summary"]["telegram_missing_configuration"]
+    assert any("TELEGRAM_IDENTITY_MAP" in action for action in bundle["evidence_summary"]["telegram_next_actions"])
     assert bundle["evidence_summary"]["telegram_pilot_ready"] is False
     assert bundle["evidence_summary"]["telegram_pilot_missing_configuration"] == []
-    assert any("Telegram getUpdates poller" in action for action in bundle["evidence_summary"]["telegram_pilot_next_actions"])
+    assert any("allowed Telegram sender" in action for action in bundle["evidence_summary"]["telegram_pilot_next_actions"])
     assert isinstance(bundle["evidence_summary"]["channels_readiness_generated_at_unix"], int)
     assert bundle["evidence_summary"]["channels_readiness_git_head"]
     assert isinstance(bundle["evidence_summary"]["telegram_pilot_generated_at_unix"], int)
@@ -306,14 +306,13 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["signal_identity_map_count"] == 0
     assert "SIGNAL_ACCOUNT_NUMBER" in bundle["evidence_summary"]["signal_missing_configuration"]
     assert any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_next_actions"])
-    assert bundle["evidence_summary"]["signal_pilot_ready"] is True
+    assert bundle["evidence_summary"]["signal_pilot_ready"] is False
     assert bundle["evidence_summary"]["signal_pilot_missing_configuration"] == []
     assert not any("SIGNAL_REST_API_URL" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
     assert not any("SIGNAL_ACCOUNT_NUMBER" in action for action in bundle["evidence_summary"]["signal_pilot_next_actions"])
     assert isinstance(bundle["evidence_summary"]["signal_pilot_generated_at_unix"], int)
     assert bundle["evidence_summary"]["signal_pilot_git_head"] is None or bundle["evidence_summary"]["signal_pilot_git_head"]
-    assert bundle["evidence_summary"]["signal_pilot_checks"]["signal_account_configured"] is True
-    assert bundle["evidence_summary"]["signal_pilot_checks"]["allowlist_identity_map_complete"] is True
+    assert bundle["evidence_summary"]["signal_pilot_checks"] == {}
     assert bundle["evidence_summary"]["whatsapp_ready"] is False
     assert bundle["evidence_summary"]["whatsapp_status"] == "disabled"
     assert bundle["evidence_summary"]["whatsapp_reason"] == "secured_public_webhook_not_approved"
@@ -411,7 +410,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`compose`: `deploy/compose/freyja-channels/compose.yaml`" in text
     assert "`atlas_deployment_ok`: `True`" in text
     assert "`telegram_empty_allowlist_policy`: `deny_all`" in text
-    assert "`telegram_allowlist_count`: `0`" in text
+    assert "`telegram_allowlist_count`: `1`" in text
     assert "`telegram_identity_map_count`: `0`" in text
     assert "`signal_empty_allowlist_policy`: `deny_all`" in text
     assert "`signal_allowlist_count`: `0`" in text
@@ -433,7 +432,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Requirement Audit" in text
     assert "`local_inference`: `complete`" in text
     assert "`messaging_channels`: `credential_gated`" in text
-    assert "Action: Stop any other Telegram getUpdates poller or clear the bot webhook, then rerun the live Telegram pilot." in text
+    assert "Action: Stop any other Telegram getUpdates poller before running the live pilot." in text
     assert "Command: `OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py" in text
     assert "Command: `scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json`" in text
     assert text.count("Command: `scripts/summarize-open-webui-home-agent-readiness.py`") == 0

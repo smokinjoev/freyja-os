@@ -93,6 +93,7 @@ def _channel_next_actions(channel: str, missing: list[str], *, ready: bool) -> l
         return [f"Run the {channel} live round-trip pilot and archive the generated readiness report."]
     actions: list[str] = []
     if channel == "telegram":
+        actions.append("Stop any other Telegram getUpdates poller before running the live pilot.")
         order = [
             ("TELEGRAM_BOT_TOKEN", "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control."),
             ("TELEGRAM_ALLOWED_USER_IDS", "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all."),
@@ -108,7 +109,7 @@ def _channel_next_actions(channel: str, missing: list[str], *, ready: bool) -> l
             ("SIGNAL_IDENTITY_MAP", "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP."),
             ("OPEN_WEBUI_API_KEY", "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control."),
         ]
-        final_action = "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy."
+        final_action = "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after the signal live round-trip registration path is healthy."
     missing_set = set(missing)
     for key, action in order:
         if key in missing_set or f"{key}:missing_allowlist_entries" in missing_set:

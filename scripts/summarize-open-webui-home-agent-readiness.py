@@ -133,7 +133,10 @@ def _pilot_next_actions(channel: str, pilot: dict[str, Any], readiness: dict[str
     if _pilot_live_round_trip_ok(pilot):
         return []
     if isinstance(pilot.get("next_actions"), list) and pilot.get("next_actions") and pilot.get("mode") == "run":
-        return [_canonical_action(str(action)) for action in pilot["next_actions"]]
+        return _dedupe(
+            [_canonical_action(str(action)) for action in pilot["next_actions"]]
+            + _channel_next_actions(channel, readiness)
+        )
     if pilot.get("ready") is True:
         return [f"Run the {channel} live round-trip pilot and archive a report with handled > 0."]
     return _channel_next_actions(channel, readiness)
@@ -165,6 +168,12 @@ def _required_next_actions(gates: list[dict[str, Any]]) -> list[str]:
     for gate in gates:
         if gate.get("ready") is True:
             continue
+        if gate.get("gate_id") == "telegram_pilot":
+            actions.extend(
+                str(action)
+                for action in gate.get("next_actions") or []
+                if "Telegram getUpdates poller" in str(action)
+            )
         if gate.get("next_action"):
             actions.append(str(gate["next_action"]))
         actions.extend(str(action) for action in gate.get("next_actions") or [])
@@ -256,8 +265,8 @@ def build_summary() -> dict[str, Any]:
             None
             if signal_live_ok
             else (
-                str(signal["next_actions"][0])
-                if signal.get("mode") == "run" and isinstance(signal.get("next_actions"), list) and signal["next_actions"]
+                "Run the Signal live round-trip pilot and require handled > 0."
+                if signal.get("mode") == "run"
                 else
                 "Run the Signal live round-trip pilot and require handled > 0."
                 if signal.get("ready") is True
@@ -274,6 +283,10 @@ def build_summary() -> dict[str, Any]:
     ]
     all_ready = all(gate["ready"] for gate in gates)
     required_next_actions = _required_next_actions(gates)
+    if chat_smoke.get("status") == "complete":
+        required_next_actions = [
+            action for action in required_next_actions if "OPEN_WEBUI_API_KEY" not in action
+        ]
     exact_next_action = None if all_ready else (open_webui_next_action or (required_next_actions[0] if required_next_actions else None))
     return {
         "report_type": "open-webui-home-agent-readiness-summary",

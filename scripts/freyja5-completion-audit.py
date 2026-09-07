@@ -60,7 +60,20 @@ def build_audit(
 ) -> dict[str, Any]:
     bundle = _load_json(readiness_bundle)
     live_blockers = freyja5_live_blocker_evidence()["joe_required"]
-    blocker_ids = [str(blocker["id"]) for blocker in live_blockers]
+    configured_blocker_ids = [str(blocker["id"]) for blocker in live_blockers]
+    live_status = _live_evidence_status(live_evidence_status)
+    if live_status.get("status") not in {"not_supplied", "missing"} and not live_status.get("secrets_detected"):
+        blocker_ids = [str(blocker) for blocker in live_status.get("remaining_blockers") or []]
+    else:
+        blocker_ids = configured_blocker_ids
+    source_ready = bool(bundle.get("source_ready") is True)
+    live_blocked = bool(blocker_ids)
+    complete = source_ready and not live_blocked
+    remaining_live_blockers = [
+        blocker
+        for blocker in live_blockers
+        if str(blocker.get("id")) in set(blocker_ids)
+    ]
     certification = freyja5_certification_evidence()
     webgui = freyja5_webgui_evidence()
     mcp = freyja5_mcp_topology_evidence()
@@ -118,9 +131,11 @@ def build_audit(
         _requirement(
             "vulcan-live-nexus",
             "Vulcan provides live local-only Nexus presets for semantic routes.",
-            "blocked" if "vulcan_nexus_presets" in blocker_ids else "complete",
+            "blocked"
+            if {"vulcan_nexus_presets", "vulcan_nexus_private_preset"} & set(blocker_ids)
+            else "complete",
             ["config/freyja-5.0-semantic-routes.yaml", "FREYJA-5.0-BLOCKERS.md"],
-            blockers=["vulcan_nexus_presets", "vulcan_nexus_private_preset"],
+            blockers=[blocker for blocker in ["vulcan_nexus_presets", "vulcan_nexus_private_preset"] if blocker in blocker_ids],
         ),
         _requirement(
             "atlas-msty-go",
@@ -134,30 +149,37 @@ def build_audit(
             "Iris live Apple/macOS MCP session is validated for Calendar target C.",
             "blocked" if "iris_apple_session" in blocker_ids else "complete",
             ["config/freyja-5.0-mcp-topology.yaml", "FREYJA-5.0-BLOCKERS.md"],
-            blockers=["iris_apple_session"],
+            blockers=["iris_apple_session"] if "iris_apple_session" in blocker_ids else [],
         ),
         _requirement(
             "hera-live-voice-avatar",
             "Hera live voice/avatar hardware path is validated.",
             "blocked" if "hera_voice_avatar_hardware" in blocker_ids else "complete",
             ["config/freyja-5.0-planes.yaml", "FREYJA-5.0-BLOCKERS.md"],
-            blockers=["hera_voice_avatar_hardware"],
+            blockers=["hera_voice_avatar_hardware"] if "hera_voice_avatar_hardware" in blocker_ids else [],
+        ),
+        _requirement(
+            "live-tool-sessions",
+            "Live MCP-backed tool sessions are reachable from Atlas and proven through delegated tool-call trace evidence.",
+            "blocked" if "live_tool_sessions" in blocker_ids else "complete",
+            ["config/freyja-5.0-mcp-topology.yaml", "certification/reports/freyja5-live-evidence-status.json"],
+            blockers=["live_tool_sessions"] if "live_tool_sessions" in blocker_ids else [],
         ),
     ]
     return {
         "schema_version": "1.0",
         "report_type": "freyja5-completion-audit",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "status": "complete" if bundle.get("passed") is True and not blocker_ids else "source-ready-live-blocked",
-        "source_ready": bool(bundle.get("source_ready") is True),
-        "live_blocked": bool(bundle.get("live_blocked") is True),
+        "status": "complete" if complete else "source-ready-live-blocked",
+        "source_ready": source_ready,
+        "live_blocked": live_blocked,
         "readiness_bundle": str(readiness_bundle),
         "agent_export": agent_export_status,
-        "live_evidence_status": _live_evidence_status(live_evidence_status),
+        "live_evidence_status": live_status,
         "certification": {
             "suite": certification["suite"],
             "targets": [target["target"] for target in certification["targets"]],
-            "live_blockers": certification["live_blockers"],
+            "live_blockers": blocker_ids,
         },
         "planes": {
             "atlas": freyja5_plane_evidence()["atlas"]["role"],
@@ -166,7 +188,7 @@ def build_audit(
             "vulcan": freyja5_vulcan_evidence()["role"] if freyja5_vulcan_evidence() else None,
         },
         "requirements": requirements,
-        "remaining_blockers": live_blockers,
+        "remaining_blockers": remaining_live_blockers,
     }
 
 

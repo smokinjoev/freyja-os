@@ -34,6 +34,7 @@ def test_atlas_channel_deployment_verifier_reports_secret_free_ready_artifacts(m
     assert report["checks"]["state_bind_mount_configured"] is True
     assert report["checks"]["signal_private_network_configured"] is True
     assert report["checks"]["telegram_not_on_signal_private_network"] is True
+    assert report["checks"]["telegram_timeout_env_passthrough"] is True
     assert report["checks"]["signal_on_signal_private_network"] is True
     assert report["checks"]["atlas_readiness_open_webui_key_file_ok"] is True
     assert report["artifacts"]["compose"] == "deploy/compose/freyja-channels/compose.yaml"

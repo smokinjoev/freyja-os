@@ -160,6 +160,62 @@ def test_pull_profile_requires_yes_before_network_call(monkeypatch) -> None:
     assert calls == ["moondream"]
 
 
+def test_loaded_reports_resident_profile_models(monkeypatch) -> None:
+    import asyncio
+
+    operator = _load_operator()
+
+    async def fake_loaded_models(provider):
+        if provider.logical_profile == "reason":
+            return [{"name": provider.model}, {"model": "qwen2.5vl:72b"}]
+        return []
+
+    monkeypatch.setattr(operator, "_ollama_loaded_models", fake_loaded_models)
+
+    result = asyncio.run(operator._loaded(_settings()))
+
+    assert result["report_type"] == "vulcan-loaded"
+    assert result["status"] == "ok"
+    assert result["checks"]["reason"]["loaded"] is True
+    assert result["checks"]["reason"]["loaded_models"] == ["gpt-oss-freyja:20b-analysis-prefill", "qwen2.5vl:72b"]
+    assert result["checks"]["vision"]["loaded"] is False
+
+
+def test_unload_profile_defaults_to_dry_run() -> None:
+    import asyncio
+
+    operator = _load_operator()
+
+    result = asyncio.run(operator._unload_profile(_settings(), profile="reason", dry_run=True))
+
+    assert result["report_type"] == "vulcan-unload-profile"
+    assert result["status"] == "dry-run"
+    assert result["dry_run"] is True
+    assert result["plan"]["profile"] == "reason"
+    assert result["plan"]["model"] == "gpt-oss-freyja:20b-analysis-prefill"
+
+
+def test_unload_profile_requires_yes_before_network_call(monkeypatch) -> None:
+    import asyncio
+
+    operator = _load_operator()
+    calls = []
+
+    async def fake_unload(provider):
+        calls.append(provider.model)
+        return 200
+
+    monkeypatch.setattr(operator, "_unload_ollama_model", fake_unload)
+
+    dry_run = asyncio.run(operator._unload_profile(_settings(), profile="reason", dry_run=True))
+    unloaded = asyncio.run(operator._unload_profile(_settings(), profile="reason", dry_run=False))
+
+    assert dry_run["status"] == "dry-run"
+    assert unloaded["status"] == "unloaded"
+    assert unloaded["http_status"] == 200
+    assert calls == ["gpt-oss-freyja:20b-analysis-prefill"]
+
+
 def test_readiness_command_writes_report_and_uses_exit_code(tmp_path, monkeypatch) -> None:
     operator = _load_operator()
     output = tmp_path / "vulcan-readiness.json"

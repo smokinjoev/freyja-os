@@ -67,6 +67,13 @@ from freyja.tools.registry import get_registry
 logger = logging.getLogger(__name__)
 FREYJA5_LEGACY_OPENAI_MODEL_ID = "freyja-5"
 FREYJA5_OPENAI_MODEL_IDS = {FREYJA5_LEGACY_OPENAI_MODEL_ID, *FREYJA5_OPEN_WEBUI_AGENT_MODELS}
+FREYJA5_AGENT_GATEWAY_MODELS = {
+    "freyja": "agent/freyja",
+    "cloyd": "agent/cloyd-gibbler",
+    "benedict": "agent/benedict",
+    "agent-44": "agent/agent-47",
+    "jenna": "agent/jennacide",
+}
 
 
 @asynccontextmanager
@@ -1234,6 +1241,18 @@ async def openai_compatible_models() -> dict[str, Any]:
     }
 
 
+@app.get("/agents/{agent_gateway}/v1/models")
+async def agent_openai_compatible_models(agent_gateway: str) -> dict[str, Any]:
+    model_id = FREYJA5_AGENT_GATEWAY_MODELS.get(agent_gateway)
+    if model_id is None:
+        raise HTTPException(status_code=404, detail="Unknown Freyja 5 agent gateway.")
+    models = (await openai_compatible_models())["data"]
+    model = next((item for item in models if item.get("id") == model_id), None)
+    if model is None:
+        raise HTTPException(status_code=404, detail="Unknown Freyja 5 agent model.")
+    return {"object": "list", "data": [model]}
+
+
 @app.post("/v1/chat/completions", response_model=None)
 async def openai_compatible_chat_completions(request: OpenAIChatCompletionRequest) -> dict[str, Any] | StreamingResponse:
     if request.model not in {"agent-smith", *FREYJA5_OPENAI_MODEL_IDS}:
@@ -1355,6 +1374,18 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
     if request.stream:
         return _openai_chat_stream(response_body)
     return response_body
+
+
+@app.post("/agents/{agent_gateway}/v1/chat/completions", response_model=None)
+async def agent_openai_compatible_chat_completions(
+    agent_gateway: str,
+    request: OpenAIChatCompletionRequest,
+) -> dict[str, Any] | StreamingResponse:
+    model_id = FREYJA5_AGENT_GATEWAY_MODELS.get(agent_gateway)
+    if model_id is None:
+        raise HTTPException(status_code=404, detail="Unknown Freyja 5 agent gateway.")
+    scoped_request = request.model_copy(update={"model": model_id})
+    return await openai_compatible_chat_completions(scoped_request)
 
 
 @app.post("/agents/family/issue-review")

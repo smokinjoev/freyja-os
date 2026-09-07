@@ -59,7 +59,7 @@ def test_freyja5_smoke_report_is_token_safe_and_checks_webgui_paths(monkeypatch)
                 },
             }
         if url.endswith("/v1/models") and method == "GET":
-            return 200, {"data": [{"id": "agent-smith"}, {"id": "freyja-5"}]}
+            return 200, {"data": [{"id": "agent-smith"}, {"id": "freyja-5"}, {"id": "agent/freyja"}]}
         route = "vision" if isinstance(payload["messages"][0]["content"], list) else "code"
         return 200, {
             "freyja": {
@@ -98,6 +98,7 @@ def test_freyja5_smoke_report_is_token_safe_and_checks_webgui_paths(monkeypatch)
     assert next(check for check in report["checks"] if check["name"] == "models")["models"] == [
         "agent-smith",
         "freyja-5",
+        "agent/freyja",
     ]
     readiness = next(check for check in report["checks"] if check["name"] == "readiness")
     assert readiness["mcp_hosts"] == ["atlas", "iris"]

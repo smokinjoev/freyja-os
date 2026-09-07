@@ -584,7 +584,12 @@ def test_macagent_app_reads_browser_front_tab(monkeypatch) -> None:
         director_authorized=True,
     )
 
-    with patch("freyja.macagent_app._osascript", new=AsyncMock(return_value="Example\thttps://example.invalid")):
+    async def fake_osascript(script: str, **kwargs):
+        if "System Events" in script:
+            return "true"
+        return "Example\thttps://example.invalid"
+
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(side_effect=fake_osascript)):
         response = test_client.post(
             f"/capabilities/{request.capability}",
             headers={"Authorization": "Bearer secret"},
@@ -594,7 +599,50 @@ def test_macagent_app_reads_browser_front_tab(monkeypatch) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
-    assert data["output"] == {"browser": "Safari", "title": "Example", "url": "https://example.invalid"}
+    assert data["output"] == {
+        "browser": "Safari",
+        "title": "Example",
+        "url": "https://example.invalid",
+        "status": "ok",
+    }
+
+
+def test_macagent_app_browser_front_tab_degrades_on_safari_timeout(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "macagent_token", "secret")
+    test_client = TestClient(macagent_app)
+    request = MacAgentOperationRequest(
+        capability="apple.browser.read",
+        operation="front_tab",
+        arguments={},
+        request_id="req-browser-timeout",
+        actor="atlas_director",
+        director_authorized=True,
+    )
+
+    async def fake_osascript(script: str, **kwargs):
+        if "System Events" in script:
+            return "true"
+        raise RuntimeError("osascript timed out")
+
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(side_effect=fake_osascript)):
+        response = test_client.post(
+            f"/capabilities/{request.capability}",
+            headers={"Authorization": "Bearer secret"},
+            json=request.model_dump(mode="json"),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["output"] == {
+        "browser": "Safari",
+        "title": "",
+        "url": "",
+        "status": "unavailable",
+        "error": "osascript timed out",
+    }
 
 
 async def test_macagent_osascript_timeout_reports_concrete_error(monkeypatch) -> None:

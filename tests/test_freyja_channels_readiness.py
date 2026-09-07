@@ -47,6 +47,7 @@ def test_channels_readiness_fails_closed_without_env(monkeypatch) -> None:
         "OPEN_WEBUI_API_KEY",
     ]
     assert report["telegram"]["next_actions"] == [
+        "Stop any other Telegram getUpdates poller before running the live pilot.",
         "Create or choose the Telegram bot and set TELEGRAM_BOT_TOKEN outside source control.",
         "Set TELEGRAM_ALLOWED_USER_IDS with reviewed family sender IDs; keep an empty allowlist as deny-all.",
         "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
@@ -73,7 +74,7 @@ def test_channels_readiness_fails_closed_without_env(monkeypatch) -> None:
         "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
         "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
         "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control.",
-        "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after signal-cli-rest-api registration is healthy.",
+        "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after the signal live round-trip registration path is healthy.",
     ]
     assert report["whatsapp"]["status"] == "disabled"
 
@@ -178,6 +179,7 @@ def test_channels_readiness_reports_incomplete_identity_map_without_sender_value
     assert report["telegram"]["ready_for_live_round_trip"] is False
     assert "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries" in report["telegram"]["missing_configuration"]
     assert report["telegram"]["next_actions"] == [
+        "Stop any other Telegram getUpdates poller before running the live pilot.",
         "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
         "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot.",
     ]

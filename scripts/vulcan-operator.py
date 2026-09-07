@@ -77,11 +77,30 @@ async def _ollama_tags(provider: InferenceProviderProfile) -> set[str]:
     return names
 
 
+async def _ollama_loaded_models(provider: InferenceProviderProfile) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{provider.base_url.rstrip('/')}/api/ps")
+        response.raise_for_status()
+        payload = response.json()
+    models = payload.get("models") if isinstance(payload, dict) else []
+    return models if isinstance(models, list) else []
+
+
 async def _pull_ollama_model(provider: InferenceProviderProfile) -> int:
     async with httpx.AsyncClient(timeout=None) as client:
         response = await client.post(
             f"{provider.base_url.rstrip('/')}/api/pull",
             json={"model": provider.model, "stream": False},
+        )
+        response.raise_for_status()
+    return response.status_code
+
+
+async def _unload_ollama_model(provider: InferenceProviderProfile) -> int:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{provider.base_url.rstrip('/')}/api/generate",
+            json={"model": provider.model, "prompt": "", "stream": False, "keep_alive": 0},
         )
         response.raise_for_status()
     return response.status_code
@@ -93,6 +112,11 @@ def _ollama_model_available(configured_model: str, available_models: set[str]) -
     if ":" not in configured_model and f"{configured_model}:latest" in available_models:
         return True
     return False
+
+
+def _model_name(model: dict[str, Any]) -> str | None:
+    name = model.get("name") or model.get("model")
+    return name if isinstance(name, str) else None
 
 
 async def _readiness(settings: Settings) -> dict[str, Any]:
@@ -150,6 +174,45 @@ async def _readiness(settings: Settings) -> dict[str, Any]:
     )
 
 
+async def _loaded(settings: Settings) -> dict[str, Any]:
+    providers = _providers_by_profile(settings)
+    checks: dict[str, Any] = {}
+
+    for profile in REQUIRED_PROFILES:
+        provider = providers.get(profile)
+        if provider is None:
+            checks[profile] = {"configured": False, "loaded": False}
+            continue
+        check: dict[str, Any] = {
+            "configured": True,
+            "provider_id": provider.provider_id,
+            "kind": provider.kind,
+            "base_url": provider.base_url,
+            "model": provider.model,
+            "loaded": False,
+        }
+        if provider.kind != "ollama":
+            checks[profile] = check
+            continue
+        try:
+            loaded_models = await _ollama_loaded_models(provider)
+        except Exception as exc:  # noqa: BLE001 - operator report should preserve failure class
+            check["host_reachable"] = False
+            check["error"] = type(exc).__name__
+        else:
+            loaded_names = [_model_name(model) for model in loaded_models if isinstance(model, dict)]
+            check["host_reachable"] = True
+            check["loaded_models"] = [name for name in loaded_names if name]
+            check["loaded"] = provider.model in check["loaded_models"]
+        checks[profile] = check
+
+    return _operator_report(
+        "vulcan-loaded",
+        {"status": "ok", "checks": checks},
+        dry_run=False,
+    )
+
+
 async def _pull_profile(settings: Settings, *, profile: str, dry_run: bool) -> dict[str, Any]:
     providers = _providers_by_profile(settings)
     provider = providers.get(profile)
@@ -190,6 +253,46 @@ async def _pull_profile(settings: Settings, *, profile: str, dry_run: bool) -> d
     )
 
 
+async def _unload_profile(settings: Settings, *, profile: str, dry_run: bool) -> dict[str, Any]:
+    providers = _providers_by_profile(settings)
+    provider = providers.get(profile)
+    if provider is None:
+        return _operator_report(
+            "vulcan-unload-profile",
+            {"status": "failed", "profile": profile, "error": "profile is not configured"},
+            dry_run=dry_run,
+        )
+    plan = {
+        "profile": profile,
+        "provider_id": provider.provider_id,
+        "kind": provider.kind,
+        "base_url": provider.base_url,
+        "model": provider.model,
+    }
+    if provider.kind != "ollama":
+        return _operator_report(
+            "vulcan-unload-profile",
+            {"status": "failed", "plan": plan, "error": "only Ollama profiles can be unloaded"},
+            dry_run=dry_run,
+        )
+    if dry_run:
+        return _operator_report("vulcan-unload-profile", {"status": "dry-run", "plan": plan}, dry_run=True)
+
+    try:
+        status_code = await _unload_ollama_model(provider)
+    except Exception as exc:  # noqa: BLE001 - operator report should preserve failure class
+        return _operator_report(
+            "vulcan-unload-profile",
+            {"status": "failed", "plan": plan, "error": type(exc).__name__},
+            dry_run=False,
+        )
+    return _operator_report(
+        "vulcan-unload-profile",
+        {"status": "unloaded", "plan": plan, "http_status": status_code},
+        dry_run=False,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Operate Vulcan model profiles")
     parser.add_argument(
@@ -201,10 +304,18 @@ def main(argv: list[str] | None = None) -> int:
     readiness_parser = subparsers.add_parser("readiness", help="Check required Vulcan profile models.")
     readiness_parser.add_argument("--output", type=Path, help="Optional path to write the JSON report.")
 
+    loaded_parser = subparsers.add_parser("loaded", help="List currently resident Vulcan profile models.")
+    loaded_parser.add_argument("--output", type=Path, help="Optional path to write the JSON report.")
+
     pull_parser = subparsers.add_parser("pull-profile", help="Pull the model configured for one Vulcan profile.")
     pull_parser.add_argument("profile", choices=REQUIRED_PROFILES)
     pull_parser.add_argument("--yes", action="store_true", help="Actually pull the model. Defaults to dry-run.")
     pull_parser.add_argument("--output", type=Path, help="Optional path to write the JSON report.")
+
+    unload_parser = subparsers.add_parser("unload-profile", help="Unload the model configured for one Vulcan profile.")
+    unload_parser.add_argument("profile", choices=REQUIRED_PROFILES)
+    unload_parser.add_argument("--yes", action="store_true", help="Actually unload the model. Defaults to dry-run.")
+    unload_parser.add_argument("--output", type=Path, help="Optional path to write the JSON report.")
 
     args = parser.parse_args(argv)
     settings = _settings(args.env_file)
@@ -213,10 +324,18 @@ def main(argv: list[str] | None = None) -> int:
         report = asyncio.run(_readiness(settings))
         _render_report(report, args.output)
         return 0 if report.get("status") == "ready" else 1
+    if args.command == "loaded":
+        report = asyncio.run(_loaded(settings))
+        _render_report(report, args.output)
+        return 0 if report.get("status") == "ok" else 1
     if args.command == "pull-profile":
         report = asyncio.run(_pull_profile(settings, profile=args.profile, dry_run=not args.yes))
         _render_report(report, args.output)
         return 0 if report.get("status") in {"dry-run", "pulled"} else 1
+    if args.command == "unload-profile":
+        report = asyncio.run(_unload_profile(settings, profile=args.profile, dry_run=not args.yes))
+        _render_report(report, args.output)
+        return 0 if report.get("status") in {"dry-run", "unloaded"} else 1
     return 2
 
 

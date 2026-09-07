@@ -1,43 +1,78 @@
-# Freyja Gateway Remote
+# Agent Smith Remote Terminal
 
-The remote mobile surface is a Tailscale-only PWA that reaches Freyja 5 Gateway
-agents through the existing OpenAI-compatible endpoint. It does not control the
-Iris desktop, expose Nexus administrative credentials, or modify Msty Go local
-storage.
+Agent Smith is a small Tailscale-only browser frame for talking to Qwen on Iris.
+It is intentionally thin: `ttyd` serves a browser terminal and attaches to a
+persistent `tmux` session running Qwen.
 
-Msty Go 0.15.4 documents Remote Routes and Channels, including Msty Go mobile
-routes, under Settings > Remote Routes. Those routes require operator account
-state and mobile pairing. Until that is configured inside Msty Go itself, the
-PWA exposes Gateway equivalents for Freyja, Benedict, Benedict Paralegal, Agent
-44, Jenna, and Cloyd. Their state is Freyja Gateway state, not Msty Go-local
-agent state. Benedict Paralegal uses `agent/benedict-paralegal`, which remains
-local-only with no cloud fallback through the Freyja 5 Gateway policy.
+## Service
 
-The service binds to `127.0.0.1:8010` and proxies to the protected local
-Freyja 5 OpenAI-compatible endpoint at `http://127.0.0.1:8503/v1`. Tailscale Serve publishes it
-privately:
+LaunchAgent:
+
+```text
+scripts/com.freyja-os.gateway-remote.plist
+```
+
+Terminal launcher:
+
+```text
+scripts/run-agent-smith-qwen.sh
+```
+
+Default local bind:
+
+```text
+127.0.0.1:8010
+```
+
+Default Qwen binary:
+
+```text
+/opt/homebrew/bin/qwen
+```
+
+Default Vulcan OpenAI-compatible endpoint passed to Qwen:
+
+```text
+http://100.94.80.21:3939/v1
+```
+
+The launcher starts Qwen with an isolated `QWEN_HOME` under the gateway state
+directory. That Smith-specific Qwen config contains only the Vulcan Nexus
+provider and does not inherit the normal `~/.qwen/settings.json` OpenRouter
+entries. The Qwen process runs inside the `agent-smith` tmux session, so closing
+Safari or locking the iPad does not stop the agent.
+
+## iPad URL
+
+Tailscale Serve publishes the localhost service privately:
 
 ```bash
 tailscale serve --bg https / http://127.0.0.1:8010
 ```
 
-Use `scripts/com.freyja-os.gateway-remote.plist` for persistent launch on Iris.
-Use `scripts/com.freyja-os.freyja5-openai.plist` for the loopback-only Freyja 5
-Gateway endpoint. The installed LaunchAgent copy must receive the local
-connector token and Nexus token from operator-managed secrets; those values are
-not committed.
-Tokens are generated under `~/.local/state/freyja/gateway-remote/tokens.json`
-as SHA-256 hashes. Raw tokens are printed only when first created.
-
-Health:
-
-```bash
-curl http://127.0.0.1:8010/health
-curl -H "Authorization: Bearer <token>" http://127.0.0.1:8010/status
-```
-
-Remote URL:
+Open from the iPad:
 
 ```text
-https://joes-mac-mini.tail3995b4.ts.net/
+https://iris.tail3995b4.ts.net/
 ```
+
+## Nexus Token
+
+Qwen receives the Nexus bearer token from:
+
+```text
+~/.local/state/freyja/gateway-remote/msty-nexus-token
+```
+
+## Security Boundary
+
+The service binds to localhost:
+
+```text
+127.0.0.1:8010
+```
+
+Tailscale Serve publishes that localhost port privately at the iPad URL. There
+is no folder picker, no autocomplete popup, and no custom command gateway. The
+terminal attaches to the existing `agent-smith` tmux session or creates it with
+Qwen as the session command.

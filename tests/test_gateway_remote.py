@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import urllib.error
-import urllib.request
+import plistlib
 from pathlib import Path
-from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER = REPO_ROOT / "deploy" / "compose" / "freyja-gateway-remote" / "server.py"
+PLIST = REPO_ROOT / "scripts" / "com.freyja-os.gateway-remote.plist"
+QWEN_LAUNCHER = REPO_ROOT / "scripts" / "run-agent-smith-qwen.sh"
 
 
 def load_server():
@@ -27,8 +27,8 @@ def test_token_generation_stores_hashes_only(tmp_path, monkeypatch) -> None:
 
     issued = server.ensure_tokens()
 
-    assert sorted(issued) == ["beth", "jenna", "joe", "liam"]
     stored = json.loads((tmp_path / "tokens.json").read_text(encoding="utf-8"))
+    assert sorted(issued) == ["beth", "jenna", "joe", "liam"]
     assert all("sha256" in record for record in stored.values())
     for raw in issued.values():
         assert raw not in str(stored)
@@ -41,62 +41,139 @@ def test_append_trace_omits_prompt_and_credentials(tmp_path, monkeypatch) -> Non
 
     server.append_trace(
         {
-            "request_id": "req-1",
+            "event": "terminal_started",
             "person": "joe",
-            "agent": "freyja",
+            "repo": "/Users/freyja/freyja-os",
             "prompt": "secret prompt",
             "credential": "secret-token",
-            "trace_id": "trace-1",
-            "egress_state": "local-only",
         }
     )
 
     body = (tmp_path / "trace.jsonl").read_text(encoding="utf-8")
     assert "secret prompt" not in body
     assert "secret-token" not in body
-    assert "trace-1" in body
+    assert "terminal_started" in body
 
 
-def test_chat_proxy_forwards_gateway_model_without_logging_prompt(tmp_path, monkeypatch) -> None:
+def test_allowed_repo_accepts_exact_repo_and_root_children(tmp_path, monkeypatch) -> None:
     server = load_server()
-    monkeypatch.setattr(server, "STATE_DIR", tmp_path)
-    monkeypatch.setattr(server, "TRACE_FILE", tmp_path / "trace.jsonl")
-    captured: dict[str, object] = {}
+    exact = tmp_path / "freyja-os"
+    root = tmp_path / "workspace"
+    child = root / "new-app"
+    outside = tmp_path / "outside"
+    exact.mkdir()
+    root.mkdir()
+    outside.mkdir()
+    monkeypatch.setattr(server, "ALLOWED_REPOS", (exact.resolve(),))
+    monkeypatch.setattr(server, "ALLOWED_ROOTS", (root.resolve(),))
 
-    class FakeResponse:
-        status = 200
+    assert server.allowed_repo(str(exact)) == exact.resolve()
+    assert server.allowed_repo(str(child), create=True) == child.resolve()
 
-        def __enter__(self):
-            return self
+    try:
+        server.allowed_repo(str(outside))
+    except ValueError as exc:
+        assert "outside allowed workspace roots" in str(exc)
+    else:
+        raise AssertionError("outside folder should be denied")
 
-        def __exit__(self, *args):
-            return None
 
-        def read(self):
-            return json.dumps(
-                {
-                    "choices": [{"message": {"content": "done"}}],
-                    "freyja": {
-                        "trace_id": "trace-2",
-                        "route": "general",
-                        "endpoint": "vulcan-nexus-strong",
-                        "provider": "nexus",
-                        "egress_state": "local-only",
-                    },
-                }
-            ).encode()
+def test_qwen_command_is_plain_interactive_terminal(monkeypatch) -> None:
+    server = load_server()
+    monkeypatch.setattr(server, "QWEN_BIN", "/opt/homebrew/bin/qwen")
+    monkeypatch.setattr(server, "VULCAN_MODEL", "@preset/freyja-coder")
 
-    def fake_urlopen(request, timeout=0):
-        captured["url"] = request.full_url
-        captured["body"] = json.loads(request.data.decode("utf-8"))
-        return FakeResponse()
+    assert server.qwen_command() == ["/opt/homebrew/bin/qwen", "--model", "@preset/freyja-coder"]
 
-    with patch.object(urllib.request, "urlopen", fake_urlopen):
-        request = urllib.request.Request(
-            "http://test/api/chat",
-            data=json.dumps({"model": "agent/freyja", "messages": [{"role": "user", "content": "hello"}]}).encode(),
-        )
-        response = fake_urlopen(request)
-        assert response.status == 200
 
-    assert captured["body"]["model"] == "agent/freyja"
+def test_terminal_env_points_qwen_at_vulcan(tmp_path, monkeypatch) -> None:
+    server = load_server()
+    token_file = tmp_path / "msty-nexus-token"
+    token_file.write_text("nexus-token\n", encoding="utf-8")
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "cloud-key")
+    monkeypatch.setattr(server, "VULCAN_MODEL_BASE_URL", "http://100.94.80.21:3939/v1")
+    monkeypatch.setattr(server, "VULCAN_MODEL", "@preset/freyja-coder")
+    monkeypatch.setattr(server, "SMITH_QWEN_HOME", tmp_path / "qwen-smith")
+    monkeypatch.setattr(server, "NEXUS_TOKEN_FILE", token_file)
+
+    env = server.terminal_env()
+
+    assert env["OPENAI_BASE_URL"] == "http://100.94.80.21:3939/v1"
+    assert env["OPENAI_API_KEY"] == "nexus-token"
+    assert env["QWEN_HOME"] == str(tmp_path / "qwen-smith")
+    assert "OPENROUTER_API_KEY" not in env
+    assert "/opt/homebrew/bin" in env["PATH"].split(":")
+
+
+def test_nexus_status_reports_token_presence_without_value(tmp_path, monkeypatch) -> None:
+    server = load_server()
+    token_file = tmp_path / "msty-nexus-token"
+    token_file.write_text("secret-nexus-token\n", encoding="utf-8")
+    monkeypatch.setattr(server, "NEXUS_TOKEN_FILE", token_file)
+
+    status = server.nexus_config_status()
+
+    assert status["token_present"] is True
+    assert status["token_file"] == str(token_file)
+    assert "secret-nexus-token" not in json.dumps(status)
+
+
+def test_smith_qwen_home_contains_only_vulcan_provider(tmp_path, monkeypatch) -> None:
+    server = load_server()
+    monkeypatch.setattr(server, "SMITH_QWEN_HOME", tmp_path / "qwen-smith")
+    monkeypatch.setattr(server, "VULCAN_MODEL_BASE_URL", "http://100.94.80.21:3939/v1")
+    monkeypatch.setattr(server, "VULCAN_MODEL", "@preset/freyja-coder")
+
+    server.ensure_smith_qwen_home()
+
+    settings = json.loads((tmp_path / "qwen-smith" / "settings.json").read_text(encoding="utf-8"))
+    assert settings["model"]["baseUrl"] == "http://100.94.80.21:3939/v1"
+    assert settings["model"]["name"] == "@preset/freyja-coder"
+    assert settings["modelProviders"]["openai"][0]["baseUrl"] == "http://100.94.80.21:3939/v1"
+    assert "openrouter" not in json.dumps(settings).lower()
+
+
+def test_sanitize_text_redacts_common_secret_shapes() -> None:
+    server = load_server()
+
+    text = server.sanitize_text("Authorization: Bearer abcdefghijklmnop\npassword: hunter2\nsk-abcdefghijklmnopqrstuvwxyz")
+
+    assert "abcdefghijklmnop" not in text
+    assert "hunter2" not in text
+    assert "sk-abcdefghijklmnopqrstuvwxyz" not in text
+
+
+def test_launchagent_runs_ttyd_terminal_for_agent_smith() -> None:
+    with PLIST.open("rb") as handle:
+        plist = plistlib.load(handle)
+
+    args = plist["ProgramArguments"]
+
+    assert args[:7] == [
+        "/opt/homebrew/bin/ttyd",
+        "--interface",
+        "127.0.0.1",
+        "--port",
+        "8010",
+        "--writable",
+        "--check-origin",
+    ]
+    assert "--ping-interval" in args
+    assert args[args.index("--ping-interval") + 1] == "30"
+    assert "disableReconnect=true" in args
+    assert "/Users/freyja/freyja-os/scripts/run-agent-smith-qwen.sh" in args
+    assert plist["EnvironmentVariables"]["AGENT_SMITH_WORKDIR"] == "/Users/freyja"
+
+
+def test_qwen_launcher_points_agent_smith_at_vulcan_only() -> None:
+    body = QWEN_LAUNCHER.read_text(encoding="utf-8")
+
+    assert "http://100.94.80.21:3939/v1" in body
+    assert "@preset/freyja-coder" in body
+    assert "msty-nexus-token" in body
+    assert '"enableAutoUpdate": False' in body
+    assert 'unset OPENROUTER_API_KEY' in body
+    assert 'TMUX_SESSION="${AGENT_SMITH_TMUX_SESSION:-agent-smith}"' in body
+    assert 'exec "$TMUX_BIN" new-session -A -s "$TMUX_SESSION"' in body
+    assert 'printf "%q " "$QWEN_BIN" --model "$FREYJA_GATEWAY_REMOTE_VULCAN_MODEL"' in body

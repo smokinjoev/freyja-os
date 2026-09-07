@@ -18,8 +18,11 @@
 ## Partial
 
 - A. Gateway to Freyja to agent runtime to Nexus/Vulcan is covered by unit tests
-  and existing Nexus provider tests; live Vulcan validation still depends on
-  Joe's local Nexus token and service state.
+  and existing Nexus provider tests. As of 2026-09-02, Iris also has live
+  authenticated validation through Msty Go's local provider endpoint to
+  Vulcan/Nexus for Freyja and the canonical agent model ids. Remaining A-path
+  work is persistence/recovery hardening for the Iris-local Msty Nexus proxy and
+  broader remote-client validation.
 - B. Freyja to Cloyd delegation is represented by persistent agent routing,
   coding lane contracts, and Freyja 5 certification trace evidence through
   `AgentGateway` and `AgentRuntimeV3`. Live model/tool delegation remains
@@ -119,6 +122,20 @@ physical/session tasks.
 - The opt-in OpenAI-compatible `freyja-5` response metadata now exposes the
   Gateway/runtime trace ID directly as `freyja.trace_id`, matching the nested
   trace summary for easier WebGUI inspection of important requests.
+- Open WebUI now exposes per-agent Freyja 5 model IDs through the existing
+  model proxy: `agent/freyja`, `agent/cloyd-gibbler`, `agent/benedict`,
+  `agent/benedict-paralegal`, `agent/agent-47`, and `agent/jennacide`.
+  Chat completions using those IDs route through Freyja 5 with channel
+  `open-webui`, preserve WebUI user context when provided, and keep Benedict
+  Paralegal on the local-only `benedict-paralegal-nexus` route.
+- Added `qwen3.5:122b-a10b` as a strong-reasoning test candidate in Msty Go and
+  the Open WebUI model proxy. The proxy maps the short OpenWebUI model name to
+  `vulcan-ollama/qwen3.5:122b-a10b`, raises too-small completion budgets for
+  reasoning-model tests, and filters tools down to web/search, ask-user,
+  task-management, and sub-agent/delegation style functions.
+- Vulcan is pulling the 81 GB `qwen3.5:122b-a10b` Ollama model in the
+  background. Progress log: `~/.freyja/logs/qwen3.5-122b-pull.log` on Vulcan.
+  Live Nexus and tokens/sec validation remain pending until the pull completes.
 - Added default-off `FREYJA5_OPENAI_LIVE_INFERENCE_ENABLED` so the opt-in
   `freyja-5` OpenAI-compatible path can use live local Nexus inference only
   when explicitly enabled. Cloud fallback remains disabled on that path.
@@ -343,6 +360,30 @@ physical/session tasks.
 - Certification target E now records separate `signal` and `open-webui` Gateway
   handoffs and verifies that both carry the same stable household principal and
   memory-scope policy for Joe.
+- 2026-09-02 autonomous agent-plane pass confirmed Iris (`iris.lan`,
+  Tailscale `100.115.228.56`) as the canonical Msty Go host, with Msty Go
+  provider `vulcan-nexus` configured directly at
+  `http://100.94.80.21:3939/v1`. The existing token was reused without exposing
+  or committing it.
+- Msty Go persistent agent rows now use tested Nexus presets and separate
+  workspaces: Freyja and Cloyd on `@preset/freyja-coder`, Benedict on
+  `@preset/freyja-strong-local`, Agent 44 and Jenna on
+  `@preset/freyja-fast-local`, and Benedict Paralegal on
+  `@preset/benedict-paralegal-local`.
+- Live Freyja 5 OpenAI-compatible smoke on `127.0.0.1:8503` verified
+  `agent/freyja`, `agent/cloyd-gibbler`, `agent/benedict`, `agent/agent-47`,
+  `agent/jennacide`, and isolated `agent/benedict-paralegal` with local-only
+  egress. Benedict Paralegal correctly denies non-enclave context with HTTP
+  403 and remains isolated rather than general household routed.
+- Msty Go remote/channel posture is partial: Freyja has a native
+  `msty_mobile:all-devices` binding; Cloyd, Benedict, Agent 44, Jenna, and
+  Benedict Paralegal are currently Telegram-triggered. Wider phone/laptop
+  access still needs Msty-native validation before falling back to Tailscale or
+  the custom local remote gateway.
+- Operational caveat: `127.0.0.1:3940` is still live as a debug proxy, but the
+  current Msty Go provider row bypasses it and points directly at Vulcan Nexus.
+  Confirm the direct provider survives Msty Go restart/reboot before unattended
+  production.
 
 ## Start And Test
 

@@ -24,6 +24,7 @@ AGENT_MODEL_IDS = {
     "freyja": "agent/freyja",
     "cloyd": "agent/cloyd-gibbler",
     "benedict": "agent/benedict",
+    "benedict-paralegal": "agent/benedict-paralegal",
     "agent-44": "agent/agent-47",
     "jenna": "agent/jennacide",
 }
@@ -101,6 +102,12 @@ def fetch_model_ids_from_container(container: str, url: str, timeout: float) -> 
         return [], 0, exc.__class__.__name__
 
 
+def _fetch_model_ids(url: str, timeout: float, api_key: str | None) -> tuple[list[str], int, str | None]:
+    if api_key:
+        return fetch_model_ids(url, timeout, api_key)
+    return fetch_model_ids(url, timeout)
+
+
 def load_manifest(path: Path = DEFAULT_MANIFEST) -> dict[str, Any]:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict) or data.get("secrets_included") is not False:
@@ -127,6 +134,14 @@ def manifest_agent_profiles(manifest: dict[str, Any]) -> dict[str, dict[str, Any
             "local_model": profile.get("model"),
             "keep_local": bool(profile.get("keep_local")),
         }
+        if agent_id == "benedict" and "restricted:benedict" in (agent.get("permitted_knowledge") or []):
+            result["agent/benedict-paralegal"] = {
+                "agent_id": "benedict-paralegal",
+                "model_profile": profile_id,
+                "provider": profile.get("provider"),
+                "local_model": profile.get("model"),
+                "keep_local": bool(profile.get("keep_local")),
+            }
     return result
 
 
@@ -171,7 +186,7 @@ def build_report(
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     probe = "http"
-    model_ids, status, error = fetch_model_ids(args.url, args.timeout, args.open_webui_api_key)
+    model_ids, status, error = _fetch_model_ids(args.url, args.timeout, args.open_webui_api_key)
     url = args.url
     if status == 401 and not args.no_container_probe:
         probe = "container"

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Benedict</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar" aria-label="Agent mode">
+        <div>
+          <p class="eyebrow">Beth's assistant</p>
+          <h1>Benedict</h1>
+        </div>
+        <div class="mode-switch" role="tablist" aria-label="Choose agent mode">
+          <button id="mode-benedict" class="mode active" type="button" role="tab" aria-selected="true">
+            <span>Benedict</span>
+            <small>Daily + PDFs</small>
+          </button>
+          <button id="mode-paralegal" class="mode" type="button" role="tab" aria-selected="false">
+            <span>Paralegal</span>
+            <small>Local PDFs</small>
+          </button>
+        </div>
+      </section>
+
+      <section class="chat" aria-label="Conversation">
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <form id="composer" class="composer">
+          <label class="upload">
+            <input id="file-input" type="file" multiple>
+            <span>Attach</span>
+          </label>
+          <div class="entry">
+            <textarea id="prompt" rows="1" placeholder="Ask Benedict..." autocomplete="off"></textarea>
+            <div id="attachments" class="attachments"></div>
+          </div>
+          <button id="send" class="send" type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

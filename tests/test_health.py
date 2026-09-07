@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from freyja.main import app
 from freyja.freyja5_config import (
+    FREYJA5_OPEN_WEBUI_AGENT_MODELS,
     freyja5_agent_evidence,
     freyja5_iris_readiness_evidence,
     freyja5_live_inference_evidence,
@@ -468,6 +469,208 @@ def test_openai_models_exposes_agent_smith(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["data"][0]["id"] == "agent-smith"
     assert {model["id"] for model in response.json()["data"]} >= {"agent-smith", "freyja-5"}
+
+
+def test_openai_models_exposes_freyja5_agent_models(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get(
+        "/v1/models",
+        headers={"Authorization": "Bearer test-connector-token"},
+    )
+
+    assert response.status_code == 200
+    models = {model["id"]: model for model in response.json()["data"]}
+    assert set(FREYJA5_OPEN_WEBUI_AGENT_MODELS).issubset(models)
+    assert models["agent/benedict-paralegal"]["freyja"]["agent_id"] == "benedict-paralegal"
+    assert models["agent/benedict-paralegal"]["freyja"]["security_domain"] == "paralegal"
+    assert models["agent/benedict-paralegal"]["freyja"]["memory_scopes"] == ["enclave:paralegal", "system"]
+    assert models["agent/benedict-paralegal"]["freyja"]["default_nexus_endpoint"] == "benedict-paralegal-nexus"
+    assert models["agent/benedict-paralegal"]["freyja"]["cloud_fallback"] is False
+
+
+def test_agent_gateway_models_exposes_only_scoped_agent(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get(
+        "/agents/agent-44/v1/models",
+        headers={"Authorization": "Bearer test-connector-token"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert [model["id"] for model in data] == ["agent/agent-47"]
+    assert data[0]["freyja"]["logical_display_name"] == "Agent 44"
+
+
+def test_agent_gateway_models_rejects_unknown_gateway(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get(
+        "/agents/unknown/v1/models",
+        headers={"Authorization": "Bearer test-connector-token"},
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("model_id", "agent_id", "user", "security_domain", "memory_scopes", "endpoint"),
+    [
+        ("agent/freyja", "freyja", "joe", "household", ["agent:freyja", "family", "system"], "vulcan-nexus-strong"),
+        ("agent/cloyd-gibbler", "cloyd-gibbler", "joe", "person.joe", ["person:joe", "family", "system"], "vulcan-nexus-coder"),
+        ("agent/benedict", "benedict", "beth", "person.beth", ["person:beth", "family", "system"], "vulcan-nexus-strong"),
+        ("agent/benedict-paralegal", "benedict-paralegal", "paralegal", "paralegal", ["enclave:paralegal", "system"], "benedict-paralegal-nexus"),
+        ("agent/agent-47", "agent-47", "liam", "person.liam", ["person:liam", "family", "system"], "vulcan-nexus-fast"),
+        ("agent/jennacide", "jennacide", "jenna", "person.jenna", ["person:jenna", "family", "system"], "vulcan-nexus-fast"),
+    ],
+)
+def test_openai_chat_completion_agent_models_map_to_freyja5_runtime(
+    monkeypatch,
+    model_id,
+    agent_id,
+    user,
+    security_domain,
+    memory_scopes,
+    endpoint,
+) -> None:
+    from freyja import main as director_main
+    from freyja.config import settings
+
+    seen = {}
+
+    class FakeRuntime:
+        def __init__(self, *, run_inference, allow_cloud_fallback, **kwargs):
+            seen["run_inference"] = run_inference
+            seen["allow_cloud_fallback"] = allow_cloud_fallback
+
+        async def arun(self, handoff):
+            seen["target_agent_id"] = handoff.target_agent_id
+            seen["channel"] = handoff.channel
+            seen["reply_context"] = handoff.reply_context
+            return SimpleNamespace(
+                trace_id=handoff.handoff_id,
+                conversation_id=handoff.conversation_id,
+                agent_id=handoff.target_agent_id,
+                response_text=f"{handoff.target_agent_id} response",
+                requested_route="private" if handoff.target_agent_id == "benedict-paralegal" else "general",
+                inference_endpoint_id=endpoint,
+                inference_provider="nexus",
+                inference_model="@preset/test",
+                egress_state="local-only",
+                degraded=False,
+                trace_summary={
+                    "trace_id": handoff.handoff_id,
+                    "channel": handoff.channel,
+                    "resolved_user": handoff.sender_id,
+                    "authenticated_subject": handoff.authenticated_subject,
+                    "agent_security_domain": security_domain,
+                    "requested_route": "private" if handoff.target_agent_id == "benedict-paralegal" else "general",
+                    "actual_endpoint": endpoint,
+                    "actual_provider": "nexus",
+                    "inference_status": "not_run",
+                },
+            )
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", False)
+    monkeypatch.setattr(director_main, "AgentRuntimeV3", FakeRuntime)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": model_id,
+            "user": user,
+            "messages": [{"role": "user", "content": "hello from Open WebUI"}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model"] == model_id
+    assert seen["target_agent_id"] == agent_id
+    assert seen["channel"] == "open-webui"
+    assert seen["reply_context"]["originating_channel"] == "open-webui"
+    assert seen["run_inference"] is False
+    assert seen["allow_cloud_fallback"] is False
+    assert data["freyja"]["agent"] == agent_id
+    assert data["freyja"]["agent_model"] == model_id
+    assert data["freyja"]["provider"] == "nexus"
+    assert data["freyja"]["endpoint"] == endpoint
+    assert data["freyja"]["agent_model_metadata"]["security_domain"] == security_domain
+    assert data["freyja"]["agent_model_metadata"]["memory_scopes"] == memory_scopes
+    assert data["freyja"]["agent_model_metadata"]["default_nexus_endpoint"] == endpoint
+    assert data["freyja"]["agent_model_metadata"]["cloud_fallback"] is False
+    assert data["freyja"]["trace"]["channel"] == "open-webui"
+
+
+def test_agent_gateway_chat_forces_scoped_agent_model(monkeypatch) -> None:
+    from freyja import main as director_main
+    from freyja.config import settings
+
+    seen = {}
+
+    class FakeRuntime:
+        def __init__(self, *, run_inference, allow_cloud_fallback, **kwargs):
+            seen["run_inference"] = run_inference
+            seen["allow_cloud_fallback"] = allow_cloud_fallback
+
+        async def arun(self, handoff):
+            seen["target_agent_id"] = handoff.target_agent_id
+            seen["reply_context"] = handoff.reply_context
+            return SimpleNamespace(
+                trace_id=handoff.handoff_id,
+                conversation_id=handoff.conversation_id,
+                agent_id=handoff.target_agent_id,
+                response_text="scoped agent response",
+                requested_route="general",
+                inference_endpoint_id="vulcan-nexus-strong",
+                inference_provider="nexus",
+                inference_model="@preset/test",
+                egress_state="local-only",
+                degraded=False,
+                trace_summary={
+                    "trace_id": handoff.handoff_id,
+                    "channel": handoff.channel,
+                    "resolved_user": handoff.sender_id,
+                    "authenticated_subject": handoff.authenticated_subject,
+                    "agent_security_domain": "person.beth",
+                    "requested_route": "general",
+                    "actual_endpoint": "vulcan-nexus-strong",
+                    "actual_provider": "nexus",
+                    "inference_status": "not_run",
+                },
+            )
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", False)
+    monkeypatch.setattr(director_main, "AgentRuntimeV3", FakeRuntime)
+
+    response = client.post(
+        "/agents/benedict/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent/freyja",
+            "user": "beth",
+            "messages": [{"role": "user", "content": "hello"}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model"] == "agent/benedict"
+    assert data["freyja"]["agent"] == "benedict"
+    assert data["freyja"]["agent_model"] == "agent/benedict"
+    assert seen["target_agent_id"] == "benedict"
+    assert seen["reply_context"]["model"] == "agent/benedict"
+    assert seen["run_inference"] is False
+    assert seen["allow_cloud_fallback"] is False
 
 
 def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatch) -> None:

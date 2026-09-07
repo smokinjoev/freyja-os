@@ -7,8 +7,26 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/freyja/freyja-os/.venv/bin/python</string>
-        <string>/Users/freyja/freyja-os/deploy/compose/freyja-gateway-remote/server.py</string>
+        <string>/opt/homebrew/bin/ttyd</string>
+        <string>--interface</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>8010</string>
+        <string>--writable</string>
+        <string>--check-origin</string>
+        <string>--terminal-type</string>
+        <string>xterm-256color</string>
+        <string>--ping-interval</string>
+        <string>30</string>
+        <string>--client-option</string>
+        <string>titleFixed=Agent Smith</string>
+        <string>--client-option</string>
+        <string>fontSize=13</string>
+        <string>--client-option</string>
+        <string>disableReconnect=true</string>
+        <string>--client-option</string>
+        <string>fontFamily=ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace</string>
+        <string>/Users/freyja/freyja-os/scripts/run-agent-smith-qwen.sh</string>
     </array>
 
     <key>EnvironmentVariables</key>
@@ -17,12 +35,20 @@
         <string>127.0.0.1</string>
         <key>FREYJA_GATEWAY_REMOTE_PORT</key>
         <string>8010</string>
-        <key>FREYJA_GATEWAY_REMOTE_OPENAI_BASE_URL</key>
-        <string>http://127.0.0.1:8503/v1</string>
+        <key>FREYJA_GATEWAY_REMOTE_QWEN_BIN</key>
+        <string>/opt/homebrew/bin/qwen</string>
+        <key>FREYJA_GATEWAY_REMOTE_VULCAN_MODEL_BASE_URL</key>
+        <string>http://100.94.80.21:3939/v1</string>
+        <key>FREYJA_GATEWAY_REMOTE_VULCAN_MODEL</key>
+        <string>@preset/freyja-coder</string>
+        <key>FREYJA_GATEWAY_REMOTE_NEXUS_TOKEN_FILE</key>
+        <string>/Users/freyja/.local/state/freyja/gateway-remote/msty-nexus-token</string>
+        <key>AGENT_SMITH_WORKDIR</key>
+        <string>/Users/freyja</string>
     </dict>
 
     <key>WorkingDirectory</key>
-    <string>/Users/freyja/freyja-os</string>
+    <string>/Users/freyja</string>
 
     <key>StandardOutPath</key>
     <string>/Users/freyja/freyja-os/logs/gateway-remote.log</string>

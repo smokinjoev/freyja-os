@@ -3,36 +3,41 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#101418">
+    <meta name="theme-color" content="#0f172a">
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="/style.css">
-    <title>Freyja Gateway</title>
+    <title>Agent Smith</title>
   </head>
   <body>
     <main>
-      <section id="auth" class="panel">
-        <h1>Freyja Gateway</h1>
+      <section id="auth" class="auth-panel">
+        <h1>Agent Smith</h1>
         <form id="auth-form">
           <input id="token" name="token" type="password" autocomplete="current-password" placeholder="Access token" required>
           <button type="submit">Unlock</button>
         </form>
       </section>
-      <section id="chat" class="hidden">
+
+      <section id="app" class="hidden">
         <header>
-          <h1 id="agent-title">Freyja</h1>
-          <select id="agent">
-            <option value="freyja">Freyja</option>
-            <option value="benedict">Benedict</option>
-            <option value="benedict-paralegal">Benedict Paralegal</option>
-            <option value="agent-44">Agent 44</option>
-            <option value="jenna">Jenna</option>
-            <option value="cloyd">Cloyd</option>
-          </select>
+          <div>
+            <h1>Agent Smith</h1>
+            <p id="connection">Disconnected</p>
+          </div>
           <button id="lock" type="button">Lock</button>
         </header>
-        <div id="messages" aria-live="polite"></div>
-        <form id="composer">
-          <textarea id="message" rows="1" placeholder="Message..." required></textarea>
+
+        <section class="controls">
+          <input id="repo" placeholder="/Users/freyja/freyja-os" aria-label="Working folder" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <button id="create-folder" type="button">Create Folder</button>
+          <button id="connect" type="button">Connect</button>
+        </section>
+
+        <section id="terminal" tabindex="0" aria-label="Qwen terminal"></section>
+
+        <form id="input-form">
+          <textarea id="terminal-input" rows="3" placeholder="Type to Qwen. Return sends newline."></textarea>
+          <button id="ctrl-c" type="button">Ctrl-C</button>
           <button id="send" type="submit">Send</button>
         </form>
       </section>

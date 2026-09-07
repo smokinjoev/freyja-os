@@ -27,6 +27,8 @@
         <string>0.0.0.0</string>
         <key>MACAGENT_PORT</key>
         <string>8765</string>
+        <key>MACAGENT_TIMEOUT_SECONDS</key>
+        <string>30.0</string>
     </dict>
 
     <key>WorkingDirectory</key>

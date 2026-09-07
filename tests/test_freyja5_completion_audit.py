@@ -113,6 +113,35 @@ def test_freyja5_completion_audit_includes_live_evidence_status(tmp_path: Path) 
     }
 
 
+def test_freyja5_completion_audit_completes_when_live_evidence_closes_blockers(tmp_path: Path) -> None:
+    audit_module = load_audit_module()
+    bundle = tmp_path / "freyja5-readiness-bundle.json"
+    live_status = tmp_path / "freyja5-live-evidence-status.json"
+    _write_bundle(bundle)
+    live_status.write_text(
+        json.dumps(
+            {
+                "report_type": "freyja5-live-evidence-status",
+                "status": "complete",
+                "complete": True,
+                "secrets_detected": False,
+                "closeable_blockers": ["msty_go_always_on_linux_validation"],
+                "remaining_blockers": [],
+                "unknown_blockers": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audit = audit_module.build_audit(readiness_bundle=bundle, live_evidence_status=live_status)
+
+    assert audit["status"] == "complete"
+    assert audit["source_ready"] is True
+    assert audit["live_blocked"] is False
+    assert audit["certification"]["live_blockers"] == []
+    assert audit["remaining_blockers"] == []
+
+
 def test_freyja5_completion_audit_script_is_executable() -> None:
     assert SCRIPT_PATH.exists()
     assert SCRIPT_PATH.stat().st_mode & 0o111

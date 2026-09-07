@@ -250,6 +250,13 @@ end tell
 async def _browser_read(request: MacAgentOperationRequest) -> dict[str, Any]:
     if request.operation != "front_tab":
         raise ValueError("unsupported apple.browser.read operation")
+    running_script = 'tell application "System Events" to return exists process "Safari"'
+    try:
+        safari_running = (await _osascript(running_script, timeout=2.0)).strip().lower() == "true"
+    except RuntimeError:
+        safari_running = False
+    if not safari_running:
+        return {"browser": "Safari", "title": "", "url": "", "status": "not_running"}
     script = """
 tell application "Safari"
   if it is running and (count of windows) > 0 and (count of tabs of front window) > 0 then
@@ -261,8 +268,11 @@ tell application "Safari"
   end if
 end tell
 """
-    title, url = _split_fields(await _osascript(script), 2)
-    return {"browser": "Safari", "title": title, "url": url}
+    try:
+        title, url = _split_fields(await _osascript(script, timeout=3.0), 2)
+    except RuntimeError as exc:
+        return {"browser": "Safari", "title": "", "url": "", "status": "unavailable", "error": str(exc)}
+    return {"browser": "Safari", "title": title, "url": url, "status": "ok" if title or url else "empty"}
 
 
 async def _shortcuts_run(request: MacAgentOperationRequest) -> dict[str, Any]:

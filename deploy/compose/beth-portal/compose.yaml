@@ -1,0 +1,20 @@
+name: freyja-beth-portal
+
+services:
+  beth-portal:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    command:
+      - python
+      - /app/server.py
+    environment:
+      BETH_PORTAL_PORT: 8091
+      FREYJA_OPENAI_BASE_URL: ${FREYJA_OPENAI_BASE_URL:-http://host.docker.internal:8500/v1}
+      FREYJA_API_KEY: ${FREYJA_API_KEY:-}
+    ports:
+      - "${BETH_PORTAL_BIND_IP:-0.0.0.0}:${BETH_PORTAL_HOST_PORT:-8091}:8091"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./server.py:/app/server.py:ro
+      - ./app:/app/app:ro

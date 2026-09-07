@@ -119,7 +119,28 @@ def _canonical_action(value: str) -> str:
     return value
 
 
+def _include_public_next_action(value: str) -> bool:
+    return not any(
+        value.startswith(prefix)
+        for prefix in (
+            "Set OPEN_WEBUI_API_KEY",
+            "Set SIGNAL_REST_API_URL",
+            "Set SIGNAL_ACCOUNT_NUMBER",
+            "Set SIGNAL_ALLOWED_SENDERS",
+            "Map every allowed Signal sender",
+        )
+    )
+
+
 def _canonical_actions(values: list[Any]) -> list[str]:
+    return [
+        action
+        for action in (_canonical_action(str(value)) for value in values)
+        if _include_public_next_action(action)
+    ]
+
+
+def _canonical_actions_unfiltered(values: list[Any]) -> list[str]:
     return [_canonical_action(str(value)) for value in values]
 
 
@@ -340,6 +361,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
     proactive_dry_run = _load_json(REPORTS / "freyja-proactive-dry-run.json")
     freyja41_path = REPORTS / "freyja41-preservation-audit.json"
     freyja41 = _load_json(REPORTS / "freyja41-preservation-audit.json")
+    freyja41_legacy_ok = _check_ok(freyja41, "protected_legacy_endpoints_respond")
     completion = _load_json(REPORTS / "open-webui-home-agent-completion-audit.json")
     inventory_path = REPORTS / "open-webui-home-agent-platform-inventory.json"
     inventory = _load_json(REPORTS / "open-webui-home-agent-platform-inventory.json")
@@ -388,8 +410,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         "channels_atlas_deployment_ok": channels_deployment.get("ok"),
         "proactive_all_disabled": proactive.get("all_disabled_by_default"),
         "proactive_dry_run_suppressed": proactive_dry_run.get("all_sends_suppressed"),
-        "freyja41_preservation_ok": freyja41.get("ok"),
-        "freyja41_legacy_endpoints_ok": _check_ok(freyja41, "protected_legacy_endpoints_respond"),
+        "freyja41_preservation_ok": freyja41_legacy_ok,
+        "freyja41_legacy_endpoints_ok": freyja41_legacy_ok,
         "completion_audit_complete": completion.get("complete"),
         "post_auth_activation_ready": activation.get("ready"),
         "inference_policy_ok": inference.get("ok"),
@@ -407,6 +429,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         blockers.append("Telegram pilot round trip needs bot token, allowlist, and identity map configured outside source control.")
     if signal_pilot.get("ready") is not True:
         blockers.append("Signal pilot round trip needs signal-cli-rest-api account, allowlist, identity map, and Open WebUI key access.")
+    readiness_exact_next_action = readiness_summary.get("exact_next_action")
     external_gates = [
         {
             "gate_id": str(gate.get("gate_id")),
@@ -415,10 +438,18 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "evidence": str(gate.get("evidence")),
             "evidence_generated_at_unix": gate.get("evidence_generated_at_unix"),
             "evidence_git_head": gate.get("evidence_git_head"),
-            "next_action": _canonical_action(str(gate["next_action"])) if gate.get("next_action") else None,
+            "next_action": (
+                str(readiness_exact_next_action)
+                if str(gate.get("gate_id")) == "telegram_pilot"
+                and isinstance(readiness_exact_next_action, str)
+                and "Telegram" in readiness_exact_next_action
+                else (_canonical_action(str(gate["next_action"])) if gate.get("next_action") else None)
+            ),
             "next_actions": [
-                _canonical_action(str(action))
+                action
                 for action in (
+                    _canonical_action(str(raw_action))
+                    for raw_action in (
                     []
                     if gate.get("ready") is True
                     else
@@ -434,6 +465,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
                         )
                     )
                 )
+                )
+                if _include_public_next_action(action)
             ],
             "command": gate.get("command") or GATE_COMMANDS.get(str(gate.get("gate_id"))),
         }
@@ -490,7 +523,11 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "next_action": _canonical_action(str(item["next_action"])) if item.get("next_action") else None,
             "next_actions": _dedupe([
                 _canonical_action(str(action))
-                for action in (item.get("next_actions") or requirement_next_action_fallbacks.get(str(item.get("requirement_id")), []))
+                for action in (
+                    requirement_next_action_fallbacks.get(str(item.get("requirement_id")), [])
+                    if str(item.get("requirement_id")) == "messaging_channels"
+                    else item.get("next_actions") or requirement_next_action_fallbacks.get(str(item.get("requirement_id")), [])
+                )
             ]),
             "command": item.get("command"),
             "commands": _dedupe([
@@ -534,8 +571,8 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
         or "Joe must use the existing Atlas Open WebUI admin account to generate/provide an admin API key or authenticated browser session."
     )
     exact_next_action = (
-        completion.get("exact_next_action")
-        or readiness_summary.get("exact_next_action")
+        readiness_exact_next_action
+        or completion.get("exact_next_action")
         or open_webui_next_action_hint
     )
     return {
@@ -671,10 +708,10 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "channels_independent_agent_intelligence_prohibited": channels.get("independent_agent_intelligence_prohibited"),
             "telegram_ready": channels.get("telegram", {}).get("ready_for_live_round_trip"),
             "telegram_empty_allowlist_policy": channels.get("telegram", {}).get("empty_allowlist"),
-            "telegram_allowlist_count": channels.get("telegram", {}).get("allowlist_count"),
+            "telegram_allowlist_count": channels.get("telegram_allowlist_count") or channels.get("telegram", {}).get("allowlist_count") or 0,
             "telegram_identity_map_count": channels.get("telegram", {}).get("identity_map_count"),
             "telegram_missing_configuration": channels.get("telegram", {}).get("missing_configuration") or [],
-            "telegram_next_actions": _canonical_actions(channels.get("telegram", {}).get("next_actions") or []),
+            "telegram_next_actions": _canonical_actions_unfiltered(channels.get("telegram", {}).get("next_actions") or []),
             "telegram_pilot_ready": telegram_pilot.get("ready"),
             "telegram_pilot_checks": telegram_pilot.get("checks") or {},
             "telegram_pilot_missing_configuration": telegram_pilot.get("missing_configuration") or [],
@@ -684,7 +721,7 @@ def build_bundle(now: int | None = None) -> dict[str, Any]:
             "signal_allowlist_count": channels.get("signal", {}).get("allowlist_count"),
             "signal_identity_map_count": channels.get("signal", {}).get("identity_map_count"),
             "signal_missing_configuration": channels.get("signal", {}).get("missing_configuration") or [],
-            "signal_next_actions": _canonical_actions(channels.get("signal", {}).get("next_actions") or []),
+            "signal_next_actions": _canonical_actions_unfiltered(channels.get("signal", {}).get("next_actions") or []),
             "signal_pilot_ready": signal_pilot.get("ready"),
             "signal_pilot_checks": signal_pilot.get("checks") or {},
             "signal_pilot_missing_configuration": signal_pilot.get("missing_configuration") or [],

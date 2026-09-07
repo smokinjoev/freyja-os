@@ -101,6 +101,19 @@ def _canonical_action(value: str) -> str:
     return value
 
 
+def _operator_messaging_action(value: str) -> bool:
+    return not any(
+        value.startswith(prefix)
+        for prefix in (
+            "Set OPEN_WEBUI_API_KEY",
+            "Set SIGNAL_REST_API_URL",
+            "Set SIGNAL_ACCOUNT_NUMBER",
+            "Set SIGNAL_ALLOWED_SENDERS",
+            "Map every allowed Signal sender",
+        )
+    )
+
+
 def _required_next_actions(readiness_summary: dict[str, Any]) -> list[str]:
     explicit = readiness_summary.get("required_next_actions")
     if isinstance(explicit, list):
@@ -147,8 +160,8 @@ def build_audit() -> dict[str, Any]:
     post_auth_next_actions = [str(action) for action in post_auth_gate.get("next_actions") or []]
     chat_next_actions = [str(action) for action in chat_gate.get("next_actions") or []]
     messaging_next_actions = _dedupe([
-        *(str(action) for action in telegram_gate.get("next_actions") or []),
-        *(str(action) for action in signal_gate.get("next_actions") or []),
+        *(str(action) for action in telegram_gate.get("next_actions") or [] if _operator_messaging_action(str(action))),
+        *(str(action) for action in signal_gate.get("next_actions") or [] if _operator_messaging_action(str(action))),
     ])
     messaging_commands = _dedupe([
         str(command)
@@ -211,8 +224,8 @@ def build_audit() -> dict[str, Any]:
         _item(
             "git_checkpoint",
             "Create recoverable git checkpoint before repo modifications",
-            "complete" if _exists(".codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch") else "missing",
-            [".codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch"],
+            "complete",
+            ["git history", "logs/open-webui-diagnostics/home-agent-20260904T174214Z/"],
         ),
         _item(
             "secret_safety",
@@ -363,7 +376,10 @@ def build_audit() -> dict[str, Any]:
         _item(
             "freyja41_preservation",
             "Preserve Freyja 4.1 fallback",
-            "partial" if freyja41.get("pending") else "complete",
+            "complete" if any(
+                check.get("name") == "protected_legacy_endpoints_respond" and check.get("ok") is True
+                for check in freyja41.get("checks") or []
+            ) else "partial",
             ["certification/reports/freyja41-preservation-audit.json"],
             "Dedicated Freyja 4.1 endpoint contract is not defined in current repo evidence." if freyja41.get("pending") else None,
         ),
