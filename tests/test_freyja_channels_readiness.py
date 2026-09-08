@@ -154,6 +154,14 @@ def test_channels_readiness_accepts_open_webui_api_key_file(tmp_path: Path, monk
     serialized = json.dumps(report)
 
     assert report["open_webui_client"]["api_key_configured"] is True
+    assert report["messaging_agents"]["catalog_complete"] is True
+    assert report["messaging_agents"]["command_prefixes"] == ["/agent ", "@"]
+    assert report["messaging_agents"]["apps"]["telegram"]["agents"] == ["agent-44", "benedict", "cloyd", "freyja", "jenna"]
+    assert report["messaging_agents"]["apps"]["telegram"]["ready_catalog"] is True
+    assert report["messaging_agents"]["apps"]["signal"]["agents"] == ["agent-44", "benedict", "cloyd", "freyja", "jenna"]
+    assert report["messaging_agents"]["apps"]["signal"]["ready_catalog"] is True
+    assert report["messaging_agents"]["apps"]["whatsapp"]["agents"] == []
+    assert report["messaging_agents"]["apps"]["whatsapp"]["ready_catalog"] is False
     assert "OPEN_WEBUI_API_KEY" not in report["telegram"]["missing_configuration"]
     assert "OPEN_WEBUI_API_KEY" not in report["signal"]["missing_configuration"]
     assert not any("OPEN_WEBUI_API_KEY" in action for action in report["telegram"]["next_actions"])

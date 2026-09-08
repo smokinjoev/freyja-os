@@ -169,6 +169,25 @@ def test_telegram_pilot_run_once_sends_replies_and_advances_offset(tmp_path: Pat
     assert offset.read_text(encoding="utf-8") == "42\n"
 
 
+def test_telegram_pilot_run_once_preserves_requested_agent_command(tmp_path: Path) -> None:
+    module = _module()
+    service = FakeService()
+    transport = FakeTransport(
+        [
+            TelegramInbound(
+                update_id=41,
+                message=ChannelMessage(channel="telegram", sender="1001", chat_id="2002", text="check the repo", requested_agent="cloyd"),
+            )
+        ]
+    )
+
+    result = module.run_once(service=service, transport=transport, offset_file=tmp_path / "telegram.offset")
+
+    assert result["handled"] == 1
+    assert service.messages[0].requested_agent == "cloyd"
+    assert service.messages[0].text == "check the repo"
+
+
 def test_telegram_pilot_run_once_enriches_attachments_before_routing(tmp_path: Path) -> None:
     module = _module()
     service = FakeService()

@@ -21,6 +21,32 @@ shared_controls:
   audit_logging: required
   rate_limits: required
   secrets_in_source_control: forbidden
+agent_catalog:
+  freyja:
+    model_id: agent/freyja
+    aliases: [freyja]
+    messaging_apps: [telegram, signal]
+  cloyd:
+    model_id: agent/cloyd-gibbler
+    aliases: [cloyd, cloyd-gibbler]
+    messaging_apps: [telegram, signal]
+  benedict:
+    model_id: agent/benedict
+    aliases: [benedict]
+    messaging_apps: [telegram, signal]
+  agent-44:
+    model_id: agent/agent-47
+    aliases: [agent-44, agent-47, liam]
+    messaging_apps: [telegram, signal]
+  jenna:
+    model_id: agent/jennacide
+    aliases: [jenna, jennacide]
+    messaging_apps: [telegram, signal]
+messaging_agent_command:
+  prefixes: ["/agent ", "@"]
+  examples:
+    - "/agent cloyd check the repo"
+    - "@benedict review this"
 identities:
   joe:
     permitted_agents: [freyja, cloyd]

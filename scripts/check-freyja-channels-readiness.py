@@ -13,7 +13,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from freyja.channel_transports import SignalCliRestConfig, TelegramPilotConfig
-from freyja.channels import DEFAULT_POLICY, DEFAULT_STATE_DIR, FreyjaChannels, OpenWebUIChatClient
+from freyja.channels import CHANNEL_AGENT_MODEL_IDS, DEFAULT_POLICY, DEFAULT_STATE_DIR, FreyjaChannels, OpenWebUIChatClient
 
 
 DEFAULT_OUTPUT = Path("certification/reports/freyja-channels-readiness.json")
@@ -125,6 +125,42 @@ def _git_head() -> str | None:
         return None
 
 
+def _messaging_agent_matrix(policy: dict[str, Any]) -> dict[str, Any]:
+    catalog = policy.get("agent_catalog") or {}
+    identities = policy.get("identities") or {}
+    channels = policy.get("channels") or {}
+    enabled_apps = [name for name, item in channels.items() if isinstance(item, dict) and item.get("status") != "disabled"]
+    all_permitted = sorted({agent for item in identities.values() if isinstance(item, dict) for agent in item.get("permitted_agents") or []})
+    configured_agents = sorted(catalog)
+    missing_from_catalog = [agent for agent in all_permitted if agent not in catalog]
+    missing_model_ids = [
+        agent
+        for agent, item in catalog.items()
+        if not isinstance(item, dict) or item.get("model_id") != CHANNEL_AGENT_MODEL_IDS.get(agent)
+    ]
+    apps: dict[str, Any] = {}
+    for app in channels:
+        app_agents = []
+        for agent, item in catalog.items():
+            if isinstance(item, dict) and app in (item.get("messaging_apps") or []):
+                app_agents.append(agent)
+        apps[app] = {
+            "status": (channels.get(app) or {}).get("status") if isinstance(channels.get(app), dict) else None,
+            "agents": sorted(app_agents),
+            "ready_catalog": app not in {"whatsapp"} and not missing_from_catalog and not missing_model_ids and bool(app_agents),
+        }
+    return {
+        "command_prefixes": (policy.get("messaging_agent_command") or {}).get("prefixes") or [],
+        "configured_agents": configured_agents,
+        "permitted_agents": all_permitted,
+        "enabled_apps": enabled_apps,
+        "apps": apps,
+        "missing_from_catalog": missing_from_catalog,
+        "missing_or_mismatched_model_ids": missing_model_ids,
+        "catalog_complete": not missing_from_catalog and not missing_model_ids,
+    }
+
+
 def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
     service = FreyjaChannels(policy_path=policy)
     channels = service.policy.get("channels") or {}
@@ -201,6 +237,7 @@ def build_report(policy: Path = DEFAULT_POLICY) -> dict[str, Any]:
             "api_key_configured": open_webui_client.configured,
             "secrets_included": False,
         },
+        "messaging_agents": _messaging_agent_matrix(service.policy),
         "telegram": {
             "status": telegram.get("status"),
             "transport": telegram.get("transport"),

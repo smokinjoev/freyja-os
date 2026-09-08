@@ -14,6 +14,8 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from freyja.channel_transports import ChannelTransportError, SignalCliRestConfig, SignalCliRestTransport
 from freyja.channels import (
+    CHANNEL_AGENT_MODEL_IDS,
+    DEFAULT_POLICY,
     ChannelClientError,
     ChannelPolicyError,
     FileChannelStore,
@@ -103,6 +105,25 @@ def _git_head() -> str | None:
         return None
 
 
+def _messaging_agents() -> dict[str, object]:
+    service = FreyjaChannels(policy_path=DEFAULT_POLICY)
+    catalog = service.policy.get("agent_catalog") or {}
+    return {
+        "app": "signal",
+        "command_prefixes": (service.policy.get("messaging_agent_command") or {}).get("prefixes") or [],
+        "agents": sorted(
+            agent
+            for agent, item in catalog.items()
+            if isinstance(item, dict) and "signal" in (item.get("messaging_apps") or [])
+        ),
+        "model_ids": {
+            agent: CHANNEL_AGENT_MODEL_IDS[agent]
+            for agent, item in catalog.items()
+            if agent in CHANNEL_AGENT_MODEL_IDS and isinstance(item, dict) and "signal" in (item.get("messaging_apps") or [])
+        },
+    }
+
+
 def _missing_configuration(checks: dict[str, bool]) -> list[str]:
     missing: list[str] = []
     if not checks["signal_rest_api_configured"]:
@@ -163,6 +184,7 @@ def readiness(args: argparse.Namespace) -> dict[str, object]:
         "private_content_included": False,
         "ready": ready,
         "checks": checks,
+        "messaging_agents": _messaging_agents(),
         "missing_configuration": missing,
         "next_actions": _next_actions(missing, ready=ready),
         "state_dir": _display_path(args.state_dir),

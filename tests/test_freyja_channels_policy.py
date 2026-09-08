@@ -61,3 +61,18 @@ def test_children_only_have_their_own_assistant() -> None:
 
     assert identities["liam"]["permitted_agents"] == ["agent-44"]
     assert identities["jenna"]["permitted_agents"] == ["jenna"]
+
+
+def test_agent_catalog_exposes_freyja5_agents_to_safe_messaging_apps() -> None:
+    payload = _payload()
+    catalog = payload["agent_catalog"]
+    permitted = {agent for item in payload["identities"].values() for agent in item["permitted_agents"]}
+
+    assert set(catalog) == permitted
+    assert catalog["freyja"]["model_id"] == "agent/freyja"
+    assert catalog["cloyd"]["model_id"] == "agent/cloyd-gibbler"
+    assert catalog["benedict"]["model_id"] == "agent/benedict"
+    assert catalog["agent-44"]["model_id"] == "agent/agent-47"
+    assert catalog["jenna"]["model_id"] == "agent/jennacide"
+    assert all(catalog[agent]["messaging_apps"] == ["telegram", "signal"] for agent in catalog)
+    assert payload["channels"]["whatsapp"]["status"] == "disabled"

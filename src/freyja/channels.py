@@ -4,6 +4,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -24,6 +25,18 @@ CHANNEL_AGENT_MODEL_IDS = {
     "agent-44": "agent/agent-47",
     "jenna": "agent/jennacide",
 }
+CHANNEL_AGENT_ALIASES = {
+    "freyja": "freyja",
+    "cloyd": "cloyd",
+    "cloyd-gibbler": "cloyd",
+    "benedict": "benedict",
+    "agent-44": "agent-44",
+    "agent-47": "agent-44",
+    "liam": "agent-44",
+    "jenna": "jenna",
+    "jennacide": "jenna",
+}
+AGENT_COMMAND_PATTERN = re.compile(r"^\s*(?:/agent\s+|@)(?P<alias>[A-Za-z0-9_-]+)(?:\s+|$)(?P<message>.*)$", re.DOTALL)
 
 
 def _env_float(name: str, default: float) -> float:
@@ -72,6 +85,17 @@ class RateLimitExceeded(ChannelPolicyError):
 
 class ChannelClientError(RuntimeError):
     pass
+
+
+def parse_agent_command(text: str) -> tuple[str | None, str]:
+    match = AGENT_COMMAND_PATTERN.match(text)
+    if not match:
+        return None, text
+    agent = CHANNEL_AGENT_ALIASES.get(match.group("alias").lower())
+    if not agent:
+        return None, text
+    cleaned = match.group("message").strip()
+    return agent, cleaned or text
 
 
 def _read_api_key_file() -> str:

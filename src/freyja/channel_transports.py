@@ -8,7 +8,7 @@ import urllib.request
 from dataclasses import dataclass, replace
 from typing import Any
 
-from freyja.channels import ChannelMessage, ChannelPolicyError
+from freyja.channels import ChannelMessage, ChannelPolicyError, parse_agent_command
 
 
 class ChannelTransportError(RuntimeError):
@@ -92,6 +92,7 @@ def parse_telegram_update(update: dict[str, Any]) -> ChannelMessage | None:
     if sender_id is None or chat_id is None:
         raise ChannelPolicyError("Telegram update lacks sender or chat id")
     text = str(message.get("text") or message.get("caption") or "").strip()
+    requested_agent, text = parse_agent_command(text)
     attachments: list[dict[str, Any]] = []
     for photo in message.get("photo") or []:
         if isinstance(photo, dict):
@@ -122,6 +123,7 @@ def parse_telegram_update(update: dict[str, Any]) -> ChannelMessage | None:
         sender=str(sender_id),
         chat_id=str(chat_id),
         text=text,
+        requested_agent=requested_agent,
         attachments=tuple(attachments),
     )
 
@@ -148,11 +150,14 @@ def parse_signal_event(event: dict[str, Any]) -> ChannelMessage | None:
                     "id": attachment.get("id"),
                 }
             )
+    text = str(data.get("message") or "").strip()
+    requested_agent, text = parse_agent_command(text)
     return ChannelMessage(
         channel="signal",
         sender=str(sender),
         chat_id=str(envelope.get("sourceUuid") or sender),
-        text=str(data.get("message") or "").strip(),
+        text=text,
+        requested_agent=requested_agent,
         attachments=tuple(attachments),
     )
 

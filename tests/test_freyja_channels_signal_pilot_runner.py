@@ -157,3 +157,15 @@ def test_signal_pilot_run_once_sends_replies() -> None:
 
     assert result == {"messages": 1, "handled": 1, "denied_or_client_failed": 0, "failed": 0}
     assert transport.sent == [{"recipient": "+15550001002", "text": "reply:hello"}]
+
+
+def test_signal_pilot_run_once_preserves_requested_agent_command() -> None:
+    module = _module()
+    service = FakeService()
+    transport = FakeSignalTransport([ChannelMessage(channel="signal", sender="+15550001002", chat_id="uuid-1", text="review this", requested_agent="benedict")])
+
+    result = module.run_once(service=service, transport=transport)
+
+    assert result["handled"] == 1
+    assert service.messages[0].requested_agent == "benedict"
+    assert service.messages[0].text == "review this"

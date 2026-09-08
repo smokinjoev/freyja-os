@@ -10,6 +10,22 @@ Open WebUI remains the agent platform. Vulcan remains the local inference path
 behind Open WebUI. WhatsApp stays disabled until a secured public webhook is
 explicitly approved.
 
+The Freyja 5 messaging agent surface is configured in
+`config/freyja-channels.yaml`. Telegram and Signal can expose `freyja`, `cloyd`,
+`benedict`, `agent-44`, and `jenna`; the gateway still enforces each sender's
+identity-specific `permitted_agents` list before forwarding anything.
+
+Allowed senders can choose a permitted agent with either command form:
+
+```text
+/agent cloyd check the repo
+@benedict review this
+```
+
+If no command prefix is present, the sender's configured default agent is used.
+Unknown aliases are left as normal message text and do not bypass the
+permitted-agent check.
+
 The channel services publish no ports. Telegram uses outbound long polling, and
 Signal reaches `signal-cli-rest-api` on the private Docker network.
 

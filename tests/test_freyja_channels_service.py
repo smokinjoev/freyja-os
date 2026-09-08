@@ -11,6 +11,7 @@ from freyja.channels import (
     MemoryChannelStore,
     OpenWebUIChatClient,
     RateLimitExceeded,
+    parse_agent_command,
 )
 
 
@@ -61,6 +62,18 @@ def test_signal_beth_can_route_to_benedict() -> None:
     assert route.agent == "benedict"
     assert route.thread_key.startswith("signal-conv:")
     assert "+1555" not in route.thread_key
+
+
+def test_agent_command_parser_selects_requested_agent_and_cleans_message() -> None:
+    assert parse_agent_command("/agent cloyd check the repo") == ("cloyd", "check the repo")
+    assert parse_agent_command("@benedict review this") == ("benedict", "review this")
+    assert parse_agent_command("@agent-47 homework") == ("agent-44", "homework")
+
+
+def test_agent_command_parser_ignores_unknown_alias() -> None:
+    text = "@unknown keep this intact"
+
+    assert parse_agent_command(text) == (None, text)
 
 
 def test_empty_allowlist_denies_all() -> None:

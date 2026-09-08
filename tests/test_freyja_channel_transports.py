@@ -45,6 +45,14 @@ def test_parse_telegram_update_rejects_missing_sender_or_chat() -> None:
         parse_telegram_update({"message": {"from": {"id": 1}, "text": "hello"}})
 
 
+def test_parse_telegram_update_extracts_requested_agent_command() -> None:
+    message = parse_telegram_update({"message": {"from": {"id": 1001}, "chat": {"id": 2002}, "text": "@cloyd check the repo"}})
+
+    assert message is not None
+    assert message.requested_agent == "cloyd"
+    assert message.text == "check the repo"
+
+
 def test_parse_signal_event_maps_sender_text_and_attachments() -> None:
     message = parse_signal_event(
         {
@@ -73,6 +81,22 @@ def test_parse_signal_event_maps_sender_text_and_attachments() -> None:
             "id": "att-1",
         },
     )
+
+
+def test_parse_signal_event_extracts_requested_agent_command() -> None:
+    message = parse_signal_event(
+        {
+            "envelope": {
+                "sourceNumber": "+15550001002",
+                "sourceUuid": "uuid-1",
+                "dataMessage": {"message": "/agent benedict review this"},
+            }
+        }
+    )
+
+    assert message is not None
+    assert message.requested_agent == "benedict"
+    assert message.text == "review this"
 
 
 def test_parse_signal_event_ignores_non_data_messages() -> None:
