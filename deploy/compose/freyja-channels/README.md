@@ -46,7 +46,44 @@ audit records.
 
 ## Telegram Pilot
 
-Telegram is profile-gated and remains off until explicitly started. Configure:
+Telegram is profile-gated and remains off until explicitly started. The
+preferred setup is one Telegram bot per exposed person/agent lane. Configure the
+matching token, allowlist, identity map, and forced agent in `.env`:
+
+```text
+TELEGRAM_FREYJA_JOE_BOT_TOKEN=...
+TELEGRAM_FREYJA_JOE_ALLOWED_USER_IDS=<joe telegram numeric id>
+TELEGRAM_FREYJA_JOE_IDENTITY_MAP=<joe telegram numeric id>:joe
+TELEGRAM_FREYJA_JOE_AGENT=freyja
+
+TELEGRAM_CLOYD_JOE_BOT_TOKEN=...
+TELEGRAM_CLOYD_JOE_ALLOWED_USER_IDS=<joe telegram numeric id>
+TELEGRAM_CLOYD_JOE_IDENTITY_MAP=<joe telegram numeric id>:joe
+TELEGRAM_CLOYD_JOE_AGENT=cloyd
+
+TELEGRAM_BENEDICT_BETH_BOT_TOKEN=...
+TELEGRAM_BENEDICT_BETH_ALLOWED_USER_IDS=<beth telegram numeric id>
+TELEGRAM_BENEDICT_BETH_IDENTITY_MAP=<beth telegram numeric id>:beth
+TELEGRAM_BENEDICT_BETH_AGENT=benedict
+
+TELEGRAM_AGENT44_LIAM_BOT_TOKEN=...
+TELEGRAM_AGENT44_LIAM_ALLOWED_USER_IDS=<liam telegram numeric id>
+TELEGRAM_AGENT44_LIAM_IDENTITY_MAP=<liam telegram numeric id>:liam
+TELEGRAM_AGENT44_LIAM_AGENT=agent-44
+
+TELEGRAM_JENNA_BOT_TOKEN=...
+TELEGRAM_JENNA_ALLOWED_USER_IDS=<jenna telegram numeric id>
+TELEGRAM_JENNA_IDENTITY_MAP=<jenna telegram numeric id>:jenna
+TELEGRAM_JENNA_AGENT=jenna
+```
+
+Each profile uses its own bot token and offset file. The forced agent is applied
+before the gateway routes the message, so a Cloyd bot cannot be turned into a
+Benedict bot by prompt text. The shared `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_ALLOWED_USER_IDS`, and `TELEGRAM_IDENTITY_MAP` variables remain
+available as the legacy single-bot pilot path.
+
+For the legacy single bot, configure:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_USER_IDS`

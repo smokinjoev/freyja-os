@@ -28,6 +28,28 @@ from freyja.channels import (
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "freyja-channels-telegram-pilot.json"
 DEFAULT_STATE_DIR = REPO_ROOT / "data" / "freyja-channels"
 DEFAULT_POLL_INTERVAL_SECONDS = 2.0
+DEFAULT_TELEGRAM_BOT_PROFILES = "FREYJA_JOE,CLOYD_JOE,BENEDICT_BETH,AGENT44_LIAM,JENNA"
+
+
+class TelegramBotProfile:
+    def __init__(
+        self,
+        *,
+        name: str,
+        token: str,
+        allowed_user_ids: set[str],
+        identity_map: dict[str, str],
+        forced_agent: str,
+    ) -> None:
+        self.name = name
+        self.token = token
+        self.allowed_user_ids = allowed_user_ids
+        self.identity_map = identity_map
+        self.forced_agent = forced_agent
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.token.strip()) and bool(self.allowed_user_ids) and bool(self.identity_map) and bool(self.forced_agent.strip())
 
 
 def _env_float(name: str, default: float) -> float:
@@ -68,6 +90,50 @@ def _csv_map(name: str) -> dict[str, str]:
         if sender.strip() and identity.strip():
             mapping[sender.strip()] = identity.strip()
     return mapping
+
+
+def _profile_key(name: str) -> str:
+    return "".join(char if char.isalnum() else "_" for char in name.upper()).strip("_")
+
+
+def _bot_profile_names() -> list[str]:
+    raw = os.environ.get("TELEGRAM_BOT_PROFILES", DEFAULT_TELEGRAM_BOT_PROFILES)
+    return [_profile_key(item) for item in raw.replace(";", ",").split(",") if _profile_key(item)]
+
+
+def _bot_profiles() -> list[TelegramBotProfile]:
+    profiles: list[TelegramBotProfile] = []
+    for name in _bot_profile_names():
+        profiles.append(
+            TelegramBotProfile(
+                name=name,
+                token=os.environ.get(f"TELEGRAM_{name}_BOT_TOKEN", ""),
+                allowed_user_ids=_csv_set(f"TELEGRAM_{name}_ALLOWED_USER_IDS"),
+                identity_map=_csv_map(f"TELEGRAM_{name}_IDENTITY_MAP"),
+                forced_agent=os.environ.get(f"TELEGRAM_{name}_AGENT", "").strip(),
+            )
+        )
+    return profiles
+
+
+def _active_bot_profiles() -> list[TelegramBotProfile]:
+    profiles = [profile for profile in _bot_profiles() if _profile_runtime_configured(profile)]
+    if profiles:
+        return profiles
+    return [
+        TelegramBotProfile(
+            name="DEFAULT",
+            token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+            allowed_user_ids=_csv_set("TELEGRAM_ALLOWED_USER_IDS"),
+            identity_map=_csv_map("TELEGRAM_IDENTITY_MAP"),
+            forced_agent=os.environ.get("TELEGRAM_FORCED_AGENT", "").strip(),
+        )
+    ]
+
+
+def _profile_runtime_configured(profile: TelegramBotProfile) -> bool:
+    forced_agent_ok = profile.name == "DEFAULT" or bool(profile.forced_agent.strip())
+    return bool(profile.token.strip()) and bool(profile.allowed_user_ids) and bool(profile.identity_map) and forced_agent_ok
 
 
 def _read_offset(path: Path) -> int | None:
@@ -130,6 +196,25 @@ def _missing_configuration(checks: dict[str, bool]) -> list[str]:
     return missing
 
 
+def _profile_readiness() -> list[dict[str, object]]:
+    results = []
+    for profile in _bot_profiles():
+        allowlist_complete = bool(profile.allowed_user_ids) and profile.allowed_user_ids <= set(profile.identity_map)
+        results.append(
+            {
+                "name": profile.name,
+                "bot_token_configured": bool(profile.token.strip()),
+                "allowlist_configured": bool(profile.allowed_user_ids),
+                "identity_map_configured": bool(profile.identity_map),
+                "allowlist_identity_map_complete": allowlist_complete,
+                "forced_agent": profile.forced_agent,
+                "configured": profile.configured and allowlist_complete,
+                "secrets_included": False,
+            }
+        )
+    return results
+
+
 def _next_actions(missing: list[str], *, ready: bool) -> list[str]:
     if ready:
         return ["Run without --dry-run, preferably with --once first, and verify the generated round-trip report."]
@@ -160,8 +245,12 @@ def readiness(args: argparse.Namespace) -> dict[str, Any]:
         "identity_map_configured": bool(identities),
         "allowlist_identity_map_complete": bool(allowlist) and allowlist <= set(identities),
     }
-    ready = all(checks.values())
+    profile_readiness = _profile_readiness()
+    profile_mode_ready = bool(profile_readiness) and any(item["configured"] for item in profile_readiness) and open_webui.configured
+    ready = all(checks.values()) or profile_mode_ready
     missing = _missing_configuration(checks)
+    if profile_mode_ready:
+        missing = []
     return {
         "report_type": "freyja-channels-telegram-pilot",
         "generated_at_unix": int(time.time()),
@@ -172,6 +261,7 @@ def readiness(args: argparse.Namespace) -> dict[str, Any]:
         "ready": ready,
         "checks": checks,
         "messaging_agents": _messaging_agents(),
+        "bot_profiles": profile_readiness,
         "missing_configuration": missing,
         "next_actions": _next_actions(missing, ready=ready),
         "state_dir": _display_path(args.state_dir),
@@ -207,18 +297,66 @@ def run_once(
     return {"updates": len(updates), "handled": handled, "denied_or_client_failed": denied, "failed": failed}
 
 
+def _force_agent(message: ChannelMessage, agent: str) -> ChannelMessage:
+    from dataclasses import replace
+
+    return replace(message, requested_agent=agent) if agent else message
+
+
+def run_once_forced_agent(
+    *,
+    service: FreyjaChannels,
+    transport: TelegramLongPollingTransport,
+    offset_file: Path,
+    forced_agent: str,
+) -> dict[str, int]:
+    offset = _read_offset(offset_file)
+    updates = transport.get_update_messages(offset=offset)
+    handled = 0
+    denied = 0
+    failed = 0
+    max_update_id = offset - 1 if offset is not None else None
+    for update in updates:
+        max_update_id = update.update_id if max_update_id is None else max(max_update_id, update.update_id)
+        try:
+            message = _force_agent(transport.enrich_attachments(update.message), forced_agent)
+            response = service.handle(message)
+            if update.message.chat_id:
+                transport.send_message(chat_id=update.message.chat_id, text=response)
+            handled += 1
+        except (ChannelPolicyError, ChannelClientError, ChannelTransportError):
+            denied += 1
+        except Exception:
+            failed += 1
+    if max_update_id is not None:
+        _write_offset(offset_file, max_update_id + 1)
+    return {"updates": len(updates), "handled": handled, "denied_or_client_failed": denied, "failed": failed}
+
+
 def run_loop(args: argparse.Namespace) -> dict[str, Any]:
-    offset_file = args.offset_file or args.state_dir / "telegram.offset"
-    allowlists = {"telegram": _csv_set("TELEGRAM_ALLOWED_USER_IDS")}
-    identities = {"telegram": _csv_map("TELEGRAM_IDENTITY_MAP")}
-    service = FreyjaChannels(allowlists=allowlists, identity_maps=identities, store=FileChannelStore(args.state_dir), client=OpenWebUIChatClient())
-    transport = TelegramLongPollingTransport()
+    profiles = _active_bot_profiles()
     totals = {"updates": 0, "handled": 0, "denied_or_client_failed": 0, "failed": 0}
     iterations = 0
     while True:
-        result = run_once(service=service, transport=transport, offset_file=offset_file)
-        for key, value in result.items():
-            totals[key] += value
+        for profile in profiles:
+            if not _profile_runtime_configured(profile):
+                continue
+            offset_file = args.offset_file or args.state_dir / f"telegram-{profile.name.lower()}.offset"
+            service = FreyjaChannels(
+                allowlists={"telegram": profile.allowed_user_ids},
+                identity_maps={"telegram": profile.identity_map},
+                store=FileChannelStore(args.state_dir / profile.name.lower()),
+                client=OpenWebUIChatClient(),
+            )
+            transport = TelegramLongPollingTransport(TelegramPilotConfig(bot_token=profile.token))
+            result = run_once_forced_agent(
+                service=service,
+                transport=transport,
+                offset_file=offset_file,
+                forced_agent=profile.forced_agent,
+            )
+            for key, value in result.items():
+                totals[key] += value
         iterations += 1
         if args.until_handled and totals["handled"] > 0:
             break

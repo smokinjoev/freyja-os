@@ -125,6 +125,39 @@ def test_telegram_pilot_requires_every_allowlisted_sender_to_have_identity(tmp_p
     assert "secret-key" not in str(report)
 
 
+def test_telegram_pilot_dry_run_accepts_configured_separate_bot_profile(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_ALLOWED_USER_IDS", raising=False)
+    monkeypatch.delenv("TELEGRAM_IDENTITY_MAP", raising=False)
+    monkeypatch.setenv("OPEN_WEBUI_API_KEY", "secret-key")
+    monkeypatch.setenv("TELEGRAM_BOT_PROFILES", "CLOYD_JOE")
+    monkeypatch.setenv("TELEGRAM_CLOYD_JOE_BOT_TOKEN", "secret-cloyd-token")
+    monkeypatch.setenv("TELEGRAM_CLOYD_JOE_ALLOWED_USER_IDS", "1001")
+    monkeypatch.setenv("TELEGRAM_CLOYD_JOE_IDENTITY_MAP", "1001:joe")
+    monkeypatch.setenv("TELEGRAM_CLOYD_JOE_AGENT", "cloyd")
+    output = tmp_path / "pilot.json"
+
+    assert _module().main(["--dry-run", "--state-dir", str(tmp_path), "--output", str(output)]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["ready"] is True
+    assert report["missing_configuration"] == []
+    assert report["bot_profiles"] == [
+        {
+            "name": "CLOYD_JOE",
+            "bot_token_configured": True,
+            "allowlist_configured": True,
+            "identity_map_configured": True,
+            "allowlist_identity_map_complete": True,
+            "forced_agent": "cloyd",
+            "configured": True,
+            "secrets_included": False,
+        }
+    ]
+    assert "secret-cloyd-token" not in str(report)
+    assert "1001" not in str(report)
+
+
 def test_telegram_pilot_invalid_poll_interval_env_uses_default(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("FREYJA_CHANNEL_TELEGRAM_POLL_INTERVAL", "not-a-number")
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
@@ -188,6 +221,29 @@ def test_telegram_pilot_run_once_preserves_requested_agent_command(tmp_path: Pat
     assert service.messages[0].text == "check the repo"
 
 
+def test_telegram_pilot_run_once_forced_agent_overrides_message_command(tmp_path: Path) -> None:
+    module = _module()
+    service = FakeService()
+    transport = FakeTransport(
+        [
+            TelegramInbound(
+                update_id=41,
+                message=ChannelMessage(channel="telegram", sender="1001", chat_id="2002", text="try another agent", requested_agent="benedict"),
+            )
+        ]
+    )
+
+    result = module.run_once_forced_agent(
+        service=service,
+        transport=transport,
+        offset_file=tmp_path / "telegram-cloyd.offset",
+        forced_agent="cloyd",
+    )
+
+    assert result["handled"] == 1
+    assert service.messages[0].requested_agent == "cloyd"
+
+
 def test_telegram_pilot_run_once_enriches_attachments_before_routing(tmp_path: Path) -> None:
     module = _module()
     service = FakeService()
@@ -238,9 +294,10 @@ def test_telegram_pilot_run_loop_until_handled_stops_after_reply(tmp_path: Path,
             ],
         ]
     )
-    monkeypatch.setattr(module, "TelegramLongPollingTransport", lambda: transport)
+    monkeypatch.setattr(module, "TelegramLongPollingTransport", lambda *_args, **_kwargs: transport)
     monkeypatch.setattr(module, "OpenWebUIChatClient", lambda: object())
     monkeypatch.setattr(module, "FreyjaChannels", lambda **kwargs: FakeService())
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "secret-token")
     monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "1001")
     monkeypatch.setenv("TELEGRAM_IDENTITY_MAP", "1001:joe")
     args = module.build_parser().parse_args(["--state-dir", str(tmp_path), "--max-iterations", "5", "--until-handled", "--poll-interval", "0.1"])
