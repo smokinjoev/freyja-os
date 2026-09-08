@@ -42,6 +42,24 @@ def test_open_webui_defaults_stay_on_model_proxy_until_freyja5_cutover() -> None
     assert "qwen3.5:122b-a10b" not in approved_line
 
 
+def test_open_webui_compose_runs_open_terminal_internally() -> None:
+    compose = yaml.safe_load(OPEN_WEBUI_COMPOSE.read_text(encoding="utf-8"))
+    services = compose["services"]
+    open_webui = services["open-webui"]
+    open_terminal = services["open-terminal"]
+    env_example = OPEN_WEBUI_ENV_EXAMPLE.read_text(encoding="utf-8")
+
+    assert set(open_webui["depends_on"]) == {"model-proxy", "open-terminal"}
+    assert open_terminal["image"] == "ghcr.io/open-webui/open-terminal:latest"
+    assert open_terminal["environment"]["OPEN_TERMINAL_API_KEY"] == (
+        "${OPEN_TERMINAL_API_KEY:?set OPEN_TERMINAL_API_KEY in deploy/compose/open-webui/.env}"
+    )
+    assert open_terminal["volumes"] == ["open-terminal:/home/user"]
+    assert "ports" not in open_terminal
+    assert compose["volumes"]["open-terminal"] is None
+    assert "OPEN_TERMINAL_API_KEY=replace-with-random-secret" in env_example
+
+
 def test_proxy_model_listing_skips_invalid_upstream_json() -> None:
     proxy = load_proxy_module()
     handler = proxy.Handler.__new__(proxy.Handler)

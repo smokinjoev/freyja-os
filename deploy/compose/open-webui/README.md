@@ -41,6 +41,7 @@ On Atlas:
 cp deploy/compose/open-webui/.env.example deploy/compose/open-webui/.env
 chmod 600 deploy/compose/open-webui/.env
 sed -i "s/replace-with-random-hex/$(openssl rand -hex 32)/" deploy/compose/open-webui/.env
+sed -i "s/replace-with-random-secret/$(openssl rand -hex 32)/" deploy/compose/open-webui/.env
 docker compose --env-file deploy/compose/open-webui/.env \
   -f deploy/compose/open-webui/compose.yaml config
 docker compose --env-file deploy/compose/open-webui/.env \
@@ -120,6 +121,21 @@ scripts/vulcan-operator.py unload-profile reason --yes
 
 For now, when ending an Open WebUI work session, leave the last active model
 warm on Vulcan instead of unloading it immediately.
+
+## Open Terminal
+
+The compose stack runs Open Terminal on the private Docker network only. In
+Open WebUI, configure it under Admin Settings > Admin > Integrations > Open
+Terminal:
+
+```text
+URL: http://open-terminal:8000
+Auth Type: Bearer
+API Key: value of OPEN_TERMINAL_API_KEY from deploy/compose/open-webui/.env
+```
+
+Do not use `localhost` for this URL; from the Open WebUI container, the service
+name is `open-terminal`.
 
 ## Update
 
