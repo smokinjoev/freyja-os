@@ -15,6 +15,8 @@ from freyja.freyja5_config import (
     freyja5_readiness_ok,
     freyja5_vulcan_evidence,
 )
+from freyja.freyja3_memory import Freyja3MemoryQuery, Freyja3MemoryStore
+from freyja.foundation_models import SecurityDomainId
 from freyja.router import RoutingDecision, RoutingResult, router
 from freyja.tools.models import ToolExecutionResult
 
@@ -674,9 +676,11 @@ def test_agent_gateway_chat_forces_scoped_agent_model(monkeypatch) -> None:
 
 
 def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatch) -> None:
+    from freyja import main as director_main
     from freyja.config import settings
 
     monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(director_main, "freyja3_memory_store", None)
     response = client.post(
         "/v1/chat/completions",
         headers={"Authorization": "Bearer test-connector-token"},
@@ -693,7 +697,7 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatc
     assert data["object"] == "chat.completion"
     assert data["model"] == "freyja-5"
     content = data["choices"][0]["message"]["content"]
-    assert "Freyja received the objective and selected no tools using vulcan-nexus-coder." in content
+    assert "Freyja received the objective and selected coding.execute using vulcan-nexus-coder." in content
     assert "Trace:" in content
     assert "Route: code" in content
     assert "Status: not_run" in content
@@ -729,6 +733,39 @@ def test_openai_chat_completion_freyja5_known_user_gets_stable_household_identit
     assert trace["resolved_user"] == "person:joe"
     assert trace["authenticated_subject"] == "person:joe"
     assert response.json()["freyja"]["egress_state"] == "local-only"
+
+
+def test_openai_agent_chat_writes_explicit_memory(monkeypatch, tmp_path) -> None:
+    from freyja import main as director_main
+    from freyja.config import settings
+
+    memory_store = Freyja3MemoryStore(tmp_path / "freyja3-memory.db")
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", False)
+    monkeypatch.setattr(director_main, "freyja3_memory_store", memory_store)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent/freyja",
+            "user": "joe",
+            "messages": [{"role": "user", "content": "Remember that Joe wants concise household status first."}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    memories = memory_store.list(
+        Freyja3MemoryQuery(owner_domain_id=SecurityDomainId.HOUSEHOLD),
+        reader_domain_id=SecurityDomainId.HOUSEHOLD,
+    )
+    assert any(
+        memory.content == "Joe wants concise household status first."
+        and memory.provenance == "agent-runtime-v3-explicit-remember"
+        for memory in memories
+    )
+    assert response.json()["freyja"]["trace"]["channel"] == "open-webui"
 
 
 def test_openai_chat_completion_freyja5_inline_image_uses_vision_route(monkeypatch) -> None:

@@ -511,6 +511,8 @@ class AgentRuntimeV3:
         allowed = set(agent.tool_grants).intersection(set(available_tool_ids))
         lowered = objective.lower()
         candidates: list[str] = []
+        if "coding.execute" in allowed and _is_coding_objective(objective):
+            return ["coding.execute"]
         rules = (
             ("web.search", ("search", "look up", "latest", "current")),
             ("weather.current", ("weather", "forecast", "temperature")),
@@ -561,7 +563,7 @@ class AgentRuntimeV3:
                     "garage",
                 ),
             ),
-            ("home-assistant.control", ("turn on", "turn off", "switch on", "switch off", "lock", "unlock", "open", "close")),
+            ("home-assistant.control", ("turn on", "turn off", "switch on", "switch off", "lock", "unlock")),
             ("macagent.apple", ("mac", "finder", "safari", "shortcut", "apple")),
             ("shell.run", ("shell", "command", "terminal")),
             ("filesystem.read", ("file", "folder", "repo", "inspect")),
@@ -1357,6 +1359,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "home-assistant.control": "home_assistant_control_state",
     "system.health": "system_health",
     "git.inspect": "repository_status",
+    "coding.execute": "opencode_send",
     "memory.private": "recall_conversation",
     "memory.shared": "memory_recall_shared",
     "music.control": "apple_music_current_track",
@@ -1365,7 +1368,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
 _CAPABILITY_BY_CONCRETE_TOOL = {tool_name: capability_id for capability_id, tool_name in _CONCRETE_TOOL_BY_CAPABILITY.items()}
 _CAPABILITY_BY_CONCRETE_TOOL["event_weather"] = "weather.current"
 
-_MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control", "calendar.write"}
+_MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control", "calendar.write", "coding.execute"}
 
 
 def _is_coding_objective(objective: str) -> bool:
@@ -1380,8 +1383,13 @@ def _is_coding_objective(objective: str) -> bool:
         r"\bbug\b",
         r"\bbuild\b",
         r"\bwebsite\b",
+        r"\bwebpage\b",
         r"\bsite\b",
         r"\bapp\b",
+        r"\bopencode\b",
+        r"\btailscale\b",
+        r"\bnetwork service\b",
+        r"\bport\b",
         r"\brepo\b",
         r"\brepository\b",
         r"\bgit\b",
@@ -1910,7 +1918,7 @@ def _trim_tool_output(output: dict[str, Any], *, max_chars: int = 6000) -> dict[
 
 
 _EXPLICIT_MEMORY_RE = re.compile(
-    r"^\s*(?:please\s+)?remember(?:\s+that|\s+this)?\s+(?P<content>.+?)\s*$",
+    r"^\s*(?:(?:system|user):\s*)?(?:please\s+)?remember(?:\s+that|\s+this)?\s+(?P<content>.+?)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 

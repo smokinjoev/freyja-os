@@ -24,6 +24,7 @@ from freyja.config import settings
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
+from freyja.freyja3_memory import Freyja3MemoryStore
 from freyja.freyja5_config import (
     FREYJA5_OPEN_WEBUI_AGENT_MODELS,
     freyja5_agent_evidence,
@@ -176,7 +177,12 @@ if settings.agent_smith_enabled and settings.agent_smith_write_pilot_enabled:
     for _tool_name in ("write_pilot_file_write", "write_pilot_git_add", "write_pilot_git_commit"):
         get_registry().set_enabled(_tool_name, True)
 
-agent_runtime_v3 = AgentRuntimeV3(tool_registry=get_registry(), run_inference=settings.freyja3_inference_enabled)
+freyja3_memory_store = Freyja3MemoryStore() if settings.memory_enabled else None
+agent_runtime_v3 = AgentRuntimeV3(
+    tool_registry=get_registry(),
+    memory_store=freyja3_memory_store,
+    run_inference=settings.freyja3_inference_enabled,
+)
 
 
 class FamilyRouteMessage(BaseModel):
@@ -1305,6 +1311,7 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
         if gateway_result.handoff is None:
             raise HTTPException(status_code=403, detail="Freyja 5 Gateway rejected request.")
         result = await AgentRuntimeV3(
+            memory_store=freyja3_memory_store,
             run_inference=settings.freyja5_openai_live_inference_enabled,
             allow_cloud_fallback=False,
         ).arun(gateway_result.handoff)
