@@ -768,6 +768,60 @@ def test_openai_agent_chat_writes_explicit_memory(monkeypatch, tmp_path) -> None
     assert response.json()["freyja"]["trace"]["channel"] == "open-webui"
 
 
+def test_openai_agent_chat_executes_home_assistant_read_tool(monkeypatch) -> None:
+    from freyja import main as director_main
+    from freyja.config import settings
+    from freyja.tools.models import ToolExecutionResult
+
+    class FakeRegistry:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def execute(self, request):
+            self.requests.append(request)
+            return ToolExecutionResult(
+                success=True,
+                tool_name=request.tool_name,
+                request_id=request.request_id,
+                output={
+                    "live_data_available": True,
+                    "count": 3,
+                    "entities": [
+                        {"entity_id": "light.kitchen", "domain": "light", "state": "on", "is_on": True},
+                        {"entity_id": "light.hall", "domain": "light", "state": "off", "is_on": False},
+                        {"entity_id": "light.office", "domain": "light", "state": "on", "is_on": True},
+                    ],
+                    "source": "unit-test",
+                },
+            )
+
+    fake_registry = FakeRegistry()
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", False)
+    monkeypatch.setattr(director_main, "freyja3_memory_store", None)
+    monkeypatch.setattr(director_main, "get_registry", lambda: fake_registry)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent/freyja",
+            "user": "joe",
+            "messages": [{"role": "user", "content": "How many lights are on right now in my home?"}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    content = data["choices"][0]["message"]["content"]
+    assert "2 lights are on." in content
+    assert fake_registry.requests[0].tool_name == "home_assistant_list_states"
+    assert fake_registry.requests[0].arguments == {"domain": "light"}
+    assert data["freyja"]["trace"]["tool_calls"] == ["home-assistant.read"]
+    assert data["freyja"]["trace"]["inference_status"] is None
+
+
 def test_openai_chat_completion_freyja5_inline_image_uses_vision_route(monkeypatch) -> None:
     from freyja.config import settings
 
