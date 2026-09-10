@@ -12,7 +12,7 @@ defaults:
 model_profiles:
   fast_chat:
     provider: vulcan_ollama
-    model: qwen2.5:32b-instruct
+    model: gpt-oss-freyja:20b-analysis-prefill
     keep_local: true
   strong_reasoning:
     provider: vulcan_ollama

@@ -378,7 +378,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Open WebUI tools OpenAPI ok" in text
     assert "Readiness summary" in text
     assert "## Inference" in text
-    assert "`fast_chat`: `qwen2.5:32b-instruct`" in text
+    assert "`fast_chat`: `gpt-oss-freyja:20b-analysis-prefill`" in text
     assert "`strong_reasoning`: `qwen3:30b-a3b`" in text
     assert "`vision_documents`: `qwen2.5vl:72b`" in text
     assert "`coding`: `qwen3-coder-next:q4_K_M`" in text

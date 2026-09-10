@@ -30,7 +30,7 @@ Verified completion: `86.7%` (13/15 requirements)
 ## Inference
 
 - `coding`: `qwen3-coder-next:q4_K_M`
-- `fast_chat`: `qwen2.5:32b-instruct`
+- `fast_chat`: `gpt-oss-freyja:20b-analysis-prefill`
 - `strong_reasoning`: `qwen3:30b-a3b`
 - `vision_documents`: `qwen2.5vl:72b`
 - `agent_models_in_proxy_catalog`: `True`

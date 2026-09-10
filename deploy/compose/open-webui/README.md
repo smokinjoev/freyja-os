@@ -10,7 +10,7 @@ Planned model catalog:
 
 | Role | Model |
 | --- | --- |
-| Fast general chat | `qwen2.5:32b-instruct` |
+| Fast general chat | `gpt-oss-freyja:20b-analysis-prefill` |
 | Reasoning agent candidate | `qwen3:30b-a3b` |
 | Coding | `qwen3-coder-next:q4_K_M` |
 | GPT OSS small | `gpt-oss:20b` or `gpt-oss-freyja:20b-analysis-prefill` |
