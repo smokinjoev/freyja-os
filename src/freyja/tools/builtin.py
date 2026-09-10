@@ -14,6 +14,7 @@ from freyja.tools.calendar import register_calendar_tools
 from freyja.tools.home_assistant import register_home_assistant_tools
 from freyja.tools.identity import register_identity_tools
 from freyja.tools.local_host import register_local_host_tools
+from freyja.tools.opencode_runtime import register_opencode_tools
 from freyja.tools.weather import WeatherRequestType, classify_weather_request, get_weather
 from freyja.tools.web_search import web_fetch, web_search
 
@@ -386,6 +387,12 @@ _BUILTIN_TOOL_NAMES = (
     "home_assistant_inventory_changes",
     "home_assistant_control_state",
     "memory_recall_shared",
+    "opencode_start",
+    "opencode_send",
+    "opencode_shell",
+    "opencode_status",
+    "opencode_output",
+    "opencode_stop",
 )
 
 
@@ -410,6 +417,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
     register_calendar_tools(registry)
     register_identity_tools(registry)
     register_home_assistant_tools(registry)
+    register_opencode_tools(registry)
     registry.register(
         ToolDefinition(
             name="get_weather",

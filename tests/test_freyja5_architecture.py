@@ -85,8 +85,8 @@ def test_gateway_handoff_trace_summary_carries_freyja5_route_and_egress() -> Non
     assert result.trace_summary["actual_runtime"] == "nexus"
     assert result.trace_summary["machine"] == "vulcan"
     assert result.trace_summary["inference_status"] == "not_run"
-    assert result.trace_summary["selected_tools"] == []
-    assert result.trace_summary["tool_calls"] == []
+    assert result.trace_summary["selected_tools"] == ["coding.execute"]
+    assert result.trace_summary["tool_calls"] == ["coding.execute"]
     assert isinstance(result.trace_summary["latency_ms"], float)
     traceability = freyja5_traceability_evidence()
     assert set(traceability["important_request_fields"]) <= set(result.trace_summary)

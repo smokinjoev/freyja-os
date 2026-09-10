@@ -16,6 +16,8 @@ agents:
       - macagent.apple
       - messaging.send
       - music.control
+      - coding.execute
+      - opencode.session
       - scheduling.create
       - vision.inspect
   - id: cloyd-gibbler

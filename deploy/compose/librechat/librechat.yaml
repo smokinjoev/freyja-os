@@ -1,0 +1,36 @@
+version: 1.3.13
+cache: true
+
+endpoints:
+  custom:
+    - name: "Vulcan Nexus"
+      apiKey: "${NEXUS_OPENAI_API_KEY}"
+      baseURL: "${NEXUS_OPENAI_BASE_URL}"
+      models:
+        default:
+          - "qwen3-coder-next:q4_K_M"
+          - "qwen2.5:32b-instruct"
+          - "qwen3:30b-a3b"
+        fetch: true
+      titleConvo: true
+      titleModel: "qwen2.5:32b-instruct"
+      summarize: false
+      forcePrompt: false
+      dropParams:
+        - "stop"
+
+mcpServers:
+  freyja-terminal:
+    title: "Freyja Terminal"
+    description: "Controlled terminal execution backend for Freyja coding-agent evaluation."
+    type: "streamable-http"
+    url: "${FREYJA_TERMINAL_MCP_URL}"
+    headers:
+      Authorization: "Bearer ${FREYJA_TERMINAL_MCP_TOKEN}"
+    requiresOAuth: false
+    timeout: 120000
+    initTimeout: 30000
+    chatMenu: false
+    serverInstructions: |
+      Use this terminal only for the designated Freyja coding-agent workspace.
+      Inspect files before editing, run tests after changes, and report commands and changed files.

@@ -39,6 +39,7 @@ certification/benchmarks/*.md
 .vscode/
 .idea/
 .backups/
+backups/
 
 # Qwen session/configuration state
 .qwen/

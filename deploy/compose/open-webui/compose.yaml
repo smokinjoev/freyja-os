@@ -18,6 +18,9 @@ services:
       FREYJA5_BASE_URL: ${OPEN_WEBUI_FREYJA5_BASE_URL:-http://host.docker.internal:8500/v1}
       FREYJA5_API_KEY: ${OPEN_WEBUI_FREYJA5_API_KEY:-not-needed}
       FREYJA5_AGENT_MODELS: ${OPEN_WEBUI_FREYJA5_AGENT_MODELS:-agent/freyja,agent/cloyd-gibbler,agent/benedict,agent/benedict-paralegal,agent/agent-47,agent/jennacide}
+      FREYJA_CORE_BASE_URL: ${OPEN_WEBUI_FREYJA_CORE_BASE_URL:-http://100.115.228.56:8510/v1}
+      FREYJA_CORE_API_KEY: ${OPEN_WEBUI_FREYJA_CORE_API_KEY:-not-needed}
+      FREYJA_CORE_MODELS: ${OPEN_WEBUI_FREYJA_CORE_MODELS:-freyja-core}
       MODEL_LIST_TIMEOUT_SECONDS: ${OPEN_WEBUI_MODEL_LIST_TIMEOUT_SECONDS:-5}
       PROBE_MODELS: ${OPEN_WEBUI_PROBE_MODELS:-gpt-oss:120b}
       PROBE_TIMEOUT_SECONDS: ${OPEN_WEBUI_PROBE_TIMEOUT_SECONDS:-45}
@@ -50,25 +53,46 @@ services:
       AIOHTTP_CLIENT_TIMEOUT: ${AIOHTTP_CLIENT_TIMEOUT:-1800}
       AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST: ${AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST:-15}
       AIOHTTP_CLIENT_TIMEOUT_OPENAI_MODEL_LIST: ${AIOHTTP_CLIENT_TIMEOUT_OPENAI_MODEL_LIST:-15}
+      TERMINAL_SERVER_CONNECTIONS: >-
+        [{
+          "id": "terminals",
+          "name": "Terminals",
+          "enabled": true,
+          "url": "http://terminals:3000",
+          "key": "${TERMINALS_API_KEY:-not-configured}",
+          "auth_type": "bearer",
+          "config": {
+            "access_grants": [{
+              "principal_type": "user",
+              "principal_id": "*",
+              "permission": "read"
+            }]
+          }
+        }]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - open-webui:/app/backend/data
     depends_on:
       - model-proxy
-      - open-terminal
+      - terminals
 
-  open-terminal:
-    image: ghcr.io/open-webui/open-terminal:latest
+  terminals:
+    image: ghcr.io/open-webui/terminals:latest
     restart: unless-stopped
     environment:
-      OPEN_TERMINAL_API_KEY: ${OPEN_TERMINAL_API_KEY:?set OPEN_TERMINAL_API_KEY in deploy/compose/open-webui/.env}
+      TERMINALS_BACKEND: docker
+      TERMINALS_API_KEY: ${TERMINALS_API_KEY:-not-configured}
+      TERMINALS_IMAGE: ghcr.io/open-webui/open-terminal:latest
+      TERMINALS_NETWORK: freyja-open-webui-atlas_default
+      TERMINALS_IDLE_TIMEOUT_MINUTES: ${TERMINALS_IDLE_TIMEOUT_MINUTES:-30}
     volumes:
-      - open-terminal:/home/user
+      - /var/run/docker.sock:/var/run/docker.sock
+      - terminals-data:/app/data
     read_only: false
     security_opt:
       - no-new-privileges:true
 
 volumes:
   open-webui:
-  open-terminal:
+  terminals-data:

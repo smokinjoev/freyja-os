@@ -1,0 +1,17 @@
+Host atlas-openwebui-status
+  HostName 100.119.235.114
+  User joe
+  IdentityFile ~/.ssh/openwebui_status_ed25519
+  IdentitiesOnly yes
+  BatchMode yes
+  StrictHostKeyChecking accept-new
+  ConnectTimeout 10
+
+Host vulcan-openwebui-status
+  HostName Vulcan-1
+  User joe
+  IdentityFile ~/.ssh/openwebui_status_ed25519
+  IdentitiesOnly yes
+  BatchMode yes
+  StrictHostKeyChecking accept-new
+  ConnectTimeout 10

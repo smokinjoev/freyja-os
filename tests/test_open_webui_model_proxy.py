@@ -33,7 +33,10 @@ def test_open_webui_defaults_stay_on_model_proxy_until_freyja5_cutover() -> None
     assert "DEFAULT_MODELS=qwen2.5vl:72b" in env_example
     assert "OPEN_WEBUI_FREYJA5_BASE_URL=http://host.docker.internal:8500/v1" in env_example
     assert "OPEN_WEBUI_FREYJA5_AGENT_MODELS=agent/freyja,agent/cloyd-gibbler,agent/benedict,agent/benedict-paralegal,agent/agent-47,agent/jennacide" in env_example
+    assert "OPEN_WEBUI_FREYJA_CORE_BASE_URL=http://100.115.228.56:8510/v1" in env_example
+    assert "OPEN_WEBUI_FREYJA_CORE_MODELS=freyja-core" in env_example
     assert proxy_environment["FREYJA5_BASE_URL"] == "${OPEN_WEBUI_FREYJA5_BASE_URL:-http://host.docker.internal:8500/v1}"
+    assert proxy_environment["FREYJA_CORE_BASE_URL"] == "${OPEN_WEBUI_FREYJA_CORE_BASE_URL:-http://100.115.228.56:8510/v1}"
     assert "DEFAULT_MODELS=freyja-5" not in env_example
     assert "qwen2.5:72b" not in proxy_environment["APPROVED_MODELS"]
     assert "qwen3.5:122b-a10b" not in proxy_environment["APPROVED_MODELS"]
@@ -46,18 +49,16 @@ def test_open_webui_compose_runs_open_terminal_internally() -> None:
     compose = yaml.safe_load(OPEN_WEBUI_COMPOSE.read_text(encoding="utf-8"))
     services = compose["services"]
     open_webui = services["open-webui"]
-    open_terminal = services["open-terminal"]
+    terminals = services["terminals"]
     env_example = OPEN_WEBUI_ENV_EXAMPLE.read_text(encoding="utf-8")
 
-    assert set(open_webui["depends_on"]) == {"model-proxy", "open-terminal"}
-    assert open_terminal["image"] == "ghcr.io/open-webui/open-terminal:latest"
-    assert open_terminal["environment"]["OPEN_TERMINAL_API_KEY"] == (
-        "${OPEN_TERMINAL_API_KEY:?set OPEN_TERMINAL_API_KEY in deploy/compose/open-webui/.env}"
-    )
-    assert open_terminal["volumes"] == ["open-terminal:/home/user"]
-    assert "ports" not in open_terminal
-    assert compose["volumes"]["open-terminal"] is None
-    assert "OPEN_TERMINAL_API_KEY=replace-with-random-secret" in env_example
+    assert set(open_webui["depends_on"]) == {"model-proxy", "terminals"}
+    assert terminals["image"] == "ghcr.io/open-webui/terminals:latest"
+    assert terminals["environment"]["TERMINALS_API_KEY"] == "${TERMINALS_API_KEY:-not-configured}"
+    assert "/var/run/docker.sock:/var/run/docker.sock" in terminals["volumes"]
+    assert "ports" not in terminals
+    assert "terminals-data" in compose["volumes"]
+    assert "TERMINALS_API_KEY=replace-with-random-secret" in env_example
 
 
 def test_proxy_model_listing_skips_invalid_upstream_json() -> None:
@@ -73,6 +74,7 @@ def test_proxy_model_listing_skips_invalid_upstream_json() -> None:
                 {"content-type": "application/json"},
                 json.dumps({"data": [{"id": "qwen2.5:7b"}]}).encode("utf-8"),
             ),
+            (599, {"content-type": "application/json"}, b"{}"),
             (599, {"content-type": "application/json"}, b"{}"),
         )
     )
@@ -103,7 +105,7 @@ def test_proxy_model_listing_uses_bounded_upstream_timeout() -> None:
     handler._proxy_models()
 
     assert sent["status"] == 503
-    assert len(calls) == 3
+    assert len(calls) == 4
     assert all(call[-1]["timeout"] == proxy.MODEL_LIST_TIMEOUT_SECONDS for call in calls)
 
 
@@ -128,6 +130,11 @@ def test_proxy_model_listing_includes_reachable_freyja5_agent_models() -> None:
                     }
                 ).encode("utf-8"),
             ),
+            (
+                200,
+                {"content-type": "application/json"},
+                json.dumps({"data": [{"id": "freyja-core", "owned_by": "freyja-os"}]}).encode("utf-8"),
+            ),
         )
     )
     handler._upstream = lambda *args, **kwargs: next(responses)
@@ -142,6 +149,7 @@ def test_proxy_model_listing_includes_reachable_freyja5_agent_models() -> None:
     assert "qwen2.5:32b-instruct" in model_ids
     assert "qwen2.5:7b" in model_ids
     assert "agent/freyja" in model_ids
+    assert "freyja-core" in model_ids
     assert "agent/not-approved" not in model_ids
 
 
@@ -170,6 +178,41 @@ def test_proxy_forwards_freyja5_agent_chat_without_unloading_vulcan() -> None:
 
     assert sent["status"] == 200
     assert upstream_calls == [(proxy.FREYJA5_BASE_URL, proxy.FREYJA5_API_KEY, "POST", "/chat/completions", {"model": "agent/freyja", "messages": [{"role": "user", "content": "hello"}]})]
+
+
+def test_proxy_forwards_freyja_core_chat_without_unloading_vulcan() -> None:
+    proxy = load_proxy_module()
+    handler = proxy.Handler.__new__(proxy.Handler)
+    handler.command = "POST"
+    handler.path = "/v1/chat/completions"
+    body = json.dumps({"model": "freyja-core", "messages": [{"role": "user", "content": "How is Vulcan doing?"}]}).encode("utf-8")
+    handler.headers = {"content-type": "application/json", "content-length": str(len(body))}
+    handler.rfile = type("Reader", (), {"read": lambda self, length: body})()
+    sent = {}
+    upstream_calls = []
+
+    def fake_upstream(base_url, api_key, method, path, request_body, timeout=120):
+        upstream_calls.append((base_url, api_key, method, path, json.loads(request_body.decode("utf-8"))))
+        return 200, {"content-type": "application/json"}, json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
+
+    handler._upstream = fake_upstream
+    handler._unload_other_primary_models = lambda requested_model: (_ for _ in ()).throw(AssertionError("should not unload"))
+    handler._send = lambda status, headers, response_body: sent.update(
+        {"status": status, "headers": headers, "body": json.loads(response_body.decode("utf-8"))}
+    )
+
+    handler._proxy()
+
+    assert sent["status"] == 200
+    assert upstream_calls == [
+        (
+            proxy.FREYJA_CORE_BASE_URL,
+            proxy.FREYJA_CORE_API_KEY,
+            "POST",
+            "/chat/completions",
+            {"model": "freyja-core", "messages": [{"role": "user", "content": "How is Vulcan doing?"}]},
+        )
+    ]
 
 
 def test_probe_failure_unloads_loaded_primary_model() -> None:

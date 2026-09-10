@@ -145,7 +145,7 @@ PERSISTENT_AGENTS: tuple[PersistentAgent, ...] = (
         security_domain_id=SecurityDomainId.HOUSEHOLD,
         home_machine_id="atlas",
         aliases=frozenset({"family", "household", "home"}),
-        tool_grants=frozenset({"web.search", "weather.current", "browser.control", "calendar.read", "calendar.write", "email.read", "messaging.send", "home-assistant.read", "home-assistant.control", "macagent.apple", "vision.inspect", "music.control", "scheduling.create", "memory.shared", "system.health"}),
+        tool_grants=frozenset({"web.search", "weather.current", "browser.control", "calendar.read", "calendar.write", "email.read", "messaging.send", "home-assistant.read", "home-assistant.control", "macagent.apple", "coding.execute", "vision.inspect", "music.control", "scheduling.create", "memory.shared", "system.health"}),
         private_memory_scope="agent:freyja",
         shared_memory_scopes=frozenset({"family", "system"}),
     ),

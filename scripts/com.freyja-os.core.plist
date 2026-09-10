@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.freyja-os.core</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/freyja/freyja-os/scripts/run-freyja-core.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/freyja</string>
+        <key>USER</key>
+        <string>freyja</string>
+        <key>LOGNAME</key>
+        <string>freyja</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/freyja/freyja-os/src:/Users/freyja/freyja-os</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>FREYJA_CORE_HOST</key>
+        <string>100.115.228.56</string>
+        <key>FREYJA_CORE_PORT</key>
+        <string>8510</string>
+        <key>NEXUS_BASE_URL</key>
+        <string>http://100.94.80.21:3939</string>
+        <key>NEXUS_API_KEY_FILE</key>
+        <string>/Users/freyja/.config/freyja/msty-nexus-token</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/freyja/freyja-os</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/freyja/freyja-os/logs/freyja-core.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/freyja/freyja-os/logs/freyja-core.log</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

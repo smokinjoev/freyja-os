@@ -15,6 +15,8 @@ FALLBACK_BASE_URL = os.environ.get("FALLBACK_BASE_URL", "http://100.115.228.56:1
 FALLBACK_API_KEY = os.environ.get("FALLBACK_API_KEY", "not-needed")
 FREYJA5_BASE_URL = os.environ.get("FREYJA5_BASE_URL", "http://host.docker.internal:8500/v1").rstrip("/")
 FREYJA5_API_KEY = os.environ.get("FREYJA5_API_KEY", "not-needed")
+FREYJA_CORE_BASE_URL = os.environ.get("FREYJA_CORE_BASE_URL", "http://100.115.228.56:8510/v1").rstrip("/")
+FREYJA_CORE_API_KEY = os.environ.get("FREYJA_CORE_API_KEY", "not-needed")
 APPROVED_MODELS = {
     model.strip()
     for model in os.environ.get(
@@ -45,6 +47,11 @@ FREYJA5_AGENT_MODELS = {
         "agent/agent-47,"
         "agent/jennacide",
     ).split(",")
+    if model.strip()
+}
+FREYJA_CORE_MODELS = {
+    model.strip()
+    for model in os.environ.get("FREYJA_CORE_MODELS", "freyja-core").split(",")
     if model.strip()
 }
 PROBE_MODELS = {
@@ -87,6 +94,7 @@ class Handler(BaseHTTPRequestHandler):
             (PRIMARY_BASE_URL, PRIMARY_API_KEY, APPROVED_MODELS),
             (FALLBACK_BASE_URL, FALLBACK_API_KEY, FALLBACK_MODELS),
             (FREYJA5_BASE_URL, FREYJA5_API_KEY, FREYJA5_AGENT_MODELS),
+            (FREYJA_CORE_BASE_URL, FREYJA_CORE_API_KEY, FREYJA_CORE_MODELS),
         ):
             status, headers, body = self._upstream(
                 base_url, api_key, "GET", "/models", b"", timeout=MODEL_LIST_TIMEOUT_SECONDS
@@ -119,7 +127,12 @@ class Handler(BaseHTTPRequestHandler):
         payload = self._request_payload(body) if self.command == "POST" else None
         requested_model = self._requested_model_from_payload(payload)
         if self.command == "POST" and self.path.split("?", 1)[0] == "/v1/chat/completions":
-            if requested_model not in APPROVED_MODELS and requested_model not in FALLBACK_MODELS and requested_model not in FREYJA5_AGENT_MODELS:
+            if (
+                requested_model not in APPROVED_MODELS
+                and requested_model not in FALLBACK_MODELS
+                and requested_model not in FREYJA5_AGENT_MODELS
+                and requested_model not in FREYJA_CORE_MODELS
+            ):
                 self._send(
                     400,
                     {"content-type": "application/json"},
@@ -130,6 +143,16 @@ class Handler(BaseHTTPRequestHandler):
                 status, headers, response_body = self._upstream(
                     FREYJA5_BASE_URL,
                     FREYJA5_API_KEY,
+                    self.command,
+                    self.path.removeprefix("/v1"),
+                    body,
+                )
+                self._send(status, headers, response_body)
+                return
+            if requested_model in FREYJA_CORE_MODELS:
+                status, headers, response_body = self._upstream(
+                    FREYJA_CORE_BASE_URL,
+                    FREYJA_CORE_API_KEY,
                     self.command,
                     self.path.removeprefix("/v1"),
                     body,

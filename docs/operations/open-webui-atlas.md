@@ -98,6 +98,31 @@ The model proxy checks Vulcan first and Iris second. Iris fallback is only for
 When the Freyja 5.0 gateway is ready for live Open WebUI traffic, switch Open
 WebUI to the Atlas-local Freyja `/v1` endpoint and select `freyja-5`.
 
+For Freyja Core v0.1 testing, keep the existing Open WebUI provider pointed at
+`http://model-proxy:8080/v1` and expose only the opt-in `freyja-core` model
+through the proxy:
+
+```text
+OPEN_WEBUI_FREYJA_CORE_BASE_URL=http://100.115.228.56:8510/v1
+OPEN_WEBUI_FREYJA_CORE_API_KEY=not-needed
+OPEN_WEBUI_FREYJA_CORE_MODELS=freyja-core
+```
+
+Do not set `DEFAULT_MODELS=freyja-core` until the test profile has been
+validated. Existing Vulcan/Open WebUI models remain the default path.
+
+Msty Go can reach the same Core directly over Tailscale with an
+OpenAI-compatible provider:
+
+```text
+Base URL: http://100.115.228.56:8510/v1
+Model: freyja-core
+API key: not-needed
+```
+
+Keep Msty Nexus on Vulcan as the inference backend; Core forwards inference to
+`http://100.94.80.21:3939/v1` and does not call Ollama directly.
+
 The model proxy includes a narrow non-streaming reasoning-output adapter. If an
 upstream returns empty assistant `content` with useful text in an
 OpenAI-compatible `reasoning` field, the proxy promotes that text to visible
