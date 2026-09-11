@@ -220,7 +220,7 @@ def _opencode_request(method: str, path: str, body: dict[str, Any] | None = None
     if body is not None:
         request.add_header("content-type", "application/json")
     try:
-        timeout = float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
+        timeout = float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "45"))
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read()
     except urllib.error.HTTPError as exc:

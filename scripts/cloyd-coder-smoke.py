@@ -49,7 +49,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke test cloyd-coder with the family-dashboard project.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8766")
     parser.add_argument("--write", action="store_true", help="Run the tiny safe write job after read-only succeeds.")
-    parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--timeout", type=int, default=120)
     args = parser.parse_args()
 
     try:
