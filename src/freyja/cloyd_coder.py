@@ -206,8 +206,10 @@ def _opencode_password_file() -> Path:
 
 
 def _opencode_credentials() -> str:
-    username = os.environ.get("OPENCODE_USERNAME", "joe")
-    password = _opencode_password_file().read_text(encoding="utf-8").strip()
+    username = os.environ.get("OPENCODE_USERNAME") or os.environ.get("OPENCODE_SERVER_USERNAME") or "joe"
+    password = os.environ.get("OPENCODE_PASSWORD") or os.environ.get("OPENCODE_SERVER_PASSWORD")
+    if not password:
+        password = _opencode_password_file().read_text(encoding="utf-8").strip()
     return base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
 
 
