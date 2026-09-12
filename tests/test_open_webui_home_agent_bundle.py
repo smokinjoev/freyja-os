@@ -188,14 +188,15 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["access_bind_git_head"]
     assert bundle["evidence_summary"]["model_import_ok"] is True
     assert bundle["evidence_summary"]["model_import_validation_errors"] == []
-    assert bundle["evidence_summary"]["model_import_record_count"] == 5
+    assert bundle["evidence_summary"]["model_import_record_count"] == 6
     agent_policy = bundle["evidence_summary"]["agent_policy_summary"]
-    assert agent_policy["agent_ids"] == ["agent-44", "benedict", "cloyd", "freyja", "jenna"]
+    assert agent_policy["agent_ids"] == ["agent-44", "benedict", "cloyd", "freyja", "jenna", "smith"]
     assert agent_policy["runtime_model_ids"] == [
         "agent/agent-47",
         "agent/benedict",
         "agent/cloyd-gibbler",
         "agent/freyja",
+        "agent/freyja-coder",
         "agent/jennacide",
     ]
     assert agent_policy["benedict_access_groups"] == ["beth"]

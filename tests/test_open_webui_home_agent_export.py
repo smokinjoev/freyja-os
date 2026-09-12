@@ -30,7 +30,14 @@ def test_open_webui_home_agent_export_is_complete_and_secret_free() -> None:
     assert export["private_content_included"] is False
     assert export["open_webui_provider"] == "http://model-proxy:8080/v1"
     assert _module().validate_export(export) == []
-    assert set(records) == {"agent/freyja", "agent/cloyd-gibbler", "agent/benedict", "agent/agent-47", "agent/jennacide"}
+    assert set(records) == {
+        "agent/freyja",
+        "agent/cloyd-gibbler",
+        "agent/freyja-coder",
+        "agent/benedict",
+        "agent/agent-47",
+        "agent/jennacide",
+    }
     assert "token" not in str(export).lower()
     assert "api_key" not in str(export).lower()
 
@@ -57,6 +64,33 @@ def test_child_exports_deny_admin_messaging_and_device_actions() -> None:
         assert "messaging.send" in denied
         assert "home.device_action" in denied
         assert records[record_id]["freyja"]["tools"]["confirm"] == []
+
+
+def test_agent_smith_export_is_pure_coding_agent() -> None:
+    records = {record["id"]: record for record in _module().build_export()["records"]}
+    smith = records["agent/freyja-coder"]
+
+    assert smith["name"] == "Agent Smith"
+    assert smith["freyja"]["agent_id"] == "smith"
+    assert smith["freyja"]["model_profile"] == "coding"
+    assert smith["freyja"]["tools"]["coding"] == [
+        "opencode.start",
+        "opencode.send",
+        "opencode.shell",
+        "opencode.stop",
+    ]
+    assert smith["freyja"]["tools"]["confirm"] == []
+    assert "home.device_action" in smith["freyja"]["tools"]["deny"]
+
+
+def test_cloyd_export_delegates_coding() -> None:
+    records = {record["id"]: record for record in _module().build_export()["records"]}
+    cloyd = records["agent/cloyd-gibbler"]
+
+    assert cloyd["freyja"]["model_profile"] == "strong_reasoning"
+    assert "delegate the work to Agent Smith" in cloyd["params"]["system"]
+    assert "coding" not in cloyd["freyja"]["tools"] or cloyd["freyja"]["tools"]["coding"] == []
+    assert "opencode.shell" in cloyd["freyja"]["tools"]["deny"]
 
 
 def test_agent_export_validation_rejects_missing_required_agent() -> None:
@@ -115,6 +149,25 @@ def test_agent_export_validation_rejects_child_policy_drift() -> None:
     assert "agent-44 must deny messaging.send" in errors
     assert "agent-44 must deny home.device_action" in errors
     assert "agent-44 must not have confirmable tools" in errors
+
+
+def test_agent_export_validation_rejects_smith_policy_drift() -> None:
+    module = _module()
+    export = module.build_export()
+    smith = next(record for record in export["records"] if record["freyja"]["agent_id"] == "smith")
+    smith["id"] = "agent/not-smith"
+    smith["freyja"]["model_profile"] = "strong_reasoning"
+    smith["freyja"]["tools"]["coding"] = ["opencode.start"]
+    smith["freyja"]["tools"]["confirm"] = ["calendar.create"]
+    smith["freyja"]["tools"]["deny"] = ["cloud_fallback"]
+
+    errors = module.validate_export(export)
+
+    assert "Agent Smith must export as agent/freyja-coder" in errors
+    assert "Agent Smith must use the coding model profile" in errors
+    assert "Agent Smith must have the OpenCode coding runtime tools" in errors
+    assert "Agent Smith must deny calendar.create" in errors
+    assert "Agent Smith must not have household confirm tools" in errors
 
 
 def test_open_webui_home_agent_export_cli_writes_json(tmp_path: Path, capsys) -> None:

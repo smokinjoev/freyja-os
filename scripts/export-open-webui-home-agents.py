@@ -18,11 +18,12 @@ DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agen
 AGENT_MODEL_IDS = {
     "freyja": "agent/freyja",
     "cloyd": "agent/cloyd-gibbler",
+    "smith": "agent/freyja-coder",
     "benedict": "agent/benedict",
     "agent-44": "agent/agent-47",
     "jenna": "agent/jennacide",
 }
-REQUIRED_AGENT_IDS = {"freyja", "cloyd", "benedict", "agent-44", "jenna"}
+REQUIRED_AGENT_IDS = {"freyja", "cloyd", "smith", "benedict", "agent-44", "jenna"}
 CHILD_AGENT_IDS = {"agent-44", "jenna"}
 
 
@@ -175,6 +176,30 @@ def validate_export(export: dict[str, Any]) -> list[str]:
         errors.append("Benedict permitted knowledge must be Beth personal and restricted Benedict only")
     if set(benedict_tools.get("confirm") or []):
         errors.append("Benedict must not have confirmable write tools")
+
+    cloyd = records.get("cloyd") or {}
+    cloyd_tools = (cloyd.get("freyja") or {}).get("tools") or {}
+    cloyd_denied = set(cloyd_tools.get("deny") or [])
+    if "coding" in cloyd_tools and cloyd_tools.get("coding"):
+        errors.append("Cloyd must not have direct coding tools")
+    for required in ("opencode.start", "opencode.send", "opencode.shell", "opencode.stop"):
+        if required not in cloyd_denied:
+            errors.append(f"Cloyd must deny {required}")
+
+    smith = records.get("smith") or {}
+    smith_freyja = smith.get("freyja") or {}
+    smith_tools = smith_freyja.get("tools") or {}
+    if smith.get("id") != "agent/freyja-coder":
+        errors.append("Agent Smith must export as agent/freyja-coder")
+    if smith_freyja.get("model_profile") != "coding":
+        errors.append("Agent Smith must use the coding model profile")
+    if set(smith_tools.get("coding") or []) != {"opencode.start", "opencode.send", "opencode.shell", "opencode.stop"}:
+        errors.append("Agent Smith must have the OpenCode coding runtime tools")
+    for prohibited in ("calendar.create", "reminders.create", "messaging.send", "home.device_action", "cloud_fallback"):
+        if prohibited not in set(smith_tools.get("deny") or []):
+            errors.append(f"Agent Smith must deny {prohibited}")
+    if set(smith_tools.get("confirm") or []):
+        errors.append("Agent Smith must not have household confirm tools")
 
     for agent_id in CHILD_AGENT_IDS:
         child = records.get(agent_id) or {}

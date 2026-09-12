@@ -58,8 +58,8 @@ def test_offline_import_dry_run_does_not_write(tmp_path: Path, capsys) -> None:
     assert isinstance(report["generated_at_unix"], int)
     assert report["git_head"]
     assert report["private_content_included"] is False
-    assert report["model_count"] == 5
-    assert report["insert_count"] == 5
+    assert report["model_count"] == 6
+    assert report["insert_count"] == 6
     assert report["touched_tables"] == ["model"]
     conn = sqlite3.connect(db_path)
     try:
@@ -83,7 +83,7 @@ def test_offline_import_apply_upserts_models_and_creates_backup(tmp_path: Path, 
     assert isinstance(report["generated_at_unix"], int)
     assert report["git_head"]
     assert report["private_content_included"] is False
-    assert report["model_count"] == 5
+    assert report["model_count"] == 6
     assert Path(report["backup"]).exists()
     assert "token" not in str(report).lower()
     assert "api_key" not in str(report).lower()
@@ -94,7 +94,14 @@ def test_offline_import_apply_upserts_models_and_creates_backup(tmp_path: Path, 
     finally:
         conn.close()
     ids = {row[0] for row in rows}
-    assert ids == {"agent/freyja", "agent/cloyd-gibbler", "agent/benedict", "agent/agent-47", "agent/jennacide"}
+    assert ids == {
+        "agent/freyja",
+        "agent/cloyd-gibbler",
+        "agent/freyja-coder",
+        "agent/benedict",
+        "agent/agent-47",
+        "agent/jennacide",
+    }
     benedict = next(row for row in rows if row[0] == "agent/benedict")
     meta = json.loads(benedict[4])
     assert meta["freyja"]["memory_policy"]["cloud_fallback"] == "forbidden"

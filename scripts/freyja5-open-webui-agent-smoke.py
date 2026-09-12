@@ -16,6 +16,7 @@ from urllib import error, request
 AGENT_MODEL_IDS = [
     "agent/freyja",
     "agent/cloyd-gibbler",
+    "agent/freyja-coder",
     "agent/benedict",
     "agent/benedict-paralegal",
     "agent/agent-47",

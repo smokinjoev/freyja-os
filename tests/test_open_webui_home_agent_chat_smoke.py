@@ -34,12 +34,13 @@ def test_chat_smoke_dry_run_lists_all_agents_without_secrets(tmp_path: Path, cap
     assert report["status"] == "pending"
     assert report["missing_configuration"] == []
     assert report["next_actions"] == [
-        "Set OPEN_WEBUI_API_KEY when ready to perform the authenticated five-agent chat smoke.",
+        "Set OPEN_WEBUI_API_KEY when ready to perform the authenticated home-agent chat smoke.",
         "Rerun without --dry-run and require status=complete for all selected agents.",
     ]
     assert {item["agent_id"] for item in report["checks"]} == {
         "freyja",
         "cloyd",
+        "smith",
         "benedict",
         "agent-44",
         "jenna",
@@ -61,7 +62,7 @@ def test_chat_smoke_missing_api_key_is_pending(tmp_path: Path, monkeypatch, caps
     assert report["next_actions"] == [
         "Use the existing Atlas Open WebUI admin account and generate an admin or service-account API key.",
         "Set OPEN_WEBUI_API_KEY outside source control.",
-        "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
+        "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all home agents.",
     ]
     assert isinstance(report["generated_at_unix"], int)
     assert report["git_head"]

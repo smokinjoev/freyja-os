@@ -23,6 +23,7 @@ DEFAULT_CONTAINER_URL = "http://model-proxy:8080/v1/models"
 AGENT_MODEL_IDS = {
     "freyja": "agent/freyja",
     "cloyd": "agent/cloyd-gibbler",
+    "smith": "agent/freyja-coder",
     "benedict": "agent/benedict",
     "benedict-paralegal": "agent/benedict-paralegal",
     "agent-44": "agent/agent-47",

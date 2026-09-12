@@ -23,6 +23,7 @@ DEFAULT_MAX_TOKENS = 256
 MODEL_IDS = {
     "freyja": "agent/freyja",
     "cloyd": "agent/cloyd-gibbler",
+    "smith": "agent/freyja-coder",
     "benedict": "agent/benedict",
     "agent-44": "agent/agent-47",
     "jenna": "agent/jennacide",
@@ -156,14 +157,14 @@ def pending_next_actions(reason: str) -> tuple[list[str], list[str]]:
             [
                 "Use the existing Atlas Open WebUI admin account and generate an admin or service-account API key.",
                 "Set OPEN_WEBUI_API_KEY outside source control.",
-                "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all five agents.",
+                "Rerun scripts/smoke-open-webui-home-agent-chats.py and require status=complete for all home agents.",
             ],
         )
     if reason == "dry run":
         return (
             [],
             [
-                "Set OPEN_WEBUI_API_KEY when ready to perform the authenticated five-agent chat smoke.",
+            "Set OPEN_WEBUI_API_KEY when ready to perform the authenticated home-agent chat smoke.",
                 "Rerun without --dry-run and require status=complete for all selected agents.",
             ],
         )

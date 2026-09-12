@@ -17,6 +17,7 @@ DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agen
 MODEL_IDS = [
     "agent/freyja",
     "agent/cloyd-gibbler",
+    "agent/freyja-coder",
     "agent/benedict",
     "agent/agent-47",
     "agent/jennacide",
