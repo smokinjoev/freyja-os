@@ -14,7 +14,14 @@ from open_webui.utils.tools import get_tool_specs
 JOE_USER_ID = "37fb033a-a2d0-46f2-986d-e22bf8355fa3"
 DB_PATH = Path("/app/backend/data/webui.db")
 TOOL_ID = "freyja_home_memory"
-MODEL_IDS = ("agent/cloyd-gibbler", "agent/freyja")
+MODEL_IDS = (
+    "agent/freyja",
+    "agent/cloyd-gibbler",
+    "agent/freyja-coder",
+    "agent/benedict",
+    "agent/agent-47",
+    "agent/jennacide",
+)
 
 
 CONTENT = r'''

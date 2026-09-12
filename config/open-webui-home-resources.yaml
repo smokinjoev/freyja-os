@@ -57,7 +57,7 @@ resources:
       boundary: openapi
       base_url: http://freyja5-gateway:8500/freyja-home-memory
       operations: [search, remember, update, forget, record-decision, recent-events]
-      allowed_agents: [freyja, cloyd, benedict, agent-44, jenna]
+      allowed_agents: [freyja, cloyd, smith, benedict, agent-44, jenna]
       confirmation_required: [forget, update]
       destructive_default: deny
       children_allowed_operations: [search, recent-events]

@@ -25,6 +25,7 @@ _SCOPE_READS: dict[str, set[str]] = {
     "person:jenna": {"personal:jenna", "household"},
     "agent:freyja": {"household", "project:freyja-os"},
     "agent:cloyd": {"personal:joe", "household", "project:freyja-os"},
+    "agent:smith": {"personal:joe", "project:freyja-os"},
     "agent:benedict": {"personal:beth", "restricted:benedict"},
     "agent:agent-44": {"personal:liam", "household"},
     "agent:jenna": {"personal:jenna", "household"},
@@ -34,6 +35,7 @@ _SCOPE_WRITES: dict[str, set[str]] = {
     key: set(value) for key, value in _SCOPE_READS.items()
 }
 _SCOPE_WRITES["agent:freyja"] = {"household", "project:freyja-os"}
+_SCOPE_WRITES["agent:smith"] = {"project:freyja-os"}
 _SCOPE_WRITES["agent:benedict"] = {"restricted:benedict"}
 _SCOPE_WRITES["agent:agent-44"] = set()
 _SCOPE_WRITES["agent:jenna"] = set()

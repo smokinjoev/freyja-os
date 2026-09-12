@@ -114,6 +114,41 @@ def test_child_agents_cannot_write_household_memory(tmp_path) -> None:
     assert denied.status_code == 403
 
 
+def test_smith_can_use_project_memory_without_personal_writes(tmp_path) -> None:
+    client = _client(tmp_path)
+
+    write = client.post(
+        "/freyja-home-memory/remember",
+        headers=_headers("agent:smith"),
+        json={
+            "scope": "project:freyja-os",
+            "owner": "freyja-os",
+            "content": "Smith needs Freyja coding architecture context.",
+            "provenance": "unit-test",
+        },
+    )
+    assert write.status_code == 200
+
+    read = client.get(
+        "/freyja-home-memory/search?scope=project:freyja-os&q=architecture",
+        headers=_headers("agent:smith"),
+    )
+    assert read.status_code == 200
+    assert read.json()["records"][0]["content"] == "Smith needs Freyja coding architecture context."
+
+    denied = client.post(
+        "/freyja-home-memory/remember",
+        headers=_headers("agent:smith"),
+        json={
+            "scope": "personal:joe",
+            "owner": "joe",
+            "content": "Smith must not write Joe personal memory.",
+            "provenance": "unit-test",
+        },
+    )
+    assert denied.status_code == 403
+
+
 def test_home_memory_records_include_required_metadata_and_recent_events(tmp_path) -> None:
     client = _client(tmp_path)
     first = client.post(
