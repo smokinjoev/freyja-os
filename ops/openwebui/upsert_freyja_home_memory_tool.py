@@ -35,17 +35,36 @@ import urllib.request
 class Tools:
     _BASE_URL = "http://host.docker.internal:8500/freyja-home-memory"
     _TOKEN_FILE = "/app/backend/data/secrets/freyja-director-token"
+    _AGENT_ALIASES = {
+        "agent/freyja": "freyja",
+        "freyja": "freyja",
+        "agent/cloyd-gibbler": "cloyd",
+        "cloyd-gibbler": "cloyd",
+        "cloyd": "cloyd",
+        "agent/freyja-coder": "smith",
+        "freyja-coder": "smith",
+        "smith": "smith",
+        "agent/benedict": "benedict",
+        "benedict": "benedict",
+        "agent/agent-47": "agent-44",
+        "agent-47": "agent-44",
+        "agent-44": "agent-44",
+        "agent/jennacide": "jenna",
+        "jennacide": "jenna",
+        "jenna": "jenna",
+    }
 
     def _token(self) -> str:
         with open(self._TOKEN_FILE, "r", encoding="utf-8") as handle:
             return handle.read().strip()
 
     def _headers(self, agent_id: str) -> dict[str, str]:
+        agent = self._AGENT_ALIASES.get(agent_id, agent_id)
         return {
             "content-type": "application/json",
             "x-api-key": self._token(),
             "x-freyja-client-type": "open-webui",
-            "x-freyja-client-subject": f"agent:{agent_id}",
+            "x-freyja-client-subject": f"agent:{agent}",
             "x-freyja-account-owner": "joe",
         }
 
