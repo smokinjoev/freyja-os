@@ -46,8 +46,11 @@ def test_agent_smith_is_pure_coding_agent() -> None:
 
     smith = agents["smith"]
     assert smith["display_name"] == "Agent Smith"
+    assert smith["purpose"] == "Joe's pure coding runtime wrapper."
     assert smith["model_profile"] == "coding"
-    assert "dedicated coding agent" in smith["system_prompt"]
+    assert "pure coding runtime wrapper" in smith["system_prompt"]
+    assert "opencode.status" in smith["system_prompt"]
+    assert "opencode.shell" in smith["system_prompt"]
     assert set(smith["tools"]["coding"]) == {
         "opencode.start",
         "opencode.send",
