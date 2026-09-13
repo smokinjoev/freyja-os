@@ -93,6 +93,7 @@ def _db(path: Path, *, users: bool) -> None:
             """
         )
         for table, columns in {
+            "config": "key TEXT PRIMARY KEY, value JSON NOT NULL, updated_at BIGINT",
             "knowledge": "id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, meta JSON, created_at BIGINT NOT NULL, updated_at BIGINT, data JSON",
             "tool": "id VARCHAR PRIMARY KEY, user_id VARCHAR, name TEXT, content TEXT, specs TEXT, meta TEXT, valves TEXT, updated_at BIGINT, created_at BIGINT",
             "memory": "id VARCHAR PRIMARY KEY, user_id VARCHAR, content TEXT, updated_at BIGINT, created_at BIGINT, type VARCHAR NOT NULL DEFAULT 'context', path TEXT, meta JSON",
@@ -209,7 +210,7 @@ def test_post_auth_activation_apply_does_not_use_container_snapshot(tmp_path: Pa
     assert printed["apply_result"]["applied"] is False
 
 
-def test_post_auth_activation_plan_is_not_ready_without_users(tmp_path: Path) -> None:
+def test_post_auth_activation_plan_is_not_ready_without_owner_user(tmp_path: Path) -> None:
     db = tmp_path / "webui.db"
     _db(db, users=False)
     agent_import, resource_import = _write_imports(tmp_path)
@@ -246,10 +247,11 @@ def test_post_auth_activation_apply_binds_access_and_resources(tmp_path: Path) -
     try:
         assert conn.execute('select count(*) from "group"').fetchone()[0] == 4
         assert conn.execute("select count(*) from group_member").fetchone()[0] == 4
-        assert conn.execute("select count(*) from access_grant").fetchone()[0] == 10
+        assert conn.execute("select count(*) from access_grant").fetchone()[0] == 11
         assert conn.execute("select count(*) from knowledge").fetchone()[0] == 3
         assert conn.execute("select count(*) from tool").fetchone()[0] == 6
         assert conn.execute("select count(*) from memory").fetchone()[0] == 4
+        assert conn.execute("select value from config where key='openai.api_base_urls'").fetchone()[0] == '["http://model-proxy:8080/v1"]'
     finally:
         conn.close()
 
@@ -272,8 +274,10 @@ def test_post_auth_activation_plan_auto_resolves_single_owner_user(tmp_path: Pat
     assert plan["resources"]["owner_user_id_resolved"] is True
     assert plan["resources"]["owner_resolution_policy"] == "auto_single_user_only"
     assert plan["resources"]["user_count"] == 1
-    assert plan["ready"] is False
+    assert plan["ready"] is True
     assert _module(SCRIPT).activation_next_actions(plan) == [
+        "Run this script again with --apply against the writable Open WebUI database.",
+        "After apply succeeds, run the five-agent authenticated chat smoke with OPEN_WEBUI_API_KEY set.",
         "Create/sign in Open WebUI users for: beth, jenna, liam.",
     ]
 

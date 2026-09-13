@@ -19,6 +19,8 @@ DEFAULT_RESOURCES = REPO_ROOT / "certification" / "reports" / "open-webui-home-r
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-post-auth-activation.json"
 DEFAULT_OPEN_WEBUI_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
 DEFAULT_OPEN_WEBUI_URL = "http://100.119.235.114:3001"
+DEFAULT_OPENAI_PROVIDER_BASE_URL = "http://model-proxy:8080/v1"
+DEFAULT_OPENAI_PROVIDER_API_KEY = "not-needed"
 
 
 def _load_module(path: Path):
@@ -142,10 +144,17 @@ def build_activation_plan(db: Path, resources_json: Path, owner_user_id: str | N
                 existing = resource_helper.count_existing(conn, table, ids)
                 resource_plan[f"{table}_insert_count"] = len([row_id for row_id in ids if row_id not in existing])
                 resource_plan[f"{table}_update_count"] = len([row_id for row_id in ids if row_id in existing])
+        provider_row = conn.execute("select value from config where key = ?", ("openai.api_base_urls",)).fetchone()
+        provider_urls = json.loads(provider_row[0]) if provider_row and provider_row[0] else []
         return {
             "access": access,
+            "openai_provider": {
+                "current_base_urls": provider_urls,
+                "desired_base_urls": [DEFAULT_OPENAI_PROVIDER_BASE_URL],
+                "ready": provider_urls == [DEFAULT_OPENAI_PROVIDER_BASE_URL],
+            },
             "resources": resource_plan,
-            "ready": bool(access.get("ready") and resource_plan.get("ready")),
+            "ready": bool(resource_plan.get("ready") and not access.get("missing_models")),
         }
     finally:
         conn.close()
@@ -153,10 +162,14 @@ def build_activation_plan(db: Path, resources_json: Path, owner_user_id: str | N
 
 def activation_next_actions(plan: dict[str, Any]) -> list[str]:
     if plan.get("ready"):
-        return [
+        actions = [
             "Run this script again with --apply against the writable Open WebUI database.",
             "After apply succeeds, run the five-agent authenticated chat smoke with OPEN_WEBUI_API_KEY set.",
         ]
+        missing_users = (plan.get("access") or {}).get("missing_users") or []
+        if missing_users:
+            actions.append("Create/sign in Open WebUI users for: " + ", ".join(str(user) for user in missing_users) + ".")
+        return actions
     actions: list[str] = []
     access = plan.get("access") or {}
     resources = plan.get("resources") or {}
@@ -185,10 +198,27 @@ def apply_activation(db: Path, resources_json: Path, owner_user_id: str | None, 
         access_report = access_helper.plan(conn)
         resource_helper.inspect_schema(conn)
         owner = resource_helper.resolve_owner(conn, owner_user_id)
-        if not access_report.get("ready") or owner is None:
+        if access_report.get("missing_models") or owner is None:
             return {"applied": False, "reason": "activation plan is not ready"}
         access_backup = access_helper._backup_database(db, backup_dir)
         access_helper.apply_plan(conn, access_report)
+        now = int(time.time())
+        conn.execute(
+            """
+            INSERT INTO config (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+            """,
+            ("openai.api_base_urls", json.dumps([DEFAULT_OPENAI_PROVIDER_BASE_URL]), now),
+        )
+        conn.execute(
+            """
+            INSERT INTO config (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+            """,
+            ("openai.api_keys", json.dumps([DEFAULT_OPENAI_PROVIDER_API_KEY]), now),
+        )
         resource_rows = resource_helper.build_rows(payload, owner)
         resource_backup = resource_helper._backup_database(db, backup_dir)
         resource_helper.upsert(conn, resource_rows)
