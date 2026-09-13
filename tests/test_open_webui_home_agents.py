@@ -6,6 +6,7 @@ import yaml
 
 
 CONFIG = Path(__file__).resolve().parents[1] / "config" / "open-webui-home-agents.yaml"
+CONTRACT = Path(__file__).resolve().parents[1] / "docs" / "operations" / "cloyd-runtime-contract.md"
 
 
 def test_open_webui_home_agents_are_secret_free_and_complete() -> None:
@@ -83,6 +84,7 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     assert "/home/joe/cloyd-services/dashboard" in cloyd["system_prompt"]
     assert "Prefer `opencode.send`" in cloyd["system_prompt"]
     assert "`opencode.shell` only for small diagnostic checks" in cloyd["system_prompt"]
+    assert "docs/operations/cloyd-runtime-contract.md" in cloyd["system_prompt"]
     assert "show the diff" in cloyd["system_prompt"]
     assert "verify the served page" in cloyd["system_prompt"]
     assert "Never report success from an edit command alone" in cloyd["system_prompt"]
@@ -98,3 +100,18 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
         "cloud_fallback",
         "unrestricted_shell",
     }.issubset(set(cloyd["tools"]["deny"]))
+
+
+def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
+    text = CONTRACT.read_text(encoding="utf-8")
+
+    assert len(text) < 2500
+    assert "Cloyd is Joe's technical brain" in text
+    assert "free-running" in text
+    assert "qwen3:30b-a3b" in text
+    assert "qwen3-coder-next:q4_K_M" in text
+    assert "http://100.115.228.56:4097" in text
+    assert "cloyd-dashboard-web" in text
+    assert "/home/joe/cloyd-services/dashboard/index.html" in text
+    assert "Do not use sub-agent or handoff-chat loops" in text
+    assert "A command finishing is not by itself completion" in text
