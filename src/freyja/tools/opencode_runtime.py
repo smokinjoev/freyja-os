@@ -17,16 +17,26 @@ from freyja.tools.registry import ToolRegistry
 MODEL = {"providerID": "vulcan-nexus", "modelID": "@preset/freyja-coder"}
 
 
-def _password() -> str:
-    return Path(settings.opencode_password_file).expanduser().read_text(encoding="utf-8").strip()
+def _password(password_file: str | None = None) -> str:
+    path = Path(password_file or settings.opencode_password_file).expanduser()
+    return path.read_text(encoding="utf-8").strip()
 
 
-def _request(method: str, path: str, body: dict[str, Any] | None = None, *, query: dict[str, str] | None = None) -> Any:
+def _request(
+    method: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+    *,
+    query: dict[str, str] | None = None,
+    base_url: str | None = None,
+    username: str | None = None,
+    password_file: str | None = None,
+) -> Any:
     if query:
         path = f"{path}?{urllib.parse.urlencode(query)}"
     data = None if body is None else json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(f"{settings.opencode_base_url.rstrip('/')}{path}", data=data, method=method)
-    credentials = f"{settings.opencode_username}:{_password()}".encode("utf-8")
+    request = urllib.request.Request(f"{(base_url or settings.opencode_base_url).rstrip('/')}{path}", data=data, method=method)
+    credentials = f"{username or settings.opencode_username}:{_password(password_file)}".encode("utf-8")
     request.add_header("authorization", "Basic " + base64.b64encode(credentials).decode("ascii"))
     if body is not None:
         request.add_header("content-type", "application/json")
@@ -47,25 +57,37 @@ def _request(method: str, path: str, body: dict[str, Any] | None = None, *, quer
     return result
 
 
-def _load_aliases() -> dict[str, str]:
+def _load_aliases() -> dict[str, Any]:
     path = Path(settings.opencode_session_registry_path).expanduser()
     if not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _save_aliases(aliases: dict[str, str]) -> None:
+def _save_aliases(aliases: dict[str, Any]) -> None:
     path = Path(settings.opencode_session_registry_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(aliases, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     path.chmod(0o600)
 
 
-def _session_id(alias_or_session: str) -> str:
+def _session_config(alias_or_session: str) -> dict[str, str]:
     if alias_or_session.startswith("ses_"):
-        return alias_or_session
+        return {"session": alias_or_session}
     aliases = _load_aliases()
-    return aliases.get(alias_or_session, "")
+    entry = aliases.get(alias_or_session)
+    if isinstance(entry, str):
+        return {"session": entry}
+    if isinstance(entry, dict) and isinstance(entry.get("session"), str):
+        config = {
+            "session": entry["session"],
+            "base_url": str(entry.get("base_url") or settings.opencode_base_url),
+            "username": str(entry.get("username") or settings.opencode_username),
+        }
+        if entry.get("password_file"):
+            config["password_file"] = str(entry["password_file"])
+        return config
+    return {}
 
 
 def _recent_action(parts: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -109,7 +131,11 @@ async def _opencode_start(request: ToolExecutionRequest) -> dict[str, Any]:
     if not result.get("ok", True):
         return result
     aliases = _load_aliases()
-    aliases[alias] = result["id"]
+    aliases[alias] = {
+        "base_url": settings.opencode_base_url,
+        "session": result["id"],
+        "username": settings.opencode_username,
+    }
     _save_aliases(aliases)
     return {
         "ok": True,
@@ -124,20 +150,28 @@ async def _opencode_send(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
     prompt = str(args.get("prompt") or "").strip()
-    session_id = _session_id(alias)
-    if not session_id:
+    session_config = _session_config(alias)
+    if not session_config:
         directory = str(args.get("directory") or settings.repository_root).strip()
         start_result = _request("POST", "/session", {"title": alias}, query={"directory": directory})
         if not start_result.get("ok", True):
             return start_result
         aliases = _load_aliases()
-        aliases[alias] = start_result["id"]
+        aliases[alias] = {
+            "base_url": settings.opencode_base_url,
+            "session": start_result["id"],
+            "username": settings.opencode_username,
+        }
         _save_aliases(aliases)
-        session_id = start_result["id"]
+        session_config = {"session": start_result["id"]}
+    session_id = session_config["session"]
     result = _request(
         "POST",
         f"/session/{session_id}/message",
         {"model": MODEL, "agent": "build", "parts": [{"type": "text", "text": prompt}]},
+        base_url=session_config.get("base_url"),
+        username=session_config.get("username"),
+        password_file=session_config.get("password_file"),
     )
     if not result.get("ok", True):
         return result
@@ -148,10 +182,18 @@ async def _opencode_shell(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
     command = str(args.get("command") or "").strip()
-    session_id = _session_id(alias)
-    if not session_id:
+    session_config = _session_config(alias)
+    if not session_config:
         return {"ok": False, "error": f"Unknown OpenCode session alias: {alias}"}
-    result = _request("POST", f"/session/{session_id}/shell", {"agent": "build", "model": MODEL, "command": command})
+    session_id = session_config["session"]
+    result = _request(
+        "POST",
+        f"/session/{session_id}/shell",
+        {"agent": "build", "model": MODEL, "command": command},
+        base_url=session_config.get("base_url"),
+        username=session_config.get("username"),
+        password_file=session_config.get("password_file"),
+    )
     if not result.get("ok", True):
         return result
     return {"ok": True, **_summarize_message(session_id, result)}
@@ -160,12 +202,18 @@ async def _opencode_shell(request: ToolExecutionRequest) -> dict[str, Any]:
 async def _opencode_status(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
-    session_id = _session_id(alias)
-    if not session_id:
+    session_config = _session_config(alias)
+    if not session_config:
         return {"ok": False, "error": f"Unknown OpenCode session alias: {alias}"}
-    statuses = _request("GET", "/session/status")
-    session = _request("GET", f"/session/{session_id}")
-    messages = _request("GET", f"/session/{session_id}/message", query={"limit": "1"})
+    session_id = session_config["session"]
+    request_config = {
+        "base_url": session_config.get("base_url"),
+        "username": session_config.get("username"),
+        "password_file": session_config.get("password_file"),
+    }
+    statuses = _request("GET", "/session/status", **request_config)
+    session = _request("GET", f"/session/{session_id}", **request_config)
+    messages = _request("GET", f"/session/{session_id}/message", query={"limit": "1"}, **request_config)
     parts = messages[0].get("parts", []) if isinstance(messages, list) and messages else []
     return {
         "ok": True,
@@ -181,19 +229,42 @@ async def _opencode_output(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
     limit = str(max(1, min(int(args.get("limit") or 5), 25)))
-    session_id = _session_id(alias)
-    if not session_id:
+    session_config = _session_config(alias)
+    if not session_config:
         return {"ok": False, "error": f"Unknown OpenCode session alias: {alias}"}
-    return {"ok": True, "session": session_id, "messages": _request("GET", f"/session/{session_id}/message", query={"limit": limit})}
+    session_id = session_config["session"]
+    return {
+        "ok": True,
+        "session": session_id,
+        "messages": _request(
+            "GET",
+            f"/session/{session_id}/message",
+            query={"limit": limit},
+            base_url=session_config.get("base_url"),
+            username=session_config.get("username"),
+            password_file=session_config.get("password_file"),
+        ),
+    }
 
 
 async def _opencode_stop(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
-    session_id = _session_id(alias)
-    if not session_id:
+    session_config = _session_config(alias)
+    if not session_config:
         return {"ok": False, "error": f"Unknown OpenCode session alias: {alias}"}
-    return {"ok": True, "session": session_id, "aborted": _request("POST", f"/session/{session_id}/abort")}
+    session_id = session_config["session"]
+    return {
+        "ok": True,
+        "session": session_id,
+        "aborted": _request(
+            "POST",
+            f"/session/{session_id}/abort",
+            base_url=session_config.get("base_url"),
+            username=session_config.get("username"),
+            password_file=session_config.get("password_file"),
+        ),
+    }
 
 
 def register_opencode_tools(registry: ToolRegistry) -> None:

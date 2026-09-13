@@ -5,7 +5,7 @@ from pathlib import Path
 
 from freyja.tools.builtin import register_builtin_tools
 from freyja.tools.models import ToolExecutionRequest, ToolRiskLevel
-from freyja.tools.opencode_runtime import _opencode_shell, _opencode_start
+from freyja.tools.opencode_runtime import _opencode_shell, _opencode_start, _session_config
 from freyja.tools.registry import ToolRegistry
 from freyja.agent_runtime_v3 import AgentRuntimeV3
 from freyja.foundation_seed import PERSISTENT_AGENTS
@@ -29,6 +29,31 @@ def test_builtin_registry_includes_opencode_control_tools() -> None:
         assert definition is not None
         assert definition.risk_level == risk
         assert definition.host_service == "opencode"
+
+
+def test_opencode_alias_registry_accepts_remote_session_entries(tmp_path: Path, monkeypatch) -> None:
+    registry_path = tmp_path / "controller-sessions.json"
+    registry_path.write_text(
+        """
+{
+  "atlas-dashboard": {
+    "base_url": "http://100.119.235.114:4097",
+    "session": "ses_remote",
+    "username": "joe"
+  },
+  "legacy": "ses_legacy"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("freyja.tools.opencode_runtime.settings.opencode_session_registry_path", str(registry_path))
+
+    assert _session_config("legacy") == {"session": "ses_legacy"}
+    assert _session_config("atlas-dashboard") == {
+        "base_url": "http://100.119.235.114:4097",
+        "session": "ses_remote",
+        "username": "joe",
+    }
 
 
 def test_opencode_live_start_and_shell_when_server_available() -> None:
