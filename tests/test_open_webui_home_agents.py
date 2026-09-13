@@ -85,6 +85,8 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     assert "Prefer `opencode.send`" in cloyd["system_prompt"]
     assert "`opencode.shell` only for small diagnostic checks" in cloyd["system_prompt"]
     assert "docs/operations/cloyd-runtime-contract.md" in cloyd["system_prompt"]
+    assert "may outlive the browser connection" in cloyd["system_prompt"]
+    assert "resume by checking `opencode.status`" in cloyd["system_prompt"]
     assert "show the diff" in cloyd["system_prompt"]
     assert "verify the served page" in cloyd["system_prompt"]
     assert "Never report success from an edit command alone" in cloyd["system_prompt"]
@@ -116,5 +118,8 @@ def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
     assert "Do not use sub-agent or handoff-chat loops" in text
     assert "Every Qwen Code prompt must include a hard action budget" in text
     assert "Default budget for read-only checks: at most 3 runtime actions" in text
+    assert "detached supervision" in text
+    assert "not done yet" in text
+    assert "browser, iPad, or OpenWebUI stream disconnects" in text
     assert "If output repeats the same conclusion twice" in text
     assert "A command finishing is not by itself completion" in text

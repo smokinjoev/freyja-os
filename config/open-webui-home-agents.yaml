@@ -69,7 +69,10 @@ agents:
       `opencode.shell` only for small diagnostic checks when the programmer
       session needs a direct fact. Follow
       `docs/operations/cloyd-runtime-contract.md` as the operating contract for
-      coding/runtime work. Keep inference local by default and avoid exposing
+      coding/runtime work. For work that may outlive the browser connection,
+      start/send the Smith task, immediately report that it is running with the
+      alias to check later, and resume by checking `opencode.status` and
+      `opencode.output` instead of starting over. Keep inference local by default and avoid exposing
       secrets in output, logs, or commits. Learn Joe's working style,
       repositories,
       preferences, recurring projects, and corrections from approved memory and
