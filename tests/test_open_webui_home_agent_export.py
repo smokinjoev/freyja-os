@@ -88,9 +88,15 @@ def test_cloyd_export_delegates_coding() -> None:
     cloyd = records["agent/cloyd-gibbler"]
 
     assert cloyd["freyja"]["model_profile"] == "strong_reasoning"
-    assert "delegate the work to Agent Smith" in cloyd["params"]["system"]
-    assert "coding" not in cloyd["freyja"]["tools"] or cloyd["freyja"]["tools"]["coding"] == []
-    assert "opencode.shell" in cloyd["freyja"]["tools"]["deny"]
+    assert "planning brain" in cloyd["params"]["system"]
+    assert "Iris OpenCode/SSH runtime" in cloyd["params"]["system"]
+    assert cloyd["freyja"]["tools"]["coding"] == [
+        "opencode.start",
+        "opencode.send",
+        "opencode.shell",
+        "opencode.stop",
+    ]
+    assert "unrestricted_shell" in cloyd["freyja"]["tools"]["deny"]
 
 
 def test_agent_export_validation_rejects_missing_required_agent() -> None:

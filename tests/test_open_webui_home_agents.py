@@ -75,14 +75,20 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
 
     cloyd = agents["cloyd"]
     assert cloyd["model_profile"] == "strong_reasoning"
-    assert "delegate the work to Agent Smith" in cloyd["system_prompt"]
+    assert "planning brain" in cloyd["system_prompt"]
+    assert "Iris OpenCode/SSH runtime" in cloyd["system_prompt"]
     assert "family webpage" in cloyd["system_prompt"]
     assert "cloyd-dashboard-web" in cloyd["system_prompt"]
     assert "/home/joe/cloyd-services/dashboard" in cloyd["system_prompt"]
-    assert "coding" not in cloyd["tools"] or cloyd["tools"]["coding"] == []
-    assert {
+    assert "opencode.status" in cloyd["tools"]["allow"]
+    assert set(cloyd["tools"]["coding"]) == {
         "opencode.start",
         "opencode.send",
         "opencode.shell",
         "opencode.stop",
+    }
+    assert {
+        "children.admin",
+        "cloud_fallback",
+        "unrestricted_shell",
     }.issubset(set(cloyd["tools"]["deny"]))
