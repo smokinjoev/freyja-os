@@ -162,6 +162,18 @@ PERSISTENT_AGENTS: tuple[PersistentAgent, ...] = (
         shared_memory_scopes=frozenset({"family", "system"}),
     ),
     PersistentAgent(
+        agent_id="smith",
+        display_name="Agent Smith",
+        owner="person:joe",
+        security_domain_id=SecurityDomainId.PERSON_JOE,
+        home_machine_id="atlas",
+        aliases=frozenset({"agent smith", "smith", "coder", "freyja-coder"}),
+        capabilities=frozenset({"code.inspect", "code.edit", "code.test"}),
+        tool_grants=frozenset({"shell.run", "filesystem.read", "filesystem.write", "git.inspect", "git.write", "coding.execute", "memory.private", "memory.shared", "system.health"}),
+        private_memory_scope="person:joe",
+        shared_memory_scopes=frozenset({"system"}),
+    ),
+    PersistentAgent(
         agent_id="benedict",
         display_name="Benedict",
         owner="person:beth",

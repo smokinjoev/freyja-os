@@ -17,7 +17,7 @@ services:
       FALLBACK_API_KEY: ${OPENAI_FALLBACK_API_KEY:-not-needed}
       FREYJA5_BASE_URL: ${OPEN_WEBUI_FREYJA5_BASE_URL:-http://host.docker.internal:8500/v1}
       FREYJA5_API_KEY: ${OPEN_WEBUI_FREYJA5_API_KEY:-not-needed}
-      FREYJA5_AGENT_MODELS: ${OPEN_WEBUI_FREYJA5_AGENT_MODELS:-agent/freyja,agent/cloyd-gibbler,agent/benedict,agent/benedict-paralegal,agent/agent-47,agent/jennacide}
+      FREYJA5_AGENT_MODELS: ${OPEN_WEBUI_FREYJA5_AGENT_MODELS:-agent/freyja,agent/cloyd-gibbler,agent/freyja-coder,agent/benedict,agent/benedict-paralegal,agent/agent-47,agent/jennacide}
       FREYJA_CORE_BASE_URL: ${OPEN_WEBUI_FREYJA_CORE_BASE_URL:-http://100.115.228.56:8510/v1}
       FREYJA_CORE_API_KEY: ${OPEN_WEBUI_FREYJA_CORE_API_KEY:-not-needed}
       FREYJA_CORE_MODELS: ${OPEN_WEBUI_FREYJA_CORE_MODELS:-freyja-core}

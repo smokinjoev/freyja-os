@@ -32,7 +32,7 @@ def test_open_webui_defaults_stay_on_model_proxy_until_freyja5_cutover() -> None
     assert "OPENAI_API_BASE_URL=http://model-proxy:8080/v1" in env_example
     assert "DEFAULT_MODELS=qwen2.5vl:72b" in env_example
     assert "OPEN_WEBUI_FREYJA5_BASE_URL=http://host.docker.internal:8500/v1" in env_example
-    assert "OPEN_WEBUI_FREYJA5_AGENT_MODELS=agent/freyja,agent/cloyd-gibbler,agent/benedict,agent/benedict-paralegal,agent/agent-47,agent/jennacide" in env_example
+    assert "OPEN_WEBUI_FREYJA5_AGENT_MODELS=agent/freyja,agent/cloyd-gibbler,agent/freyja-coder,agent/benedict,agent/benedict-paralegal,agent/agent-47,agent/jennacide" in env_example
     assert "OPEN_WEBUI_FREYJA_CORE_BASE_URL=http://100.115.228.56:8510/v1" in env_example
     assert "OPEN_WEBUI_FREYJA_CORE_MODELS=freyja-core" in env_example
     assert proxy_environment["FREYJA5_BASE_URL"] == "${OPEN_WEBUI_FREYJA5_BASE_URL:-http://host.docker.internal:8500/v1}"

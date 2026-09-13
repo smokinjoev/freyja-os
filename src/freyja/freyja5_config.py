@@ -19,6 +19,7 @@ FREYJA5_CERTIFICATION_SUITE_PATH = REPO_ROOT / "certification" / "suites" / "rou
 FREYJA5_OPEN_WEBUI_AGENT_MODELS = {
     "agent/freyja": {"agent_id": "freyja", "default_route": "general"},
     "agent/cloyd-gibbler": {"agent_id": "cloyd-gibbler", "default_route": "code"},
+    "agent/freyja-coder": {"agent_id": "smith", "default_route": "code"},
     "agent/benedict": {"agent_id": "benedict", "default_route": "general"},
     "agent/benedict-paralegal": {"agent_id": "benedict-paralegal", "default_route": "private"},
     "agent/agent-47": {"agent_id": "agent-47", "default_route": "fast"},

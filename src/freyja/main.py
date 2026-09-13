@@ -71,6 +71,7 @@ FREYJA5_OPENAI_MODEL_IDS = {FREYJA5_LEGACY_OPENAI_MODEL_ID, *FREYJA5_OPEN_WEBUI_
 FREYJA5_AGENT_GATEWAY_MODELS = {
     "freyja": "agent/freyja",
     "cloyd": "agent/cloyd-gibbler",
+    "smith": "agent/freyja-coder",
     "benedict": "agent/benedict",
     "agent-44": "agent/agent-47",
     "jenna": "agent/jennacide",
