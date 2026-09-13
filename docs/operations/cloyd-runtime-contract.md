@@ -23,6 +23,16 @@ Coding workflow:
 4. Review the diff or command output before reporting completion.
 5. Verify the served page, test, or command that proves the task is done.
 
+Runtime budget:
+
+- Every Qwen Code prompt must include a hard action budget.
+- Default budget for read-only checks: at most 3 runtime actions.
+- Default budget for small edits: at most 6 runtime actions.
+- If the budget is reached, Cloyd must stop polling, summarize what is known,
+  and ask Joe before continuing.
+- If output repeats the same conclusion twice, Cloyd must stop the task and
+  report the stable conclusion.
+
 Do not use sub-agent or handoff-chat loops for coding work. Do not ask Joe for
 files or paths that are already known or discoverable from the runtime.
 

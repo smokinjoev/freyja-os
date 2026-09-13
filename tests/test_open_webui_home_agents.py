@@ -114,4 +114,7 @@ def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
     assert "cloyd-dashboard-web" in text
     assert "/home/joe/cloyd-services/dashboard/index.html" in text
     assert "Do not use sub-agent or handoff-chat loops" in text
+    assert "Every Qwen Code prompt must include a hard action budget" in text
+    assert "Default budget for read-only checks: at most 3 runtime actions" in text
+    assert "If output repeats the same conclusion twice" in text
     assert "A command finishing is not by itself completion" in text
