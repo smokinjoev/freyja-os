@@ -90,7 +90,7 @@ def test_offline_import_apply_upserts_models_and_creates_backup(tmp_path: Path, 
 
     conn = sqlite3.connect(db_path)
     try:
-        rows = conn.execute("select id, base_model_id, name, params, meta from model order by id").fetchall()
+        rows = conn.execute("select id, user_id, base_model_id, name, params, meta from model order by id").fetchall()
     finally:
         conn.close()
     ids = {row[0] for row in rows}
@@ -102,7 +102,8 @@ def test_offline_import_apply_upserts_models_and_creates_backup(tmp_path: Path, 
         "agent/agent-47",
         "agent/jennacide",
     }
+    assert {row[1] for row in rows} == {apply_module.DEFAULT_OWNER_USER_ID}
     benedict = next(row for row in rows if row[0] == "agent/benedict")
-    meta = json.loads(benedict[4])
+    meta = json.loads(benedict[5])
     assert meta["freyja"]["memory_policy"]["cloud_fallback"] == "forbidden"
     assert meta["access_control"]["read"]["group_ids"] == ["beth"]

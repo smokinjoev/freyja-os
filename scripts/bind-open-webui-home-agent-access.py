@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path("/app/backend/data/webui.db")
 DEFAULT_OUTPUT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agent-access-bind-dry-run.json"
 DEFAULT_OPEN_WEBUI_CONTAINER = "freyja-open-webui-atlas-open-webui-1"
+DEFAULT_OWNER_USER_ID = "d264d0df-d0b6-4f35-bd66-5d602e84aae4"
 GROUPS = {"joe": "Joe", "beth": "Beth", "liam": "Liam", "jenna": "Jenna"}
 MODEL_GROUPS = {
     "agent/freyja": ["joe", "beth"],
@@ -32,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--apply", action="store_true", help="Write changes. Default is dry-run.")
     parser.add_argument("--backup-dir", type=Path)
+    parser.add_argument("--owner-user-id", default=DEFAULT_OWNER_USER_ID)
     parser.add_argument("--open-webui-container", default=DEFAULT_OPEN_WEBUI_CONTAINER)
     parser.add_argument("--no-container-snapshot", action="store_true")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
@@ -166,7 +168,7 @@ def plan(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
-def apply_plan(conn: sqlite3.Connection, report: dict[str, Any]) -> None:
+def apply_plan(conn: sqlite3.Connection, report: dict[str, Any], owner_user_id: str = DEFAULT_OWNER_USER_ID) -> None:
     now = int(time.time())
     conn.executemany(
         """
@@ -183,7 +185,7 @@ def apply_plan(conn: sqlite3.Connection, report: dict[str, Any]) -> None:
         [
             (
                 group_id,
-                None,
+                owner_user_id,
                 GROUPS[group_id],
                 f"Freyja home-agent access group for {GROUPS[group_id]}.",
                 json.dumps({"freyja_home_agent": True}, sort_keys=True),
@@ -259,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
                     report["reason"] = "missing required Open WebUI models"
                 else:
                     backup = _backup_database(args.db, args.backup_dir)
-                    apply_plan(conn, report)
+                    apply_plan(conn, report, args.owner_user_id)
                     conn.commit()
                     report["backup"] = str(backup)
                     report["applied"] = True

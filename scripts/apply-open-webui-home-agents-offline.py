@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_IMPORT = REPO_ROOT / "certification" / "reports" / "open-webui-home-agents-import.json"
 DEFAULT_DB = Path("/app/backend/data/webui.db")
 MODEL_COLUMNS = {"id", "user_id", "base_model_id", "name", "params", "meta", "updated_at", "created_at", "is_active"}
+DEFAULT_OWNER_USER_ID = "d264d0df-d0b6-4f35-bd66-5d602e84aae4"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--import-json", type=Path, default=DEFAULT_IMPORT)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--backup-dir", type=Path)
+    parser.add_argument("--owner-user-id", default=DEFAULT_OWNER_USER_ID)
     parser.add_argument("--apply", action="store_true", help="Write changes. Default is dry-run.")
     return parser
 
@@ -47,7 +49,7 @@ def inspect_model_table(conn: sqlite3.Connection) -> set[str]:
     return {str(row[1]) for row in conn.execute("pragma table_info(model)").fetchall()}
 
 
-def build_model_rows(payload: dict[str, Any], now: int | None = None) -> list[dict[str, Any]]:
+def build_model_rows(payload: dict[str, Any], now: int | None = None, owner_user_id: str = DEFAULT_OWNER_USER_ID) -> list[dict[str, Any]]:
     timestamp = int(now or time.time())
     rows = []
     for record in payload.get("records") or []:
@@ -56,7 +58,7 @@ def build_model_rows(payload: dict[str, Any], now: int | None = None) -> list[di
         rows.append(
             {
                 "id": str(record["id"]),
-                "user_id": None,
+                "user_id": owner_user_id,
                 "base_model_id": str(record["base_model_id"]),
                 "name": str(record["name"]),
                 "params": json.dumps(record.get("params") or {}, sort_keys=True),
@@ -116,7 +118,7 @@ def upsert_rows(conn: sqlite3.Connection, rows: list[dict[str, Any]]) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     payload = load_import(args.import_json)
-    rows = build_model_rows(payload)
+    rows = build_model_rows(payload, owner_user_id=args.owner_user_id)
     conn = sqlite3.connect(args.db)
     try:
         columns = inspect_model_table(conn)

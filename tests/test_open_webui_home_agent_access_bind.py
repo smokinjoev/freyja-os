@@ -226,6 +226,10 @@ def test_access_bind_apply_creates_groups_memberships_and_model_grants(tmp_path:
         conn.commit()
 
         assert conn.execute('select count(*) from "group"').fetchone()[0] == 4
+        assert {
+            row[0]
+            for row in conn.execute('select distinct user_id from "group"').fetchall()
+        } == {bind.DEFAULT_OWNER_USER_ID}
         assert conn.execute("select count(*) from group_member").fetchone()[0] == 4
         assert conn.execute("select count(*) from access_grant").fetchone()[0] == 11
         benedict_groups = conn.execute(
