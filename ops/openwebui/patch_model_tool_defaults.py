@@ -11,7 +11,10 @@ OLD = "    tool_ids = form_data.pop('tool_ids', None)\n"
 NEW = (
     "    tool_ids = form_data.pop('tool_ids', None)\n"
     "    if tool_ids is None:\n"
-    "        model_meta = (model.get('info', {}).get('meta', {}) or {})\n"
+    "        model_meta = (\n"
+    "            ((model.get('info') or {}).get('meta') or {})\n"
+    "            or (model.get('meta') or {})\n"
+    "        )\n"
     "        tool_ids = model_meta.get('tool_ids') or model_meta.get('toolIds')\n"
 )
 

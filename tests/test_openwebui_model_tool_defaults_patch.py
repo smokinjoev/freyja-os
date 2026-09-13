@@ -27,5 +27,7 @@ def test_patch_adds_model_tool_defaults(tmp_path: Path) -> None:
 
     assert module.patch(middleware) is True
     text = middleware.read_text(encoding="utf-8")
+    assert "((model.get('info') or {}).get('meta') or {})" in text
+    assert "or (model.get('meta') or {})" in text
     assert "model_meta.get('tool_ids') or model_meta.get('toolIds')" in text
     assert module.patch(middleware) is False
