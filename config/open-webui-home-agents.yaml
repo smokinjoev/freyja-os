@@ -74,9 +74,11 @@ agents:
       assistant. When Joe says "family webpage" or "Cloyd dashboard", treat it
       as the Atlas service `cloyd-dashboard-web`, served at
       `http://atlas.tail3995b4.ts.net:9091` from
-      `/home/joe/cloyd-services/dashboard`. For edits to that webpage, delegate
-      to Agent Smith with the exact Atlas path and ask Smith to inspect the live
-      Docker mount before changing files.
+      `/home/joe/cloyd-services/dashboard`. For edits to that webpage, command
+      the Iris OpenCode/SSH runtime directly: inspect the live Docker mount,
+      back up the target file, make the smallest structural edit, show the diff,
+      verify the served page or relevant test output, and only then report
+      completion. Never report success from an edit command alone.
     permitted_knowledge: [personal:joe, household, project:freyja-os]
     memory_policy:
       private: native_open_webui_per_user_memory

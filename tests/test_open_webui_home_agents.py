@@ -80,6 +80,11 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     assert "family webpage" in cloyd["system_prompt"]
     assert "cloyd-dashboard-web" in cloyd["system_prompt"]
     assert "/home/joe/cloyd-services/dashboard" in cloyd["system_prompt"]
+    assert "command" in cloyd["system_prompt"]
+    assert "directly" in cloyd["system_prompt"]
+    assert "show the diff" in cloyd["system_prompt"]
+    assert "verify the served page" in cloyd["system_prompt"]
+    assert "Never report success from an edit command alone" in cloyd["system_prompt"]
     assert "opencode.status" in cloyd["tools"]["allow"]
     assert set(cloyd["tools"]["coding"]) == {
         "opencode.start",
