@@ -27,6 +27,8 @@ Start it from the repository root:
 ```bash
 cp deploy/compose/freyja5/.env.example deploy/compose/freyja5/.env
 chmod 600 deploy/compose/freyja5/.env
+mkdir -p data
+chown "$(id -u):$(id -g)" data
 docker compose --env-file deploy/compose/freyja5/.env \
   -f deploy/compose/freyja5/compose.yaml up -d --build
 curl http://${HOST}:8500/health
