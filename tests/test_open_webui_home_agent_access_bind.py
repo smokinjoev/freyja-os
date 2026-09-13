@@ -119,7 +119,7 @@ def test_access_bind_dry_run_waits_for_real_users(tmp_path: Path) -> None:
     assert report["git_head"]
     assert report["missing_users"] == ["beth", "jenna", "joe", "liam"]
     assert report["group_inserts"] == ["joe", "beth", "liam", "jenna"]
-    assert report["grant_insert_count"] == 10
+    assert report["grant_insert_count"] == 11
 
 
 def test_access_bind_main_writes_dry_run_output(tmp_path: Path, capsys) -> None:
@@ -227,7 +227,7 @@ def test_access_bind_apply_creates_groups_memberships_and_model_grants(tmp_path:
 
         assert conn.execute('select count(*) from "group"').fetchone()[0] == 4
         assert conn.execute("select count(*) from group_member").fetchone()[0] == 4
-        assert conn.execute("select count(*) from access_grant").fetchone()[0] == 10
+        assert conn.execute("select count(*) from access_grant").fetchone()[0] == 11
         benedict_groups = conn.execute(
             "select principal_id from access_grant where resource_id='agent/benedict' order by principal_id"
         ).fetchall()

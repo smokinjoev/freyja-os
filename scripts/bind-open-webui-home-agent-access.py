@@ -20,6 +20,7 @@ GROUPS = {"joe": "Joe", "beth": "Beth", "liam": "Liam", "jenna": "Jenna"}
 MODEL_GROUPS = {
     "agent/freyja": ["joe", "beth"],
     "agent/cloyd-gibbler": ["joe"],
+    "agent/freyja-coder": ["joe"],
     "agent/benedict": ["beth"],
     "agent/agent-47": ["liam", "joe", "beth"],
     "agent/jennacide": ["jenna", "joe", "beth"],
@@ -253,15 +254,17 @@ def main(argv: list[str] | None = None) -> int:
             if snapshot_source is not None:
                 report["dry_run_snapshot"] = snapshot_source
             if args.apply:
-                if not report["ready"]:
+                if report["missing_models"]:
                     report["applied"] = False
-                    report["reason"] = "missing required Open WebUI users or models"
+                    report["reason"] = "missing required Open WebUI models"
                 else:
                     backup = _backup_database(args.db, args.backup_dir)
                     apply_plan(conn, report)
                     conn.commit()
                     report["backup"] = str(backup)
                     report["applied"] = True
+                    if report["missing_users"]:
+                        report["reason"] = "applied available users; some Open WebUI users are still missing"
             else:
                 report["applied"] = False
             rendered = json.dumps(report, indent=2, sort_keys=True)
