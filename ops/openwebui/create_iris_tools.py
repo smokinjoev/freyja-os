@@ -371,74 +371,185 @@ class Tools:
 
 
 OPENCODE_RUNTIME = '''
-"""OpenCode runtime controls through Freyja Director."""
+"""Direct OpenCode controls for approved Freyja coding-agent sessions."""
 
+import base64
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
-from typing import Literal
 
 
 class Tools:
-    _DIRECTOR_URL = "http://host.docker.internal:8000"
-    _TOKEN_FILE = "/app/backend/data/secrets/freyja-director-token"
+    _ALIASES_FILE = "/app/backend/data/opencode-runtime-aliases.json"
+    _MODEL = {"providerID": "vulcan-nexus", "modelID": "@preset/freyja-coder"}
+    _DEFAULTS = {
+        "atlas-dashboard": {
+            "base_url": "http://100.119.235.114:4097",
+            "directory": "/home/joe/cloyd-services",
+            "password_file": "/app/backend/data/secrets/opencode-password",
+            "session": "",
+            "username": "joe",
+        },
+        "freyja-code": {
+            "base_url": "http://100.115.228.56:4097",
+            "directory": "/Users/freyja/freyja-os",
+            "password_file": "/app/backend/data/secrets/opencode-iris-password",
+            "session": "",
+            "username": "joe",
+        },
+    }
 
-    def _token(self) -> str:
-        with open(self._TOKEN_FILE, "r", encoding="utf-8") as handle:
+    def _aliases(self) -> dict:
+        try:
+            with open(self._ALIASES_FILE, "r", encoding="utf-8") as handle:
+                aliases = json.load(handle)
+        except Exception:
+            aliases = {}
+        for alias, defaults in self._DEFAULTS.items():
+            aliases.setdefault(alias, defaults.copy())
+        return aliases
+
+    def _save_aliases(self, aliases: dict) -> None:
+        with open(self._ALIASES_FILE, "w", encoding="utf-8") as handle:
+            json.dump(aliases, handle, indent=2, sort_keys=True)
+
+    def _config(self, alias: str) -> dict:
+        aliases = self._aliases()
+        value = aliases.get(alias)
+        if isinstance(value, str):
+            value = {"session": value}
+        if not isinstance(value, dict):
+            value = {}
+        defaults = self._DEFAULTS.get(alias, self._DEFAULTS["freyja-code"])
+        return {**defaults, **value}
+
+    def _password(self, config: dict) -> str:
+        with open(config["password_file"], "r", encoding="utf-8") as handle:
             return handle.read().strip()
 
-    def _call(self, tool_name: str, arguments: dict, timeout: int = 300) -> str:
-        payload = json.dumps(
-            {
-                "actor": "open-webui:agent/freyja",
-                "arguments": arguments,
-                "metadata": {"director_authorized": True},
-            }
-        ).encode("utf-8")
-        request = urllib.request.Request(
-            f"{self._DIRECTOR_URL}/tools/{tool_name}/execute",
-            data=payload,
-            method="POST",
-            headers={
-                "authorization": f"Bearer {self._token()}",
-                "content-type": "application/json",
-            },
-        )
+    def _request(self, config: dict, method: str, path: str, body: dict | None = None, query: dict | None = None, timeout: int = 300):
+        if query:
+            path = f"{path}?{urllib.parse.urlencode(query)}"
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(f"{config['base_url'].rstrip('/')}{path}", data=data, method=method)
+        credentials = f"{config['username']}:{self._password(config)}".encode("utf-8")
+        request.add_header("authorization", "Basic " + base64.b64encode(credentials).decode("ascii"))
+        if body is not None:
+            request.add_header("content-type", "application/json")
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                body = response.read().decode("utf-8", errors="replace")
+                payload = response.read()
         except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            return json.dumps({"ok": False, "status": exc.code, "error": body})
+            return {"ok": False, "status": exc.code, "error": exc.read().decode("utf-8", errors="replace")}
         except Exception as exc:
-            return json.dumps({"ok": False, "error": str(exc)})
-        if len(body) > 50000:
-            body = body[-50000:]
-        return body
+            return {"ok": False, "error": str(exc)}
+        if not payload:
+            return {"ok": True}
+        result = json.loads(payload)
+        if isinstance(result, dict):
+            result.setdefault("ok", True)
+        return result
 
-    def opencode_start(self, alias: str = "freyja-code", directory: str = "/Users/freyja/freyja-os") -> str:
-        """Start an OpenCode coding-agent session for a repository or worktree."""
-        return self._call("opencode_start", {"alias": alias, "directory": directory}, timeout=60)
+    def _session(self, alias: str) -> tuple[dict, str]:
+        config = self._config(alias)
+        session = config.get("session") or ""
+        return config, session
+
+    def _recent_action(self, parts: list[dict]) -> dict | None:
+        for part in reversed(parts):
+            if part.get("type") == "tool":
+                state = part.get("state") or {}
+                return {
+                    "tool": part.get("tool"),
+                    "status": state.get("status"),
+                    "title": state.get("title"),
+                    "input": state.get("input"),
+                    "error": state.get("error"),
+                }
+        return None
+
+    def _summarize_message(self, session: str, result: dict) -> dict:
+        parts = result.get("parts", []) if isinstance(result, dict) else []
+        text = "\\n".join(part.get("text", "") for part in parts if part.get("type") == "text").strip()
+        action = self._recent_action(parts)
+        return {
+            "ok": True,
+            "session": session,
+            "state": "completed" if (result.get("info") or {}).get("time", {}).get("completed") else "working",
+            "message": (result.get("info") or {}).get("id"),
+            "recent_action": action,
+            "result": text,
+        }
+
+    def opencode_start(self, alias: str = "freyja-code", directory: str = "") -> str:
+        """Start an OpenCode coding-agent session for an approved alias."""
+        config = self._config(alias)
+        target_directory = directory or config["directory"]
+        result = self._request(config, "POST", "/session", {"title": alias}, query={"directory": target_directory}, timeout=60)
+        if not result.get("ok", True):
+            return json.dumps(result)
+        aliases = self._aliases()
+        config["session"] = result["id"]
+        aliases[alias] = config
+        self._save_aliases(aliases)
+        return json.dumps({"ok": True, "alias": alias, "session": result["id"], "working_directory": result.get("directory"), "state": "idle"})
 
     def opencode_send(self, prompt: str, alias: str = "freyja-code") -> str:
-        """Send a coding or development prompt to an existing OpenCode session."""
-        return self._call("opencode_send", {"alias": alias, "prompt": prompt}, timeout=300)
+        """Send a coding or development prompt to an OpenCode session."""
+        config, session = self._session(alias)
+        if not session:
+            start = json.loads(self.opencode_start(alias, config["directory"]))
+            if not start.get("ok"):
+                return json.dumps(start)
+            config, session = self._session(alias)
+        result = self._request(config, "POST", f"/session/{session}/message", {"model": self._MODEL, "agent": "build", "parts": [{"type": "text", "text": prompt}]})
+        if not result.get("ok", True):
+            return json.dumps(result)
+        return json.dumps(self._summarize_message(session, result))
 
     def opencode_shell(self, command: str, alias: str = "freyja-code") -> str:
         """Run a shell command through an existing OpenCode session and return output."""
-        return self._call("opencode_shell", {"alias": alias, "command": command}, timeout=300)
+        config, session = self._session(alias)
+        if not session:
+            return json.dumps({"ok": False, "error": f"Unknown OpenCode session alias: {alias}"})
+        result = self._request(config, "POST", f"/session/{session}/shell", {"agent": "build", "model": self._MODEL, "command": command})
+        if not result.get("ok", True):
+            return json.dumps(result)
+        return json.dumps(self._summarize_message(session, result))
 
     def opencode_status(self, alias: str = "freyja-code") -> str:
         """Return OpenCode session state, working directory, and recent action."""
-        return self._call("opencode_status", {"alias": alias}, timeout=30)
+        config, session = self._session(alias)
+        if not session:
+            return json.dumps({"ok": False, "error": f"Unknown OpenCode session alias: {alias}"})
+        statuses = self._request(config, "GET", "/session/status", timeout=30)
+        current = self._request(config, "GET", f"/session/{session}", timeout=30)
+        messages = self._request(config, "GET", f"/session/{session}/message", query={"limit": "1"}, timeout=30)
+        parts = messages[0].get("parts", []) if isinstance(messages, list) and messages else []
+        return json.dumps({
+            "ok": True,
+            "alias": alias,
+            "session": session,
+            "working_directory": current.get("directory") if isinstance(current, dict) else None,
+            "state": statuses.get(session, "idle") if isinstance(statuses, dict) else "unknown",
+            "recent_action": self._recent_action(parts),
+        })
 
     def opencode_output(self, alias: str = "freyja-code", limit: int = 5) -> str:
         """Return recent OpenCode messages and tool output for a session."""
-        return self._call("opencode_output", {"alias": alias, "limit": max(1, min(int(limit), 25))}, timeout=30)
+        config, session = self._session(alias)
+        if not session:
+            return json.dumps({"ok": False, "error": f"Unknown OpenCode session alias: {alias}"})
+        messages = self._request(config, "GET", f"/session/{session}/message", query={"limit": str(max(1, min(int(limit), 25)))}, timeout=30)
+        return json.dumps({"ok": True, "session": session, "messages": messages})
 
     def opencode_stop(self, alias: str = "freyja-code") -> str:
         """Abort current OpenCode work for a session."""
-        return self._call("opencode_stop", {"alias": alias}, timeout=30)
+        config, session = self._session(alias)
+        if not session:
+            return json.dumps({"ok": False, "error": f"Unknown OpenCode session alias: {alias}"})
+        return json.dumps({"ok": True, "session": session, "aborted": self._request(config, "POST", f"/session/{session}/abort", timeout=30)})
 '''
 
 

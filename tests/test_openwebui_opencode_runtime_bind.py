@@ -55,3 +55,15 @@ def test_bind_opencode_runtime_only_attaches_to_coding_agents(tmp_path: Path) ->
     assert rows["agent/cloyd-gibbler"][0]["toolIds"] == []
     assert "OpenCode Runtime tool is available" in rows["agent/freyja-coder"][1]["system"]
     assert "OpenCode Runtime tool is available" not in rows["agent/cloyd-gibbler"][1]["system"]
+
+
+def test_openwebui_opencode_runtime_supports_atlas_and_iris_aliases() -> None:
+    content = (REPO_ROOT / "ops" / "openwebui" / "create_iris_tools.py").read_text(encoding="utf-8")
+
+    assert '"atlas-dashboard"' in content
+    assert '"http://100.119.235.114:4097"' in content
+    assert '"/home/joe/cloyd-services"' in content
+    assert '"freyja-code"' in content
+    assert '"http://100.115.228.56:4097"' in content
+    assert '"/Users/freyja/freyja-os"' in content
+    assert "opencode-iris-password" in content
