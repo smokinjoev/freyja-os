@@ -89,7 +89,8 @@ def test_cloyd_export_delegates_coding() -> None:
 
     assert cloyd["freyja"]["model_profile"] == "strong_reasoning"
     assert "planning brain" in cloyd["params"]["system"]
-    assert "Iris OpenCode/SSH runtime" in cloyd["params"]["system"]
+    assert "free-running Iris Qwen Code/OpenCode session" in cloyd["params"]["system"]
+    assert "send Qwen Code a precise task prompt" in cloyd["params"]["system"]
     assert cloyd["freyja"]["tools"]["coding"] == [
         "opencode.start",
         "opencode.send",
