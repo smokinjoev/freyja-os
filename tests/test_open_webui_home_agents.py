@@ -76,6 +76,9 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     cloyd = agents["cloyd"]
     assert cloyd["model_profile"] == "strong_reasoning"
     assert "delegate the work to Agent Smith" in cloyd["system_prompt"]
+    assert "family webpage" in cloyd["system_prompt"]
+    assert "cloyd-dashboard-web" in cloyd["system_prompt"]
+    assert "/home/joe/cloyd-services/dashboard" in cloyd["system_prompt"]
     assert "coding" not in cloyd["tools"] or cloyd["tools"]["coding"] == []
     assert {
         "opencode.start",
