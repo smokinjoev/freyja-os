@@ -105,7 +105,7 @@ def test_daemon_blocks_job_after_repeated_busy_statuses(tmp_path: Path, monkeypa
                         "smith_alias": "freyja-code",
                         "objective": "Check a page.",
                         "current_prompt": "Read-only check.",
-                        "created_at": "2026-09-14T00:00:00+00:00",
+                        "created_at": "3026-09-14T00:00:00+00:00",
                     }
                 },
                 "events": {},
@@ -129,3 +129,44 @@ def test_daemon_blocks_job_after_repeated_busy_statuses(tmp_path: Path, monkeypa
     assert job["status"] == "blocked"
     assert job["next_action"] == "operator_review"
     assert job["error"] == "Smith stayed busy for 2 checks"
+
+
+def test_daemon_blocks_expired_running_job_without_polling_smith(tmp_path: Path, monkeypatch) -> None:
+    daemon = _daemon_module()
+    jobs_file = tmp_path / "jobs.json"
+    job_id = "freyja52-expired"
+    jobs_file.write_text(
+        json.dumps(
+            {
+                "jobs": {
+                    job_id: {
+                        "job_id": job_id,
+                        "status": "running",
+                        "smith_alias": "freyja-code",
+                        "objective": "Long job.",
+                        "current_prompt": "Keep going.",
+                        "created_at": "2026-09-14T00:00:00+00:00",
+                    }
+                },
+                "events": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(daemon, "JOBS_FILE", jobs_file)
+    monkeypatch.setattr(daemon, "MAX_JOB_SECONDS", 1)
+    monkeypatch.setattr(daemon, "job_age_seconds", lambda job: 2)
+    monkeypatch.setattr(
+        daemon,
+        "opencode_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not poll Smith")),
+    )
+
+    result = daemon.run_once()
+
+    ledger = json.loads(jobs_file.read_text(encoding="utf-8"))
+    job = ledger["jobs"][job_id]
+    assert result == [{"job_id": job_id, "action": "job_timeout", "status": "blocked"}]
+    assert job["status"] == "blocked"
+    assert job["next_action"] == "operator_review"
+    assert job["error"] == "Job exceeded 1 seconds"

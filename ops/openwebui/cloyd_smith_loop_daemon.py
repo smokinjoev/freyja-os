@@ -18,6 +18,7 @@ JOBS_FILE = Path("/app/backend/data/cloyd-smith-loop-jobs.json")
 ALIASES_FILE = Path("/app/backend/data/opencode-runtime-aliases.json")
 MODEL = {"providerID": "vulcan-nexus", "modelID": "@preset/freyja-coder"}
 MAX_BUSY_CHECKS = int(os.environ.get("FREYJA52_MAX_BUSY_CHECKS", "12"))
+MAX_JOB_SECONDS = int(os.environ.get("FREYJA52_MAX_JOB_SECONDS", "1800"))
 DEFAULT_ALIASES = {
     "atlas-dashboard": {
         "base_url": "http://100.119.235.114:4097",
@@ -175,11 +176,38 @@ def bounded(payload: Any, limit: int = 20000) -> dict[str, Any]:
     return {"truncated": True, "text": text[-limit:]}
 
 
+def job_age_seconds(job: dict[str, Any]) -> float:
+    try:
+        created_at = datetime.fromisoformat(str(job.get("created_at", "")))
+    except ValueError:
+        return 0.0
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - created_at).total_seconds()
+
+
+def block_expired_job(job: dict[str, Any]) -> bool:
+    if MAX_JOB_SECONDS <= 0 or job.get("status") not in {"queued", "running"}:
+        return False
+    age = job_age_seconds(job)
+    if age < MAX_JOB_SECONDS:
+        return False
+    job["status"] = "blocked"
+    job["error"] = f"Job exceeded {MAX_JOB_SECONDS} seconds"
+    job["next_action"] = "operator_review"
+    job["updated_at"] = now()
+    return True
+
+
 def run_once() -> list[dict[str, Any]]:
     ledger = load_ledger()
     results: list[dict[str, Any]] = []
     touched_jobs: set[str] = set()
     for job_id, job in sorted(ledger["jobs"].items(), key=lambda item: (item[1].get("created_at", ""), item[0])):
+        if block_expired_job(job):
+            touched_jobs.add(job_id)
+            results.append({"job_id": job_id, "action": "job_timeout", "status": "blocked"})
+            continue
         if job.get("status") == "queued":
             try:
                 config, session = ensure_session(job.get("smith_alias", "freyja-code"), alias_config(job.get("smith_alias", "freyja-code")))
