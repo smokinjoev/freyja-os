@@ -96,7 +96,11 @@ def test_cloyd_export_delegates_coding() -> None:
         "opencode.send",
         "opencode.shell",
         "opencode.stop",
+        "cloyd_smith.submit",
+        "cloyd_smith.record",
+        "cloyd_smith.stop",
     ]
+    assert "cloyd_smith.status" in cloyd["freyja"]["tools"]["allow"]
     assert "unrestricted_shell" in cloyd["freyja"]["tools"]["deny"]
 
 

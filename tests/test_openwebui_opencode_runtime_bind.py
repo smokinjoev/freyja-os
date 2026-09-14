@@ -67,3 +67,14 @@ def test_openwebui_opencode_runtime_supports_atlas_and_iris_aliases() -> None:
     assert '"http://100.115.228.56:4097"' in content
     assert '"/Users/freyja/freyja-os"' in content
     assert "opencode-iris-password" in content
+
+
+def test_openwebui_includes_cloyd_smith_loop_tool() -> None:
+    content = (REPO_ROOT / "ops" / "openwebui" / "create_iris_tools.py").read_text(encoding="utf-8")
+
+    assert "CLOYD_SMITH_LOOP" in content
+    assert "cloyd_smith_submit" in content
+    assert "cloyd_smith_status" in content
+    assert "cloyd_smith_stop" in content
+    assert "cloyd-smith-loop-jobs.json" in content
+    assert '"cloyd_smith_loop"' in content

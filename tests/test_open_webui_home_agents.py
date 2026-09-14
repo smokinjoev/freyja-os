@@ -85,17 +85,22 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     assert "Prefer `opencode.send`" in cloyd["system_prompt"]
     assert "`opencode.shell` only for small diagnostic checks" in cloyd["system_prompt"]
     assert "docs/operations/cloyd-runtime-contract.md" in cloyd["system_prompt"]
+    assert "Pratt 5.2 durable Cloyd-Smith loop" in cloyd["system_prompt"]
     assert "may outlive the browser connection" in cloyd["system_prompt"]
-    assert "resume by checking `opencode.status`" in cloyd["system_prompt"]
+    assert "job ledger" in cloyd["system_prompt"]
     assert "show the diff" in cloyd["system_prompt"]
     assert "verify the served page" in cloyd["system_prompt"]
     assert "Never report success from an edit command alone" in cloyd["system_prompt"]
     assert "opencode.status" in cloyd["tools"]["allow"]
+    assert "cloyd_smith.status" in cloyd["tools"]["allow"]
     assert set(cloyd["tools"]["coding"]) == {
         "opencode.start",
         "opencode.send",
         "opencode.shell",
         "opencode.stop",
+        "cloyd_smith.submit",
+        "cloyd_smith.record",
+        "cloyd_smith.stop",
     }
     assert {
         "children.admin",

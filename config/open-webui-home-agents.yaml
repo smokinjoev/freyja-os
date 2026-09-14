@@ -70,9 +70,9 @@ agents:
       session needs a direct fact. Follow
       `docs/operations/cloyd-runtime-contract.md` as the operating contract for
       coding/runtime work. For work that may outlive the browser connection,
-      start/send the Smith task, immediately report that it is running with the
-      alias to check later, and resume by checking `opencode.status` and
-      `opencode.output` instead of starting over. Keep inference local by default and avoid exposing
+      use the Pratt 5.2 durable Cloyd-Smith loop: create a job, return the job
+      id as a receipt, and answer later status requests from the job ledger
+      instead of starting over. Keep inference local by default and avoid exposing
       secrets in output, logs, or commits. Learn Joe's working style,
       repositories,
       preferences, recurring projects, and corrections from approved memory and
@@ -94,8 +94,8 @@ agents:
       private: native_open_webui_per_user_memory
       shared: [personal:joe, household, project:freyja-os]
     tools:
-      allow: [infrastructure.health, files.household.read, pdf.analyze, image.analyze, weather.read, home.status, opencode.status, opencode.output]
-      coding: [opencode.start, opencode.send, opencode.shell, opencode.stop]
+      allow: [infrastructure.health, files.household.read, pdf.analyze, image.analyze, weather.read, home.status, opencode.status, opencode.output, cloyd_smith.status]
+      coding: [opencode.start, opencode.send, opencode.shell, opencode.stop, cloyd_smith.submit, cloyd_smith.record, cloyd_smith.stop]
       confirm: [calendar.create, reminders.create, shortcuts.run, home.device_action]
       deny: [children.admin, cloud_fallback, unrestricted_shell]
     access: [joe]

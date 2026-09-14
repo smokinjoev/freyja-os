@@ -180,9 +180,19 @@ def validate_export(export: dict[str, Any]) -> list[str]:
     cloyd = records.get("cloyd") or {}
     cloyd_tools = (cloyd.get("freyja") or {}).get("tools") or {}
     cloyd_denied = set(cloyd_tools.get("deny") or [])
-    for required in ("opencode.start", "opencode.send", "opencode.shell", "opencode.stop"):
+    for required in (
+        "opencode.start",
+        "opencode.send",
+        "opencode.shell",
+        "opencode.stop",
+        "cloyd_smith.submit",
+        "cloyd_smith.record",
+        "cloyd_smith.stop",
+    ):
         if required not in set(cloyd_tools.get("coding") or []):
             errors.append(f"Cloyd must be able to command {required}")
+    if "cloyd_smith.status" not in set(cloyd_tools.get("allow") or []):
+        errors.append("Cloyd must be able to read durable Cloyd-Smith job status")
     for required in ("children.admin", "cloud_fallback", "unrestricted_shell"):
         if required not in cloyd_denied:
             errors.append(f"Cloyd must deny {required}")

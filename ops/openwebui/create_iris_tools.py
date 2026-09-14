@@ -553,6 +553,146 @@ class Tools:
 '''
 
 
+CLOYD_SMITH_LOOP = '''
+"""Pratt 5.2 durable Cloyd-Smith job ledger for OpenWebUI."""
+
+from datetime import datetime, timezone
+import json
+import os
+import uuid
+
+
+class Tools:
+    _JOBS_FILE = "/app/backend/data/cloyd-smith-loop-jobs.json"
+
+    def _now(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def _load(self) -> dict:
+        try:
+            with open(self._JOBS_FILE, "r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except Exception:
+            return {"jobs": {}, "events": {}}
+
+    def _save(self, ledger: dict) -> None:
+        directory = os.path.dirname(self._JOBS_FILE)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        tmp = f"{self._JOBS_FILE}.tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(ledger, handle, indent=2, sort_keys=True)
+        os.replace(tmp, self._JOBS_FILE)
+
+    def cloyd_smith_submit(
+        self,
+        objective: str,
+        prompt: str = "",
+        smith_alias: str = "freyja-code",
+        acceptance_criteria: str = "",
+    ) -> str:
+        """Create a durable Cloyd-Smith job receipt. Long work is handled by the Atlas daemon."""
+        objective = (objective or "").strip()
+        prompt = (prompt or objective).strip()
+        if not objective or not prompt:
+            return json.dumps({"ok": False, "error": "objective and prompt are required"})
+        now = self._now()
+        job_id = "pratt52-" + uuid.uuid4().hex[:12]
+        criteria = [line.strip("- ").strip() for line in acceptance_criteria.splitlines() if line.strip()]
+        ledger = self._load()
+        ledger.setdefault("jobs", {})[job_id] = {
+            "job_id": job_id,
+            "objective": objective,
+            "smith_alias": smith_alias,
+            "acceptance_criteria": criteria,
+            "current_prompt": prompt,
+            "status": "queued",
+            "next_action": "daemon_send_to_smith",
+            "last_evidence": {},
+            "error": "",
+            "created_at": now,
+            "updated_at": now,
+            "completed_at": "",
+        }
+        ledger.setdefault("events", {}).setdefault(job_id, []).append(
+            {"event_type": "submitted", "payload": {"source": "openwebui"}, "created_at": now}
+        )
+        self._save(ledger)
+        return json.dumps(
+            {
+                "ok": True,
+                "receipt": {
+                    "job_id": job_id,
+                    "status": "queued",
+                    "smith_alias": smith_alias,
+                    "summary": objective,
+                    "status_prompt": f"Ask Cloyd: status {job_id}",
+                },
+            }
+        )
+
+    def cloyd_smith_status(self, job_id: str = "") -> str:
+        """Return one durable Cloyd-Smith job, or all active jobs if job_id is omitted."""
+        ledger = self._load()
+        jobs = ledger.get("jobs", {})
+        events = ledger.get("events", {})
+        if job_id:
+            job = jobs.get(job_id)
+            if not job:
+                return json.dumps({"ok": False, "error": f"Unknown Cloyd-Smith job: {job_id}"})
+            return json.dumps({"ok": True, "job": job, "events": list(reversed(events.get(job_id, [])[-25:]))})
+        active = [
+            job
+            for job in jobs.values()
+            if job.get("status") in {"queued", "running", "needs_review", "blocked"}
+        ]
+        active.sort(key=lambda item: (item.get("created_at", ""), item.get("job_id", "")))
+        return json.dumps({"ok": True, "jobs": active[:50]})
+
+    def cloyd_smith_record(self, job_id: str, event_type: str, payload_json: str = "{}", status: str = "", next_action: str = "") -> str:
+        """Record daemon/Cloyd evidence for a durable Cloyd-Smith job."""
+        ledger = self._load()
+        job = ledger.get("jobs", {}).get(job_id)
+        if not job:
+            return json.dumps({"ok": False, "error": f"Unknown Cloyd-Smith job: {job_id}"})
+        try:
+            payload = json.loads(payload_json or "{}")
+        except Exception:
+            return json.dumps({"ok": False, "error": "payload_json must be valid JSON"})
+        now = self._now()
+        ledger.setdefault("events", {}).setdefault(job_id, []).append(
+            {"event_type": event_type or "evidence", "payload": payload, "created_at": now}
+        )
+        if status:
+            job["status"] = status
+        if next_action:
+            job["next_action"] = next_action
+        job["last_evidence"] = payload
+        job["updated_at"] = now
+        if job["status"] in {"done", "blocked", "stopped"}:
+            job["completed_at"] = now
+        self._save(ledger)
+        return json.dumps({"ok": True, "job": job})
+
+    def cloyd_smith_stop(self, job_id: str) -> str:
+        """Mark a durable Cloyd-Smith job stopped so the daemon will not continue it."""
+        ledger = self._load()
+        job = ledger.get("jobs", {}).get(job_id)
+        if not job:
+            return json.dumps({"ok": False, "error": f"Unknown Cloyd-Smith job: {job_id}"})
+        now = self._now()
+        job["status"] = "stopped"
+        job["next_action"] = "stopped_by_user"
+        job["updated_at"] = now
+        job["completed_at"] = now
+        ledger.setdefault("events", {}).setdefault(job_id, []).append(
+            {"event_type": "stopped", "payload": {"source": "openwebui"}, "created_at": now}
+        )
+        self._save(ledger)
+        return json.dumps({"ok": True, "job": job})
+'''
+
+
 async def upsert_tool(tool_id: str, name: str, description: str, content: str) -> None:
     module, frontmatter = await load_tool_module_by_id(tool_id, content=content)
     specs = get_tool_specs(module)
@@ -636,6 +776,12 @@ async def main() -> None:
         "Control Freyja's approved OpenCode coding-agent sessions through Freyja Director.",
         OPENCODE_RUNTIME,
     )
+    await upsert_tool(
+        "cloyd_smith_loop",
+        "Cloyd Smith Loop 5.2",
+        "Durable Pratt 5.2 job receipts and status for Cloyd supervising Smith outside the browser stream.",
+        CLOYD_SMITH_LOOP,
+    )
 
     rows = []
     for tool_id in (
@@ -648,6 +794,7 @@ async def main() -> None:
         "vulcan_agent",
         "openwebui_terminal_bridge",
         "opencode_runtime",
+        "cloyd_smith_loop",
     ):
         tool = await Tools.get_tool_by_id(tool_id)
         rows.append({"id": tool.id, "name": tool.name, "specs": tool.specs})

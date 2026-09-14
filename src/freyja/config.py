@@ -128,6 +128,10 @@ class Settings(BaseSettings):
         default=str(_default_state_dir() / "opencode" / "controller-sessions.json"),
         alias="OPENCODE_SESSION_REGISTRY_PATH",
     )
+    cloyd_smith_loop_database_path: str = Field(
+        default=str(_default_state_dir() / "cloyd-smith-loop.db"),
+        alias="CLOYD_SMITH_LOOP_DATABASE_PATH",
+    )
     repository_root: str = str(_repo_root())
 
     calendar_default_provider: str = "memory"
