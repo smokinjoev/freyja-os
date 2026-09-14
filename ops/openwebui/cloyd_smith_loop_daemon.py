@@ -17,6 +17,7 @@ from typing import Any
 JOBS_FILE = Path("/app/backend/data/cloyd-smith-loop-jobs.json")
 ALIASES_FILE = Path("/app/backend/data/opencode-runtime-aliases.json")
 MODEL = {"providerID": "vulcan-nexus", "modelID": "@preset/freyja-coder"}
+MAX_BUSY_CHECKS = int(os.environ.get("FREYJA52_MAX_BUSY_CHECKS", "12"))
 DEFAULT_ALIASES = {
     "atlas-dashboard": {
         "base_url": "http://100.119.235.114:4097",
@@ -232,10 +233,18 @@ def run_once() -> list[dict[str, Any]]:
                 touched_jobs.add(job_id)
                 results.append({"job_id": job_id, "action": "ready_for_review", "status": "needs_review"})
             else:
+                busy_checks = int(job.get("busy_checks") or 0) + 1
                 job["last_evidence"] = bounded(status)
                 job["updated_at"] = now()
+                job["busy_checks"] = busy_checks
+                if busy_checks >= MAX_BUSY_CHECKS:
+                    job["status"] = "blocked"
+                    job["error"] = f"Smith stayed busy for {busy_checks} checks"
+                    job["next_action"] = "operator_review"
+                    results.append({"job_id": job_id, "action": "busy_timeout", "status": "blocked"})
+                else:
+                    results.append({"job_id": job_id, "action": "still_running", "status": "running", "busy_checks": busy_checks})
                 touched_jobs.add(job_id)
-                results.append({"job_id": job_id, "action": "still_running", "status": "running"})
     if touched_jobs:
         merge_save_ledger(ledger, touched_jobs)
     return results
