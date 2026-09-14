@@ -193,9 +193,19 @@ def validate_export(export: dict[str, Any]) -> list[str]:
             errors.append(f"Cloyd must be able to command {required}")
     if "cloyd_smith.status" not in set(cloyd_tools.get("allow") or []):
         errors.append("Cloyd must be able to read durable Cloyd-Smith job status")
-    for required in ("children.admin", "cloud_fallback", "unrestricted_shell"):
+    for required in (
+        "children.admin",
+        "cloud_fallback",
+        "unrestricted_shell",
+        "calendar.create",
+        "reminders.create",
+        "shortcuts.run",
+        "home.device_action",
+    ):
         if required not in cloyd_denied:
             errors.append(f"Cloyd must deny {required}")
+    if set(cloyd_tools.get("confirm") or []):
+        errors.append("Cloyd must not have confirmable household/schedule write tools")
 
     smith = records.get("smith") or {}
     smith_freyja = smith.get("freyja") or {}

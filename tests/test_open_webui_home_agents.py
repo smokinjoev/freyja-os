@@ -106,7 +106,12 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
         "children.admin",
         "cloud_fallback",
         "unrestricted_shell",
+        "calendar.create",
+        "reminders.create",
+        "shortcuts.run",
+        "home.device_action",
     }.issubset(set(cloyd["tools"]["deny"]))
+    assert cloyd["tools"]["confirm"] == []
 
 
 def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
