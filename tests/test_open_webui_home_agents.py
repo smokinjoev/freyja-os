@@ -85,7 +85,7 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     assert "Prefer `opencode.send`" in cloyd["system_prompt"]
     assert "`opencode.shell` only for small diagnostic checks" in cloyd["system_prompt"]
     assert "docs/operations/cloyd-runtime-contract.md" in cloyd["system_prompt"]
-    assert "Pratt 5.2 durable Cloyd-Smith loop" in cloyd["system_prompt"]
+    assert "Freyja 5.2 durable Cloyd-Smith loop" in cloyd["system_prompt"]
     assert "may outlive the browser connection" in cloyd["system_prompt"]
     assert "job ledger" in cloyd["system_prompt"]
     assert "show the diff" in cloyd["system_prompt"]

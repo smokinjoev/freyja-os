@@ -127,7 +127,7 @@ def register_cloyd_smith_loop_tools(registry: ToolRegistry) -> None:
         (
             ToolDefinition(
                 name="cloyd_smith_submit",
-                description="Create a durable Pratt 5.2 Cloyd-Smith job and return a receipt for later status checks.",
+                description="Create a durable Freyja 5.2 Cloyd-Smith job and return a receipt for later status checks.",
                 input_schema={
                     "type": "object",
                     "required": ["objective"],

@@ -554,7 +554,7 @@ class Tools:
 
 
 CLOYD_SMITH_LOOP = '''
-"""Pratt 5.2 durable Cloyd-Smith job ledger for OpenWebUI."""
+"""Freyja 5.2 durable Cloyd-Smith job ledger for OpenWebUI."""
 
 from datetime import datetime, timezone
 import json
@@ -597,7 +597,7 @@ class Tools:
         if not objective or not prompt:
             return json.dumps({"ok": False, "error": "objective and prompt are required"})
         now = self._now()
-        job_id = "pratt52-" + uuid.uuid4().hex[:12]
+        job_id = "freyja52-" + uuid.uuid4().hex[:12]
         criteria = [line.strip("- ").strip() for line in acceptance_criteria.splitlines() if line.strip()]
         ledger = self._load()
         ledger.setdefault("jobs", {})[job_id] = {
@@ -779,7 +779,7 @@ async def main() -> None:
     await upsert_tool(
         "cloyd_smith_loop",
         "Cloyd Smith Loop 5.2",
-        "Durable Pratt 5.2 job receipts and status for Cloyd supervising Smith outside the browser stream.",
+        "Durable Freyja 5.2 job receipts and status for Cloyd supervising Smith outside the browser stream.",
         CLOYD_SMITH_LOOP,
     )
 

@@ -20,7 +20,7 @@ def test_cloyd_smith_job_lifecycle_records_status_and_events(tmp_path) -> None:
         )
     )
 
-    assert job.job_id.startswith("pratt52-")
+    assert job.job_id.startswith("freyja52-")
     assert job.status == CloydSmithJobStatus.QUEUED
     assert store.list_active()[0].job_id == job.job_id
 
@@ -80,7 +80,7 @@ def test_cloyd_smith_submit_returns_receipt(tmp_path, monkeypatch) -> None:
     )
 
     assert result["ok"] is True
-    assert result["receipt"]["job_id"].startswith("pratt52-")
+    assert result["receipt"]["job_id"].startswith("freyja52-")
     assert result["receipt"]["status"] == "queued"
     assert result["receipt"]["status_prompt"].startswith("Ask Cloyd: status")
 

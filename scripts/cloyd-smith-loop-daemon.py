@@ -106,7 +106,7 @@ async def _stop_job(store: CloydSmithJobStore, job_id: str) -> dict[str, Any]:
 
 def _smith_prompt(job) -> str:
     criteria = "\n".join(f"- {item}" for item in job.acceptance_criteria) or "- Report evidence clearly."
-    return f"""Pratt 5.2 Smith worker task.
+    return f"""Freyja 5.2 Smith worker task.
 
 Original Cloyd objective:
 {job.objective}
@@ -133,7 +133,7 @@ def _bounded(payload: Any, *, limit: int = 20000) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Pratt 5.2 durable Cloyd-Smith supervisor loop.")
+    parser = argparse.ArgumentParser(description="Freyja 5.2 durable Cloyd-Smith supervisor loop.")
     parser.add_argument("--database")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval", type=float, default=15.0)

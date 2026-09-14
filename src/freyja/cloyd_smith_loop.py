@@ -68,7 +68,7 @@ def default_cloyd_smith_database_path() -> Path:
 
 
 class CloydSmithJobStore:
-    """Durable Pratt 5.2 ledger for the Cloyd supervisor and Smith worker loop."""
+    """Durable Freyja 5.2 ledger for the Cloyd supervisor and Smith worker loop."""
 
     def __init__(self, database_path: str | Path | None = None) -> None:
         self.database_path = Path(database_path or default_cloyd_smith_database_path()).expanduser()
@@ -80,7 +80,7 @@ class CloydSmithJobStore:
     def create(self, request: CloydSmithJobCreate) -> CloydSmithJob:
         now = datetime.now(UTC)
         job = CloydSmithJob(
-            job_id=f"pratt52-{uuid.uuid4().hex[:12]}",
+            job_id=f"freyja52-{uuid.uuid4().hex[:12]}",
             objective=request.objective,
             smith_alias=request.smith_alias,
             acceptance_criteria=request.acceptance_criteria,

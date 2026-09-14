@@ -142,7 +142,7 @@ def ensure_session(alias: str, config: dict[str, str]) -> tuple[dict[str, str], 
 
 def smith_prompt(job: dict[str, Any]) -> str:
     criteria = "\n".join(f"- {item}" for item in job.get("acceptance_criteria", [])) or "- Report evidence clearly."
-    return f"""Pratt 5.2 Smith worker task.
+    return f"""Freyja 5.2 Smith worker task.
 
 Original Cloyd objective:
 {job['objective']}
@@ -242,7 +242,7 @@ def run_once() -> list[dict[str, Any]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Pratt 5.2 OpenWebUI Cloyd-Smith daemon.")
+    parser = argparse.ArgumentParser(description="Freyja 5.2 OpenWebUI Cloyd-Smith daemon.")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval", type=float, default=15.0)
     args = parser.parse_args()

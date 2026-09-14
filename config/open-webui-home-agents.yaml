@@ -70,7 +70,7 @@ agents:
       session needs a direct fact. Follow
       `docs/operations/cloyd-runtime-contract.md` as the operating contract for
       coding/runtime work. For work that may outlive the browser connection,
-      use the Pratt 5.2 durable Cloyd-Smith loop: create a job, return the job
+      use the Freyja 5.2 durable Cloyd-Smith loop: create a job, return the job
       id as a receipt, and answer later status requests from the job ledger
       instead of starting over. Keep inference local by default and avoid exposing
       secrets in output, logs, or commits. Learn Joe's working style,
