@@ -22,6 +22,7 @@ def test_builtin_registry_exposes_macagent_read_tools(registry: ToolRegistry) ->
     assert registry.get_tool("apple_messages_send") is not None
     assert registry.get_tool("apple_mailbox_counts") is not None
     assert registry.get_tool("apple_music_current_track") is not None
+    assert registry.get_tool("apple_music_play_query") is not None
     assert registry.get_tool("apple_browser_front_tab") is not None
     assert registry.get_tool("apple_shortcuts_run") is not None
 
@@ -250,6 +251,69 @@ async def test_apple_music_current_track_invokes_macagent_envelope(
     assert captured["request"].capability == "apple.music.read"
     assert captured["request"].operation == "current_track"
     assert captured["request"].arguments == {}
+
+
+@pytest.mark.asyncio
+async def test_apple_music_play_query_requires_explicit_approval(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoked = False
+
+    class Client:
+        async def invoke(self, request):
+            nonlocal invoked
+            invoked = True
+            return MacAgentOperationResult(ok=True, capability="apple.music.write", operation="play_query")
+
+    monkeypatch.setattr("freyja.tools.builtin.MacAgentClient", Client)
+
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="apple_music_play_query",
+            arguments={"query": "jazz", "destination": "HomePod"},
+            metadata={"director_authorized": True, "person": {"person_id": "joe"}},
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "authorization_denied"
+    assert invoked is False
+
+
+@pytest.mark.asyncio
+async def test_apple_music_play_query_invokes_macagent_after_approval(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    class Client:
+        async def invoke(self, request):
+            captured["request"] = request
+            return MacAgentOperationResult(
+                ok=True,
+                capability="apple.music.write",
+                operation="play_query",
+                output={"player_state": "playing", "track": "Song", "artist": "Artist", "destination": "HomePod"},
+            )
+
+    monkeypatch.setattr("freyja.tools.builtin.MacAgentClient", Client)
+
+    result = await registry.execute(
+        ToolExecutionRequest(
+            tool_name="apple_music_play_query",
+            arguments={"query": "jazz", "destination": "HomePod"},
+            metadata={"director_authorized": True, "approval_granted": True, "person": {"person_id": "joe"}},
+        )
+    )
+
+    assert result.success is True
+    assert result.output["track"] == "Song"
+    assert captured["request"].approval_granted is True
+    assert captured["request"].capability == "apple.music.write"
+    assert captured["request"].operation == "play_query"
+    assert captured["request"].arguments == {"query": "jazz", "destination": "HomePod"}
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,7 @@ MacAgentCapability = Literal[
     "apple.contacts.read",
     "apple.mail.read",
     "apple.music.read",
+    "apple.music.write",
     "apple.browser.read",
     "apple.shortcuts.run",
 ]
