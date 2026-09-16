@@ -217,7 +217,7 @@ class ToolRegistry:
                 required_permission=permission,
             )
 
-        if permission in {"apple.messages.send", "apple.shortcuts.run"}:
+        if permission in {"apple.messages.send", "apple.shortcuts.run", "apple.music.write"}:
             if not _is_canonical_household_principal(person_id):
                 return ToolAuthorizationDecision(
                     allowed=False,
@@ -231,7 +231,11 @@ class ToolRegistry:
                     required_permission=permission,
                 )
             if metadata.get("approval_granted") is not True:
-                operation = "Messages send" if permission == "apple.messages.send" else "Shortcuts run"
+                operation = {
+                    "apple.messages.send": "Messages send",
+                    "apple.shortcuts.run": "Shortcuts run",
+                    "apple.music.write": "Music playback",
+                }[permission]
                 return ToolAuthorizationDecision(
                     allowed=False,
                     reason=f"explicit approval required for Apple {operation}",
