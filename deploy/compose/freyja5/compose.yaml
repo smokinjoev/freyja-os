@@ -27,6 +27,7 @@ services:
       FREYJA3_WORKER_DATABASE_PATH: /app/data/freyja3_workers.db
       FREYJA3_AUDIT_DATABASE_PATH: /app/data/freyja3_audit.db
       MEMORY_DATABASE_PATH: /app/data/freyja.db
+      CLOYD_SMITH_LOOP_DATABASE_PATH: /app/data/cloyd-smith-loop.db
       REPOSITORY_ROOT: /app
       NEXUS_BASE_URL: ${NEXUS_BASE_URL:-}
       NEXUS_API_KEY: ${NEXUS_API_KEY:-}

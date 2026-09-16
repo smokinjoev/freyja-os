@@ -8,6 +8,8 @@ from freyja.cloyd_smith_loop import (
     CloydSmithJobStore,
     CloydSmithJobUpdate,
 )
+from freyja.home_memory import HomeMemoryWriteRequest, _write_record
+from freyja.memory.models import MemoryPrincipal
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLevel
 from freyja.tools.registry import ToolRegistry
 
@@ -98,11 +100,58 @@ async def _cloyd_smith_record(request: ToolExecutionRequest) -> dict[str, Any]:
                 error=str(args["error"]) if args.get("error") is not None else None,
             ),
         )
+        continuity_record = _record_cloyd_continuity_summary(request, job, event_type=event_type, payload=payload)
     except KeyError:
         return {"ok": False, "error": f"Unknown Cloyd Smith job: {job_id}"}
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
-    return {"ok": True, "job": _job_summary(job)}
+    result = {"ok": True, "job": _job_summary(job)}
+    if continuity_record is not None:
+        result["continuity"] = continuity_record.model_dump(mode="json")
+    return result
+
+
+def _record_cloyd_continuity_summary(
+    request: ToolExecutionRequest,
+    job,
+    *,
+    event_type: str,
+    payload: dict[str, Any],
+):
+    args = request.arguments or {}
+    content = str(args.get("continuity_summary") or args.get("decision") or "").strip()
+    if not content:
+        return None
+    operation = "record-decision" if args.get("decision") else "remember"
+    scope = str(args.get("continuity_scope") or "project:freyja-os").strip()
+    owner = str(args.get("continuity_owner") or "freyja-os").strip()
+    provenance = str(args.get("continuity_provenance") or "cloyd-smith-loop").strip()
+    principal = MemoryPrincipal(
+        client_type="cloyd-smith-loop",
+        client_subject="agent:cloyd",
+        account_owner="joe",
+    )
+    return _write_record(
+        principal,
+        HomeMemoryWriteRequest(
+            scope=scope,
+            owner=owner,
+            content=content,
+            provenance=provenance,
+            sensitivity=str(args.get("continuity_sensitivity") or "private"),
+            record_id=str(args.get("continuity_record_id") or f"cloyd-smith-{job.job_id}-{event_type}"),
+            metadata={
+                "continuity_surface": "opencode",
+                "continuity_active_user": request.actor or "joe",
+                "continuity_active_agent": "cloyd",
+                "cloyd_smith_job_id": job.job_id,
+                "cloyd_smith_event_type": event_type,
+                "cloyd_smith_status": job.status.value,
+                "cloyd_smith_payload_keys": sorted(payload),
+            },
+        ),
+        operation=operation,
+    )
 
 
 async def _cloyd_smith_stop(request: ToolExecutionRequest) -> dict[str, Any]:
@@ -173,6 +222,11 @@ def register_cloyd_smith_loop_tools(registry: ToolRegistry) -> None:
                         "status": {"type": "string"},
                         "next_action": {"type": "string"},
                         "error": {"type": "string"},
+                        "continuity_summary": {"type": "string"},
+                        "decision": {"type": "string"},
+                        "continuity_scope": {"type": "string"},
+                        "continuity_owner": {"type": "string"},
+                        "continuity_record_id": {"type": "string"},
                     },
                 },
                 output_schema={"type": "object", "properties": {}},

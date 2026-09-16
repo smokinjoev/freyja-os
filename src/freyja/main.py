@@ -21,6 +21,7 @@ from freyja.agents.runtime import SmithRuntime
 from freyja.agent_gateway import AgentGateway, GatewayAuthenticationError, GatewayPermissionError, GatewayRequest
 from freyja.agent_runtime_v3 import AgentRuntimeV3, home_assistant_focus_for_text
 from freyja.config import settings
+from freyja.continuity import continuity_router
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
@@ -164,6 +165,7 @@ semantic_event_store_v3 = SemanticEventStore()
 
 app.include_router(memory_router)
 app.routes.extend(home_memory_router.routes)
+app.include_router(continuity_router)
 app.include_router(open_webui_tools_router)
 app.include_router(tools_router)
 

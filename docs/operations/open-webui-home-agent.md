@@ -380,6 +380,21 @@ The additive home-memory API is mounted in the Freyja FastAPI app at:
 /freyja-home-memory
 ```
 
+Freyja Core continuity is the shared layer underneath Open WebUI, the
+Cloyd-Smith/OpenCode loop, Msty Go, and future messaging channels. It is also
+mounted additively:
+
+```text
+/freyja-core/continuity
+```
+
+Open WebUI and OpenCode remain the public surfaces. Freyja Core is the
+authority for stable identity, memory policy, tool grants, approvals, and audit;
+Nexus and Msty must not become household-authority stores. The continuity
+facade writes to the same durable scoped memory store as `/freyja-home-memory`,
+so existing Open WebUI home-memory tooling keeps working while newer surfaces
+can call the core API directly.
+
 Deployment note: the side-by-side Freyja 5 gateway is started with
 `deploy/compose/freyja5/compose.yaml`. The container sets `REPOSITORY_ROOT=/app`
 so source-controlled config files resolve from `/app/config` after package
@@ -396,6 +411,18 @@ Operations:
 | `record-decision` | `POST /freyja-home-memory/record-decision` |
 | `recent-events` | `GET /freyja-home-memory/recent-events?scope=<scope>` |
 
+Continuity aliases:
+
+| Operation | Endpoint |
+| --- | --- |
+| `identity` | `GET /freyja-core/continuity/identity` |
+| `context` | `GET /freyja-core/continuity/context?surface=<surface>` |
+| `search` | `GET /freyja-core/continuity/memory/search?scope=<scope>&q=<query>` |
+| `remember` | `POST /freyja-core/continuity/memory/remember` |
+| `record-decision` | `POST /freyja-core/continuity/memory/record-decision` |
+| `recent` | `GET /freyja-core/continuity/memory/recent?scope=<scope>` |
+| `current-work` | `GET /freyja-core/continuity/current-work` |
+
 Records include scope, owner, provenance, created/updated timestamps, sensitivity, and operation metadata. Current enforced scopes include:
 
 ```text
@@ -409,6 +436,12 @@ restricted:benedict
 ```
 
 Benedict can read `personal:beth` and `restricted:benedict`, but can only write `restricted:benedict`. Joe cannot read Beth/Benedict scopes, Beth cannot read Joe's personal scope, and child agents cannot access administrative scopes.
+
+The Cloyd-Smith tool `cloyd_smith.record` can mirror a concise job summary into
+Freyja Core continuity by passing `continuity_summary` or `decision`. That
+does not replace the Cloyd-Smith ledger; it adds a scoped memory/audit breadcrumb
+that Cloyd, OpenWebUI, and future Msty Go sessions can recall through the same
+core API.
 
 ## Open WebUI Resources
 
