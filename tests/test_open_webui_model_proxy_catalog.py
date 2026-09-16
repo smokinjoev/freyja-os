@@ -19,7 +19,7 @@ def _module():
 
 def test_model_proxy_catalog_report_tracks_agent_models() -> None:
     module = _module()
-    report = module.build_report(sorted(module.EXPECTED_AGENT_MODELS | {"qwen3:30b-a3b"}))
+    report = module.build_report(sorted(module.EXPECTED_AGENT_MODELS | {"qwen3.8:27b", "qwen3:30b-a3b"}))
 
     assert report["ok"] is True
     assert report["secrets_included"] is False
@@ -34,7 +34,7 @@ def test_model_proxy_catalog_report_tracks_agent_models() -> None:
     assert report["agent_profile_map"]["agent/freyja"]["provider"] == "vulcan_ollama"
     assert report["agent_profile_map"]["agent/freyja"]["keep_local"] is True
     assert report["agent_profile_map"]["agent/benedict-paralegal"]["agent_id"] == "benedict-paralegal"
-    assert report["model_count"] == 7
+    assert report["model_count"] == 9
 
 
 def test_model_proxy_catalog_report_fails_when_agent_missing() -> None:

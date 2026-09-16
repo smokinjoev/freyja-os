@@ -8,7 +8,7 @@ services:
       - python
       - /app/model-proxy.py
     environment:
-      APPROVED_MODELS: ${OPEN_WEBUI_APPROVED_MODELS:-qwen2.5:32b-instruct,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b}
+      APPROVED_MODELS: ${OPEN_WEBUI_APPROVED_MODELS:-qwen3.8:27b,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b}
       FALLBACK_MODELS: ${OPEN_WEBUI_FALLBACK_MODELS:-qwen2.5:7b}
       PRIMARY_BASE_URL: ${OPENAI_PRIMARY_BASE_URL:-http://100.94.80.21:8088/v1}
       PRIMARY_API_KEY: ${OPENAI_PRIMARY_API_KEY:-not-needed}
@@ -28,13 +28,17 @@ services:
       GARBAGE_GUARD_MIN_TOKENS: ${OPEN_WEBUI_GARBAGE_GUARD_MIN_TOKENS:-512}
       VISION_MODELS: ${OPEN_WEBUI_VISION_MODELS:-qwen2.5vl:72b}
       TEXT_MODEL: ${OPEN_WEBUI_TEXT_MODEL:-qwen2.5vl:72b}
-      TOOL_MODEL: ${OPEN_WEBUI_TOOL_MODEL:-qwen2.5:32b-instruct}
+      TOOL_MODEL: ${OPEN_WEBUI_TOOL_MODEL:-qwen3.8:27b}
     volumes:
       - ./model-proxy.py:/app/model-proxy.py:ro
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     restart: unless-stopped
+    command:
+      - bash
+      - -lc
+      - python /app/patches/patch_model_tool_defaults.py && bash start.sh
     ports:
       - "${OPEN_WEBUI_BIND_IP:-0.0.0.0}:${OPEN_WEBUI_HOST_PORT:-3000}:8080"
     environment:
@@ -43,6 +47,9 @@ services:
       WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in deploy/compose/open-webui/.env}
       OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-http://model-proxy:8080/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY in deploy/compose/open-webui/.env}
+      ENABLE_OLLAMA_API: ${ENABLE_OLLAMA_API:-false}
+      OLLAMA_BASE_URLS: ${OLLAMA_BASE_URLS:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
       DEFAULT_MODELS: ${DEFAULT_MODELS:-qwen2.5vl:72b}
       RAG_EMBEDDING_ENGINE: ${RAG_EMBEDDING_ENGINE:-}
       RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-}
@@ -73,6 +80,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - open-webui:/app/backend/data
+      - ../../../ops/openwebui/patch_model_tool_defaults.py:/app/patches/patch_model_tool_defaults.py:ro
     depends_on:
       - model-proxy
       - terminals

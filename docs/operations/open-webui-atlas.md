@@ -12,14 +12,15 @@ Planned model catalog:
 
 | Role | Model |
 | --- | --- |
-| Daily driver | `qwen2.5vl:72b` |
+| Hot daily/tool model | `qwen3.8:27b` |
+| Vision daily driver | `qwen2.5vl:72b` |
 | Fast general chat | `gpt-oss-freyja:20b-analysis-prefill` |
 | Reasoning agent candidate | `qwen3:30b-a3b` |
 | Coding | `qwen3-coder-next:q4_K_M` |
 | GPT OSS small | `gpt-oss:20b` or `gpt-oss-freyja:20b-analysis-prefill` |
 | GPT OSS large | `gpt-oss:120b` |
 
-Open WebUI may show these models in its picker. Only the selected model should be resident on Vulcan at runtime.
+Open WebUI may show these models in its picker. The intentionally hot resident model is `qwen3.8:27b`; larger or specialized models stay available on demand but should not remain resident accidentally.
 
 Fallback rule: Iris/Ollama is only a 7B/12B-class fallback tier. The 20B, 30B,
 coder, 72B, and 120B roles are Vulcan-only unless another machine with enough
@@ -78,7 +79,7 @@ Initial provider target:
 ```text
 OPENAI_API_BASE_URL=http://model-proxy:8080/v1
 DEFAULT_MODELS=qwen2.5vl:72b
-OPEN_WEBUI_APPROVED_MODELS=qwen2.5:32b-instruct,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b
+OPEN_WEBUI_APPROVED_MODELS=qwen3.8:27b,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b
 OPEN_WEBUI_FALLBACK_MODELS=qwen2.5:7b
 ```
 
@@ -91,6 +92,37 @@ AIOHTTP_CLIENT_TIMEOUT_OPENAI_MODEL_LIST=15
 ```
 
 `DEFAULT_MODELS` only controls the initial Open WebUI default. Runtime model choice belongs to Open WebUI; the proxy preserves the selected request model and unloads other resident Vulcan models before forwarding chat.
+
+Vulcan policy: Ollama is the canonical model runtime. Msty Nexus is the stable
+preset/routing layer over Ollama, not a second model source of truth. Ollama is
+configured for one loaded model and one parallel request, with qwen3.8 warmed
+by `freyja-hot-model-warm.timer`. The Ollama context cap is `16384` for normal
+serving so OpenAI-compatible calls do not accidentally allocate the full 262k
+context. Vulcan exposes an AMD Strix/Krackan/Strix Halo NPU at `/dev/accel0`
+with the `amdxdna` driver, but normal LLM serving remains on the Radeon GPU.
+
+Current endpoint map:
+
+| Surface | Endpoint | Purpose |
+| --- | --- | --- |
+| Atlas Open WebUI | `http://100.119.235.114:3001` | Household UI |
+| Atlas model proxy | `http://model-proxy:8080/v1` | Open WebUI provider boundary |
+| Vulcan Ollama native | `http://100.94.80.21:11434` | Canonical model runtime and loaded-model state |
+| Vulcan Ollama OpenAI | `http://100.94.80.21:11434/v1` | Direct OpenAI-compatible diagnostic path |
+| Vulcan Ollama TCP proxy | `http://100.94.80.21:8088/v1` | Open WebUI/model-proxy primary upstream |
+| Vulcan Nexus | `http://100.94.80.21:3939/v1` | Stable preset/routing layer over Ollama |
+| Iris fallback Ollama | `http://100.115.228.56:11434/v1` | 7B-class fallback only |
+
+Current Nexus presets:
+
+| Preset | Model |
+| --- | --- |
+| `@preset/freyja-fast-local` | `external-ollama/gpt-oss:20b` |
+| `@preset/freyja-strong-local` | `external-ollama/qwen3.8:27b` |
+| `@preset/freyja-private-local` | `external-ollama/qwen3.8:27b` |
+| `@preset/freyja-coder` | `external-ollama/qwen3.8:27b` |
+| `@preset/benedict-paralegal-local` | `external-ollama/qwen3.8:27b` |
+| `@preset/freyja-vision-docs` | `external-ollama/qwen2.5vl:72b` |
 
 The model proxy checks Vulcan first and Iris second. Iris fallback is only for
 7B/12B-class active models installed on Iris.
@@ -120,8 +152,7 @@ Model: freyja-core
 API key: not-needed
 ```
 
-Keep Msty Nexus on Vulcan as the inference backend; Core forwards inference to
-`http://100.94.80.21:3939/v1` and does not call Ollama directly.
+Use Ollama on Vulcan as the canonical model runtime. Keep Msty Nexus as the stable preset and routing layer over Ollama; Core may call Nexus presets, but physical model residency and health are verified through Ollama.
 
 The model proxy includes a narrow non-streaming reasoning-output adapter. If an
 upstream returns empty assistant `content` with useful text in an
@@ -138,8 +169,10 @@ docker compose --env-file deploy/compose/open-webui/.env \
 curl http://100.94.80.21:8088/api/ps
 ```
 
-After using a model, verify Vulcan has only the selected model resident. If
-another model remains loaded, unload it on Vulcan before continuing.
+After using a model, verify Vulcan has only the intended model resident. If
+another model remains loaded, or qwen3.8 is not restored as the hot resident
+model after normal use, unload the unwanted model and rerun the hot-model
+warmer before continuing.
 
 For now, when ending an Open WebUI work session, leave the last active model
 warm on Vulcan instead of unloading it immediately.

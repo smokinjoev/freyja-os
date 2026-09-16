@@ -116,7 +116,7 @@ def test_proxy_model_listing_includes_reachable_freyja5_agent_models() -> None:
 
     responses = iter(
         (
-            (200, {"content-type": "application/json"}, json.dumps({"data": [{"id": "qwen2.5:32b-instruct"}]}).encode("utf-8")),
+            (200, {"content-type": "application/json"}, json.dumps({"data": [{"id": "qwen3.8:27b"}]}).encode("utf-8")),
             (200, {"content-type": "application/json"}, json.dumps({"data": [{"id": "qwen2.5:7b"}]}).encode("utf-8")),
             (
                 200,
@@ -146,7 +146,7 @@ def test_proxy_model_listing_includes_reachable_freyja5_agent_models() -> None:
 
     model_ids = {model["id"] for model in sent["body"]["data"]}
     assert sent["status"] == 200
-    assert "qwen2.5:32b-instruct" in model_ids
+    assert "qwen3.8:27b" in model_ids
     assert "qwen2.5:7b" in model_ids
     assert "agent/freyja" in model_ids
     assert "freyja-core" in model_ids
@@ -178,6 +178,47 @@ def test_proxy_forwards_freyja5_agent_chat_without_unloading_vulcan() -> None:
 
     assert sent["status"] == 200
     assert upstream_calls == [(proxy.FREYJA5_BASE_URL, proxy.FREYJA5_API_KEY, "POST", "/chat/completions", {"model": "agent/freyja", "messages": [{"role": "user", "content": "hello"}]})]
+
+
+def test_proxy_routes_tool_enabled_freyja5_agent_chat_to_tool_model() -> None:
+    proxy = load_proxy_module()
+    handler = proxy.Handler.__new__(proxy.Handler)
+    handler.command = "POST"
+    handler.path = "/v1/chat/completions"
+    payload = {
+        "model": "agent/cloyd-gibbler",
+        "messages": [{"role": "user", "content": "Search memory."}],
+        "tools": [{"type": "function", "function": {"name": "search"}}],
+    }
+    body = json.dumps(payload).encode("utf-8")
+    handler.headers = {"content-type": "application/json", "content-length": str(len(body))}
+    handler.rfile = type("Reader", (), {"read": lambda self, length: body})()
+    sent = {}
+    upstream_calls = []
+
+    def fake_upstream(base_url, api_key, method, path, request_body, timeout=120):
+        upstream_calls.append((base_url, api_key, method, path, json.loads(request_body.decode("utf-8"))))
+        return 200, {"content-type": "application/json"}, json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
+
+    handler._upstream = fake_upstream
+    handler._model_available = lambda base_url, api_key, model: model == proxy.TOOL_MODEL
+    handler._unload_other_primary_models = lambda requested_model: None
+    handler._send = lambda status, headers, response_body: sent.update(
+        {"status": status, "headers": headers, "body": json.loads(response_body.decode("utf-8"))}
+    )
+
+    handler._proxy()
+
+    assert sent["status"] == 200
+    assert upstream_calls == [
+        (
+            proxy.PRIMARY_BASE_URL,
+            proxy.PRIMARY_API_KEY,
+            "POST",
+            "/chat/completions",
+            {**payload, "model": proxy.TOOL_MODEL},
+        )
+    ]
 
 
 def test_proxy_forwards_freyja_core_chat_without_unloading_vulcan() -> None:
@@ -304,7 +345,7 @@ def test_routes_tool_payload_away_from_vision_model() -> None:
         "tools": [{"type": "function", "function": {"name": "current_time"}}],
     }
 
-    assert handler._routed_chat_model(payload) == "qwen2.5:32b-instruct"
+    assert handler._routed_chat_model(payload) == "qwen3.8:27b"
 
 
 def test_keeps_plain_text_payload_on_vision_model() -> None:
@@ -322,7 +363,7 @@ def test_routes_image_payload_to_vision_model() -> None:
     proxy = load_proxy_module()
     handler = proxy.Handler.__new__(proxy.Handler)
     payload = {
-        "model": "qwen2.5:32b-instruct",
+        "model": "qwen3.8:27b",
         "messages": [
             {
                 "role": "user",
@@ -341,7 +382,7 @@ def test_routes_pdf_payload_to_vision_model() -> None:
     proxy = load_proxy_module()
     handler = proxy.Handler.__new__(proxy.Handler)
     payload = {
-        "model": "qwen2.5:32b-instruct",
+        "model": "qwen3.8:27b",
         "messages": [
             {
                 "role": "user",

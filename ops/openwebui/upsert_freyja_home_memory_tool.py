@@ -25,7 +25,13 @@ MODEL_IDS = (
 
 
 CONTENT = r'''
-"""Freyja Home Memory adapter for OpenWebUI home agents."""
+"""LIVE Freyja Home Memory adapter for OpenWebUI home agents.
+
+Use this tool whenever Joe asks about memory, old Raspberry Pi Cloyd archives,
+Freyja architecture continuity, or a scoped memory search. This adapter is live:
+do not say it is unwired and do not suggest restarting a freyja-home-memory
+service.
+"""
 
 import json
 import urllib.parse
@@ -53,6 +59,32 @@ class Tools:
         "jennacide": "jenna",
         "jenna": "jenna",
     }
+    _SCOPES = {
+        "personal:joe",
+        "personal:beth",
+        "personal:liam",
+        "personal:jenna",
+        "household",
+        "project:freyja-os",
+        "restricted:benedict",
+    }
+
+    def _normalize_scope(self, scope: str) -> str:
+        normalized = (scope or "project:freyja-os").strip()
+        aliases = {
+            "joe": "personal:joe",
+            "memory": "personal:joe",
+            "project": "project:freyja-os",
+            "freyja": "project:freyja-os",
+            "freyja-os": "project:freyja-os",
+        }
+        normalized = aliases.get(normalized, normalized)
+        if normalized not in self._SCOPES:
+            raise ValueError(
+                "invalid Freyja Home Memory scope; use one of: "
+                + ", ".join(sorted(self._SCOPES))
+            )
+        return normalized
 
     def _token(self) -> str:
         with open(self._TOKEN_FILE, "r", encoding="utf-8") as handle:
@@ -81,14 +113,22 @@ class Tools:
         return body
 
     def search(self, query: str = "", scope: str = "project:freyja-os", limit: int = 8, agent_id: str = "cloyd") -> str:
-        """Search Freyja permanent memory. For old Raspberry Pi/Cloyd archive facts, search project:freyja-os."""
+        """LIVE search of Freyja permanent memory. Use scope personal:joe for Joe's private memories and project:freyja-os for Freyja/Cloyd archive facts."""
         bounded = max(1, min(int(limit), 20))
-        return self._get("/search", {"scope": scope, "q": query, "limit": bounded}, agent_id)
+        try:
+            normalized_scope = self._normalize_scope(scope)
+        except ValueError as exc:
+            return json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True)
+        return self._get("/search", {"scope": normalized_scope, "q": query, "limit": bounded}, agent_id)
 
     def recent_events(self, scope: str = "project:freyja-os", limit: int = 8, agent_id: str = "cloyd") -> str:
-        """Return recent Freyja permanent memory records for a permitted scope."""
+        """LIVE recent Freyja permanent memory records for a permitted scope."""
         bounded = max(1, min(int(limit), 20))
-        return self._get("/recent-events", {"scope": scope, "limit": bounded}, agent_id)
+        try:
+            normalized_scope = self._normalize_scope(scope)
+        except ValueError as exc:
+            return json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True)
+        return self._get("/recent-events", {"scope": normalized_scope, "limit": bounded}, agent_id)
 '''
 
 
@@ -153,6 +193,7 @@ def bind_models() -> list[dict]:
                 tool_ids.append(TOOL_ID)
             meta["toolIds"] = tool_ids
             capabilities = meta.setdefault("capabilities", {})
+            capabilities["builtin_tools"] = False
             capabilities["function_calling"] = True
             capabilities["tools"] = True
             conn.execute(

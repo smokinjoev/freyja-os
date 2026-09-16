@@ -21,7 +21,7 @@ APPROVED_MODELS = {
     model.strip()
     for model in os.environ.get(
         "APPROVED_MODELS",
-        "qwen2.5:32b-instruct,"
+        "qwen3.8:27b,"
         "qwen2.5vl:72b,"
         "qwen3:30b-a3b,"
         "qwen3-coder-next:q4_K_M,"
@@ -73,7 +73,7 @@ VISION_MODELS = {
     if model.strip()
 }
 TEXT_MODEL = os.environ.get("TEXT_MODEL", "qwen2.5vl:72b").strip()
-TOOL_MODEL = os.environ.get("TOOL_MODEL", "qwen2.5:32b-instruct").strip()
+TOOL_MODEL = os.environ.get("TOOL_MODEL", "qwen3.8:27b").strip()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -139,7 +139,11 @@ class Handler(BaseHTTPRequestHandler):
                     json.dumps({"error": f"model is not approved for Open WebUI: {requested_model}"}).encode("utf-8"),
                 )
                 return
-            if requested_model in FREYJA5_AGENT_MODELS:
+            if requested_model in FREYJA5_AGENT_MODELS and self._has_tools(payload):
+                payload["model"] = TOOL_MODEL
+                body = json.dumps(payload).encode("utf-8")
+                requested_model = TOOL_MODEL
+            elif requested_model in FREYJA5_AGENT_MODELS:
                 status, headers, response_body = self._upstream(
                     FREYJA5_BASE_URL,
                     FREYJA5_API_KEY,

@@ -10,14 +10,16 @@ Planned model catalog:
 
 | Role | Model |
 | --- | --- |
+| Hot daily/tool model | `qwen3.8:27b` |
 | Fast general chat | `gpt-oss-freyja:20b-analysis-prefill` |
 | Reasoning agent candidate | `qwen3:30b-a3b` |
 | Coding | `qwen3-coder-next:q4_K_M` |
 | GPT OSS small | `gpt-oss:20b` or `gpt-oss-freyja:20b-analysis-prefill` |
 | GPT OSS large | `gpt-oss:120b` |
 
-Open WebUI may show these models in its picker. Only the selected model should
-be resident on Vulcan at runtime.
+Open WebUI may show these models in its picker. The intentionally hot resident
+model is `qwen3.8:27b`; larger or specialized models stay available on demand
+but should not remain resident accidentally.
 
 Fallback rule: Iris/Ollama is only a 7B/12B-class fallback tier. The 20B, 30B,
 coder, 72B, and 120B roles are Vulcan-only unless another machine with enough
@@ -63,13 +65,21 @@ endpoint over Tailscale:
 OPENAI_API_BASE_URL=http://model-proxy:8080/v1
 OPENAI_API_KEY=not-needed
 DEFAULT_MODELS=qwen2.5vl:72b
-OPEN_WEBUI_APPROVED_MODELS=qwen2.5:32b-instruct,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b
+OPEN_WEBUI_APPROVED_MODELS=qwen3.8:27b,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b
 OPEN_WEBUI_FALLBACK_MODELS=qwen2.5:7b
 ```
 
 `DEFAULT_MODELS` only controls the initial Open WebUI default. Runtime model
 choice belongs to Open WebUI; the proxy preserves the selected request model
 and unloads other resident Vulcan models before forwarding chat.
+
+Vulcan policy: Ollama is the canonical model runtime. Msty Nexus is the stable
+preset/routing layer over Ollama, not a second model source of truth. Ollama is
+configured for one loaded model and one parallel request, with qwen3.8 warmed
+by `freyja-hot-model-warm.timer`. The Ollama context cap is `16384` for normal
+serving so OpenAI-compatible calls do not accidentally allocate the full 262k
+context. Vulcan exposes an AMD Strix/Krackan/Strix Halo NPU at `/dev/accel0`
+with the `amdxdna` driver, but normal LLM serving remains on the Radeon GPU.
 
 The model proxy checks Vulcan first and Iris second. Iris fallback is only for
 7B/12B-class active models installed on Iris. DNS, socket, and other connection
@@ -111,8 +121,9 @@ docker compose --env-file deploy/compose/open-webui/.env \
 curl http://100.94.80.21:8088/api/ps
 ```
 
-If more than the intended model is resident, unload the unwanted model from
-Vulcan before continuing:
+If more than the intended model is resident, or if qwen3.8 is not the hot
+resident model after normal use, unload the unwanted model from Vulcan before
+continuing:
 
 ```bash
 scripts/vulcan-operator.py loaded
