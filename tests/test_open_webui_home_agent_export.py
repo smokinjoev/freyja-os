@@ -91,6 +91,7 @@ def test_cloyd_export_delegates_coding() -> None:
     assert "planning brain" in cloyd["params"]["system"]
     assert "free-running Iris Qwen Code/OpenCode session" in cloyd["params"]["system"]
     assert "send Qwen Code a precise task prompt" in cloyd["params"]["system"]
+    assert "cloyd_smith.replace" in cloyd["params"]["system"]
     assert cloyd["freyja"]["tools"]["coding"] == [
         "opencode.start",
         "opencode.send",
@@ -99,6 +100,11 @@ def test_cloyd_export_delegates_coding() -> None:
         "cloyd_smith.submit",
         "cloyd_smith.record",
         "cloyd_smith.stop",
+        "cloyd_smith.retry",
+        "cloyd_smith.mark_done",
+        "cloyd_smith.mark_blocked",
+        "cloyd_smith.follow_up",
+        "cloyd_smith.replace",
     ]
     assert "cloyd_smith.status" in cloyd["freyja"]["tools"]["allow"]
     assert "unrestricted_shell" in cloyd["freyja"]["tools"]["deny"]

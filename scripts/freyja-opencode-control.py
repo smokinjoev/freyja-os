@@ -14,10 +14,16 @@ from typing import Any
 
 
 DEFAULT_URL = "http://127.0.0.1:4097"
-DEFAULT_USERNAME = "freyja"
+DEFAULT_USERNAME = "joe"
 DEFAULT_PASSWORD_FILE = Path.home() / ".local" / "state" / "freyja" / "opencode" / "server-password"
 STATE_FILE = Path.home() / ".local" / "state" / "freyja" / "opencode" / "controller-sessions.json"
 MODEL = {"providerID": "vulcan-nexus", "modelID": "@preset/freyja-coder"}
+PROMPT_GUARDRAILS = (
+    "OpenCode safety guardrails: stay in the configured working directory; "
+    "do not use nonexistent Linux paths such as /home/joe/freyja-config on this Mac; "
+    "use bounded shell commands such as tail -n 200 or timeout-wrapped commands for logs; "
+    "do not directly read large or blocking log files."
+)
 
 
 def _password(password_file: str | None = None) -> str:
@@ -105,6 +111,8 @@ def _recent_action(parts: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def start(args: argparse.Namespace) -> None:
+    if args.directory and not Path(args.directory).expanduser().exists():
+        raise SystemExit(f"OpenCode directory does not exist: {args.directory}")
     query = {"directory": args.directory} if args.directory else None
     session = _request("POST", "/session", {"title": args.alias}, query=query)
     state = _load_state()
@@ -123,7 +131,7 @@ def send(args: argparse.Namespace) -> None:
     body = {
         "model": MODEL,
         "agent": "build",
-        "parts": [{"type": "text", "text": args.prompt}],
+        "parts": [{"type": "text", "text": f"{PROMPT_GUARDRAILS}\n\n{args.prompt}"}],
     }
     result = _request("POST", f"/session/{session_id}/message", body, **_request_config(session_config))
     print(json.dumps(_summarize_message(session_id, result), indent=2))

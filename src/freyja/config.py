@@ -119,7 +119,7 @@ class Settings(BaseSettings):
     tools_default_timeout_seconds: int = 30
     tools_audit_log_enabled: bool = True
     opencode_base_url: str = Field(default="http://100.115.228.56:4097", alias="OPENCODE_BASE_URL")
-    opencode_username: str = Field(default="freyja", alias="OPENCODE_USERNAME")
+    opencode_username: str = Field(default="joe", alias="OPENCODE_USERNAME")
     opencode_password_file: str = Field(
         default=str(_default_state_dir() / "opencode" / "server-password"),
         alias="OPENCODE_PASSWORD_FILE",

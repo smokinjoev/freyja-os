@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 import yaml
@@ -177,7 +178,7 @@ class AgentRuntimeV3:
             )
         ]
         recalled_memories = self._recall_memories(agent, steps, audit_events)
-        follow_up_questions = self._follow_up_questions(agent, handoff.prompt, selected_tools, steps, audit_events)
+        follow_up_questions = self._follow_up_questions(agent, handoff, selected_tools, steps, audit_events)
         self._record_plan(agent, selected_tools, follow_up_questions, steps, audit_events)
         for tool_id in selected_tools:
             self._record_tool_selection(agent, tool_id, steps, audit_events, reason="agent selected permitted tool")
@@ -511,8 +512,6 @@ class AgentRuntimeV3:
         allowed = set(agent.tool_grants).intersection(set(available_tool_ids))
         lowered = objective.lower()
         candidates: list[str] = []
-        if "coding.execute" in allowed and _is_coding_objective(objective):
-            return ["coding.execute"]
         rules = (
             ("web.search", ("search", "look up", "latest", "current")),
             ("weather.current", ("weather", "forecast", "temperature")),
@@ -581,6 +580,13 @@ class AgentRuntimeV3:
         for tool_id, terms in rules:
             if tool_id in allowed and any(term in lowered for term in terms):
                 candidates.append(tool_id)
+        if (
+            "calendar.write" in allowed
+            and "calendar.write" not in candidates
+            and re.search(r"\b(add|put|create|schedule)\b", lowered)
+            and re.search(r"\b(today|tonight|tomorrow|this weekend|next weekend|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", lowered)
+        ):
+            candidates.append("calendar.write")
         if "home-assistant.read" in allowed and "home-assistant.read" not in candidates and home_assistant_focus_for_text(lowered):
             candidates.append("home-assistant.read")
         if "home-assistant.control" in candidates and "home-assistant.read" in candidates:
@@ -596,17 +602,24 @@ class AgentRuntimeV3:
     def _follow_up_questions(
         self,
         agent: PersistentAgent,
-        objective: str,
+        handoff: GatewayHandoff,
         selected_tools: list[str],
         steps: list[AgentStep],
         audit_events: list[AuditEvent],
     ) -> list[str]:
         questions: list[str] = []
+        objective = handoff.prompt
         lowered = objective.lower()
         if "messaging.send" in selected_tools and not _has_message_target(objective):
             questions.append("Who should I send the message to, and what should it say?")
-        if "calendar.write" in selected_tools and not _approval_granted("calendar.write", frozenset()):
-            questions.append("I can create that calendar event. Please confirm the exact date, start time, title, and that you approve adding it.")
+        if "calendar.write" in selected_tools and not _approval_granted("calendar.write", handoff.permissions):
+            weekend = _this_weekend_context(handoff, objective)
+            if weekend:
+                questions.append(
+                    f"I can create that calendar event. This weekend is {weekend}; which day and start time should I use, and do you approve adding it?"
+                )
+            else:
+                questions.append("I can create that calendar event. Please confirm the exact date, start time, title, and that you approve adding it.")
         if "scheduling.create" in selected_tools and not _has_time_detail(lowered):
             questions.append("When should I schedule that?")
         if "home-assistant.control" in selected_tools and not _has_home_action_detail(lowered):
@@ -1277,14 +1290,18 @@ class AgentRuntimeV3:
             return _home_assistant_read_arguments(objective)
         if capability_id == "home-assistant.control":
             return _home_assistant_control_arguments(objective)
+        if capability_id == "calendar.write":
+            return _calendar_write_arguments(objective, handoff)
         return {}
 
     @staticmethod
     def _inference_prompt(agent: PersistentAgent, handoff: GatewayHandoff, tool_results: list[dict[str, Any]]) -> str:
         document_context = _document_context_from_handoff(handoff)
+        temporal_context = _temporal_context_from_handoff(handoff)
         return (
             f"You are {agent.display_name}, a persistent Freyja agent. "
             "Answer the user's objective using only the supplied context.\n\n"
+            f"{temporal_context}"
             f"Objective: {handoff.prompt}\n\n"
             f"{document_context}"
             f"Tool results: {tool_results}"
@@ -1844,6 +1861,101 @@ def _document_context_from_handoff(handoff: GatewayHandoff) -> str:
         else:
             lines.append(f"- {document.filename} ({document.mime_type}): {document.error or 'document text unavailable'}")
     return "\n".join(lines) + "\n\n"
+
+
+def _temporal_context_from_handoff(handoff: GatewayHandoff) -> str:
+    context = handoff.reply_context.get("temporal_context")
+    if not isinstance(context, dict):
+        return ""
+    local_date = context.get("local_date")
+    local_time = context.get("local_time")
+    local_datetime = context.get("local_datetime")
+    timezone = context.get("timezone")
+    if not all(isinstance(value, str) and value for value in (local_date, local_time, local_datetime, timezone)):
+        return ""
+    return (
+        "Current local time context:\n"
+        f"- date: {local_date}\n"
+        f"- time: {local_time}\n"
+        f"- datetime: {local_datetime}\n"
+        f"- timezone: {timezone}\n\n"
+    )
+
+
+def _this_weekend_context(handoff: GatewayHandoff, objective: str) -> str | None:
+    if "this weekend" not in objective.lower():
+        return None
+    context = handoff.reply_context.get("temporal_context")
+    if not isinstance(context, dict) or not isinstance(context.get("local_date"), str):
+        return None
+    try:
+        local_date = _datetime.date.fromisoformat(context["local_date"])
+    except ValueError:
+        return None
+    days_until_saturday = (5 - local_date.weekday()) % 7
+    saturday = local_date + _datetime.timedelta(days=days_until_saturday)
+    sunday = saturday + _datetime.timedelta(days=1)
+    return f"{saturday.isoformat()} to {sunday.isoformat()}"
+
+
+def _calendar_write_arguments(objective: str, handoff: GatewayHandoff) -> dict[str, Any]:
+    context = handoff.reply_context.get("temporal_context")
+    if not isinstance(context, dict):
+        return {}
+    local_date_text = context.get("local_date")
+    timezone_text = context.get("timezone")
+    if not isinstance(local_date_text, str) or not isinstance(timezone_text, str):
+        return {}
+    try:
+        local_date = _datetime.date.fromisoformat(local_date_text)
+        timezone = ZoneInfo(timezone_text)
+    except (ValueError, KeyError):
+        return {}
+    lowered = objective.lower()
+    if "this weekend" not in lowered:
+        return {}
+    day = None
+    if "saturday" in lowered:
+        day = 5
+    elif "sunday" in lowered:
+        day = 6
+    if day is None:
+        return {}
+    match = re.search(r"\b(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", lowered)
+    if match is None:
+        return {}
+    hour = int(match.group(1))
+    minute = int(match.group(2) or "0")
+    meridiem = match.group(3)
+    if meridiem == "pm" and hour != 12:
+        hour += 12
+    elif meridiem == "am" and hour == 12:
+        hour = 0
+    if hour > 23 or minute > 59:
+        return {}
+    days_until_saturday = (5 - local_date.weekday()) % 7
+    saturday = local_date + _datetime.timedelta(days=days_until_saturday)
+    target_date = saturday + _datetime.timedelta(days=day - 5)
+    start = _datetime.datetime.combine(target_date, _datetime.time(hour, minute), tzinfo=timezone)
+    end = start + _datetime.timedelta(hours=1)
+    return {
+        "title": _calendar_title_from_objective(objective),
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "member_ids": ["joe"],
+    }
+
+
+def _calendar_title_from_objective(objective: str) -> str:
+    for line in objective.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        text = re.sub(r"^(?:user:\s*)?(?:please\s+)?(?:add|put|create|schedule)\s+", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s+this weekend.*$", "", text, flags=re.IGNORECASE).strip(" .")
+        if text:
+            return text
+    return "Calendar event"
 
 
 def _attachment_inputs_from_handoff(handoff: GatewayHandoff) -> list[AttachmentInput]:

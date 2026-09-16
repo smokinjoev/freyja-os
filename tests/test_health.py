@@ -303,7 +303,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "home_machine": "atlas",
         "private_memory_scope": "agent:freyja",
         "shared_memory_scopes": ["family", "system"],
-        "tool_grant_count": 15,
+            "tool_grant_count": 16,
         "mcp_tool_grants": [
             "browser.control",
             "calendar.read",
@@ -675,6 +675,76 @@ def test_agent_gateway_chat_forces_scoped_agent_model(monkeypatch) -> None:
     assert seen["allow_cloud_fallback"] is False
 
 
+def test_open_webui_agent_chat_includes_local_temporal_context(monkeypatch) -> None:
+    from freyja import main as director_main
+    from freyja.config import settings
+
+    seen = {}
+
+    class FakeRuntime:
+        def __init__(self, *, run_inference, allow_cloud_fallback, **kwargs):
+            pass
+
+        async def arun(self, handoff):
+            seen["reply_context"] = handoff.reply_context
+            return SimpleNamespace(
+                trace_id=handoff.handoff_id,
+                conversation_id=handoff.conversation_id,
+                agent_id=handoff.target_agent_id,
+                response_text="temporal context ok",
+                requested_route="general",
+                inference_endpoint_id="vulcan-nexus-strong",
+                inference_provider="nexus",
+                inference_model="@preset/test",
+                egress_state="local-only",
+                degraded=False,
+                trace_summary={
+                    "trace_id": handoff.handoff_id,
+                    "channel": handoff.channel,
+                    "resolved_user": handoff.sender_id,
+                    "authenticated_subject": handoff.authenticated_subject,
+                    "agent_security_domain": "household",
+                    "requested_route": "general",
+                    "actual_endpoint": "vulcan-nexus-strong",
+                    "actual_provider": "nexus",
+                    "inference_status": "not_run",
+                },
+            )
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", False)
+    monkeypatch.setattr(director_main, "AgentRuntimeV3", FakeRuntime)
+    monkeypatch.setattr(
+        director_main,
+        "_openai_temporal_context",
+        lambda: {
+            "local_date": "2026-09-15",
+            "local_time": "09:42:00",
+            "local_datetime": "2026-09-15T09:42:00-04:00",
+            "timezone": "America/New_York",
+        },
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent/freyja",
+            "user": "joe",
+            "messages": [{"role": "user", "content": "Add Family Basement Cleanup this weekend."}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    assert seen["reply_context"]["temporal_context"] == {
+        "local_date": "2026-09-15",
+        "local_time": "09:42:00",
+        "local_datetime": "2026-09-15T09:42:00-04:00",
+        "timezone": "America/New_York",
+    }
+
+
 def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatch) -> None:
     from freyja import main as director_main
     from freyja.config import settings
@@ -697,7 +767,8 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatc
     assert data["object"] == "chat.completion"
     assert data["model"] == "freyja-5"
     content = data["choices"][0]["message"]["content"]
-    assert "Freyja received the objective and selected coding.execute using vulcan-nexus-coder." in content
+    assert "Freyja received the objective and selected coding.execute, system.health" in content
+    assert "using vulcan-nexus-coder." in content
     assert "Trace:" in content
     assert "Route: code" in content
     assert "Status: not_run" in content
@@ -961,7 +1032,8 @@ def test_openai_chat_completion_freyja5_streams_sse(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert '"model":"freyja-5"' in response.text
-    assert "Freyja received the objective and selected no tools using vulcan-nexus-vision-docs." in response.text
+    assert "Freyja received the objective and selected no tools" in response.text
+    assert "using vulcan-nexus-vision-docs." in response.text
     assert "Route: vision" in response.text
     assert "data: [DONE]" in response.text
 

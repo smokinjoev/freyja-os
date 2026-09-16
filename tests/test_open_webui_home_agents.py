@@ -88,9 +88,17 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     assert "Freyja 5.2 durable Cloyd-Smith loop" in cloyd["system_prompt"]
     assert "may outlive the browser connection" in cloyd["system_prompt"]
     assert "job ledger" in cloyd["system_prompt"]
+    assert "begin monitoring Agents" in cloyd["system_prompt"]
+    assert "monitor opencode" in cloyd["system_prompt"]
+    assert "/agent-runs" in cloyd["system_prompt"]
+    assert "http://0.0.0.0:8000/agent-runs" in cloyd["system_prompt"]
+    assert "`supervisor` heartbeat field" in cloyd["system_prompt"]
+    assert "alive, stale, or missing" in cloyd["system_prompt"]
+    assert "never a `127.0.0.1` localhost URL" in cloyd["system_prompt"]
     assert "show the diff" in cloyd["system_prompt"]
     assert "verify the served page" in cloyd["system_prompt"]
     assert "Never report success from an edit command alone" in cloyd["system_prompt"]
+    assert "cloyd_smith.replace" in cloyd["system_prompt"]
     assert "opencode.status" in cloyd["tools"]["allow"]
     assert "cloyd_smith.status" in cloyd["tools"]["allow"]
     assert set(cloyd["tools"]["coding"]) == {
@@ -101,6 +109,11 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
         "cloyd_smith.submit",
         "cloyd_smith.record",
         "cloyd_smith.stop",
+        "cloyd_smith.retry",
+        "cloyd_smith.mark_done",
+        "cloyd_smith.mark_blocked",
+        "cloyd_smith.follow_up",
+        "cloyd_smith.replace",
     }
     assert {
         "children.admin",

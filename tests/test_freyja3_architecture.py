@@ -1244,6 +1244,62 @@ def test_document_attachment_text_is_included_in_inference_prompt(monkeypatch) -
     assert "Contract renewal deadline is Friday." in prompt
 
 
+def test_temporal_context_is_included_in_inference_prompt() -> None:
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="Add Family Basement Cleanup this weekend.",
+            conversation_id="conv-calendar",
+            reply_context={
+                "temporal_context": {
+                    "local_date": "2026-09-15",
+                    "local_time": "09:42:00",
+                    "local_datetime": "2026-09-15T09:42:00-04:00",
+                    "timezone": "America/New_York",
+                }
+            },
+        )
+    ).handoff
+    assert handoff is not None
+
+    prompt = AgentRuntimeV3._inference_prompt(AgentRuntimeV3()._agent("freyja"), handoff, [])
+
+    assert "Current local time context" in prompt
+    assert "date: 2026-09-15" in prompt
+    assert "timezone: America/New_York" in prompt
+    assert "Add Family Basement Cleanup this weekend." in prompt
+
+
+def test_calendar_write_relative_weekend_asks_for_specific_time() -> None:
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="Add Family Basement Cleanup this weekend.",
+            conversation_id="conv-calendar",
+            reply_context={
+                "temporal_context": {
+                    "local_date": "2026-09-15",
+                    "local_time": "09:42:00",
+                    "local_datetime": "2026-09-15T09:42:00-04:00",
+                    "timezone": "America/New_York",
+                }
+            },
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(run_inference=False).run(handoff)
+
+    assert "calendar.write" in result.selected_tools
+    assert result.follow_up_questions == (
+        "I can create that calendar event. This weekend is 2026-09-19 to 2026-09-20; "
+        "which day and start time should I use, and do you approve adding it?",
+    )
+    assert result.response_text == result.follow_up_questions[0]
+
+
 def test_embeddings_route_is_registered_for_memory_retrieval() -> None:
     endpoints = InferenceRegistryV3().endpoints_for(capability="embeddings.local", domain_id=SecurityDomainId.HOUSEHOLD)
 

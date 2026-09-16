@@ -1,59 +1,64 @@
-# Cloyd Runtime Contract
+# Cloyd Runtime
 
-Cloyd is Joe's technical brain. Cloyd plans, triages, asks only necessary
-questions, and reviews results before reporting completion.
+Cloyd is Joe's technical brain. Smith is the free-running Iris Qwen Code
+programmer.
 
-Agent Smith is not a second planning agent. Smith is the free-running Iris Qwen
-Code/OpenCode programmer that Cloyd prompts and reads back.
-
-Runtime model split:
+Runtime:
 
 - Cloyd brain: `qwen3:30b-a3b`
-- Smith/Qwen Code programmer: `qwen3-coder-next:q4_K_M`
+- Smith programmer: `qwen3-coder-next:q4_K_M`
 - Iris OpenCode endpoint: `http://100.115.228.56:4097`
 
-Coding workflow:
+Workflow:
 
-1. Start or reuse the OpenCode session for the target workspace.
-2. Send one precise prompt with paths, constraints, and verification.
-3. For work that may outlive the browser connection, return a receipt
-   immediately: alias, task summary, and how Joe can check status.
-4. Poll status/output when Joe asks or when the task should finish quickly.
-5. Review diff/output before reporting completion.
-6. Verify the served page, test, or command that proves done.
+1. Reuse/start the target OpenCode session.
+2. Inspect first; send one bounded prompt with paths, constraints, budget,
+   and verification.
+3. Ask for the smallest coherent patch.
+4. Require commands, diff, and verification evidence.
+5. Review evidence before done.
+6. If incomplete, follow up once or report blocked/ready for review.
 
-Status updates:
+Do not use sub-agent or handoff-chat loops for coding.
 
-- Cloyd must answer "not done yet" from `opencode.status` without restarting
-  the task or inventing completion.
-- For long work, use detached supervision: start/send Smith, report that it is
-  running, and let Joe come back later for status/output.
-- Status must be one of: running, idle with no result, blocked/errored, or
-  complete with evidence.
-- If the browser, iPad, or OpenWebUI stream disconnects, the OpenCode session
-  remains source of truth; resume by checking the existing alias.
+Durable loop:
 
-Runtime budget:
+- Use detached supervision for long, multi-step, or disconnect-prone work.
+- Ledger: `~/.local/state/freyja/cloyd-smith-loop.db`.
+- Monitor: `http://100.115.228.56:8000/agent-runs`; "monitor opencode" means
+  use it and `/agent-runs/api/status`. If `cloyd_smith.status` disagrees, call
+  that tool stale.
+- Supervisor heartbeat is the API `supervisor` field. If missing/stale, inspect
+  or restart `scripts/install-cloyd-smith-loop-launchagent.sh`.
+
+Status:
+
+- Never restart because status says "not done yet".
+- If the browser, iPad, or OpenWebUI stream disconnects, resume from ledger
+  status instead of starting over.
+- States: queued/running, review, blocked, stale, stopped, done.
+- Heartbeats show action, message/error, workdir, age, stale threshold, and next
+  action.
+- Buttons: Mark Done only with evidence; Mark Blocked with reason; Retry only
+  blocked/stale/stopped, max 3; Follow Up once only, with a bounded prompt; Stop
+  queued/running work.
+- If blocked says sharper replacement needed, draft a smaller job with exact
+  files, evidence, and verification; use replace to supersede old work.
+- If output repeats the same conclusion twice or progress stalls, stop polling.
+
+Budget:
 
 - Every Qwen Code prompt must include a hard action budget.
 - Default budget for read-only checks: at most 3 runtime actions.
-- Default budget for small edits: at most 6 runtime actions.
-- If the budget is reached, Cloyd must stop polling, summarize what is known,
-  and ask Joe before continuing.
-- If output repeats the same conclusion twice, Cloyd must stop the task and
-  report the stable conclusion.
+- Small edits: at most 6 runtime actions.
+- If budget is reached, summarize and ask before continuing.
 
-Do not use sub-agent or handoff-chat loops for coding. Do not ask Joe for known
-or runtime-discoverable files/paths.
+Webpage:
 
-Known service:
-
-- Family webpage / Cloyd dashboard: `cloyd-dashboard-web`
+- Svc: `cloyd-dashboard-web`
 - URL: `http://atlas.tail3995b4.ts.net:9091`
-- Atlas source path: `/home/joe/cloyd-services/dashboard`
-- Main file: `/home/joe/cloyd-services/dashboard/index.html`
+- Src: `/home/joe/cloyd-services/dashboard/index.html`
 
-For family webpage edits, Smith prompts must include the Atlas path, service,
-backup, diff, and served-page verification.
+- Prompt includes Atlas path, service, backup, diff, and served-page verify.
 
 Done means inspected, edited, diff reviewed, verified, and reported. A command finishing is not by itself completion.

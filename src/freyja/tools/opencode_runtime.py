@@ -15,6 +15,12 @@ from freyja.tools.registry import ToolRegistry
 
 
 MODEL = {"providerID": "vulcan-nexus", "modelID": "@preset/freyja-coder"}
+PROMPT_GUARDRAILS = (
+    "OpenCode safety guardrails: stay in the configured working directory; "
+    "do not use nonexistent Linux paths such as /home/joe/freyja-config on this Mac; "
+    "use bounded shell commands such as tail -n 200 or timeout-wrapped commands for logs; "
+    "do not directly read large or blocking log files."
+)
 
 
 def _password(password_file: str | None = None) -> str:
@@ -31,6 +37,7 @@ def _request(
     base_url: str | None = None,
     username: str | None = None,
     password_file: str | None = None,
+    timeout_seconds: float | None = None,
 ) -> Any:
     if query:
         path = f"{path}?{urllib.parse.urlencode(query)}"
@@ -41,7 +48,7 @@ def _request(
     if body is not None:
         request.add_header("content-type", "application/json")
     try:
-        timeout = float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
+        timeout = timeout_seconds if timeout_seconds is not None else float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read()
     except urllib.error.HTTPError as exc:
@@ -55,6 +62,33 @@ def _request(
     if isinstance(result, dict):
         result.setdefault("ok", True)
     return result
+
+
+def opencode_health(*, alias: str | None = None, timeout_seconds: float = 5.0) -> dict[str, Any]:
+    """Check whether the configured OpenCode runtime answers authenticated status calls."""
+    config = _session_config(alias) if alias else {}
+    result = _request(
+        "GET",
+        "/session/status",
+        timeout_seconds=timeout_seconds,
+        base_url=config.get("base_url"),
+        username=config.get("username"),
+        password_file=config.get("password_file"),
+    )
+    if not result.get("ok", True):
+        return {
+            "ok": False,
+            "alias": alias or "",
+            "base_url": config.get("base_url") or settings.opencode_base_url,
+            "error": str(result.get("error") or result),
+        }
+    session_count = len([key for key in result if key != "ok"]) if isinstance(result, dict) else 0
+    return {
+        "ok": True,
+        "alias": alias or "",
+        "base_url": config.get("base_url") or settings.opencode_base_url,
+        "session_count": session_count,
+    }
 
 
 def _load_aliases() -> dict[str, Any]:
@@ -122,20 +156,55 @@ def _summarize_message(session_id: str, result: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _valid_directory(directory: str) -> tuple[bool, str]:
+    if not directory:
+        return True, ""
+    path = Path(directory).expanduser()
+    if not path.exists():
+        return False, f"OpenCode directory does not exist: {directory}"
+    if not path.is_dir():
+        return False, f"OpenCode directory is not a directory: {directory}"
+    return True, str(path)
+
+
+def _guard_prompt(prompt: str) -> str:
+    if PROMPT_GUARDRAILS in prompt:
+        return prompt
+    return f"{PROMPT_GUARDRAILS}\n\n{prompt}"
+
+
 async def _opencode_start(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
     directory = str(args.get("directory") or "").strip()
+    directory_ok, directory_or_error = _valid_directory(directory)
+    if not directory_ok:
+        return {"ok": False, "error": directory_or_error}
+    directory = directory_or_error
     query = {"directory": directory} if directory else None
-    result = _request("POST", "/session", {"title": alias}, query=query)
+    existing_config = _session_config(alias)
+    result = _request(
+        "POST",
+        "/session",
+        {"title": alias},
+        query=query,
+        base_url=existing_config.get("base_url"),
+        username=existing_config.get("username"),
+        password_file=existing_config.get("password_file"),
+    )
     if not result.get("ok", True):
         return result
     aliases = _load_aliases()
+    previous = aliases.get(alias)
+    previous_config = previous if isinstance(previous, dict) else {}
     aliases[alias] = {
-        "base_url": settings.opencode_base_url,
+        "base_url": existing_config.get("base_url") or str(previous_config.get("base_url") or settings.opencode_base_url),
         "session": result["id"],
-        "username": settings.opencode_username,
+        "username": existing_config.get("username") or str(previous_config.get("username") or settings.opencode_username),
     }
+    password_file = existing_config.get("password_file") or previous_config.get("password_file")
+    if password_file:
+        aliases[alias]["password_file"] = str(password_file)
     _save_aliases(aliases)
     return {
         "ok": True,
@@ -150,9 +219,14 @@ async def _opencode_send(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
     prompt = str(args.get("prompt") or "").strip()
+    timeout_seconds = float(args.get("timeout_seconds") or os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
     session_config = _session_config(alias)
     if not session_config:
         directory = str(args.get("directory") or settings.repository_root).strip()
+        directory_ok, directory_or_error = _valid_directory(directory)
+        if not directory_ok:
+            return {"ok": False, "error": directory_or_error}
+        directory = directory_or_error
         start_result = _request("POST", "/session", {"title": alias}, query={"directory": directory})
         if not start_result.get("ok", True):
             return start_result
@@ -168,10 +242,11 @@ async def _opencode_send(request: ToolExecutionRequest) -> dict[str, Any]:
     result = _request(
         "POST",
         f"/session/{session_id}/message",
-        {"model": MODEL, "agent": "build", "parts": [{"type": "text", "text": prompt}]},
+        {"model": MODEL, "agent": "build", "parts": [{"type": "text", "text": _guard_prompt(prompt)}]},
         base_url=session_config.get("base_url"),
         username=session_config.get("username"),
         password_file=session_config.get("password_file"),
+        timeout_seconds=timeout_seconds,
     )
     if not result.get("ok", True):
         return result

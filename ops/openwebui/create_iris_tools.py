@@ -554,35 +554,29 @@ class Tools:
 
 
 CLOYD_SMITH_LOOP = '''
-"""Freyja 5.2 durable Cloyd-Smith job ledger for OpenWebUI."""
+"""Canonical Cloyd-Smith loop controls through Freyja Director."""
 
-from datetime import datetime, timezone
 import json
-import os
-import uuid
-
+import urllib.error
+import urllib.request
 
 class Tools:
-    _JOBS_FILE = "/app/backend/data/cloyd-smith-loop-jobs.json"
+    base_url = "http://100.115.228.56:8000"
 
-    def _now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
-
-    def _load(self) -> dict:
+    def _request(self, method: str, path: str, body: dict | None = None) -> str:
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(f"{self.base_url}{path}", data=data, method=method)
+        if body is not None:
+            request.add_header("content-type", "application/json")
         try:
-            with open(self._JOBS_FILE, "r", encoding="utf-8") as handle:
-                return json.load(handle)
-        except Exception:
-            return {"jobs": {}, "events": {}}
-
-    def _save(self, ledger: dict) -> None:
-        directory = os.path.dirname(self._JOBS_FILE)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        tmp = f"{self._JOBS_FILE}.tmp"
-        with open(tmp, "w", encoding="utf-8") as handle:
-            json.dump(ledger, handle, indent=2, sort_keys=True)
-        os.replace(tmp, self._JOBS_FILE)
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = response.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            return json.dumps({"ok": False, "status": exc.code, "error": detail, "source": self.base_url})
+        except OSError as exc:
+            return json.dumps({"ok": False, "error": str(exc), "source": self.base_url})
+        return payload or json.dumps({"ok": True, "source": self.base_url})
 
     def cloyd_smith_submit(
         self,
@@ -591,105 +585,75 @@ class Tools:
         smith_alias: str = "freyja-code",
         acceptance_criteria: str = "",
     ) -> str:
-        """Create a durable Cloyd-Smith job receipt. Long work is handled by the Atlas daemon."""
-        objective = (objective or "").strip()
-        prompt = (prompt or objective).strip()
-        if not objective or not prompt:
-            return json.dumps({"ok": False, "error": "objective and prompt are required"})
-        now = self._now()
-        job_id = "freyja52-" + uuid.uuid4().hex[:12]
-        criteria = [line.strip("- ").strip() for line in acceptance_criteria.splitlines() if line.strip()]
-        ledger = self._load()
-        ledger.setdefault("jobs", {})[job_id] = {
-            "job_id": job_id,
-            "objective": objective,
-            "smith_alias": smith_alias,
-            "acceptance_criteria": criteria,
-            "current_prompt": prompt,
-            "status": "queued",
-            "next_action": "daemon_send_to_smith",
-            "last_evidence": {},
-            "error": "",
-            "created_at": now,
-            "updated_at": now,
-            "completed_at": "",
-        }
-        ledger.setdefault("events", {}).setdefault(job_id, []).append(
-            {"event_type": "submitted", "payload": {"source": "openwebui"}, "created_at": now}
-        )
-        self._save(ledger)
+        """Deprecated: ask Joe/Codex to create new jobs through Freyja, then use status/actions here."""
         return json.dumps(
             {
-                "ok": True,
-                "receipt": {
-                    "job_id": job_id,
-                    "status": "queued",
-                    "smith_alias": smith_alias,
-                    "summary": objective,
-                    "status_prompt": f"Ask Cloyd: status {job_id}",
-                },
+                "ok": False,
+                "status": "submit_not_exposed",
+                "objective": objective,
+                "next_action": "Use the Agent Runs monitor to create/reconcile jobs; this OpenWebUI tool only reviews and clears canonical jobs.",
+                "monitor": f"{self.base_url}/agent-runs",
             }
         )
 
     def cloyd_smith_status(self, job_id: str = "") -> str:
-        """Return one durable Cloyd-Smith job, or all active jobs if job_id is omitted."""
-        ledger = self._load()
-        jobs = ledger.get("jobs", {})
-        events = ledger.get("events", {})
-        if job_id:
-            job = jobs.get(job_id)
-            if not job:
-                return json.dumps({"ok": False, "error": f"Unknown Cloyd-Smith job: {job_id}"})
-            return json.dumps({"ok": True, "job": job, "events": list(reversed(events.get(job_id, [])[-25:]))})
-        active = [
-            job
-            for job in jobs.values()
-            if job.get("status") in {"queued", "running", "needs_review", "blocked"}
-        ]
-        active.sort(key=lambda item: (item.get("created_at", ""), item.get("job_id", "")))
-        return json.dumps({"ok": True, "jobs": active[:50]})
+        """Return canonical Agent Runs status; job_id filters the returned runs client-side."""
+        status = json.loads(self._request("GET", "/agent-runs/api/status"))
+        if job_id and status.get("ok"):
+            status["runs"] = [run for run in status.get("runs", []) if run.get("job_id") == job_id]
+            status["job"] = status["runs"][0] if status["runs"] else None
+            if not status["job"]:
+                status["ok"] = False
+                status["error"] = f"Job {job_id} is not visible in the canonical Agent Runs monitor."
+        return json.dumps(status)
 
     def cloyd_smith_record(self, job_id: str, event_type: str, payload_json: str = "{}", status: str = "", next_action: str = "") -> str:
-        """Record daemon/Cloyd evidence for a durable Cloyd-Smith job."""
-        ledger = self._load()
-        job = ledger.get("jobs", {}).get(job_id)
-        if not job:
-            return json.dumps({"ok": False, "error": f"Unknown Cloyd-Smith job: {job_id}"})
-        try:
-            payload = json.loads(payload_json or "{}")
-        except Exception:
-            return json.dumps({"ok": False, "error": "payload_json must be valid JSON"})
-        now = self._now()
-        ledger.setdefault("events", {}).setdefault(job_id, []).append(
-            {"event_type": event_type or "evidence", "payload": payload, "created_at": now}
+        """Deprecated: use mark_done, mark_blocked, retry, follow_up, or stop to change canonical job state."""
+        return json.dumps(
+            {
+                "ok": False,
+                "status": "record_not_exposed",
+                "job_id": job_id,
+                "next_action": "Use a concrete queue-clearing action: cloyd_smith_mark_done, cloyd_smith_mark_blocked, cloyd_smith_retry, cloyd_smith_follow_up, cloyd_smith_replace, or cloyd_smith_stop.",
+            }
         )
-        if status:
-            job["status"] = status
-        if next_action:
-            job["next_action"] = next_action
-        job["last_evidence"] = payload
-        job["updated_at"] = now
-        if job["status"] in {"done", "blocked", "stopped"}:
-            job["completed_at"] = now
-        self._save(ledger)
-        return json.dumps({"ok": True, "job": job})
 
     def cloyd_smith_stop(self, job_id: str) -> str:
-        """Mark a durable Cloyd-Smith job stopped so the daemon will not continue it."""
-        ledger = self._load()
-        job = ledger.get("jobs", {}).get(job_id)
-        if not job:
-            return json.dumps({"ok": False, "error": f"Unknown Cloyd-Smith job: {job_id}"})
-        now = self._now()
-        job["status"] = "stopped"
-        job["next_action"] = "stopped_by_user"
-        job["updated_at"] = now
-        job["completed_at"] = now
-        ledger.setdefault("events", {}).setdefault(job_id, []).append(
-            {"event_type": "stopped", "payload": {"source": "openwebui"}, "created_at": now}
-        )
-        self._save(ledger)
-        return json.dumps({"ok": True, "job": job})
+        """Stop a queued or running canonical Cloyd-Smith job."""
+        return self._request("POST", f"/agent-runs/api/jobs/{job_id}/stop")
+
+    def cloyd_smith_retry(self, job_id: str) -> str:
+        """Retry one blocked, stale, or stopped job after Freyja preflights OpenCode health."""
+        return self._request("POST", f"/agent-runs/api/jobs/{job_id}/retry")
+
+    def cloyd_smith_mark_done(self, job_id: str) -> str:
+        """Mark a needs-review job done after evidence proves the objective."""
+        return self._request("POST", f"/agent-runs/api/jobs/{job_id}/done")
+
+    def cloyd_smith_mark_blocked(self, job_id: str, reason: str = "") -> str:
+        """Mark an active or needs-review job blocked with a concrete reason."""
+        return self._request("POST", f"/agent-runs/api/jobs/{job_id}/block")
+
+    def cloyd_smith_follow_up(self, job_id: str, prompt: str) -> str:
+        """Queue exactly one bounded follow-up prompt for a review, blocked, or stale job."""
+        return self._request("POST", f"/agent-runs/api/jobs/{job_id}/follow-up", {"prompt": prompt})
+
+    def cloyd_smith_replace(
+        self,
+        job_id: str,
+        prompt: str,
+        objective: str = "",
+        smith_alias: str = "",
+        acceptance_criteria: str = "",
+    ) -> str:
+        """Create a narrower replacement job for a blocked canonical job and supersede the old job."""
+        criteria = [line.strip() for line in acceptance_criteria.splitlines() if line.strip()]
+        body = {"prompt": prompt, "acceptance_criteria": criteria}
+        if objective:
+            body["objective"] = objective
+        if smith_alias:
+            body["smith_alias"] = smith_alias
+        return self._request("POST", f"/agent-runs/api/jobs/{job_id}/replace", body)
 '''
 
 

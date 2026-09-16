@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import json
 from pathlib import Path
 import socket
 import sqlite3
@@ -126,7 +127,12 @@ async def _calendar_write(request: MacAgentOperationRequest) -> dict[str, Any]:
             location=_optional_string(request.arguments.get("location")),
             description=_optional_string(request.arguments.get("description")),
         )
-        created = await provider.create_event(event)
+        try:
+            created = await provider.create_event(event)
+        except RuntimeError as exc:
+            if "xcode license" not in str(exc).lower():
+                raise
+            created = await _calendar_create_event_osascript(event)
         return {"event": _calendar_event_payload(created)}
     if request.operation == "modify_event":
         event = await provider.modify_event(
@@ -318,6 +324,36 @@ async def _osascript(script: str, *, timeout: float | None = None) -> str:
         stdout_detail = stdout.decode("utf-8", errors="replace").strip()
         raise RuntimeError(detail or stdout_detail or f"osascript failed with status {process.returncode}")
     return stdout.decode("utf-8", errors="replace").strip()
+
+
+async def _calendar_create_event_osascript(event: CalendarEvent) -> CalendarEvent:
+    calendar_name = event.calendar_id.split("::", 1)[-1]
+    start_text = event.start.strftime("%A, %B %-d, %Y %I:%M:%S %p")
+    end_text = event.end.strftime("%A, %B %-d, %Y %I:%M:%S %p")
+    script = f"""
+set targetCalendarName to {json.dumps(calendar_name)}
+set eventTitle to {json.dumps(event.title)}
+set eventStart to date {json.dumps(start_text)}
+set eventEnd to date {json.dumps(end_text)}
+tell application "Calendar"
+    set targetCalendar to first calendar whose name is targetCalendarName
+    set createdEvent to make new event at end of events of targetCalendar with properties {{summary:eventTitle, start date:eventStart, end date:eventEnd}}
+    return uid of createdEvent
+end tell
+"""
+    event_id = await _osascript(script, timeout=settings.macagent_timeout_seconds)
+    return event.model_copy(
+        update={
+            "event_id": event_id,
+            "calendar_id": calendar_name,
+            "provider": "apple",
+            "metadata": {
+                **dict(event.metadata),
+                "apple_calendar_title": calendar_name,
+                "fallback": "osascript",
+            },
+        }
+    )
 
 
 def _split_fields(value: str, count: int) -> list[str]:

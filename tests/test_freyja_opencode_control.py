@@ -46,3 +46,21 @@ def test_session_alias_preserves_remote_connection_details(tmp_path: Path) -> No
         "session": "ses_remote",
         "username": "joe",
     }
+
+
+def test_default_username_matches_local_opencode_server() -> None:
+    module = _module()
+
+    assert module.DEFAULT_USERNAME == "joe"
+
+
+def test_start_rejects_missing_directory(tmp_path: Path) -> None:
+    module = _module()
+    args = type("Args", (), {"alias": "coder", "directory": str(tmp_path / "missing")})()
+
+    try:
+        module.start(args)
+    except SystemExit as exc:
+        assert "does not exist" in str(exc)
+    else:
+        raise AssertionError("start should reject nonexistent OpenCode directories")

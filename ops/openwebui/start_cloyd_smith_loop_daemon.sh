@@ -1,12 +1,16 @@
 #!/usr/bin/env sh
 set -eu
 
-container="${1:-freyja-open-webui-atlas-open-webui-1}"
-script="/app/backend/data/cloyd_smith_loop_daemon.py"
-pidfile="/app/backend/data/cloyd-smith-loop-daemon.pid"
-logfile="/app/backend/data/cloyd-smith-loop-daemon.log"
+cat >&2 <<'EOF'
+The OpenWebUI container JSON-ledger Cloyd-Smith daemon is deprecated.
 
-docker exec "$container" sh -lc "if [ -f '$pidfile' ]; then old=\$(cat '$pidfile' 2>/dev/null || true); if [ -n \"\$old\" ]; then kill \"\$old\" 2>/dev/null || true; fi; fi"
-docker cp "$(dirname "$0")/cloyd_smith_loop_daemon.py" "$container:$script"
-docker exec -d "$container" sh -lc "nohup python '$script' --interval 15 >> '$logfile' 2>&1 & echo \$! > '$pidfile'"
-docker exec "$container" sh -lc "cat '$pidfile'"
+Use the canonical local SQLite loop instead:
+
+  scripts/install-cloyd-smith-loop-launchagent.sh
+  scripts/status-cloyd-smith-loop.sh
+  scripts/cloyd-smith-loop-daemon.py --status
+
+Canonical ledger:
+  ~/.local/state/freyja/cloyd-smith-loop.db
+EOF
+exit 2
