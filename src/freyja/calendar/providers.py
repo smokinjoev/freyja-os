@@ -212,11 +212,12 @@ class MacAgentAppleCalendarProvider:
         *,
         default_calendar_name: str = "iCloud::Family",
         calendar_aliases: dict[str, str] | None = None,
+        timeout_seconds: float | None = None,
         client: MacAgentClient | None = None,
     ) -> None:
         self.default_calendar_name = default_calendar_name
         self.calendar_aliases = calendar_aliases or {}
-        self._client = client or MacAgentClient()
+        self._client = client or MacAgentClient(timeout_seconds=timeout_seconds)
 
     async def list_events(
         self,

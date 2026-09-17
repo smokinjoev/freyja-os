@@ -36,7 +36,10 @@ def build_calendar_service() -> CalendarService:
             "calendar_aliases": _parse_aliases(settings.apple_calendar_calendar_aliases),
         }
         if settings.apple_calendar_backend.strip().lower() == "macagent":
-            providers["apple"] = MacAgentAppleCalendarProvider(**provider_kwargs)
+            providers["apple"] = MacAgentAppleCalendarProvider(
+                **provider_kwargs,
+                timeout_seconds=settings.apple_calendar_timeout_seconds,
+            )
         else:
             providers["apple"] = AppleCalendarProvider(
                 **provider_kwargs,

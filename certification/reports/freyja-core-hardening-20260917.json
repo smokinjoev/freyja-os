@@ -1,0 +1,78 @@
+{
+  "checked_at": "2026-09-17T14:31:00Z",
+  "service": {
+    "label": "com.freyja-os.core",
+    "state": "running",
+    "pid_observed": 6304,
+    "plist": "/Users/freyja/Library/LaunchAgents/com.freyja-os.core.plist",
+    "program": "/Users/freyja/freyja-os/scripts/run-freyja-core.sh",
+    "url": "http://100.115.228.56:8510",
+    "environment": {
+      "APPLE_CALENDAR_TIMEOUT_SECONDS": "30",
+      "FREYJA_CORE_HOST": "100.115.228.56",
+      "FREYJA_CORE_PORT": "8510",
+      "FREYJA_CORE_STATUS_TIMEOUT_SECONDS": "8",
+      "NEXUS_BASE_URL": "http://100.94.80.21:3939"
+    }
+  },
+  "post_restart_smoke": {
+    "command": "FREYJA_CORE_URL=http://100.115.228.56:8510 FREYJA_SMOKE_OPENCODE_ALIAS=freyja-core-hardening FREYJA_SMOKE_OPENCODE_SEND_TIMEOUT=20 scripts/smoke-freyja-core-tools.sh",
+    "status_check": {
+      "ok": true,
+      "nexus": true,
+      "opencode": true,
+      "macagent_calendar_read_write": true
+    },
+    "calendar_resolve_date": {
+      "phrase": "this weekend",
+      "base_date": "2026-09-17",
+      "dates": [
+        "2026-09-19",
+        "2026-09-20"
+      ]
+    },
+    "calendar_create_event_validation": {
+      "ok": false,
+      "error_contains": "calendar_id"
+    },
+    "calendar_delete_event_without_approval": {
+      "ok": false,
+      "approval_required": true
+    },
+    "opencode": {
+      "alias": "freyja-core-hardening",
+      "start": true,
+      "status": true,
+      "send_result": "READY",
+      "read": true,
+      "stop": true
+    },
+    "memory": {
+      "write": true,
+      "search": true,
+      "memory_id": "core-smoke"
+    }
+  },
+  "calendar_live_create_cleanup": {
+    "created": true,
+    "deleted": true,
+    "calendar_id": "iCloud::Family",
+    "event_id": "7B3EF2B6-58D1-465C-B51A-0FD1F5DDBF7D:B6AB08D5-8E23-4583-B3C2-6DAC007B0E73",
+    "title": "Freyja Core cleanup smoke test",
+    "start": "2026-09-18T11:20:00+00:00",
+    "end": "2026-09-18T11:25:00+00:00",
+    "cleanup_approval": "DELETE_FREYJA_CORE_SMOKE_EVENT"
+  },
+  "msty_go": {
+    "bot_id": "freyja",
+    "model": "@preset/freyja-coder",
+    "core_routing_block": true,
+    "shell_access_enabled": true,
+    "completed_core_tool_loop_report": "certification/reports/msty-freyja-core-routing-20260917.json",
+    "service_url_retry": {
+      "command_generated": true,
+      "status": "permission_denied_after_manual_stop",
+      "note": "The durable service endpoint is directly smoke-tested; the completed Msty proof in the routing report used the earlier loopback Core validation."
+    }
+  }
+}

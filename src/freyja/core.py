@@ -10,14 +10,21 @@ import subprocess
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from freyja.config import settings
+from freyja.calendar.service import parse_datetime
+from freyja.macagent import MacAgentClient
+from freyja.memory.models import MemoryPrincipal, PutSharedMemoryRequest
+from freyja.memory.store import get_store
+from freyja.tools.calendar import get_calendar_service
 from freyja.tools.models import ToolExecutionRequest
 from freyja.tools.opencode_runtime import (
     _opencode_output,
@@ -32,6 +39,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_NEXUS_BASE_URL = "http://100.94.80.21:3939"
 DEFAULT_CORE_MODEL = "@preset/freyja-fast-local"
 DEFAULT_CORE_PORT = 8510
+DEFAULT_TIMEZONE = "America/New_York"
+CORE_TOOL_NAMES = (
+    "status.check",
+    "calendar.resolve_date",
+    "calendar.create_event",
+    "calendar.delete_event",
+    "opencode.start",
+    "opencode.stop",
+    "opencode.status",
+    "opencode.send",
+    "opencode.read",
+    "memory.search",
+    "memory.write",
+)
 
 
 HOUSE: dict[str, dict[str, Any]] = {
@@ -126,6 +147,11 @@ class ChatRequest(BaseModel):
     temperature: float | None = None
 
 
+class CoreToolRequest(BaseModel):
+    tool: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
 @dataclass(frozen=True)
 class ToolCall:
     name: str
@@ -138,6 +164,17 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, Any]:
         return {"ok": True, "service": "freyja-core", "nexus_base_url": _nexus_base_url()}
+
+    @app.get("/tools")
+    async def list_core_tools() -> dict[str, Any]:
+        return {"ok": True, "tools": list(CORE_TOOL_NAMES)}
+
+    @app.post("/tools/call")
+    async def call_core_tool(request: CoreToolRequest) -> dict[str, Any]:
+        result = await call_tool(request.tool, request.arguments)
+        if not result.get("ok", False):
+            return result
+        return result
 
     @app.get("/v1/models")
     async def models() -> dict[str, Any]:
@@ -177,6 +214,137 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+async def call_tool(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    arguments = arguments or {}
+    try:
+        if tool == "status.check":
+            return await status_check()
+        if tool == "calendar.resolve_date":
+            return resolve_date_tool(arguments)
+        if tool == "calendar.create_event":
+            return await create_calendar_event_tool(arguments)
+        if tool == "calendar.delete_event":
+            return await delete_calendar_event_tool(arguments)
+        if tool.startswith("opencode."):
+            return await opencode_tool(tool, arguments)
+        if tool == "memory.search":
+            return memory_search_tool(arguments)
+        if tool == "memory.write":
+            return memory_write_tool(arguments)
+        return {"ok": False, "error": f"Unknown Freyja Core tool: {tool}", "configured_tools": list(CORE_TOOL_NAMES)}
+    except Exception as exc:
+        logger.exception("Freyja Core tool failed: %s", tool)
+        return {"ok": False, "tool": tool, "error": str(exc)}
+
+
+async def status_check() -> dict[str, Any]:
+    hostname = subprocess.run(["hostname"], text=True, capture_output=True, timeout=3).stdout.strip()
+    checks = {
+        "nexus": await _http_reachable(_nexus_base_url(), "/health"),
+        "opencode": await _http_reachable(settings.opencode_base_url, "/session/status", auth="opencode"),
+    }
+    if settings.apple_calendar_enabled and settings.apple_calendar_backend.strip().lower() == "macagent":
+        checks["macagent"] = (await MacAgentClient(timeout_seconds=settings.apple_calendar_timeout_seconds).health()).model_dump(mode="json")
+    calendar_provider = settings.calendar_default_provider
+    memory_path = str(Path(settings.memory_database_path).expanduser())
+    return {
+        "ok": True,
+        "service": "freyja-core",
+        "hostname": hostname,
+        "time": _now_iso(),
+        "timezone": DEFAULT_TIMEZONE,
+        "configured_tools": list(CORE_TOOL_NAMES),
+        "downstream": checks,
+        "configuration": {
+            "nexus_base_url": _nexus_base_url(),
+            "opencode_base_url": settings.opencode_base_url,
+            "calendar_provider": calendar_provider,
+            "apple_calendar_enabled": settings.apple_calendar_enabled,
+            "memory_database_path": memory_path,
+        },
+    }
+
+
+def resolve_date_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    phrase = str(arguments.get("phrase") or "").strip()
+    if not phrase:
+        return {"ok": False, "error": "calendar.resolve_date requires phrase."}
+    base = _base_date(arguments)
+    resolved = _resolve_date_phrase(phrase, base)
+    if resolved is None:
+        return {"ok": False, "error": f"Unsupported date phrase: {phrase}"}
+    return {"ok": True, "phrase": phrase, "base_date": base.isoformat(), **resolved}
+
+
+async def create_calendar_event_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    missing = [name for name in ("title", "start", "end", "calendar_id") if not str(arguments.get(name) or "").strip()]
+    if missing:
+        return {"ok": False, "error": "calendar.create_event missing required field(s): " + ", ".join(missing)}
+    start = parse_datetime(str(arguments["start"]))
+    end = parse_datetime(str(arguments["end"]))
+    if end <= start:
+        return {"ok": False, "error": "calendar.create_event requires end after start."}
+    event = await get_calendar_service().create_event(
+        title=str(arguments["title"]).strip(),
+        start=start,
+        end=end,
+        member_ids=arguments.get("member_ids"),
+        calendar_id=str(arguments["calendar_id"]).strip(),
+        provider_name=arguments.get("provider"),
+        location=arguments.get("location"),
+        description=arguments.get("description"),
+    )
+    return {"ok": True, "event": event.to_dict()}
+
+
+async def delete_calendar_event_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    event_id = str(arguments.get("event_id") or "").strip()
+    approval = str(arguments.get("approval") or "").strip()
+    if not event_id:
+        return {"ok": False, "error": "calendar.delete_event requires event_id."}
+    if approval != "DELETE_FREYJA_CORE_SMOKE_EVENT":
+        return {
+            "ok": False,
+            "error": "calendar.delete_event requires approval='DELETE_FREYJA_CORE_SMOKE_EVENT'.",
+            "approval_required": True,
+        }
+    deleted = await get_calendar_service().delete_event(event_id=event_id, provider_name=arguments.get("provider"))
+    return {"ok": True, "deleted": deleted, "event_id": event_id}
+
+
+async def opencode_tool(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    action = tool.split(".", 1)[1]
+    action_map = {"read": "output"}
+    return await agent_control({"action": action_map.get(action, action), **arguments})
+
+
+def memory_search_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    query = str(arguments.get("query") or "").strip().lower()
+    limit = int(arguments.get("limit") or 10)
+    memories = get_store().list_shared_memories(_memory_principal(arguments), limit=min(max(limit, 1), 50)).memories
+    if query:
+        memories = [memory for memory in memories if query in memory.content.lower() or query in memory.memory_id.lower()]
+    return {"ok": True, "count": len(memories), "memories": [memory.model_dump(mode="json") for memory in memories[:limit]]}
+
+
+def memory_write_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    content = str(arguments.get("content") or "").strip()
+    if not content:
+        return {"ok": False, "error": "memory.write requires content."}
+    memory_id = str(arguments.get("memory_id") or f"core-{uuid.uuid4()}").strip()
+    request = PutSharedMemoryRequest(
+        memory_id=memory_id,
+        kind=arguments.get("kind") or "fact",
+        content=content,
+        source="freyja-core",
+        confidence=float(arguments.get("confidence") or 1.0),
+        sensitivity=arguments.get("sensitivity") or "private",
+        metadata={"tool": "memory.write"},
+    )
+    memory = get_store().put_shared_memory(_memory_principal(arguments), request)
+    return {"ok": True, "memory": memory.model_dump(mode="json")}
 
 
 async def run_core_loop(prompt: str, *, max_iterations: int | None = None) -> dict[str, Any]:
@@ -394,6 +562,80 @@ def _fallback_answer(prompt: str, observations: list[dict[str, Any]], error: str
         result = item.get("result", {})
         lines.append(f"- {item['tool']} {item.get('arguments', {})}: ok={result.get('ok')} {result.get('error', '')}".rstrip())
     return "\n".join(lines)
+
+
+async def _http_reachable(base_url: str, path: str, *, auth: str | None = None) -> dict[str, Any]:
+    timeout = float(os.environ.get("FREYJA_CORE_STATUS_TIMEOUT_SECONDS", "8"))
+    if not base_url:
+        return {"ok": False, "error": "base URL is not configured"}
+    headers: dict[str, str] = {}
+    if auth == "opencode":
+        try:
+            import base64
+
+            credentials = f"{settings.opencode_username}:{Path(settings.opencode_password_file).expanduser().read_text(encoding='utf-8').strip()}"
+            headers["authorization"] = "Basic " + base64.b64encode(credentials.encode("utf-8")).decode("ascii")
+        except OSError as exc:
+            return {"ok": False, "base_url": base_url, "error": f"OpenCode password file unavailable: {exc}"}
+    try:
+        async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+            response = await client.get(f"{base_url.rstrip('/')}{path}")
+        return {"ok": response.status_code < 500, "base_url": base_url, "status_code": response.status_code, "timeout_seconds": timeout}
+    except Exception as exc:
+        return {"ok": False, "base_url": base_url, "timeout_seconds": timeout, "error": str(exc)}
+
+
+def _base_date(arguments: dict[str, Any]) -> date:
+    value = str(arguments.get("base_date") or "").strip()
+    if value:
+        return date.fromisoformat(value)
+    return datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).date()
+
+
+def _resolve_date_phrase(phrase: str, base: date) -> dict[str, Any] | None:
+    normalized = re.sub(r"\s+", " ", phrase.strip().lower())
+    if normalized == "today":
+        return _single_date(base, "today")
+    if normalized == "tomorrow":
+        return _single_date(base + timedelta(days=1), "tomorrow")
+    if normalized in {"this weekend", "weekend"}:
+        saturday = base + timedelta(days=(5 - base.weekday()) % 7)
+        sunday = saturday + timedelta(days=1)
+        return {"kind": "date_range", "label": "this weekend", "start_date": saturday.isoformat(), "end_date": sunday.isoformat(), "dates": [saturday.isoformat(), sunday.isoformat()]}
+    if normalized == "next weekend":
+        saturday = base + timedelta(days=((5 - base.weekday()) % 7) + 7)
+        sunday = saturday + timedelta(days=1)
+        return {"kind": "date_range", "label": "next weekend", "start_date": saturday.isoformat(), "end_date": sunday.isoformat(), "dates": [saturday.isoformat(), sunday.isoformat()]}
+    match = re.fullmatch(r"(this|next)? ?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)", normalized)
+    if match:
+        modifier = match.group(1) or "this"
+        weekday = _weekday_number(match.group(2))
+        days_ahead = (weekday - base.weekday()) % 7
+        if modifier == "next":
+            days_ahead = days_ahead + 7 if days_ahead == 0 else days_ahead
+        return _single_date(base + timedelta(days=days_ahead), f"{modifier} {match.group(2)}")
+    return None
+
+
+def _single_date(value: date, label: str) -> dict[str, Any]:
+    return {"kind": "date", "label": label, "date": value.isoformat(), "dates": [value.isoformat()]}
+
+
+def _weekday_number(name: str) -> int:
+    return ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].index(name)
+
+
+def _memory_principal(arguments: dict[str, Any]) -> MemoryPrincipal:
+    return MemoryPrincipal(
+        client_type=str(arguments.get("client_type") or "core"),
+        client_subject=str(arguments.get("client_subject") or "agent:freyja"),
+        account_owner=str(arguments.get("account_owner") or "person:joe"),
+        conversation_id=str(arguments.get("conversation_id") or "freyja-core"),
+    )
+
+
+def _now_iso() -> str:
+    return datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).isoformat()
 
 
 def _compact_observations(observations: list[dict[str, Any]]) -> str:

@@ -4,6 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import freyja.core as core
+from freyja.calendar.providers import InMemoryCalendarProvider
+from freyja.calendar.service import CalendarService
 
 
 def test_house_query_contains_core_hosts() -> None:
@@ -129,3 +131,133 @@ def test_openai_compatible_chat_endpoint(monkeypatch) -> None:
     body = response.json()
     assert body["choices"][0]["message"]["content"] == "answered: How is Vulcan doing?"
     assert body["freyja"]["iterations"] == 1
+
+
+def test_tools_endpoint_lists_core_owned_tools() -> None:
+    client = TestClient(core.create_app())
+
+    response = client.get("/tools")
+
+    assert response.status_code == 200
+    tools = response.json()["tools"]
+    assert "status.check" in tools
+    assert "calendar.resolve_date" in tools
+    assert "opencode.send" in tools
+
+
+def test_calendar_resolve_date_this_weekend_is_deterministic() -> None:
+    result = core.resolve_date_tool({"phrase": "this weekend", "base_date": "2026-09-17"})
+
+    assert result["ok"] is True
+    assert result["start_date"] == "2026-09-19"
+    assert result["end_date"] == "2026-09-20"
+    assert result["dates"] == ["2026-09-19", "2026-09-20"]
+
+
+def test_calendar_resolve_date_next_friday() -> None:
+    result = core.resolve_date_tool({"phrase": "next Friday", "base_date": "2026-09-17"})
+
+    assert result["ok"] is True
+    assert result["date"] == "2026-09-18"
+
+
+def test_calendar_create_event_requires_calendar() -> None:
+    client = TestClient(core.create_app())
+
+    response = client.post(
+        "/tools/call",
+        json={
+            "tool": "calendar.create_event",
+            "arguments": {
+                "title": "Freyja Core smoke",
+                "start": "2026-09-19T10:00:00+00:00",
+                "end": "2026-09-19T10:15:00+00:00",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert "calendar_id" in response.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_calendar_create_event_uses_calendar_service(monkeypatch) -> None:
+    service = CalendarService(
+        providers={"memory": InMemoryCalendarProvider()},
+        default_provider_name="memory",
+    )
+    monkeypatch.setattr(core, "get_calendar_service", lambda: service)
+
+    result = await core.create_calendar_event_tool(
+        {
+            "title": "Freyja Core smoke",
+            "start": "2026-09-19T10:00:00+00:00",
+            "end": "2026-09-19T10:15:00+00:00",
+            "calendar_id": "joe",
+            "provider": "memory",
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["event"]["title"] == "Freyja Core smoke"
+    assert result["event"]["calendar_id"] == "joe"
+
+
+@pytest.mark.asyncio
+async def test_calendar_delete_event_requires_explicit_cleanup_approval(monkeypatch) -> None:
+    service = CalendarService(
+        providers={"memory": InMemoryCalendarProvider()},
+        default_provider_name="memory",
+    )
+    monkeypatch.setattr(core, "get_calendar_service", lambda: service)
+
+    result = await core.delete_calendar_event_tool({"event_id": "event-1", "provider": "memory"})
+
+    assert result["ok"] is False
+    assert result["approval_required"] is True
+
+
+@pytest.mark.asyncio
+async def test_calendar_delete_event_deletes_with_cleanup_approval(monkeypatch) -> None:
+    service = CalendarService(
+        providers={"memory": InMemoryCalendarProvider()},
+        default_provider_name="memory",
+    )
+    monkeypatch.setattr(core, "get_calendar_service", lambda: service)
+    created = await core.create_calendar_event_tool(
+        {
+            "title": "Freyja Core cleanup smoke",
+            "start": "2026-09-19T10:00:00+00:00",
+            "end": "2026-09-19T10:15:00+00:00",
+            "calendar_id": "joe",
+            "provider": "memory",
+        }
+    )
+
+    result = await core.delete_calendar_event_tool(
+        {
+            "event_id": created["event"]["event_id"],
+            "provider": "memory",
+            "approval": "DELETE_FREYJA_CORE_SMOKE_EVENT",
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["deleted"] is True
+
+
+@pytest.mark.asyncio
+async def test_opencode_read_routes_to_output(monkeypatch) -> None:
+    calls = []
+
+    async def fake_agent_control(arguments: dict) -> dict:
+        calls.append(arguments)
+        return {"ok": True, "action": arguments["action"]}
+
+    monkeypatch.setattr(core, "agent_control", fake_agent_control)
+
+    result = await core.opencode_tool("opencode.read", {"alias": "coder"})
+
+    assert result["ok"] is True
+    assert calls == [{"action": "output", "alias": "coder"}]

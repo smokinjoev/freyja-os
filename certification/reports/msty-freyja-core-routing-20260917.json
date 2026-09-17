@@ -1,0 +1,64 @@
+{
+  "checked_at": "2026-09-17T14:32:43.430962+00:00",
+  "core": {
+    "health": {
+      "nexus_base_url": "http://100.94.80.21:3939",
+      "ok": true,
+      "service": "freyja-core"
+    },
+    "missing_required_tools": [],
+    "ok": true,
+    "tool_count": 11
+  },
+  "core_url": "http://100.115.228.56:8510",
+  "msty": {
+    "bot": {
+      "core_routing_block_present": true,
+      "id": "freyja",
+      "model": "@preset/freyja-coder",
+      "name": "Freyja",
+      "search_lens_enabled": true,
+      "shell_access_enabled": true,
+      "tools_call_instruction_present": true,
+      "web_access_enabled": true
+    },
+    "configured": true,
+    "recent_core_tool_events": [
+      {
+        "conversation_id": "GxSUr9DGv_gZrZCi-5X4X",
+        "created_at": "2026-09-17T14:30:53.889Z",
+        "id": "XXrVFu6gbmVVj4xqinFal",
+        "message_id": "bExREd8HXhBDf26HoUO9s",
+        "model": "@preset/freyja-coder",
+        "session_id": "GxSUr9DGv_gZrZCi-5X4X",
+        "status": "failed",
+        "tool_name": "shell"
+      },
+      {
+        "conversation_id": "6AEXCObCur-32NmTWCMJN",
+        "created_at": "2026-09-17T13:47:31.893Z",
+        "id": "YaKU5nLbg3wSBe3kIYqMX",
+        "message_id": "WrU3DIGmhosiuJMq84_9x",
+        "model": "@preset/freyja-coder",
+        "session_id": "6AEXCObCur-32NmTWCMJN",
+        "status": "completed",
+        "tool_name": "shell"
+      }
+    ],
+    "recent_core_tool_messages": [
+      {
+        "content": "[\"2026-09-19\",\"2026-09-20\"]",
+        "conversation_id": "6AEXCObCur-32NmTWCMJN",
+        "created_at": "2026-09-17T13:47:31.888Z",
+        "id": "WrU3DIGmhosiuJMq84_9x",
+        "metadata": "{\"providerTranscript\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_ozt3glrc\",\"name\":\"shell\",\"input\":{\"command\":\"printf '%s' 'eyJ0b29sIjoiY2FsZW5kYXIucmVzb2x2ZV9kYXRlIiwiYXJndW1lbnRzIjp7InBocmFzZSI6InRoaXMgd2Vla2VuZCIsImJhc2VfZGF0ZSI6IjIwMjYtMDktMTcifX0=' | base64 --decode | curl -fsS http://127.0.0.1:8510/tools/call -H 'content-type: application/json' -d @-\",\"timeout_ms\":15000}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_ozt3glrc\",\"content\":\"{\\\"ok\\\":true,\\\"phrase\\\":\\\"this weekend\\\",\\\"base_date\\\":\\\"2026-09-17\\\",\\\"kind\\\":\\\"date_range\\\",\\\"label\\\":\\\"this weekend\\\",\\\"start_date\\\":\\\"2026-09-19\\\",\\\"end_date\\\":\\\"2026-09-20\\\",\\\"dates\\\":[\\\"2026-09-19\\\",\\\"2026-09-20\\\"]}\",\"is_error\":false}]},{\"role\":\"assistant\",\"content\":\"[\\\"2026-09-19\\\",\\\"2026-09-20\\\"]\"}],\"providerId\":\"XJLaAGz65SOmQeIQ98fAu\",\"providerName\":\"Vulcan Nexus\",\"providerType\":\"openai\",\"model\":\"@preset/freyja-coder\",\"durationMs\":47207,\"memoryContext\":{\"packCount\":1,\"packTitles\":[\"Freyja 5 Shared Household Memory\"]}}",
+        "role": "assistant",
+        "sequence": 4,
+        "tool_calls": "[{\"id\":\"call_ozt3glrc\",\"name\":\"shell\",\"input\":{\"command\":\"printf '%s' 'eyJ0b29sIjoiY2FsZW5kYXIucmVzb2x2ZV9kYXRlIiwiYXJndW1lbnRzIjp7InBocmFzZSI6InRoaXMgd2Vla2VuZCIsImJhc2VfZGF0ZSI6IjIwMjYtMDktMTcifX0=' | base64 --decode | curl -fsS http://127.0.0.1:8510/tools/call -H 'content-type: application/json' -d @-\",\"timeout_ms\":15000},\"status\":\"completed\",\"result\":\"{\\\"ok\\\":true,\\\"phrase\\\":\\\"this weekend\\\",\\\"base_date\\\":\\\"2026-09-17\\\",\\\"kind\\\":\\\"date_range\\\",\\\"label\\\":\\\"this weekend\\\",\\\"start_date\\\":\\\"2026-09-19\\\",\\\"end_date\\\":\\\"2026-09-20\\\",\\\"dates\\\":[\\\"2026-09-19\\\",\\\"2026-09-20\\\"]}\",\"isError\":false,\"metadata\":{\"shellCwd\":\"/Users/freyja/Library/Application Support/Msty Go/workspaces/freyja\"}}]"
+      }
+    ]
+  },
+  "msty_db": "/Users/freyja/Library/Application Support/Msty Go/msty-go.db",
+  "ok": true,
+  "remaining_live_validation": []
+}

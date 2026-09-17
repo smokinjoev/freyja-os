@@ -55,10 +55,12 @@ def test_build_calendar_service_can_use_macagent_apple_backend(monkeypatch: pyte
     monkeypatch.setattr(settings, "apple_calendar_enabled", True)
     monkeypatch.setattr(settings, "apple_calendar_backend", "macagent")
     monkeypatch.setattr(settings, "calendar_default_provider", "apple")
+    monkeypatch.setattr(settings, "apple_calendar_timeout_seconds", 17.0)
 
     service = build_calendar_service()
 
     assert isinstance(service._providers["apple"], MacAgentAppleCalendarProvider)
+    assert service._providers["apple"]._client.timeout_seconds == 17.0
 
 
 @pytest.mark.asyncio
