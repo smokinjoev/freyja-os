@@ -126,6 +126,69 @@ Current evidence:
 - A later Msty service-endpoint attempt generated the correct shell command but was stopped before approval, so it is recorded as denied and is not counted as completed proof.
 - Do not add an Msty MCP row until Msty's `mcp_servers.transport_config` shape is verified from docs or a working export.
 
+## MCP Wrapper
+
+Freyja Core also has a minimal MCP-compatible wrapper. It is a protocol adapter only; it delegates to `freyja.core.call_tool` and does not duplicate calendar, OpenCode, memory, or policy logic.
+
+Run locally:
+
+```bash
+PYTHONPATH=src:. FREYJA_CORE_MCP_HOST=127.0.0.1 FREYJA_CORE_MCP_PORT=8766 \
+.venv/bin/python scripts/freyja-core-mcp-server.py
+```
+
+Health:
+
+```bash
+curl -fsS http://127.0.0.1:8766/healthz
+```
+
+MCP transport:
+
+```text
+http://127.0.0.1:8766/mcp
+```
+
+Optional bearer auth:
+
+```bash
+FREYJA_CORE_MCP_TOKEN='local-token' \
+PYTHONPATH=src:. .venv/bin/python scripts/freyja-core-mcp-server.py
+```
+
+The MCP wrapper exposes the canonical Core tool names:
+
+- `status.check`
+- `calendar.resolve_date`
+- `calendar.create_event`
+- `calendar.delete_event`
+- `opencode.start`
+- `opencode.stop`
+- `opencode.status`
+- `opencode.send`
+- `opencode.read`
+- `memory.search`
+- `memory.write`
+
+Smoke from shell without an MCP client:
+
+```bash
+.venv/bin/python - <<'PY'
+import asyncio, importlib.util, json
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("freyja_core_mcp_server", Path("scripts/freyja-core-mcp-server.py"))
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+async def main():
+    tools = [tool.name for tool in await module.mcp.list_tools()]
+    resolved = json.loads(await module.calendar_resolve_date("this weekend"))
+    print(json.dumps({"tools": tools, "resolved": resolved}, indent=2))
+
+asyncio.run(main())
+PY
+```
+
 ## Failure Modes
 
 - Core healthy but downstream unhealthy: inspect `status.check.downstream`.
@@ -133,3 +196,4 @@ Current evidence:
 - Nexus unavailable: direct tool calls still work; only synthesis/inference paths are affected.
 - OpenCode unknown alias: run `opencode.start` before `opencode.status/read/send`.
 - Calendar cleanup denied: include the exact approval token only for known smoke event IDs.
+- MCP wrapper unhealthy: verify the wrapper process separately from the Core launchd service. The wrapper can be down while HTTP Core remains healthy.

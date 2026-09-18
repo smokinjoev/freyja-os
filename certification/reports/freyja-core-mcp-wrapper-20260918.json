@@ -1,0 +1,68 @@
+{
+  "report_type": "freyja-core-mcp-wrapper",
+  "generated_at": "2026-09-18T18:58:00Z",
+  "status": "implemented_and_smoke_tested",
+  "objective": "Expose existing Freyja Core tools through a minimal MCP-compatible wrapper without duplicating tool logic.",
+  "artifacts": {
+    "server": "scripts/freyja-core-mcp-server.py",
+    "tests": "tests/test_freyja_core_mcp_server.py",
+    "runbook": "docs/FREYJA_CORE_RUNBOOK.md",
+    "gateway_doc": "docs/FREYJA_CORE_TOOL_GATEWAY.md"
+  },
+  "transport": {
+    "kind": "streamable_http",
+    "path": "/mcp",
+    "default_host": "127.0.0.1",
+    "default_port": 8766,
+    "health": "/healthz",
+    "optional_auth_env": "FREYJA_CORE_MCP_TOKEN"
+  },
+  "ownership": {
+    "tool_logic_owner": "freyja.core.call_tool",
+    "mcp_wrapper_role": "protocol adapter only",
+    "duplicates_calendar_logic": false,
+    "duplicates_opencode_logic": false,
+    "duplicates_memory_logic": false
+  },
+  "tools": [
+    "status.check",
+    "calendar.resolve_date",
+    "calendar.create_event",
+    "calendar.delete_event",
+    "opencode.start",
+    "opencode.stop",
+    "opencode.status",
+    "opencode.send",
+    "opencode.read",
+    "memory.search",
+    "memory.write"
+  ],
+  "tests": {
+    "command": ".venv/bin/pytest tests/test_freyja_core_mcp_server.py tests/test_freyja_terminal_mcp_server.py -q",
+    "result": "4 passed in 0.27s",
+    "compile": ".venv/bin/python -m py_compile scripts/freyja-core-mcp-server.py"
+  },
+  "live_wrapper_probe": {
+    "method": "Imported scripts/freyja-core-mcp-server.py, listed MCP tools, and called wrapper functions that delegate to Core.",
+    "tool_count": 11,
+    "status_check": {
+      "ok": true,
+      "hostname": "iris.lan"
+    },
+    "calendar_resolve_date": {
+      "phrase": "this weekend",
+      "dates": [
+        "2026-09-19",
+        "2026-09-20"
+      ]
+    },
+    "error_passthrough": {
+      "ok": false,
+      "error": "Unknown Freyja Core tool: not.a.real.tool"
+    }
+  },
+  "not_done": [
+    "No always-on launchd service was added for the MCP wrapper in this minimal pass.",
+    "No Msty MCP config row was changed; Msty MCP transport shape still needs separate safe verification before live config edits."
+  ]
+}

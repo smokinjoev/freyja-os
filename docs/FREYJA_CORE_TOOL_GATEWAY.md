@@ -11,6 +11,7 @@ Freyja Core runs on Iris and owns the first stable tool surface. Vulcan/Msty Nex
 - Health: `GET /health`
 - Tool list: `GET /tools`
 - Tool call: `POST /tools/call`
+- MCP wrapper: `scripts/freyja-core-mcp-server.py` exposes the same tool surface at `/mcp`.
 - Apple Calendar timeout: `APPLE_CALENDAR_TIMEOUT_SECONDS` feeds both the Swift bridge and the MacAgent Apple Calendar backend.
 
 Tool call envelope:
@@ -43,6 +44,32 @@ FREYJA_CORE_URL=http://127.0.0.1:8510 scripts/smoke-freyja-core-tools.sh
 ```
 
 The smoke script checks `status.check`, deterministic date resolution, calendar write validation, OpenCode `start/status/send/read/stop`, and local memory `write/search`.
+
+MCP wrapper smoke:
+
+```bash
+.venv/bin/pytest tests/test_freyja_core_mcp_server.py tests/test_freyja_terminal_mcp_server.py -q
+```
+
+Live wrapper check without a separate MCP client:
+
+```bash
+.venv/bin/python - <<'PY'
+import asyncio, importlib.util, json
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("freyja_core_mcp_server", Path("scripts/freyja-core-mcp-server.py"))
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+async def main():
+    tools = [tool.name for tool in await module.mcp.list_tools()]
+    status = json.loads(await module.status_check())
+    resolved = json.loads(await module.calendar_resolve_date("this weekend"))
+    print(json.dumps({"tool_count": len(tools), "status_ok": status["ok"], "dates": resolved["dates"]}, indent=2))
+
+asyncio.run(main())
+PY
+```
 
 Live evidence from 2026-09-17:
 
