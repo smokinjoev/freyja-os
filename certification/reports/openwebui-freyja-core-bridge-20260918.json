@@ -1,0 +1,120 @@
+{
+  "report_type": "openwebui-freyja-core-bridge",
+  "generated_at": "2026-09-18T18:36:26Z",
+  "status": "installed_and_live_smoke_passed",
+  "objective": "Create one OpenWebUI tool wrapper, freyja_core_call, that forwards explicit Freyja Core tool calls to http://100.115.228.56:8510/tools/call.",
+  "artifacts": {
+    "upsert_script": "ops/openwebui/upsert_freyja_core_bridge_tool.py",
+    "tests": "tests/test_openwebui_freyja_core_bridge.py"
+  },
+  "bridge_contract": {
+    "openwebui_tool_id": "freyja_core_bridge",
+    "openwebui_function": "freyja_core_call",
+    "core_endpoint": "http://100.115.228.56:8510/tools/call",
+    "arguments": {
+      "tool": "Core tool name, for example status.check",
+      "arguments_json": "JSON object encoded as a string"
+    },
+    "ownership": "OpenWebUI only forwards calls. Freyja Core owns calendar, OpenCode, memory, status, and policy logic."
+  },
+  "local_tests": {
+    "command": ".venv/bin/pytest tests/test_openwebui_freyja_core_bridge.py tests/test_openwebui_opencode_runtime_bind.py -q",
+    "result": "9 passed in 0.03s",
+    "compile_check": ".venv/bin/python -m py_compile ops/openwebui/upsert_freyja_core_bridge_tool.py"
+  },
+  "direct_core_acceptance_probe": {
+    "status_check": "Core was reachable at /tools/call earlier in this run and returned ok=true with configured Freyja Core tools and downstream reachability.",
+    "calendar_resolve_date": {
+      "tool": "calendar.resolve_date",
+      "arguments": {
+        "phrase": "this weekend"
+      },
+      "result": {
+        "ok": true,
+        "start_date": "2026-09-19",
+        "end_date": "2026-09-20",
+        "dates": [
+          "2026-09-19",
+          "2026-09-20"
+        ]
+      }
+    },
+    "opencode_status": {
+      "tool": "opencode.status",
+      "result": {
+        "ok": true,
+        "state": "idle",
+        "working_directory": "/Users/freyja/freyja-os"
+      }
+    },
+    "error_passthrough": {
+      "tool": "not.a.real.tool",
+      "result": {
+        "ok": false,
+        "error": "Unknown Freyja Core tool: not.a.real.tool"
+      }
+    }
+  },
+  "live_openwebui_install": {
+    "attempted": true,
+    "initial_blocker": "Docker daemon was initially unavailable from this shell: Cannot connect to the Docker daemon at unix:///Users/freyja/.docker/run/docker.sock.",
+    "resolution": "Docker Desktop was launched with open -a Docker, OpenWebUI reached healthy state, and the upsert was rerun with PYTHONPATH=/app/backend.",
+    "apply_command": "docker cp ops/openwebui/upsert_freyja_core_bridge_tool.py freyja-open-webui-atlas-open-webui-1:/tmp/upsert_freyja_core_bridge_tool.py && docker exec freyja-open-webui-atlas-open-webui-1 sh -lc 'PYTHONPATH=/app/backend python /tmp/upsert_freyja_core_bridge_tool.py'",
+    "result": {
+      "ok": true,
+      "tool": "freyja_core_bridge",
+      "specs": [
+        "freyja_core_call"
+      ],
+      "models": [
+        "agent/freyja",
+        "agent/cloyd-gibbler",
+        "agent/freyja-coder"
+      ]
+    },
+    "backup": "/app/backend/data/backups/freyja-core-bridge-20260918-183836/webui.db.bak",
+    "backup_behavior": "The upsert script copies /app/backend/data/webui.db plus WAL/SHM sidecars to /app/backend/data/backups/freyja-core-bridge-<timestamp>/ before mutation unless --no-backup is passed."
+  },
+  "live_openwebui_tool_smoke": {
+    "method": "Loaded the installed freyja_core_bridge tool content from /app/backend/data/webui.db inside the OpenWebUI container, instantiated Tools, and called freyja_core_call.",
+    "status_check": {
+      "ok": true,
+      "hostname": "iris.lan",
+      "configured_tools_included": [
+        "status.check",
+        "calendar.resolve_date",
+        "calendar.create_event",
+        "calendar.delete_event",
+        "opencode.start",
+        "opencode.stop",
+        "opencode.status",
+        "opencode.send",
+        "opencode.read",
+        "memory.search",
+        "memory.write"
+      ]
+    },
+    "calendar_resolve_date": {
+      "ok": true,
+      "dates": [
+        "2026-09-19",
+        "2026-09-20"
+      ]
+    },
+    "opencode_status": {
+      "ok": true,
+      "state": "idle"
+    },
+    "error_passthrough": {
+      "ok": false,
+      "error": "Unknown Freyja Core tool: not.a.real.tool"
+    }
+  },
+  "acceptance": {
+    "openwebui_can_call_status_check": "passed via freyja_core_call inside OpenWebUI container",
+    "openwebui_can_call_calendar_resolve_date": "passed via freyja_core_call inside OpenWebUI container",
+    "openwebui_can_call_opencode_status": "passed via freyja_core_call inside OpenWebUI container",
+    "core_errors_pass_through": "passed via freyja_core_call inside OpenWebUI container",
+    "existing_openwebui_tools_preserved": "implemented by appending freyja_core_bridge to model toolIds without removing existing toolIds"
+  }
+}
