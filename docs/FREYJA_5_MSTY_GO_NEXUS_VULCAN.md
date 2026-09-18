@@ -10,6 +10,7 @@ Last updated: 2026-09-05.
 - Msty Go provider base URL on Iris: `http://100.94.80.21:3939/v1`.
 - Freyja Msty Go agent model: `@preset/freyja-coder`.
 - Nexus resolution: `@preset/freyja-coder` -> `vulcan-ollama/qwen3-coder-next:q4_K_M`.
+- Current product direction: Msty Go is the primary named-agent UI; Nexus/Vulcan is inference only; Freyja Core on Iris is tool authority; OpenWebUI is secondary/raw-model testing.
 
 `@preset/freyja-fast-local` remains the lightweight route and still resolves to
 `vulcan-ollama/qwen2.5:7b`. Do not repurpose it for persistent Msty Go agents
@@ -230,7 +231,7 @@ Current canonical Msty Go agent rows:
 | Agent | Bot id | Workspace | Msty Go model | Shell | Web/Search | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | Freyja | `freyja` | Msty Go `workspaces/freyja` | `@preset/freyja-coder` | on | on/on | Proven first and kept as the baseline. |
-| Cloyd | `cloyd-gibbler` | Msty Go `workspaces/cloyd-gibbler` | `@preset/freyja-coder` | on | on/on | Tool-heavy Joe/coding agent. Re-aligned from `@preset/freyja-fast-local` on 2026-09-05. |
+| Cloyd | `cloyd-gibbler` | Msty Go `workspaces/cloyd-gibbler` | `@preset/freyja-coder` | on | on/on | Tool-heavy Joe/coding agent. Re-aligned from drifted direct/external model route on 2026-09-18. |
 | Benedict | `benedict` | Msty Go `workspaces/benedict` | `@preset/freyja-strong-local` | off | on/on | Beth personal agent. |
 | Agent 44 | `agent-47` | Msty Go `workspaces/agent-47` | `@preset/freyja-fast-local` | off | on/on | Existing id preserved for compatibility; display name now Agent 44. |
 | Jenna | `jennacide` | Msty Go `workspaces/jennacide` | `@preset/freyja-fast-local` | off | on/on | Jenna personal agent. |
@@ -314,6 +315,15 @@ Live verification performed on 2026-09-05:
   `agent/agent-47`, and `agent/jennacide`.
 - Live `POST /v1/chat/completions` calls to those five model ids succeeded
   with `provider=nexus`, `egress_state=local-only`, and Nexus endpoint metadata.
+
+Runtime posture verified on 2026-09-18:
+
+- Freyja and Cloyd both use the Vulcan Nexus provider and `@preset/freyja-coder`.
+- Cloyd was corrected from a drifted direct/external model route back to the Nexus preset after backing up the Msty Go DB.
+- Freyja and Cloyd both have shell/web/search enabled and explicit Freyja Core routing instructions.
+- `scripts/verify-msty-nexus-core-posture.py` passed and wrote `certification/reports/msty-nexus-core-posture-20260918.json`.
+- Msty `mcp_servers` is intentionally unchanged until the transport config shape is proven; shell+curl remains the documented bridge.
+- OpenWebUI is not required for named-agent acceptance and should be treated as raw-model/fallback testing.
 - Distinct scoped OpenAI-compatible gateway endpoints were added to the existing
   Freyja 5 service. Each endpoint exposes only its own agent model and rewrites
   chat requests to that model before using the existing deterministic gateway

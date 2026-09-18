@@ -1,6 +1,6 @@
 # Freyja Core Tool Gateway
 
-Freyja Core runs on Iris and owns the first stable tool surface. Vulcan/Msty Nexus remains inference only. OpenWebUI and Msty Go should call this gateway instead of owning tool implementations.
+Freyja Core runs on Iris and owns the first stable tool surface. Vulcan/Msty Nexus remains inference only. Msty Go is the primary named-agent UI and should call this gateway instead of owning tool implementations. OpenWebUI is secondary/raw-model testing only.
 
 ## Service
 
@@ -122,7 +122,7 @@ Before aligning Freyja back to the previously proven Msty tool-calling model `@p
 /Users/freyja/Library/Application Support/Msty Go/msty-go.db.backup-before-freyja-core-tool-model-20260917-094530
 ```
 
-Freyja's Msty Go bot instructions now include a Core routing block:
+Freyja and Cloyd's Msty Go bot instructions now include a Core routing block:
 
 ```text
 Freyja Core tool gateway:
@@ -133,6 +133,19 @@ Freyja Core tool gateway:
 ```
 
 Verification so far: the database row contains the routing instructions and Freyja has shell access enabled. A live Msty Go Freyja chat on `@preset/freyja-coder` called Core through Msty's shell tool and returned `["2026-09-19","2026-09-20"]` from `calendar.resolve_date`.
+
+Repeatable posture verifier:
+
+```bash
+scripts/verify-msty-nexus-core-posture.py \
+  --output certification/reports/msty-nexus-core-posture-20260918.json
+```
+
+This verifies the live Msty provider points at Vulcan Nexus, required semantic presets are present, Freyja and Cloyd use `@preset/freyja-coder`, Core routing instructions are present, Nexus is reachable, and Freyja Core `status.check` plus `calendar.resolve_date` pass. Msty `mcp_servers` is intentionally not changed until the `transport_config` shape is proven.
+
+## OpenWebUI Role
+
+OpenWebUI is not the Freyja named-agent tool authority. Keep it as raw-model/general chat testing, fallback UI, occasional Core bridge experiments, and OpenWebUI-specific diagnostics. Do not require OpenWebUI named-agent tool success for Freyja acceptance; Msty Go plus Freyja Core is the primary path.
 
 Repeatable verifier:
 

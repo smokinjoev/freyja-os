@@ -99,7 +99,7 @@ The cleanup tool refuses to delete without `approval=DELETE_FREYJA_CORE_SMOKE_EV
 
 ## Msty Go
 
-Freyja's Msty Go bot row is configured for:
+Freyja and Cloyd are the primary Msty Go named-agent rows for Core-backed work. They are configured for:
 
 - model: `@preset/freyja-coder`
 - shell access: enabled
@@ -113,6 +113,9 @@ Backups made before live Msty edits:
 Verifier:
 
 ```bash
+scripts/verify-msty-nexus-core-posture.py \
+  --output certification/reports/msty-nexus-core-posture-20260918.json
+
 scripts/verify-msty-freyja-core-routing.py \
   --core-url http://100.115.228.56:8510 \
   --since 2026-09-17T13:46:00Z \
@@ -125,6 +128,10 @@ Current evidence:
 - Post-restart service endpoint is directly smoke-tested at `100.115.228.56:8510`.
 - A later Msty service-endpoint attempt generated the correct shell command but was stopped before approval, so it is recorded as denied and is not counted as completed proof.
 - Do not add an Msty MCP row until Msty's `mcp_servers.transport_config` shape is verified from docs or a working export.
+
+## OpenWebUI Posture
+
+OpenWebUI is secondary/raw-model testing, not the Freyja named-agent authority. Use Msty Go for Freyja/Cloyd/Smith style agent work. Use OpenWebUI for fallback checks, raw model comparisons, and OpenWebUI-specific diagnostics only.
 
 ## MCP Wrapper
 

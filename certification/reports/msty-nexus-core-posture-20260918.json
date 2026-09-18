@@ -1,0 +1,294 @@
+{
+  "acceptance": {
+    "core_date_check_passed": true,
+    "core_status_check_passed": true,
+    "msty_mcp_config_action": "not changed; keep shell+curl bridge until transport_config shape is proven",
+    "msty_mcp_servers_configured": false,
+    "nexus_required_presets_present": true,
+    "primary_bots_route_to_nexus_coder_preset": true
+  },
+  "checks": {
+    "core_date": {
+      "dates": [
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "ok": true,
+      "status_code": 200
+    },
+    "core_status": {
+      "configured_tools": [
+        "status.check",
+        "calendar.resolve_date",
+        "calendar.create_event",
+        "calendar.delete_event",
+        "opencode.start",
+        "opencode.stop",
+        "opencode.status",
+        "opencode.send",
+        "opencode.read",
+        "memory.search",
+        "memory.write"
+      ],
+      "downstream": {
+        "macagent": {
+          "authenticated": true,
+          "capabilities": [
+            "apple.messages.read",
+            "apple.messages.send",
+            "apple.calendar.read",
+            "apple.calendar.write",
+            "apple.contacts.read",
+            "apple.mail.read",
+            "apple.music.read",
+            "apple.music.write",
+            "apple.browser.read",
+            "apple.shortcuts.run"
+          ],
+          "enabled": true,
+          "error": null,
+          "host": "iris.lan",
+          "reachable": true
+        },
+        "nexus": {
+          "base_url": "http://100.94.80.21:3939",
+          "ok": true,
+          "status_code": 200,
+          "timeout_seconds": 8.0
+        },
+        "opencode": {
+          "base_url": "http://100.115.228.56:4097",
+          "ok": true,
+          "status_code": 200,
+          "timeout_seconds": 8.0
+        }
+      },
+      "hostname": "iris.lan",
+      "ok": true,
+      "status_code": 200
+    },
+    "nexus_health": {
+      "ok": true,
+      "status_code": 200
+    },
+    "nexus_models": {
+      "ok": true,
+      "preset_count": 6,
+      "required_presets_present": [
+        "@preset/benedict-paralegal-local",
+        "@preset/freyja-coder",
+        "@preset/freyja-fast-local",
+        "@preset/freyja-private-local",
+        "@preset/freyja-strong-local",
+        "@preset/freyja-vision-docs"
+      ],
+      "status_code": 200
+    }
+  },
+  "generated_at_unix": 1789763362,
+  "msty": {
+    "bots": [
+      {
+        "has_core_gateway_block": false,
+        "id": "agent-47",
+        "mentions_nexus_inference_only": false,
+        "mentions_tools_call": false,
+        "model": "@preset/freyja-fast-local",
+        "name": "Agent 44",
+        "provider_id": "XJLaAGz65SOmQeIQ98fAu",
+        "search_lens_enabled": true,
+        "shell_access_enabled": false,
+        "web_access_enabled": true
+      },
+      {
+        "has_core_gateway_block": false,
+        "id": "benedict",
+        "mentions_nexus_inference_only": false,
+        "mentions_tools_call": false,
+        "model": "@preset/freyja-strong-local",
+        "name": "Benedict Cumberbot",
+        "provider_id": "XJLaAGz65SOmQeIQ98fAu",
+        "search_lens_enabled": true,
+        "shell_access_enabled": false,
+        "web_access_enabled": true
+      },
+      {
+        "has_core_gateway_block": false,
+        "id": "benedict-paralegal",
+        "mentions_nexus_inference_only": false,
+        "mentions_tools_call": false,
+        "model": "@preset/benedict-paralegal-local",
+        "name": "Benedict Paralegal",
+        "provider_id": "XJLaAGz65SOmQeIQ98fAu",
+        "search_lens_enabled": false,
+        "shell_access_enabled": false,
+        "web_access_enabled": false
+      },
+      {
+        "has_core_gateway_block": true,
+        "id": "cloyd-gibbler",
+        "mentions_nexus_inference_only": true,
+        "mentions_tools_call": true,
+        "model": "@preset/freyja-coder",
+        "name": "Cloyd Gibbler",
+        "provider_id": "XJLaAGz65SOmQeIQ98fAu",
+        "search_lens_enabled": true,
+        "shell_access_enabled": true,
+        "web_access_enabled": true
+      },
+      {
+        "has_core_gateway_block": true,
+        "id": "freyja",
+        "mentions_nexus_inference_only": true,
+        "mentions_tools_call": true,
+        "model": "@preset/freyja-coder",
+        "name": "Freyja",
+        "provider_id": "XJLaAGz65SOmQeIQ98fAu",
+        "search_lens_enabled": true,
+        "shell_access_enabled": true,
+        "web_access_enabled": true
+      },
+      {
+        "has_core_gateway_block": false,
+        "id": "jennacide",
+        "mentions_nexus_inference_only": false,
+        "mentions_tools_call": false,
+        "model": "@preset/freyja-fast-local",
+        "name": "JennaCide",
+        "provider_id": "XJLaAGz65SOmQeIQ98fAu",
+        "search_lens_enabled": true,
+        "shell_access_enabled": false,
+        "web_access_enabled": true
+      }
+    ],
+    "custom_models": [
+      {
+        "capabilities_json": "[\"chat\",\"private\",\"legal\"]",
+        "display_name": "Benedict Paralegal Local",
+        "model_id": "@preset/benedict-paralegal-local"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"tools\",\"code\"]",
+        "display_name": "Freyja Coder",
+        "model_id": "@preset/freyja-coder"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"tools\"]",
+        "display_name": "Freyja Fast Local",
+        "model_id": "@preset/freyja-fast-local"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"private\"]",
+        "display_name": "Freyja Private Local",
+        "model_id": "@preset/freyja-private-local"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"tools\",\"reasoning\"]",
+        "display_name": "Freyja Strong Local",
+        "model_id": "@preset/freyja-strong-local"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"vision\"]",
+        "display_name": "Freyja Vision Docs",
+        "model_id": "@preset/freyja-vision-docs"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"strong_reasoning\",\"web_search\",\"sub-agents\",\"task_management\"]",
+        "display_name": "GPT OSS 120B Strong Reasoning Local",
+        "model_id": "external-ollama/gpt-oss:120b"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"tools\",\"reasoning\"]",
+        "display_name": "GPT OSS 20B Local",
+        "model_id": "external-ollama/gpt-oss:20b"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"medium_reasoning\",\"web_search\",\"sub-agents\",\"task_management\"]",
+        "display_name": "Qwen 2.5 72B Medium Reasoning Local",
+        "model_id": "external-ollama/qwen2.5:72b"
+      },
+      {
+        "capabilities_json": "[\"chat\",\"strong_reasoning\",\"web_search\",\"sub-agents\",\"task_management\"]",
+        "display_name": "Qwen 3.5 122B Strong Reasoning Candidate",
+        "model_id": "external-ollama/qwen3.5:122b-a10b"
+      }
+    ],
+    "mcp_servers": [],
+    "provider": {
+      "base_url": "http://100.94.80.21:3939/v1",
+      "has_api_key": true,
+      "hidden": false,
+      "id": "XJLaAGz65SOmQeIQ98fAu",
+      "metadata": {
+        "aligned_at": "2026-09-07",
+        "canonical_base_url": "http://100.94.80.21:3939/v1",
+        "machine": "vulcan",
+        "providerPreset": "msty-nexus",
+        "semantic_gateway": "msty-nexus",
+        "source": "freyja5"
+      },
+      "name": "Vulcan Nexus",
+      "type": "openai"
+    },
+    "recent_tool_events": [
+      {
+        "conversation_id": "GxSUr9DGv_gZrZCi-5X4X",
+        "created_at": "2026-09-17T14:30:53.889Z",
+        "message_id": "bExREd8HXhBDf26HoUO9s",
+        "model": "@preset/freyja-coder",
+        "provider_name": "Vulcan Nexus",
+        "provider_type": "openai",
+        "status": "failed",
+        "tool_name": "shell"
+      },
+      {
+        "conversation_id": "6AEXCObCur-32NmTWCMJN",
+        "created_at": "2026-09-17T13:47:31.893Z",
+        "message_id": "WrU3DIGmhosiuJMq84_9x",
+        "model": "@preset/freyja-coder",
+        "provider_name": "Vulcan Nexus",
+        "provider_type": "openai",
+        "status": "completed",
+        "tool_name": "shell"
+      },
+      {
+        "conversation_id": "8asahnL_IW4S2LwcP7CR3",
+        "created_at": "2026-09-02T03:36:34.866Z",
+        "message_id": "wxISgORYIEYbbaftoBY4_",
+        "model": "@preset/freyja-coder",
+        "provider_name": "Vulcan Nexus",
+        "provider_type": "openai",
+        "status": "completed",
+        "tool_name": "web_fetch"
+      },
+      {
+        "conversation_id": "8asahnL_IW4S2LwcP7CR3",
+        "created_at": "2026-09-02T03:36:34.865Z",
+        "message_id": "wxISgORYIEYbbaftoBY4_",
+        "model": "@preset/freyja-coder",
+        "provider_name": "Vulcan Nexus",
+        "provider_type": "openai",
+        "status": "failed",
+        "tool_name": "web_search"
+      },
+      {
+        "conversation_id": "8asahnL_IW4S2LwcP7CR3",
+        "created_at": "2026-09-02T03:33:44.902Z",
+        "message_id": "9E9edI0MUjkNxUplSFkc5",
+        "model": "@preset/freyja-coder",
+        "provider_name": "Vulcan Nexus",
+        "provider_type": "openai",
+        "status": "completed",
+        "tool_name": "shell"
+      }
+    ]
+  },
+  "ok": true,
+  "report_type": "msty-nexus-core-posture",
+  "role_contract": {
+    "freyja_core_iris": "tool authority",
+    "msty_go": "primary named-agent UI",
+    "nexus_vulcan": "inference plane only",
+    "openwebui": "secondary/raw-model testing only"
+  }
+}
