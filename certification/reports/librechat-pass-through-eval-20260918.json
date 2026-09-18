@@ -1,0 +1,99 @@
+{
+  "acceptance": {
+    "can_route_inference_to_nexus_by_config": true,
+    "can_route_tools_to_freyja_core_mcp_by_config": true,
+    "does_not_duplicate_tool_logic": true,
+    "existing_services_untouched": true,
+    "full_ui_smoke_status": "blocked; isolated LibreChat docker compose pull did not complete within the bounded trial window and was stopped with Ctrl-C before containers started"
+  },
+  "blockers_or_next_steps": [
+    "Update deploy/compose/librechat/.env from .env.example locally; the checked-in example intentionally contains placeholders only.",
+    "Run scripts/freyja-core-mcp-server.py with FREYJA_CORE_MCP_TOKEN matching LibreChat .env before a UI smoke.",
+    "Resume or retry the isolated LibreChat compose image pull before a browser/iPad trial; the first pull was very slow and was stopped before containers started.",
+    "In LibreChat, confirm the UI exposes Freyja Core tools as freyja-core::{tool_name} and can call status.check/date resolution."
+  ],
+  "generated_at_unix": 1789764110,
+  "live_checks": {
+    "compose_config": {
+      "ok": true,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_contains_librechat": true
+    },
+    "freyja_core": {
+      "configured_tools_present": [
+        "calendar.create_event",
+        "calendar.delete_event",
+        "calendar.resolve_date",
+        "memory.search",
+        "memory.write",
+        "opencode.read",
+        "opencode.send",
+        "opencode.start",
+        "opencode.status",
+        "opencode.stop",
+        "status.check"
+      ],
+      "date_dates": [
+        "2026-09-19",
+        "2026-09-20"
+      ],
+      "health_status": 200,
+      "hostname": "iris.lan",
+      "ok": true,
+      "status_check_ok": true
+    },
+    "nexus": {
+      "health_status": 200,
+      "models_status": 200,
+      "ok": true,
+      "preset_count": 6,
+      "required_presets_present": [
+        "@preset/freyja-coder",
+        "@preset/freyja-fast-local",
+        "@preset/freyja-strong-local"
+      ]
+    }
+  },
+  "official_docs_findings": {
+    "custom_openai_compatible_endpoints": true,
+    "docker_quickstart_available": true,
+    "internal_endpoint_ssrf_allowlists_required": true,
+    "mcp_http_transport": true,
+    "mcp_tool_names_are_server_scoped": "LibreChat documents tool names as {server_name}::{tool_name}.",
+    "self_hosted_privacy_claim": true
+  },
+  "ok": true,
+  "report_type": "librechat-pass-through-eval",
+  "trial_config": {
+    "compose": "deploy/compose/librechat/compose.yaml",
+    "config": "deploy/compose/librechat/librechat.yaml",
+    "env_example": "deploy/compose/librechat/.env.example",
+    "freyja_core_mcp": {
+      "has_auth_header": true,
+      "server_name": "freyja-core",
+      "type": "streamable-http",
+      "url": "${FREYJA_CORE_MCP_URL}"
+    },
+    "nexus_endpoint": {
+      "apiKey_placeholder": "${NEXUS_OPENAI_API_KEY}",
+      "baseURL": "${NEXUS_OPENAI_BASE_URL}",
+      "models": [
+        "@preset/freyja-coder",
+        "@preset/freyja-fast-local",
+        "@preset/freyja-strong-local"
+      ],
+      "name": "Vulcan Nexus"
+    },
+    "ssrf_allowlists": {
+      "endpoints_allowedAddresses": [
+        "100.94.80.21:3939"
+      ],
+      "mcp_allowedAddresses": [
+        "100.115.228.56:8766",
+        "host.docker.internal:8766"
+      ]
+    }
+  },
+  "verdict": "maybe-promising-pass-through-candidate"
+}
