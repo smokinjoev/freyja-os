@@ -1,0 +1,86 @@
+platform:
+  name: Freyja 6.0
+  mode: validation
+  control_plane: atlas
+  inference_node: vulcan
+  model_gateway: litellm
+  agent_runtime: hermes-agent
+
+agents:
+  - id: freyja-test
+    display_name: Freyja Test
+    purpose: Validate the Freyja 6.0 household agent stack before any migration.
+    identity_file: /var/lib/hermes/agents/freyja-test/identity.md
+    sessions_dir: /var/lib/hermes/agents/freyja-test/sessions
+    memory:
+      provider: hermes-native
+      private_dir: /var/lib/hermes/agents/freyja-test/memory/private
+      shared_household_dir: null
+    tools:
+      filesystem:
+        approved_roots:
+          - /workspace/approved
+        mode: read-only
+      terminal:
+        enabled: true
+        safe_commands:
+          - pwd
+          - date
+          - whoami
+          - ls
+          - rg
+      mcp:
+        enabled: true
+        config_file: /etc/hermes/mcp/freyja-test.json
+        host_config_source: config/freyja6/mcp/freyja-test.json
+      calendar:
+        enabled: true
+        boundary: mcp
+      home_assistant:
+        enabled: true
+        boundary: mcp
+      coding_agent:
+        enabled: true
+        executor: opencode
+    messaging:
+      gateway: discord
+      channel_scope: dedicated-test-channel
+      credentials_source: environment
+      env:
+        token: FREYJA6_DISCORD_BOT_TOKEN
+        channel_id: FREYJA6_DISCORD_CHANNEL_ID
+    models:
+      gateway_base_url: http://litellm:4000/v1
+      default_model: vulcan-general
+      allowed_models:
+        - vulcan-fast
+        - vulcan-general
+        - vulcan-code
+    schedules:
+      enabled: true
+      config_file: /etc/hermes/schedules/freyja-test.yaml
+      host_config_source: config/freyja6/schedules.yaml
+    logging:
+      tool_log: /var/log/freyja6/freyja-test-tools.jsonl
+      model_log: /var/log/freyja6/freyja-test-model-calls.jsonl
+      acceptance_log: /var/log/freyja6/freyja-test-acceptance.jsonl
+
+future_agents:
+  # Reserved names only. Freyja 6.0 Phase 1 must not instantiate them.
+  - Freyja
+  - Cloyd
+  - Benedict
+  - Agent 44
+  - Agent Smith
+
+guardrails:
+  local_private_data_default: true
+  cloud_model_use_requires_explicit_approval: true
+  do_not_modify_existing_bots_or_credentials: true
+  do_not_migrate_existing_systems: true
+  preserve_existing_systems:
+    - Freyja 4
+    - Freyja 5
+    - Msty Nexus
+    - Msty Go
+    - OpenWebUI

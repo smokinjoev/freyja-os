@@ -1,0 +1,31 @@
+schema_version: "1.0"
+profile_id: freyja61-parent
+runtime_agent_id: freyja-test
+display_name: Freyja
+deployment_mode: promote-current-test-agent
+public_delivery:
+  platform: discord
+  channel_scope: dedicated-test-channel
+  bot_count: 1
+  child_delivery: parent-synthesis-only
+model:
+  endpoint: freyja61-litellm
+  default: vulcan-general
+tool_transport:
+  endpoint: freyja-core-mcp
+  direct_downstream_access: false
+memory:
+  private_session_owner: hermes
+  shared_memory_owner: freyja-core
+  msty_memory_owner: msty-go
+  msty_direct_database_access: false
+delegation:
+  enabled_after_tool_compatibility: true
+  max_concurrent_children: 2
+  max_spawn_depth: 1
+  child_public_delivery: false
+  child_durable_memory_write: false
+  parent_must_synthesize: true
+rollback:
+  retained_profile: freyja-test-phase1
+  action: disable-freyja61-tool-profile-and-restart-hermes

@@ -1,0 +1,84 @@
+services:
+  litellm-db:
+    image: postgres:16.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - litellm-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  litellm:
+    image: ${LITELLM_IMAGE}
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      VULCAN_OLLAMA_BASE_URL: ${VULCAN_OLLAMA_BASE_URL}
+      VULCAN_FAST_MODEL: ${VULCAN_FAST_MODEL}
+      VULCAN_GENERAL_MODEL: ${VULCAN_GENERAL_MODEL}
+      VULCAN_CODE_MODEL: ${VULCAN_CODE_MODEL}
+    ports:
+      - "127.0.0.1:4600:4000"
+    volumes:
+      - ./litellm.config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  hermes-freyja-test:
+    image: ${HERMES_AGENT_IMAGE}
+    restart: unless-stopped
+    command: ["gateway"]
+    depends_on:
+      litellm:
+        condition: service_healthy
+    environment:
+      HERMES_AGENT_ID: freyja-test
+      HERMES_AGENT_CONFIG: /etc/hermes/agents/freyja-test.yaml
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      HERMES_DEFAULT_MODEL: vulcan-general
+      HERMES_COMPACT_DELEGATION_SCHEMA: "1"
+      FREYJA6_DISCORD_BOT_TOKEN: ${FREYJA6_DISCORD_BOT_TOKEN}
+      FREYJA6_DISCORD_CHANNEL_ID: ${FREYJA6_DISCORD_CHANNEL_ID}
+      DISCORD_BOT_TOKEN: ${FREYJA6_DISCORD_BOT_TOKEN}
+      DISCORD_HOME_CHANNEL: ${FREYJA6_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOWED_CHANNELS: ${FREYJA6_DISCORD_CHANNEL_ID}
+      DISCORD_FREE_RESPONSE_CHANNELS: ${FREYJA6_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOW_ALL_USERS: "true"
+      FREYJA6_CORE_MCP_TOKEN: ${FREYJA6_CORE_MCP_TOKEN}
+      FREYJA6_TERMINAL_MCP_TOKEN: ${FREYJA6_TERMINAL_MCP_TOKEN}
+    volumes:
+      - ../../..:/workspace/repo:ro
+      - ../../../config/freyja6/hermes-config.yaml:/opt/data/config.yaml:ro
+      - ../../../config/freyja6/freyja-test.yaml:/etc/hermes/agents/freyja-test.yaml:ro
+      - ../../../config/freyja6/mcp/freyja-test.json:/etc/hermes/mcp/freyja-test.json:ro
+      - ../../../config/freyja6/schedules.yaml:/etc/hermes/schedules/freyja-test.yaml:ro
+      - ${FREYJA6_APPROVED_FILES_ROOT}:/workspace/approved:ro
+      - ${FREYJA6_HERMES_DATA}:/var/lib/hermes
+      - ${FREYJA6_LOG_ROOT}:/var/log/freyja6
+    labels:
+      freyja.platform: "6.0"
+      freyja.agent: "freyja-test"
+      freyja.phase: "validation"
+      freyja.migration: "disabled"
+
+volumes:
+  litellm-db:

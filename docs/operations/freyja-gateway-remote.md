@@ -41,6 +41,8 @@ directory. That Smith-specific Qwen config contains only the Vulcan Nexus
 provider and does not inherit the normal `~/.qwen/settings.json` OpenRouter
 entries. The Qwen process runs inside the `agent-smith` tmux session, so closing
 Safari or locking the iPad does not stop the agent.
+Browser reconnect is left enabled in ttyd so the page can reattach to that
+persistent tmux session after network drops, iPad sleeps, or Safari refreshes.
 
 ## iPad URL
 

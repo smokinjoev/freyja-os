@@ -161,7 +161,7 @@ def test_launchagent_runs_ttyd_terminal_for_agent_smith() -> None:
     ]
     assert "--ping-interval" in args
     assert args[args.index("--ping-interval") + 1] == "30"
-    assert "disableReconnect=true" in args
+    assert "disableReconnect=true" not in args
     assert "/Users/freyja/freyja-os/scripts/run-agent-smith-qwen.sh" in args
     assert plist["EnvironmentVariables"]["AGENT_SMITH_WORKDIR"] == "/Users/freyja"
 

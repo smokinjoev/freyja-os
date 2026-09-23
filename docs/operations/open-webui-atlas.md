@@ -8,6 +8,19 @@ the Apple/Mac interaction host and workstation. Vulcan remains compute.
 
 Policy: Open WebUI lists the approved model catalog. The backend enforces one resident Vulcan model at a time.
 
+Canonical local AI surfaces:
+
+| Surface | Canonical role | Default model path |
+| --- | --- | --- |
+| Open WebUI | Shared household browser/PWA UI on Atlas | Atlas `model-proxy` to Vulcan, or direct Vulcan OpenAI-compatible endpoint for diagnostics |
+| OpenCode | Operator coding/session surface controlled through Freyja Core | Direct Vulcan OpenAI-compatible endpoint or Nexus preset backed by Vulcan |
+| OpenCodex | Operator coding/session surface for Codex-style workflows | Direct Vulcan OpenAI-compatible endpoint or Nexus preset backed by Vulcan |
+
+All three should be installed, reachable, and smoke-tested as part of the
+standing local stack. They are allowed to point straight at Vulcan for model
+inference. Do not route household authorization, memory writes, messaging, or
+tool policy through Vulcan; Vulcan remains inference compute.
+
 Planned model catalog:
 
 | Role | Model |
@@ -105,12 +118,15 @@ Current endpoint map:
 
 | Surface | Endpoint | Purpose |
 | --- | --- | --- |
+| Atlas family landing page | `http://100.119.235.114:9091` | Served by `cloyd-dashboard-web` from Atlas `/home/joe/cloyd-services/dashboard/index.html` |
 | Atlas Open WebUI | `http://100.119.235.114:3001` | Household UI |
 | Atlas model proxy | `http://model-proxy:8080/v1` | Open WebUI provider boundary |
 | Vulcan Ollama native | `http://100.94.80.21:11434` | Canonical model runtime and loaded-model state |
 | Vulcan Ollama OpenAI | `http://100.94.80.21:11434/v1` | Direct OpenAI-compatible diagnostic path |
 | Vulcan Ollama TCP proxy | `http://100.94.80.21:8088/v1` | Open WebUI/model-proxy primary upstream |
 | Vulcan Nexus | `http://100.94.80.21:3939/v1` | Stable preset/routing layer over Ollama |
+| OpenCode | `http://100.119.235.114:4097` | Atlas coding-session surface; Basic Auth challenge is expected |
+| OpenCodex | `http://100.115.228.56:8510` | Freyja Core/Codex-style operator workflow surface on Iris |
 | Iris fallback Ollama | `http://100.115.228.56:11434/v1` | 7B-class fallback only |
 
 Current Nexus presets:

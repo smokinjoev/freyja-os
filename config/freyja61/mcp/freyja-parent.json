@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "freyja-core-gateway": {
+      "transport": "streamable_http",
+      "url": "http://host.docker.internal:8766/mcp",
+      "headers": {
+        "Authorization": "Bearer ${FREYJA61_CORE_MCP_TOKEN}"
+      },
+      "allowed_tools": [
+        "tools.search",
+        "tools.profile",
+        "tools.call"
+      ],
+      "notes": "The Freyja 6.1 parent reaches live capabilities only through Freyja Core. Child roles receive no raw endpoint credentials or MCP token."
+    }
+  }
+}

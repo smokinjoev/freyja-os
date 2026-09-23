@@ -1,0 +1,401 @@
+{
+  "acceptance": [
+    {
+      "description": "Reply through the dedicated Discord test channel.",
+      "id": "discord_reply",
+      "metadata": {},
+      "missing_evidence": [
+        "discord_channel_id_redacted",
+        "message_trace_id",
+        "reply_trace_id",
+        "verification_method"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "discord_channel_id_redacted",
+        "message_trace_id",
+        "reply_trace_id",
+        "verification_method"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Survive restart with identity and session intact.",
+      "id": "restart_identity_session",
+      "metadata": {},
+      "missing_evidence": [
+        "restart_trace_id",
+        "identity_before",
+        "identity_after",
+        "session_restored"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "restart_trace_id",
+        "identity_before",
+        "identity_after",
+        "session_restored"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Remember an intentionally stored fact through Hermes native memory.",
+      "id": "remember_fact",
+      "metadata": {},
+      "missing_evidence": [
+        "stored_fact_label",
+        "recall_trace_id",
+        "memory_provider"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "stored_fact_label",
+        "recall_trace_id",
+        "memory_provider"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Use Vulcan models through LiteLLM.",
+      "id": "litellm_to_vulcan",
+      "metadata": {},
+      "missing_evidence": [
+        "litellm_request_id",
+        "model",
+        "response_model",
+        "vulcan_backend"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "litellm_request_id",
+        "model",
+        "response_model",
+        "vulcan_backend"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Switch models through the LiteLLM gateway.",
+      "id": "model_switch",
+      "metadata": {},
+      "missing_evidence": [
+        "models_tested",
+        "response_models",
+        "gateway_trace_ids"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "models_tested",
+        "response_models",
+        "gateway_trace_ids"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Read a file under the approved filesystem root.",
+      "id": "approved_file_read",
+      "metadata": {},
+      "missing_evidence": [
+        "approved_path",
+        "tool_trace_id",
+        "bytes_read"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "approved_path",
+        "tool_trace_id",
+        "bytes_read"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Execute a safe terminal command.",
+      "id": "safe_terminal",
+      "metadata": {},
+      "missing_evidence": [
+        "command",
+        "tool_trace_id",
+        "exit_code",
+        "working_dir"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "command",
+        "tool_trace_id",
+        "exit_code",
+        "working_dir"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Call an MCP tool.",
+      "id": "mcp_tool",
+      "metadata": {},
+      "missing_evidence": [
+        "server",
+        "tool",
+        "tool_trace_id",
+        "status_code"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "server",
+        "tool",
+        "tool_trace_id",
+        "status_code"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Read the family calendar through the tool boundary.",
+      "id": "calendar_read",
+      "metadata": {},
+      "missing_evidence": [
+        "calendar_name_redacted",
+        "tool_trace_id",
+        "status_code"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "calendar_name_redacted",
+        "tool_trace_id",
+        "status_code"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Create an event from 'Add basement cleanup this Saturday'.",
+      "id": "calendar_create_event",
+      "metadata": {},
+      "missing_evidence": [
+        "event_title",
+        "event_date",
+        "tool_trace_id",
+        "created_event_id"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "event_title",
+        "event_date",
+        "tool_trace_id",
+        "created_event_id"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Query Home Assistant through the tool boundary.",
+      "id": "home_assistant_query",
+      "metadata": {},
+      "missing_evidence": [
+        "entity_id_redacted",
+        "tool_trace_id",
+        "states_count"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "entity_id_redacted",
+        "tool_trace_id",
+        "states_count"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Invoke the coding workflow through OpenCode or the approved coding executor.",
+      "id": "coding_workflow",
+      "metadata": {},
+      "missing_evidence": [
+        "executor",
+        "handoff_trace_id",
+        "result_summary",
+        "status_keys"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "executor",
+        "handoff_trace_id",
+        "result_summary",
+        "status_keys"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    },
+    {
+      "description": "Return automatically after Atlas reboot.",
+      "id": "atlas_reboot_return",
+      "metadata": {},
+      "missing_evidence": [
+        "reboot_window",
+        "container_status_after",
+        "discord_reply_after_reboot",
+        "discord_reply_after_reboot_verification"
+      ],
+      "missing_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "present_evidence": [],
+      "required_evidence": [
+        "reboot_window",
+        "container_status_after",
+        "discord_reply_after_reboot",
+        "discord_reply_after_reboot_verification"
+      ],
+      "required_metadata": [
+        "captured_at",
+        "source"
+      ],
+      "semantic_failures": [],
+      "status": "missing"
+    }
+  ],
+  "complete": false,
+  "evidence": "certification/reports/freyja6-live-evidence.json",
+  "evidence_contract": {
+    "message": "No live evidence has been captured yet.",
+    "status": "pass"
+  },
+  "next_actions": [
+    "Start the Freyja 6 compose stack on Atlas with a dedicated Discord test channel.",
+    "Capture live evidence for discord_reply: Reply through the dedicated Discord test channel.",
+    "Record redacted evidence in certification/reports/freyja6-live-evidence.json."
+  ],
+  "remaining_acceptance": [
+    "discord_reply",
+    "restart_identity_session",
+    "remember_fact",
+    "litellm_to_vulcan",
+    "model_switch",
+    "approved_file_read",
+    "safe_terminal",
+    "mcp_tool",
+    "calendar_read",
+    "calendar_create_event",
+    "home_assistant_query",
+    "coding_workflow",
+    "atlas_reboot_return"
+  ],
+  "report_type": "freyja6-acceptance-status",
+  "scaffold": {
+    "failures": [],
+    "ok": true,
+    "source_files": [
+      "config/freyja6/freyja-test.yaml",
+      "deploy/compose/freyja6/compose.yaml",
+      "deploy/compose/freyja6/litellm.config.yaml",
+      "config/freyja6/schedules.yaml",
+      "config/freyja6/bootstrap/identity.md",
+      "config/freyja6/bootstrap/approved-smoke.txt"
+    ]
+  },
+  "schema_version": "1.0",
+  "secrets_detected": false,
+  "status": "incomplete",
+  "timestamp": "2026-09-20T22:34:43.679061+00:00"
+}

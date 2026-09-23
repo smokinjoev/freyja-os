@@ -1,0 +1,1 @@
+{"mcpServers":{"freyja-core-gateway":{"transport":"streamable_http","url":"http://host.docker.internal:8766/mcp","headers":{"Authorization":"Bearer ${FREYJA6_CORE_MCP_TOKEN}"},"allowed_tools":["tools.search","tools.profile","tools.call"],"notes":"Per-agent token determines the Core policy; no direct host-tool servers are mounted."}}}

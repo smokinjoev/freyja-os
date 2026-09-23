@@ -1,0 +1,111 @@
+schema_version: "1.0"
+registry_id: freyja61-canonical-endpoints
+control_plane_host: iris
+inference_host: vulcan-1
+
+endpoints:
+  - id: discord-freyja-parent
+    owner: hermes
+    host: iris
+    url: discord://freyja-test
+    auth_boundary: discord-bot-token
+    callers: [household-users]
+    lifecycle: active-test
+    purpose: Single public ingress for Freyja 6.1.
+    delivery_profile: final-only-no-mcp
+    tool_activation: disabled-until-discord-certified
+  - id: freyja61-litellm
+    owner: freyja61
+    host: iris
+    url: http://127.0.0.1:4600/v1
+    auth_boundary: litellm-master-key
+    callers: [hermes-parent]
+    lifecycle: active
+    purpose: Iris-local model gateway for Hermes.
+  - id: freyja-core
+    owner: freyja-core
+    host: iris
+    url: http://100.115.228.56:8510
+    auth_boundary: core-policy-and-mcp-token
+    callers: [hermes-parent, msty-go]
+    lifecycle: active
+    purpose: Canonical tool and cross-runtime-memory authority.
+  - id: freyja-core-mcp
+    owner: freyja-core
+    host: iris
+    url: http://127.0.0.1:8766/mcp
+    auth_boundary: per-agent-mcp-token
+    callers: [hermes-parent]
+    lifecycle: active
+    purpose: Hermes-to-Core tool transport.
+  - id: macagent-mcp
+    owner: macagent
+    host: iris
+    url: http://100.115.228.56:8765/mcp
+    auth_boundary: macagent-token
+    callers: [freyja-core]
+    lifecycle: active
+    purpose: Apple service boundary; Hermes must not call it directly.
+  - id: opencode
+    owner: opencode
+    host: iris
+    url: http://100.115.228.56:4097
+    auth_boundary: opencode-basic-auth
+    callers: [freyja-core]
+    lifecycle: active
+    purpose: Bounded coding runtime; Hermes must not call it directly.
+  - id: nexus
+    owner: msty-nexus
+    host: vulcan-1
+    url: http://100.94.80.21:3939/v1
+    auth_boundary: nexus-bearer-token
+    callers: [msty-go, freyja5, approved-clients]
+    lifecycle: active
+    purpose: Stable model preset routing.
+  - id: vulcan-ollama
+    owner: vulcan
+    host: vulcan-1
+    url: http://100.94.80.21:11434/v1
+    auth_boundary: tailnet-only
+    callers: [nexus, freyja61-litellm, diagnostics]
+    lifecycle: active
+    purpose: Model execution only.
+  - id: msty-go
+    owner: msty-go
+    host: iris
+    url: app://msty-go
+    auth_boundary: local-user-session
+    callers: [household-users]
+    lifecycle: preserved
+    purpose: Existing named-agent UI and Msty-owned memory bank.
+  - id: open-webui-iris
+    owner: open-webui
+    host: iris
+    url: http://100.115.228.56:3001
+    auth_boundary: open-webui-login
+    callers: [household-users]
+    lifecycle: preserved
+    purpose: Raw-model and fallback UI.
+  - id: freyja5
+    owner: freyja5
+    host: iris
+    url: http://100.115.228.56:8500/v1
+    auth_boundary: freyja-connector-token
+    callers: [msty-go, open-webui, legacy-clients]
+    lifecycle: preserved
+    purpose: Existing named-agent compatibility gateway.
+  - id: freyja3
+    owner: freyja3
+    host: iris
+    url: http://100.115.228.56:8300
+    auth_boundary: existing-service-policy
+    callers: [legacy-clients]
+    lifecycle: preserved
+    purpose: Earlier Freyja gateway retained without change.
+
+invariants:
+  - Iris owns coordination, tools, and user-facing state.
+  - Vulcan owns inference only.
+  - Hermes reaches live tools only through freyja-core-mcp.
+  - No endpoint in this registry authorizes a new public listener.
+  - Preserved endpoints must not be stopped by Freyja 6.1 work.

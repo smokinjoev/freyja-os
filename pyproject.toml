@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-settings",
     "pyyaml",
     "uvicorn",
+    "websockets",
 ]
 
 [project.scripts]
@@ -39,7 +40,7 @@ freyja = "src/freyja"
 
 [tool.setuptools.package-data]
 certification = ["suites/**/*.yaml"]
-freyja = ["identity/*.swift"]
+freyja = ["identity/*.swift", "*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -11,7 +11,7 @@ from open_webui.utils.plugin import load_tool_module_by_id
 from open_webui.utils.tools import get_tool_specs
 
 
-JOE_USER_ID = "37fb033a-a2d0-46f2-986d-e22bf8355fa3"
+JOE_USER_ID = "d264d0df-d0b6-4f35-bd66-5d602e84aae4"
 DB_PATH = Path("/app/backend/data/webui.db")
 TOOL_ID = "freyja_home_memory"
 MODEL_IDS = (
@@ -112,7 +112,7 @@ class Tools:
             body = body[:16000] + "\n[truncated]"
         return body
 
-    def search(self, query: str = "", scope: str = "project:freyja-os", limit: int = 8, agent_id: str = "cloyd") -> str:
+    def freyja_home_memory_search(self, query: str = "", scope: str = "project:freyja-os", limit: int = 8, agent_id: str = "cloyd") -> str:
         """LIVE search of Freyja permanent memory. Use scope personal:joe for Joe's private memories and project:freyja-os for Freyja/Cloyd archive facts."""
         bounded = max(1, min(int(limit), 20))
         try:
@@ -121,7 +121,16 @@ class Tools:
             return json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True)
         return self._get("/search", {"scope": normalized_scope, "q": query, "limit": bounded}, agent_id)
 
-    def recent_events(self, scope: str = "project:freyja-os", limit: int = 8, agent_id: str = "cloyd") -> str:
+    def search(self, query: str = "", scope: str = "personal:joe", limit: int = 8, agent_id: str = "cloyd") -> str:
+        """LIVE compatibility search for Freyja Home Memory. Defaults to Joe's private scope personal:joe."""
+        return self.freyja_home_memory_search(query=query, scope=scope, limit=limit, agent_id=agent_id)
+
+    def freyja_home_memory_search_joe(self, query: str = "", limit: int = 8, agent_id: str = "cloyd") -> str:
+        """LIVE search of Joe's private Freyja memory. Always searches scope personal:joe."""
+        bounded = max(1, min(int(limit), 20))
+        return self._get("/search", {"scope": "personal:joe", "q": query, "limit": bounded}, agent_id)
+
+    def freyja_home_memory_recent_events(self, scope: str = "project:freyja-os", limit: int = 8, agent_id: str = "cloyd") -> str:
         """LIVE recent Freyja permanent memory records for a permitted scope."""
         bounded = max(1, min(int(limit), 20))
         try:

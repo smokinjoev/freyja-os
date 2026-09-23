@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paralegal Enclave</title>
+  <style>
+    :root { color-scheme: light; --ink:#18202a; --muted:#637083; --line:#d9dee7; --panel:#f7f8fb; --accent:#226b5f; --warn:#8a5a00; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:var(--ink); background:#ffffff; }
+    header { padding:28px 32px 18px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:16px; align-items:end; }
+    h1 { margin:0; font-size:32px; letter-spacing:0; }
+    main { display:grid; grid-template-columns:320px minmax(0, 1fr); min-height:calc(100vh - 92px); }
+    aside { border-right:1px solid var(--line); padding:20px; background:var(--panel); }
+    section { padding:20px 24px; }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+    input, select { width:100%; border:1px solid var(--line); border-radius:6px; padding:10px 12px; font:inherit; background:white; }
+    button, .button { border:1px solid #174f47; background:var(--accent); color:white; border-radius:6px; padding:10px 12px; font-weight:650; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:8px; }
+    button.secondary, .button.secondary { background:white; color:var(--ink); border-color:var(--line); }
+    .stack { display:grid; gap:14px; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .matter { width:100%; justify-content:space-between; margin-top:8px; }
+    .dropzone { border:2px dashed #9aa7b8; border-radius:8px; min-height:170px; display:grid; place-items:center; text-align:center; padding:28px; background:#fbfcfe; }
+    .dropzone.active { border-color:var(--accent); background:#eef8f5; }
+    .status { color:var(--muted); font-size:14px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { border-bottom:1px solid var(--line); padding:10px 8px; text-align:left; vertical-align:top; }
+    th { color:#485568; font-size:12px; text-transform:uppercase; letter-spacing:.04em; background:#fafbfc; }
+    td.context { max-width:460px; color:#394556; }
+    a { color:#155d91; }
+    @media (max-width: 820px) { main { grid-template-columns:1fr; } aside { border-right:0; border-bottom:1px solid var(--line); } header { align-items:start; flex-direction:column; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Paralegal Enclave</h1>
+      <div class="status">Matter folders, PDF intake, financial extraction, and source traceability for Beth.</div>
+    </div>
+    <a class="button secondary" href="/paralegal/api/extractions.csv">Export CSV</a>
+  </header>
+  <main>
+    <aside class="stack">
+      <form id="matter-form" class="stack">
+        <div>
+          <label for="matter-name">New matter folder</label>
+          <input id="matter-name" autocomplete="off" placeholder="Smith v. Example">
+        </div>
+        <button type="submit">Create Folder</button>
+      </form>
+      <div>
+        <label>Folders</label>
+        <div id="matters" class="stack"></div>
+      </div>
+    </aside>
+    <section class="stack">
+      <div class="row">
+        <select id="matter-select" aria-label="Matter folder"></select>
+        <button id="scan" class="secondary" type="button">Scan Dropped PDFs</button>
+      </div>
+      <div id="watch-status" class="status"></div>
+      <div id="dropzone" class="dropzone">
+        <div>
+          <strong>Drop PDFs here</strong>
+          <div class="status">New files are stored in the selected folder and scanned immediately.</div>
+        </div>
+      </div>
+      <div id="status" class="status"></div>
+      <table>
+        <thead>
+          <tr><th>Matter</th><th>Document</th><th>Page</th><th>Field</th><th>Amount</th><th>Anchor</th><th>Context</th><th>Source</th></tr>
+        </thead>
+        <tbody id="extractions"></tbody>
+      </table>
+    </section>
+  </main>
+  <script>
+    const mattersEl = document.querySelector('#matters');
+    const matterSelect = document.querySelector('#matter-select');
+    const statusEl = document.querySelector('#status');
+    const watchStatusEl = document.querySelector('#watch-status');
+    const dropzone = document.querySelector('#dropzone');
+    const extractionsEl = document.querySelector('#extractions');
+
+    const api = (url, options = {}) => fetch(url, options).then(async response => {
+      if (!response.ok) throw new Error((await response.json()).detail || response.statusText);
+      return response.json();
+    });
+
+    function setStatus(text) { statusEl.textContent = text; }
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;'}[char]));
+    }
+
+    async function refreshMatters() {
+      const data = await api('/paralegal/api/matters');
+      matterSelect.innerHTML = data.matters.map(m => `<option value="${escapeHtml(m.slug)}">${escapeHtml(m.slug)} (${m.pdf_count})</option>`).join('');
+      mattersEl.innerHTML = data.matters.map(m => `<button class="secondary matter" type="button" data-slug="${escapeHtml(m.slug)}"><span>${escapeHtml(m.slug)}</span><span>${m.pdf_count}</span></button>`).join('');
+      mattersEl.querySelectorAll('button').forEach(button => button.addEventListener('click', () => { matterSelect.value = button.dataset.slug; }));
+    }
+
+    async function refreshExtractions() {
+      const data = await api('/paralegal/api/extractions');
+      extractionsEl.innerHTML = data.extractions.map(row => `
+        <tr>
+          <td>${escapeHtml(row.matter_slug)}</td>
+          <td>${escapeHtml(row.filename)}</td>
+          <td>${row.page_number}</td>
+          <td>${escapeHtml(row.field_label)}</td>
+          <td><strong>${escapeHtml(row.amount_text)}</strong></td>
+          <td>${escapeHtml(row.text_anchor || '')}</td>
+          <td class="context">${escapeHtml(row.context)}</td>
+          <td><a href="${escapeHtml(row.source_link)}" target="_blank" rel="noreferrer">Verify</a></td>
+        </tr>`).join('');
+    }
+
+    async function refreshStatus() {
+      const status = await api('/paralegal/api/status');
+      watchStatusEl.textContent = `Watching ${status.matter_root}; ${status.document_count} documents, ${status.extraction_count} extracted rows. Database: ${status.database_file}`;
+      if (status.scan.processed > 0 || status.scan.errors.length > 0) {
+        await refreshMatters();
+        await refreshExtractions();
+        setStatus(`Auto-scan found ${status.scan.processed} new PDF file${status.scan.processed === 1 ? '' : 's'} with ${status.scan.errors.length} errors.`);
+      }
+    }
+
+    document.querySelector('#matter-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const name = document.querySelector('#matter-name').value.trim();
+      if (!name) return;
+      const matter = await api('/paralegal/api/matters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name}) });
+      document.querySelector('#matter-name').value = '';
+      await refreshMatters();
+      matterSelect.value = matter.slug;
+      setStatus(`Created ${matter.slug}`);
+    });
+
+    document.querySelector('#scan').addEventListener('click', async () => {
+      const result = await api('/paralegal/api/scan', { method:'POST' });
+      await refreshMatters(); await refreshExtractions();
+      setStatus(`Scan complete: ${result.processed} processed, ${result.skipped} already known, ${result.errors.length} errors.`);
+    });
+
+    ['dragenter', 'dragover'].forEach(name => dropzone.addEventListener(name, event => { event.preventDefault(); dropzone.classList.add('active'); }));
+    ['dragleave', 'drop'].forEach(name => dropzone.addEventListener(name, event => { event.preventDefault(); dropzone.classList.remove('active'); }));
+    dropzone.addEventListener('drop', async event => {
+      const slug = matterSelect.value;
+      if (!slug) { setStatus('Create a matter folder first.'); return; }
+      const files = [...event.dataTransfer.files].filter(file => file.name.toLowerCase().endsWith('.pdf'));
+      for (const file of files) {
+        await fetch(`/paralegal/api/matters/${encodeURIComponent(slug)}/documents/${encodeURIComponent(file.name)}`, { method:'PUT', body:file });
+      }
+      await refreshMatters(); await refreshExtractions();
+      setStatus(`Uploaded and scanned ${files.length} PDF file${files.length === 1 ? '' : 's'}.`);
+    });
+
+    refreshMatters()
+      .then(refreshExtractions)
+      .then(refreshStatus)
+      .then(() => setInterval(() => refreshStatus().catch(error => setStatus(error.message)), 10000))
+      .catch(error => setStatus(error.message));
+  </script>
+</body>
+</html>

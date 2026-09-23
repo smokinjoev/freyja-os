@@ -4,12 +4,12 @@
     "can_route_tools_to_freyja_core_mcp_by_config": true,
     "does_not_duplicate_tool_logic": true,
     "existing_services_untouched": true,
-    "full_ui_smoke_status": "blocked; isolated LibreChat docker compose pull did not complete within the bounded trial window and was stopped with Ctrl-C before containers started"
+    "full_ui_smoke_status": "blocked; isolated LibreChat docker compose pull did not complete within the bounded trial window and was stopped with Ctrl-C before containers started. 2026-09-19 retry pulled Mongo and Meilisearch successfully; LibreChat app image still did not complete."
   },
   "blockers_or_next_steps": [
     "Update deploy/compose/librechat/.env from .env.example locally; the checked-in example intentionally contains placeholders only.",
     "Run scripts/freyja-core-mcp-server.py with FREYJA_CORE_MCP_TOKEN matching LibreChat .env before a UI smoke.",
-    "Resume or retry the isolated LibreChat compose image pull before a browser/iPad trial; the first pull was very slow and was stopped before containers started.",
+    "Resume or retry the isolated LibreChat app image pull before a browser/iPad trial; Mongo and Meilisearch are now local, but registry.librechat.ai/danny-avila/librechat-dev:latest did not finish pulling.",
     "In LibreChat, confirm the UI exposes Freyja Core tools as freyja-core::{tool_name} and can call status.check/date resolution."
   ],
   "generated_at_unix": 1789764110,
@@ -65,6 +65,15 @@
   },
   "ok": true,
   "report_type": "librechat-pass-through-eval",
+  "retry_status_2026_09_19": {
+    "containers_created": false,
+    "images_present": [
+      "mongo:8.0.20",
+      "getmeili/meilisearch:v1.35.1"
+    ],
+    "remaining_blocker": "registry.librechat.ai/danny-avila/librechat-dev:latest",
+    "targeted_digest_attempted": "registry.librechat.ai/danny-avila/librechat-dev@sha256:ec8be20a8aaec930ba84a68e98d8cd98c5e104c0961571661b9781df03707fd6"
+  },
   "trial_config": {
     "compose": "deploy/compose/librechat/compose.yaml",
     "config": "deploy/compose/librechat/librechat.yaml",

@@ -113,6 +113,13 @@ sit behind Director policy; Director routing must tolerate those nodes being
 unavailable and use configured fallback paths instead of fabricating an answer.
 OpenRouter fallback requires a configured API key and approved model allowlist.
 
+Open WebUI, OpenCode, and OpenCodex are canonical installed operator surfaces,
+not optional experiments. They should be present, smoke-tested, and documented
+as functioning on the Freyja machines that own them. For model access they may
+point directly at Vulcan's private OpenAI-compatible endpoints; Atlas Director
+policy still owns household authorization, memory, messaging, and tool
+boundaries.
+
 The Signal connector deployment uses
 [`bbernhard/signal-cli-rest-api`](https://github.com/bbernhard/signal-cli-rest-api)
 in `native` mode on Atlas: a transport adapter polls its receive endpoint,

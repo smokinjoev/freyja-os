@@ -1,0 +1,64 @@
+model:
+  default: vulcan-general
+  provider: custom:litellm-local
+  context_length: 65536
+
+providers:
+  litellm-local:
+    name: LiteLLM Local
+    api: http://litellm:4000/v1
+    key_env: OPENAI_API_KEY
+    default_model: vulcan-general
+    transport: chat_completions
+    models:
+      vulcan-general:
+        context_length: 65536
+
+mcp_servers:
+  freyja-core-gateway:
+    url: http://host.docker.internal:8766/mcp
+    headers:
+      Authorization: Bearer ${FREYJA6_CORE_MCP_TOKEN}
+    enabled: true
+    timeout: 30
+    connect_timeout: 10
+    supports_parallel_tool_calls: false
+    tools:
+      include: [tools.search, tools.profile, tools.call]
+      resources: false
+      prompts: false
+
+platform_toolsets:
+  cli:
+    - freyja-core-gateway
+    - delegation
+  # Discord starts as final-only. no_mcp is required because Hermes otherwise
+  # re-adds globally enabled MCP servers to an empty platform toolset list.
+  discord: [no_mcp]
+
+streaming:
+  enabled: false
+  transport: "off"
+
+display:
+  platforms:
+    discord:
+      streaming: false
+      tool_progress: false
+
+agent:
+  disabled_toolsets:
+    - kanban
+
+# Freyja 6.1 runs flat, private subagent delegation behind the Discord parent.
+delegation:
+  max_concurrent_children: 2
+  max_spawn_depth: 1
+  orchestrator_enabled: true
+
+terminal:
+  backend: local
+  cwd: /workspace/repo
+  timeout: 180
+  docker_mount_cwd_to_workspace: false
+  lifetime_seconds: 300

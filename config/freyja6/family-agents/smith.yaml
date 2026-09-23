@@ -1,0 +1,10 @@
+agents:
+  - id: smith
+    display_name: Agent Smith
+    purpose: Agent Smith personal agent.
+    identity_file: /var/lib/hermes/agents/smith/identity.md
+    sessions_dir: /var/lib/hermes/agents/smith/sessions
+    memory: {provider: hermes-native, private_dir: /var/lib/hermes/agents/smith/memory/private, shared_household_dir: null}
+    tools: {mcp: {enabled: true, config_file: /etc/hermes/mcp/family.json}, terminal: {enabled: false}}
+    messaging: {gateway: discord, channel_scope: dedicated-smith-channel, credentials_source: environment, env: {token: DISCORD_BOT_TOKEN, channel_id: DISCORD_HOME_CHANNEL}}
+    schedules: {enabled: false}

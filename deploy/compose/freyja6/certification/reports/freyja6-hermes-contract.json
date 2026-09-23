@@ -1,0 +1,53 @@
+{
+  "checks": [
+    {
+      "id": "source_files",
+      "message": "Hermes runtime contract source files are present.",
+      "status": "pass"
+    },
+    {
+      "id": "service",
+      "message": "Hermes compose service matches the runtime contract.",
+      "status": "pass"
+    },
+    {
+      "id": "environment",
+      "message": "Hermes environment matches the runtime contract.",
+      "status": "pass"
+    },
+    {
+      "id": "mounts",
+      "message": "Hermes mounts satisfy the runtime contract.",
+      "status": "pass"
+    },
+    {
+      "id": "agent_paths",
+      "message": "Agent persistence and filesystem paths match the runtime contract.",
+      "status": "pass"
+    },
+    {
+      "id": "mcp",
+      "message": "MCP runtime contract is satisfied.",
+      "status": "pass"
+    },
+    {
+      "id": "schedules",
+      "message": "Schedule runtime contract is satisfied.",
+      "status": "pass"
+    },
+    {
+      "id": "logging",
+      "message": "Logging paths match the Hermes runtime contract.",
+      "status": "pass"
+    }
+  ],
+  "failures": [],
+  "next_actions": [
+    "Use this contract when verifying or adapting the pinned Hermes Agent image."
+  ],
+  "ok": true,
+  "report_type": "freyja6-hermes-contract",
+  "schema_version": "1.0",
+  "status": "ready",
+  "timestamp": "2026-09-20T22:33:18.807450+00:00"
+}

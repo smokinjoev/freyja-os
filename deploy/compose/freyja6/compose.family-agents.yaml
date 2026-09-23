@@ -1,0 +1,152 @@
+# Opt-in overlay. Invoke with compose.yaml only after family-discord.env exists.
+services:
+  hermes-freyja:
+    image: ${HERMES_AGENT_IMAGE}
+    restart: unless-stopped
+    command: ["gateway"]
+    depends_on:
+      litellm: {condition: service_healthy}
+    environment:
+      HERMES_AGENT_ID: freyja
+      HERMES_AGENT_CONFIG: /etc/hermes/agents/freyja.yaml
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      HERMES_DEFAULT_MODEL: vulcan-fast
+      DISCORD_BOT_TOKEN: ${FREYJA6_FREYJA_DISCORD_BOT_TOKEN}
+      DISCORD_HOME_CHANNEL: ${FREYJA6_FREYJA_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOWED_CHANNELS: ${FREYJA6_FREYJA_DISCORD_CHANNEL_ID}
+      DISCORD_FREE_RESPONSE_CHANNELS: ${FREYJA6_FREYJA_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOW_ALL_USERS: "true"
+      FREYJA6_CORE_MCP_TOKEN: ${FREYJA6_FREYJA_CORE_MCP_TOKEN}
+    volumes:
+      - ../../..:/workspace/repo:ro
+      - ../../../config/freyja6/hermes-family-config.yaml:/opt/data/config.yaml:ro
+      - ../../../config/freyja6/family-agents/freyja.yaml:/etc/hermes/agents/freyja.yaml:ro
+      - ../../../config/freyja6/mcp/family.json:/etc/hermes/mcp/family.json:ro
+      - /Users/freyja/.local/share/freyja6/family-agents/freyja:/var/lib/hermes
+      - /Users/freyja/.local/state/freyja6/family-agents/freyja:/var/log/freyja6
+    labels:
+      freyja.platform: "6.1"
+      freyja.agent: "freyja"
+      freyja.core-policy: "freyja"
+      freyja.activation: "family-discord"
+  hermes-cloyd:
+    image: ${HERMES_AGENT_IMAGE}
+    restart: unless-stopped
+    command: ["gateway"]
+    depends_on:
+      litellm: {condition: service_healthy}
+    environment:
+      HERMES_AGENT_ID: cloyd
+      HERMES_AGENT_CONFIG: /etc/hermes/agents/cloyd.yaml
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      HERMES_DEFAULT_MODEL: vulcan-fast
+      DISCORD_BOT_TOKEN: ${FREYJA6_CLOYD_DISCORD_BOT_TOKEN}
+      DISCORD_HOME_CHANNEL: ${FREYJA6_CLOYD_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOWED_CHANNELS: ${FREYJA6_CLOYD_DISCORD_CHANNEL_ID}
+      DISCORD_FREE_RESPONSE_CHANNELS: ${FREYJA6_CLOYD_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOW_ALL_USERS: "true"
+      FREYJA6_CORE_MCP_TOKEN: ${FREYJA6_CLOYD_CORE_MCP_TOKEN}
+    volumes:
+      - ../../..:/workspace/repo:ro
+      - ../../../config/freyja6/hermes-family-config.yaml:/opt/data/config.yaml:ro
+      - ../../../config/freyja6/family-agents/cloyd.yaml:/etc/hermes/agents/cloyd.yaml:ro
+      - ../../../config/freyja6/mcp/family.json:/etc/hermes/mcp/family.json:ro
+      - /Users/freyja/.local/share/freyja6/family-agents/cloyd:/var/lib/hermes
+      - /Users/freyja/.local/state/freyja6/family-agents/cloyd:/var/log/freyja6
+    labels:
+      freyja.platform: "6.1"
+      freyja.agent: "cloyd"
+      freyja.core-policy: "cloyd-gibbler"
+      freyja.activation: "family-discord"
+  hermes-benedict:
+    image: ${HERMES_AGENT_IMAGE}
+    restart: unless-stopped
+    command: ["gateway"]
+    depends_on:
+      litellm: {condition: service_healthy}
+    environment:
+      HERMES_AGENT_ID: benedict
+      HERMES_AGENT_CONFIG: /etc/hermes/agents/benedict.yaml
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      HERMES_DEFAULT_MODEL: vulcan-fast
+      DISCORD_BOT_TOKEN: ${FREYJA6_BENEDICT_DISCORD_BOT_TOKEN}
+      DISCORD_HOME_CHANNEL: ${FREYJA6_BENEDICT_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOWED_CHANNELS: ${FREYJA6_BENEDICT_DISCORD_CHANNEL_ID}
+      DISCORD_FREE_RESPONSE_CHANNELS: ${FREYJA6_BENEDICT_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOW_ALL_USERS: "true"
+      FREYJA6_CORE_MCP_TOKEN: ${FREYJA6_BENEDICT_CORE_MCP_TOKEN}
+    volumes:
+      - ../../..:/workspace/repo:ro
+      - ../../../config/freyja6/hermes-family-config.yaml:/opt/data/config.yaml:ro
+      - ../../../config/freyja6/family-agents/benedict.yaml:/etc/hermes/agents/benedict.yaml:ro
+      - ../../../config/freyja6/mcp/family.json:/etc/hermes/mcp/family.json:ro
+      - /Users/freyja/.local/share/freyja6/family-agents/benedict:/var/lib/hermes
+      - /Users/freyja/.local/state/freyja6/family-agents/benedict:/var/log/freyja6
+    labels:
+      freyja.platform: "6.1"
+      freyja.agent: "benedict"
+      freyja.core-policy: "benedict"
+      freyja.activation: "family-discord"
+  hermes-agent-44:
+    image: ${HERMES_AGENT_IMAGE}
+    restart: unless-stopped
+    command: ["gateway"]
+    depends_on:
+      litellm: {condition: service_healthy}
+    environment:
+      HERMES_AGENT_ID: agent-44
+      HERMES_AGENT_CONFIG: /etc/hermes/agents/agent-44.yaml
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      HERMES_DEFAULT_MODEL: vulcan-fast
+      DISCORD_BOT_TOKEN: ${FREYJA6_AGENT_44_DISCORD_BOT_TOKEN}
+      DISCORD_HOME_CHANNEL: ${FREYJA6_AGENT_44_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOWED_CHANNELS: ${FREYJA6_AGENT_44_DISCORD_CHANNEL_ID}
+      DISCORD_FREE_RESPONSE_CHANNELS: ${FREYJA6_AGENT_44_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOW_ALL_USERS: "true"
+      FREYJA6_CORE_MCP_TOKEN: ${FREYJA6_AGENT_44_CORE_MCP_TOKEN}
+    volumes:
+      - ../../..:/workspace/repo:ro
+      - ../../../config/freyja6/hermes-family-config.yaml:/opt/data/config.yaml:ro
+      - ../../../config/freyja6/family-agents/agent-44.yaml:/etc/hermes/agents/agent-44.yaml:ro
+      - ../../../config/freyja6/mcp/family.json:/etc/hermes/mcp/family.json:ro
+      - /Users/freyja/.local/share/freyja6/family-agents/agent-44:/var/lib/hermes
+      - /Users/freyja/.local/state/freyja6/family-agents/agent-44:/var/log/freyja6
+    labels:
+      freyja.platform: "6.1"
+      freyja.agent: "agent-44"
+      freyja.core-policy: "agent-47"
+      freyja.activation: "family-discord"
+  hermes-smith:
+    image: ${HERMES_AGENT_IMAGE}
+    restart: unless-stopped
+    command: ["gateway"]
+    depends_on:
+      litellm: {condition: service_healthy}
+    environment:
+      HERMES_AGENT_ID: smith
+      HERMES_AGENT_CONFIG: /etc/hermes/agents/smith.yaml
+      OPENAI_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      HERMES_DEFAULT_MODEL: vulcan-fast
+      DISCORD_BOT_TOKEN: ${FREYJA6_SMITH_DISCORD_BOT_TOKEN}
+      DISCORD_HOME_CHANNEL: ${FREYJA6_SMITH_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOWED_CHANNELS: ${FREYJA6_SMITH_DISCORD_CHANNEL_ID}
+      DISCORD_FREE_RESPONSE_CHANNELS: ${FREYJA6_SMITH_DISCORD_CHANNEL_ID}
+      DISCORD_ALLOW_ALL_USERS: "true"
+      FREYJA6_CORE_MCP_TOKEN: ${FREYJA6_SMITH_CORE_MCP_TOKEN}
+    volumes:
+      - ../../..:/workspace/repo:ro
+      - ../../../config/freyja6/hermes-family-config.yaml:/opt/data/config.yaml:ro
+      - ../../../config/freyja6/family-agents/smith.yaml:/etc/hermes/agents/smith.yaml:ro
+      - ../../../config/freyja6/mcp/family.json:/etc/hermes/mcp/family.json:ro
+      - /Users/freyja/.local/share/freyja6/family-agents/smith:/var/lib/hermes
+      - /Users/freyja/.local/state/freyja6/family-agents/smith:/var/log/freyja6
+    labels:
+      freyja.platform: "6.1"
+      freyja.agent: "smith"
+      freyja.core-policy: "smith"
+      freyja.activation: "family-discord"

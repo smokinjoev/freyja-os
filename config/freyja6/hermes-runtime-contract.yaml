@@ -1,0 +1,77 @@
+schema_version: "1.0"
+contract_id: freyja6-hermes-runtime-contract
+platform: Freyja 6.0
+phase: validation
+agent_id: freyja-test
+
+service:
+  name: hermes-freyja-test
+  image_env: HERMES_AGENT_IMAGE
+  restart_policy: unless-stopped
+  depends_on:
+    litellm: service_healthy
+
+required_environment:
+  HERMES_AGENT_ID: freyja-test
+  HERMES_AGENT_CONFIG: /etc/hermes/agents/freyja-test.yaml
+  OPENAI_BASE_URL: http://litellm:4000/v1
+  OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+  HERMES_DEFAULT_MODEL: vulcan-general
+  HERMES_COMPACT_DELEGATION_SCHEMA: '1'
+  FREYJA6_DISCORD_BOT_TOKEN: ${FREYJA6_DISCORD_BOT_TOKEN}
+  FREYJA6_DISCORD_CHANNEL_ID: ${FREYJA6_DISCORD_CHANNEL_ID}
+  DISCORD_BOT_TOKEN: ${FREYJA6_DISCORD_BOT_TOKEN}
+  DISCORD_HOME_CHANNEL: ${FREYJA6_DISCORD_CHANNEL_ID}
+  DISCORD_ALLOWED_CHANNELS: ${FREYJA6_DISCORD_CHANNEL_ID}
+  DISCORD_FREE_RESPONSE_CHANNELS: ${FREYJA6_DISCORD_CHANNEL_ID}
+  DISCORD_ALLOW_ALL_USERS: "true"
+  FREYJA6_CORE_MCP_TOKEN: ${FREYJA6_CORE_MCP_TOKEN}
+  FREYJA6_TERMINAL_MCP_TOKEN: ${FREYJA6_TERMINAL_MCP_TOKEN}
+
+required_mounts:
+  - source: ../../..
+    target: /workspace/repo
+    mode: ro
+  - source: ../../../config/freyja6/hermes-config.yaml
+    target: /opt/data/config.yaml
+    mode: ro
+  - source: ../../../config/freyja6/freyja-test.yaml
+    target: /etc/hermes/agents/freyja-test.yaml
+    mode: ro
+  - source: ../../../config/freyja6/mcp/freyja-test.json
+    target: /etc/hermes/mcp/freyja-test.json
+    mode: ro
+  - source: ../../../config/freyja6/schedules.yaml
+    target: /etc/hermes/schedules/freyja-test.yaml
+    mode: ro
+  - source_env: FREYJA6_APPROVED_FILES_ROOT
+    target: /workspace/approved
+    mode: ro
+  - source_env: FREYJA6_HERMES_DATA
+    target: /var/lib/hermes
+    mode: rw
+  - source_env: FREYJA6_LOG_ROOT
+    target: /var/log/freyja6
+    mode: rw
+
+runtime_paths:
+  identity_file: /var/lib/hermes/agents/freyja-test/identity.md
+  sessions_dir: /var/lib/hermes/agents/freyja-test/sessions
+  private_memory_dir: /var/lib/hermes/agents/freyja-test/memory/private
+  hermes_config_file: /opt/data/config.yaml
+  mcp_config_file: /etc/hermes/mcp/freyja-test.json
+  schedules_file: /etc/hermes/schedules/freyja-test.yaml
+  approved_files_root: /workspace/approved
+  tool_log: /var/log/freyja6/freyja-test-tools.jsonl
+  model_log: /var/log/freyja6/freyja-test-model-calls.jsonl
+  acceptance_log: /var/log/freyja6/freyja-test-acceptance.jsonl
+
+startup_obligations:
+  - Load the agent config from HERMES_AGENT_CONFIG.
+  - Use OPENAI_BASE_URL and OPENAI_API_KEY for all model calls through LiteLLM.
+  - Persist identity, sessions, and private memory under /var/lib/hermes.
+  - Scope Discord handling to FREYJA6_DISCORD_CHANNEL_ID only.
+  - Load MCP servers from /etc/hermes/mcp/freyja-test.json.
+  - Load schedules from /etc/hermes/schedules/freyja-test.yaml.
+  - Append redacted JSONL tool and model-call records under /var/log/freyja6.
+  - Treat /workspace/approved as read-only filesystem access.

@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "report_type": "freyja6-live-evidence",
+  "restart_validation_prepared": {
+    "agent_id": "freyja-test",
+    "identity_before": "sha256:...",
+    "session_id": "session-validation",
+    "stored_fact_label": "freyja6-validation-basement-cleanup",
+    "memory_fact_file_redacted": "hermes/agents/freyja-test/memory/private/freyja6-validation-fact.json",
+    "prepared_at": "2026-09-19T10:00:00+00:00"
+  },
+  "acceptance": {
+    "discord_reply": {
+      "status": "complete",
+      "captured_at": "2026-09-19T10:05:00+00:00",
+      "source": "freyja6-discord-smoke",
+      "evidence": {
+        "discord_channel_id_redacted": "discord-channel-...1234",
+        "message_trace_id": "trace-...",
+        "reply_trace_id": "trace-reply-...",
+        "verification_method": "discord-api"
+      }
+    },
+    "restart_identity_session": {
+      "status": "complete",
+      "captured_at": "2026-09-19T10:10:00+00:00",
+      "source": "freyja6-restart-evidence",
+      "evidence": {
+        "restart_trace_id": "trace-...",
+        "identity_before": "sha256:...",
+        "identity_after": "sha256:...",
+        "session_restored": true
+      }
+    }
+  }
+}

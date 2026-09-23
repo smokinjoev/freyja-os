@@ -15,8 +15,8 @@ from freyja.freyja5_config import (
     freyja5_readiness_ok,
     freyja5_vulcan_evidence,
 )
-from freyja.freyja3_memory import Freyja3MemoryQuery, Freyja3MemoryStore
-from freyja.foundation_models import SecurityDomainId
+from freyja.freyja3_memory import Freyja3MemoryQuery, Freyja3MemoryStore, Freyja3MemoryWrite
+from freyja.foundation_models import MemoryClassification, MemoryScope, SecurityDomainId
 from freyja.router import RoutingDecision, RoutingResult, router
 from freyja.tools.models import ToolExecutionResult
 
@@ -837,6 +837,46 @@ def test_openai_agent_chat_writes_explicit_memory(monkeypatch, tmp_path) -> None
         for memory in memories
     )
     assert response.json()["freyja"]["trace"]["channel"] == "open-webui"
+
+
+def test_openai_cloyd_chat_recalls_durable_memory(monkeypatch, tmp_path) -> None:
+    from freyja import main as director_main
+    from freyja.config import settings
+
+    memory_store = Freyja3MemoryStore(tmp_path / "freyja3-memory.db")
+    memory_store.put(
+        Freyja3MemoryWrite(
+            owner_domain_id=SecurityDomainId.PERSON_JOE,
+            scope=MemoryScope.PERSONAL,
+            source_agent_id="cloyd-gibbler",
+            content="Joe wants durable-memory status called out explicitly.",
+            provenance="unit-test",
+            classification=MemoryClassification.PRIVATE,
+        ),
+        writer_domain_id=SecurityDomainId.PERSON_JOE,
+    )
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    monkeypatch.setattr(settings, "freyja5_openai_live_inference_enabled", False)
+    monkeypatch.setattr(director_main, "freyja3_memory_store", memory_store)
+
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer test-connector-token"},
+        json={
+            "model": "agent/cloyd-gibbler",
+            "user": "joe",
+            "messages": [{"role": "user", "content": "What do you remember about status style?"}],
+            "stream": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    content = data["choices"][0]["message"]["content"]
+    assert "with 1 recalled memory record(s)" in content
+    assert data["freyja"]["agent"] == "cloyd-gibbler"
+    assert data["freyja"]["trace"]["recalled_memory_count"] == 1
+    assert data["freyja"]["trace"]["recalled_memories"][0]["content"] == "Joe wants durable-memory status called out explicitly."
 
 
 def test_openai_agent_chat_executes_home_assistant_read_tool(monkeypatch) -> None:

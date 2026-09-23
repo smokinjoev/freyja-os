@@ -1,0 +1,25 @@
+schema_version: "1.0"
+parent_profile: freyja61-parent
+roles:
+  - id: research
+    purpose: Gather and summarize bounded information for the parent.
+    allowed_core_tools: [status.check, memory.search]
+    direct_credentials: false
+    durable_memory_write: false
+    discord_delivery: false
+  - id: household
+    purpose: Plan household work and read approved live state for the parent.
+    allowed_core_tools: [status.check, calendar.resolve_date, calendar.list_events, home_assistant.read_state, home_assistant.list_states, memory.search]
+    direct_credentials: false
+    durable_memory_write: false
+    discord_delivery: false
+  - id: coding
+    purpose: Prepare bounded coding work through the parent-approved Core workflow.
+    allowed_core_tools: [status.check, opencode.status, opencode.read, memory.search]
+    direct_credentials: false
+    durable_memory_write: false
+    discord_delivery: false
+invariants:
+  - Roles are ephemeral Hermes children, not named household agents.
+  - Children cannot delegate, create Discord messages, or access raw endpoint credentials.
+  - Only the parent may request an approved write through Freyja Core.

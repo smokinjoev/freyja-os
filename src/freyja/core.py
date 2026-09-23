@@ -25,6 +25,8 @@ from freyja.macagent import MacAgentClient
 from freyja.memory.models import MemoryPrincipal, PutSharedMemoryRequest
 from freyja.memory.store import get_store
 from freyja.tools.calendar import get_calendar_service
+from freyja.tools.home_assistant import _list_states as _home_assistant_list_states
+from freyja.tools.home_assistant import _read_state as _home_assistant_read_state
 from freyja.tools.models import ToolExecutionRequest
 from freyja.tools.opencode_runtime import (
     _opencode_output,
@@ -43,8 +45,11 @@ DEFAULT_TIMEZONE = "America/New_York"
 CORE_TOOL_NAMES = (
     "status.check",
     "calendar.resolve_date",
+    "calendar.list_events",
     "calendar.create_event",
     "calendar.delete_event",
+    "home_assistant.read_state",
+    "home_assistant.list_states",
     "opencode.start",
     "opencode.stop",
     "opencode.status",
@@ -223,10 +228,16 @@ async def call_tool(tool: str, arguments: dict[str, Any] | None = None) -> dict[
             return await status_check()
         if tool == "calendar.resolve_date":
             return resolve_date_tool(arguments)
+        if tool == "calendar.list_events":
+            return await list_calendar_events_tool(arguments)
         if tool == "calendar.create_event":
             return await create_calendar_event_tool(arguments)
         if tool == "calendar.delete_event":
             return await delete_calendar_event_tool(arguments)
+        if tool == "home_assistant.read_state":
+            return await home_assistant_read_state_tool(arguments)
+        if tool == "home_assistant.list_states":
+            return await home_assistant_list_states_tool(arguments)
         if tool.startswith("opencode."):
             return await opencode_tool(tool, arguments)
         if tool == "memory.search":
@@ -299,6 +310,23 @@ async def create_calendar_event_tool(arguments: dict[str, Any]) -> dict[str, Any
     return {"ok": True, "event": event.to_dict()}
 
 
+async def list_calendar_events_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    missing = [name for name in ("start", "end") if not str(arguments.get(name) or "").strip()]
+    if missing:
+        return {"ok": False, "error": "calendar.list_events missing required field(s): " + ", ".join(missing)}
+    start = parse_datetime(str(arguments["start"]))
+    end = parse_datetime(str(arguments["end"]))
+    if end <= start:
+        return {"ok": False, "error": "calendar.list_events requires end after start."}
+    events = await get_calendar_service().list_events(
+        start=start,
+        end=end,
+        member_ids=arguments.get("member_ids"),
+        calendar_ids=arguments.get("calendar_ids"),
+    )
+    return {"ok": True, "count": len(events), "events": [event.to_dict() for event in events]}
+
+
 async def delete_calendar_event_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     event_id = str(arguments.get("event_id") or "").strip()
     approval = str(arguments.get("approval") or "").strip()
@@ -345,6 +373,20 @@ def memory_write_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     )
     memory = get_store().put_shared_memory(_memory_principal(arguments), request)
     return {"ok": True, "memory": memory.model_dump(mode="json")}
+
+
+async def home_assistant_read_state_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    result = await _home_assistant_read_state(
+        ToolExecutionRequest(tool_name="home_assistant_read_state", arguments=arguments, actor="freyja-core")
+    )
+    return {"ok": "error" not in result, **result}
+
+
+async def home_assistant_list_states_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    result = await _home_assistant_list_states(
+        ToolExecutionRequest(tool_name="home_assistant_list_states", arguments=arguments, actor="freyja-core")
+    )
+    return {"ok": True, **result}
 
 
 async def run_core_loop(prompt: str, *, max_iterations: int | None = None) -> dict[str, Any]:

@@ -1,0 +1,4 @@
+Freyja 6 approved filesystem smoke file.
+
+This file is safe for freyja-test to read during Phase 1 validation.
+It contains no private household data and no credentials.

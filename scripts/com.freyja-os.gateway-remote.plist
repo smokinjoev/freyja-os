@@ -23,8 +23,6 @@
         <string>--client-option</string>
         <string>fontSize=13</string>
         <string>--client-option</string>
-        <string>disableReconnect=true</string>
-        <string>--client-option</string>
         <string>fontFamily=ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace</string>
         <string>/Users/freyja/freyja-os/scripts/run-agent-smith-qwen.sh</string>
     </array>

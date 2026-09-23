@@ -170,6 +170,8 @@ async def require_connector_auth(request: Request, call_next):
         or request.url.path in public_paths
         or request.url.path == "/road"
         or request.url.path.startswith("/road/")
+        or request.url.path == "/paralegal"
+        or request.url.path.startswith("/paralegal/")
         or request.url.path.startswith("/agent-runs/")
     ):
         return await call_next(request)

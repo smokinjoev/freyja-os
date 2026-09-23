@@ -1,0 +1,22 @@
+schema_version: "1.0"
+stores:
+  - id: msty-go-named-agent-memory
+    owner: msty-go
+    scope: existing named-agent workspaces and freyja5-shared-household
+    access: preserved-no-direct-hermes-write
+  - id: hermes-parent-private-memory
+    owner: hermes
+    scope: Discord session continuity and Freyja operational notes
+    access: parent-private
+  - id: freyja-core-shared-memory
+    owner: freyja-core
+    scope: explicitly authorized cross-runtime household facts
+    access: parent-mediated
+write_policy:
+  - Child roles may propose facts but cannot write durable memory.
+  - The Hermes parent may write Core shared memory only after explicit user intent or an approved policy action.
+  - Hermes must never write directly to the Msty Go database.
+future_bridge:
+  state: design-only
+  direction: msty-go-to-freyja-core-read-only
+  requirements: [stable-id, provenance, authorization, deduplication, backup, rollback]

@@ -1,0 +1,82 @@
+{
+  "acceptance": {
+    "litellm_to_vulcan": {
+      "captured_at": "2026-09-21T17:50:10.627069+00:00",
+      "evidence": {
+        "litellm_request_id": "freyja6-litellm-6d343b883dd3-1",
+        "model": "vulcan-fast",
+        "response_model": "vulcan-fast",
+        "vulcan_backend": "http://atlas-loopback:4600/v1"
+      },
+      "source": "freyja6-litellm-smoke",
+      "status": "complete"
+    },
+    "model_switch": {
+      "captured_at": "2026-09-21T17:50:10.627069+00:00",
+      "evidence": {
+        "gateway_trace_ids": [
+          "freyja6-litellm-6d343b883dd3-1",
+          "freyja6-litellm-6d343b883dd3-2",
+          "freyja6-litellm-6d343b883dd3-3"
+        ],
+        "listed_models": [
+          "vulcan-code",
+          "vulcan-fast",
+          "vulcan-general"
+        ],
+        "models_tested": [
+          "vulcan-fast",
+          "vulcan-general",
+          "vulcan-code"
+        ],
+        "response_models": [
+          "vulcan-fast",
+          "vulcan-general",
+          "vulcan-code"
+        ]
+      },
+      "source": "freyja6-litellm-smoke",
+      "status": "complete"
+    }
+  },
+  "last_litellm_smoke": {
+    "base_url_redacted": "http://atlas-loopback:4600/v1",
+    "listed_models": [
+      "vulcan-code",
+      "vulcan-fast",
+      "vulcan-general"
+    ],
+    "results": [
+      {
+        "finish_reason": "stop",
+        "model": "vulcan-fast",
+        "ok": true,
+        "response_model": "vulcan-fast",
+        "response_text": "gateway ok",
+        "status_code": 200,
+        "trace_id": "freyja6-litellm-6d343b883dd3-1"
+      },
+      {
+        "finish_reason": "stop",
+        "model": "vulcan-general",
+        "ok": true,
+        "response_model": "vulcan-general",
+        "response_text": "gateway ok",
+        "status_code": 200,
+        "trace_id": "freyja6-litellm-6d343b883dd3-2"
+      },
+      {
+        "finish_reason": "stop",
+        "model": "vulcan-code",
+        "ok": true,
+        "response_model": "vulcan-code",
+        "response_text": "gateway ok",
+        "status_code": 200,
+        "trace_id": "freyja6-litellm-6d343b883dd3-3"
+      }
+    ],
+    "timestamp": "2026-09-21T17:50:10.627069+00:00"
+  },
+  "report_type": "freyja6-live-evidence",
+  "schema_version": "1.0"
+}

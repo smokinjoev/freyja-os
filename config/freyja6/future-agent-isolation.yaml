@@ -1,0 +1,91 @@
+phase: reservation_only
+live_agents:
+  - freyja-test
+future_agents:
+  - display_name: Freyja
+    slug: freyja
+    status: reserved
+    identity_file: /var/lib/hermes/agents/freyja/identity.md
+    sessions_dir: /var/lib/hermes/agents/freyja/sessions
+    private_memory_dir: /var/lib/hermes/agents/freyja/memory/private
+    shared_memory: authorized_household_only
+    credentials_env_prefix: FREYJA6_FREYJA
+    messaging:
+      gateway: discord
+      token_env: FREYJA6_FREYJA_DISCORD_BOT_TOKEN
+      channel_env: FREYJA6_FREYJA_DISCORD_CHANNEL_ID
+    mcp_token_env: FREYJA6_FREYJA_CORE_MCP_TOKEN
+    tool_profile: future-home-coordinator
+    role: household_coordinator
+    activation_model: standalone
+  - display_name: Cloyd
+    slug: cloyd
+    status: reserved
+    identity_file: /var/lib/hermes/agents/cloyd/identity.md
+    sessions_dir: /var/lib/hermes/agents/cloyd/sessions
+    private_memory_dir: /var/lib/hermes/agents/cloyd/memory/private
+    shared_memory: authorized_household_only
+    credentials_env_prefix: FREYJA6_CLOYD
+    messaging:
+      gateway: discord
+      token_env: FREYJA6_CLOYD_DISCORD_BOT_TOKEN
+      channel_env: FREYJA6_CLOYD_DISCORD_CHANNEL_ID
+    mcp_token_env: FREYJA6_CLOYD_CORE_MCP_TOKEN
+    tool_profile: future-personal-agent
+    owner: joe
+    activation_model: standalone
+  - display_name: Benedict
+    slug: benedict
+    status: reserved
+    identity_file: /var/lib/hermes/agents/benedict/identity.md
+    sessions_dir: /var/lib/hermes/agents/benedict/sessions
+    private_memory_dir: /var/lib/hermes/agents/benedict/memory/private
+    shared_memory: authorized_household_only
+    credentials_env_prefix: FREYJA6_BENEDICT
+    messaging:
+      gateway: discord
+      token_env: FREYJA6_BENEDICT_DISCORD_BOT_TOKEN
+      channel_env: FREYJA6_BENEDICT_DISCORD_CHANNEL_ID
+    mcp_token_env: FREYJA6_BENEDICT_CORE_MCP_TOKEN
+    tool_profile: future-personal-agent
+    owner: beth
+    activation_model: standalone
+  - display_name: Agent 44
+    slug: agent-44
+    status: reserved
+    identity_file: /var/lib/hermes/agents/agent-44/identity.md
+    sessions_dir: /var/lib/hermes/agents/agent-44/sessions
+    private_memory_dir: /var/lib/hermes/agents/agent-44/memory/private
+    shared_memory: authorized_household_only
+    credentials_env_prefix: FREYJA6_AGENT_44
+    messaging:
+      gateway: discord
+      token_env: FREYJA6_AGENT_44_DISCORD_BOT_TOKEN
+      channel_env: FREYJA6_AGENT_44_DISCORD_CHANNEL_ID
+    mcp_token_env: FREYJA6_AGENT_44_CORE_MCP_TOKEN
+    tool_profile: future-personal-agent
+    owner: liam
+    activation_model: standalone
+  - display_name: Agent Smith
+    slug: smith
+    status: reserved
+    identity_file: /var/lib/hermes/agents/smith/identity.md
+    sessions_dir: /var/lib/hermes/agents/smith/sessions
+    private_memory_dir: /var/lib/hermes/agents/smith/memory/private
+    shared_memory: authorized_household_only
+    credentials_env_prefix: FREYJA6_SMITH
+    messaging:
+      gateway: discord
+      token_env: FREYJA6_SMITH_DISCORD_BOT_TOKEN
+      channel_env: FREYJA6_SMITH_DISCORD_CHANNEL_ID
+    mcp_token_env: FREYJA6_SMITH_CORE_MCP_TOKEN
+    tool_profile: future-personal-agent
+    owner: household
+    activation_model: standalone
+invariants:
+  - Future agents are reservations only during Phase 1.
+  - Do not add Hermes services, Discord credentials, schedules, or MCP config files for reserved agents yet.
+  - Every future agent must keep separate identity, session, private memory, credentials, MCP token, and messaging channel boundaries.
+  - Shared household memory is opt-in and authorized after freyja-test proves the base stack.
+  - Freyja is the shared household coordinator; Cloyd, Benedict, Agent 44, and Agent Smith are standalone personal agents, never Hermes children of Freyja or each other.
+  - The paralegal enclave is agentless unless a separate activation decision creates an enclave-specific agent.

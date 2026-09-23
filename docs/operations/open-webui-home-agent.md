@@ -462,7 +462,7 @@ The export contains:
 
 - `Freyja Household` Knowledge for stable household/device/procedure information.
 - `Freyja Projects` Knowledge for Freyja OS architecture and runbooks.
-- `Benedict Restricted` Knowledge for Beth-authorized local paralegal material only.
+- `Benedict Restricted` Knowledge for Beth-authorized restricted material only. The paralegal enclave is separate and agentless unless explicitly activated.
 - Native Open WebUI per-user memory policy for Joe, Beth, Liam, and Jenna.
 - Narrow MCP/OpenAPI tool boundaries for Iris, Home Assistant, weather, household files, infrastructure health, PDF/image analysis, and `freyja-home-memory`.
 - Atlas-side `/open-webui-tools` policy gateway for Open WebUI tool calls.

@@ -1,0 +1,69 @@
+agent_id: freyja-test
+phase: validation
+default_policy: deny
+tool_targets:
+  filesystem:
+    status: configured
+    boundary: docker_bind_mount
+    mode: read_only
+    approved_roots:
+      - /workspace/approved
+    acceptance:
+      - approved_file_read
+  terminal:
+    status: configured
+    boundary: mcp
+    server: freyja-terminal
+    safe_commands:
+      - pwd
+      - date
+      - whoami
+      - ls
+      - rg
+    acceptance:
+      - safe_terminal
+  mcp:
+    status: configured
+    boundary: hermes_mcp_client
+    config_file: /etc/hermes/mcp/freyja-test.json
+    servers:
+      - freyja-core-gateway
+      - freyja-terminal
+    acceptance:
+      - mcp_tool
+  calendar:
+    status: configured
+    boundary: mcp
+    server: freyja-core-gateway
+    gateway_tool: tools.call
+    core_tools:
+      - calendar.list_events
+      - calendar.resolve_date
+      - calendar.create_event
+    acceptance:
+      - calendar_read
+      - calendar_create_event
+  home_assistant:
+    status: configured
+    boundary: mcp
+    server: freyja-core-gateway
+    gateway_tool: tools.call
+    core_tools:
+      - home_assistant.read_state
+      - home_assistant.list_states
+    acceptance:
+      - home_assistant_query
+  coding_agent:
+    status: configured
+    boundary: mcp
+    server: freyja-core-gateway
+    gateway_tool: tools.call
+    executor: opencode
+    core_tools:
+      - opencode.start
+      - opencode.status
+      - opencode.send
+      - opencode.read
+      - opencode.stop
+    acceptance:
+      - coding_workflow

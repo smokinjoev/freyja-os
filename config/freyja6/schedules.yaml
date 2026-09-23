@@ -1,0 +1,35 @@
+agent_id: freyja-test
+phase: validation
+timezone: America/New_York
+enabled_by_default: true
+schedules:
+  - id: freyja-test-health-heartbeat
+    kind: cron
+    cron: "*/15 * * * *"
+    enabled: true
+    purpose: Verify freyja-test can wake on schedule, inspect its tool boundary, and write a redacted heartbeat.
+    prompt: >
+      Run the Freyja 6 validation heartbeat. Check identity, session continuity,
+      LiteLLM model gateway reachability, MCP discovery, and approved tool logs.
+      Write only redacted trace IDs and status summaries to the acceptance log.
+    evidence:
+      acceptance_item: scheduled_validation
+      log: /var/log/freyja6/freyja-test-acceptance.jsonl
+  - id: freyja-test-daily-tool-smoke
+    kind: cron
+    cron: "17 7 * * *"
+    enabled: true
+    purpose: Run the daily non-mutating tool smoke for approved filesystem, terminal, MCP, calendar read, Home Assistant read, and coding status.
+    prompt: >
+      Run the Freyja 6 daily read-only tool smoke. Do not create calendar
+      events, modify files, control Home Assistant devices, or start migration.
+      Record redacted evidence for configured read-only tool paths.
+    evidence:
+      acceptance_items:
+        - approved_file_read
+        - safe_terminal
+        - mcp_tool
+        - calendar_read
+        - home_assistant_query
+        - coding_workflow
+      log: /var/log/freyja6/freyja-test-tools.jsonl

@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "freyja-core-gateway": {
+      "transport": "streamable_http",
+      "url": "http://host.docker.internal:8766/mcp",
+      "headers": {
+        "Authorization": "Bearer ${FREYJA6_CORE_MCP_TOKEN}"
+      },
+      "allowed_tools": [
+        "tools.search",
+        "tools.profile",
+        "tools.call"
+      ],
+      "notes": "Policy-aware Freyja Core gateway. The token maps to agent_id=freyja-test through FREYJA_MCP_AGENT_TOKENS_JSON."
+    },
+    "freyja-terminal": {
+      "transport": "streamable_http",
+      "url": "http://host.docker.internal:8765/mcp",
+      "headers": {
+        "Authorization": "Bearer ${FREYJA6_TERMINAL_MCP_TOKEN}"
+      },
+      "allowed_tools": [
+        "terminal_start",
+        "terminal_status",
+        "terminal_send",
+        "terminal_read",
+        "terminal_ctrl_c",
+        "terminal_stop"
+      ],
+      "notes": "Controlled terminal surface for safe command and coding executor validation."
+    }
+  }
+}

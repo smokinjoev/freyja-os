@@ -1,0 +1,10 @@
+agents:
+  - id: cloyd
+    display_name: Cloyd
+    purpose: Joe personal agent.
+    identity_file: /var/lib/hermes/agents/cloyd/identity.md
+    sessions_dir: /var/lib/hermes/agents/cloyd/sessions
+    memory: {provider: hermes-native, private_dir: /var/lib/hermes/agents/cloyd/memory/private, shared_household_dir: null}
+    tools: {mcp: {enabled: true, config_file: /etc/hermes/mcp/family.json}, terminal: {enabled: false}}
+    messaging: {gateway: discord, channel_scope: dedicated-cloyd-channel, credentials_source: environment, env: {token: DISCORD_BOT_TOKEN, channel_id: DISCORD_HOME_CHANNEL}}
+    schedules: {enabled: false}

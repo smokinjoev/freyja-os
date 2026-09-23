@@ -1,0 +1,20 @@
+schema_version: "1.0"
+parent_profile: freyja61-parent
+default_state: disabled-until-certified
+stages:
+  - id: status-and-calendar-read
+    allowed_core_tools: [status.check, calendar.resolve_date, calendar.list_events, memory.search]
+    required_evidence: [litellm-forced-tool-call, core-mcp-policy-check, discord-round-trip]
+  - id: calendar-write
+    allowed_core_tools: [calendar.create_event]
+    required_evidence: [macagent-authenticated, explicit-confirmation-check, calendar-write-audit]
+  - id: home-read
+    allowed_core_tools: [home_assistant.read_state, home_assistant.list_states]
+    required_evidence: [home-read-boundary-check, discord-round-trip]
+  - id: opencode-lifecycle
+    allowed_core_tools: [opencode.start, opencode.status, opencode.send, opencode.read, opencode.stop]
+    required_evidence: [opencode-core-lifecycle-check, discord-round-trip]
+rules:
+  - Hermes receives only a deliberately narrow Core tool schema for the active stage.
+  - Calendar and coding writes require the existing Core approval policy.
+  - Later stages remain disabled until all listed evidence is recorded.
