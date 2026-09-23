@@ -734,6 +734,41 @@ def test_imessage_route_smoke_supports_custom_identity(monkeypatch):
     assert status["imessage"]["expected_client_subject"] == "agent:benedict"
 
 
+def test_imessage_route_smoke_accepts_inference_endpoint_provider(monkeypatch):
+    module = _load_script()
+
+    class Settings:
+        freyja_director_url = "http://director"
+        freyja_connector_token = ""
+
+    identity = module.SyntheticRouteIdentity(expected_provider="vulcan-nexus-strong")
+
+    def fake_post(url, *, payload, timeout=5.0, headers=None):
+        interface = headers["X-Freyja-Client-Type"]
+        return {
+            "ok": True,
+            "status_code": 200,
+            "payload": {
+                "text": "ack",
+                "channel_metadata": {
+                    "inference_endpoint_id": "vulcan-nexus-strong",
+                    "inference_model": "@preset/freyja-strong-local",
+                    "trace": {
+                        "interface": interface,
+                        "person": {"person_id": "joe"},
+                        "principal": {"client_subject": "agent:cloyd-gibbler"},
+                    },
+                },
+            },
+        }
+
+    status = module._imessage_route_smoke(Settings(), timeout=3.0, identity=identity, post_json=fake_post)
+
+    assert status["ok"] is True
+    assert status["imessage"]["provider"] == "vulcan-nexus-strong"
+    assert status["imessage"]["checks"]["provider_matches"] is True
+
+
 def test_imessage_route_smoke_accepts_freyja3_metadata(monkeypatch):
     module = _load_script()
 

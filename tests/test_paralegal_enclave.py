@@ -30,7 +30,7 @@ def test_matter_folder_scan_and_csv_export(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(enclave, "MATTERS_DIR", tmp_path / "matters")
     monkeypatch.setattr(enclave, "DB_FILE", tmp_path / "financial_extractions.sqlite3")
     monkeypatch.setattr(enclave, "EXPORT_FILE", tmp_path / "financial_extractions.csv")
-    monkeypatch.setattr(enclave, "_extract_pdf_pages", lambda path: (1, [(1, "Please pay invoice total $1,234.56 by check.")]))
+    monkeypatch.setattr(enclave, "_extract_document_pages", lambda path: (1, [(1, "Please pay invoice total $1,234.56 by check.")]))
 
     client = TestClient(app)
     created = client.post("/paralegal/api/matters", json={"name": "Beth Case 101"})
@@ -63,11 +63,24 @@ def test_matter_folder_scan_and_csv_export(tmp_path, monkeypatch) -> None:
     assert (tmp_path / "financial_extractions.csv").exists()
     assert "$1,234.56" in (tmp_path / "financial_extractions.csv").read_text(encoding="utf-8")
 
+    workbook_path = tmp_path / "matters" / slug / "financial_extractions.xlsx"
+    assert workbook_path.exists()
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(workbook_path)
+    sheet = workbook["Financial Extracts"]
+    assert sheet["G2"].value == "$1,234.56"
+    assert sheet["C2"].hyperlink.target.startswith("file://")
+    assert sheet["D2"].hyperlink.target.startswith(f"/paralegal/api/matters/{slug}/documents/")
+
     status = client.get("/paralegal/api/status").json()
     assert status["document_count"] == 1
     assert status["extraction_count"] == 1
     assert status["matter_root"] == str(tmp_path / "matters")
     assert status["excel_readable_file"] == str(tmp_path / "financial_extractions.csv")
+    assert status["matter_workbooks"][slug] == str(workbook_path)
+    assert ".pdf" in status["supported_document_types"]
+    assert ".png" in status["supported_document_types"]
     assert "ocr_available" in status
 
 
@@ -101,7 +114,7 @@ def test_status_scan_detects_pdf_dropped_directly_into_matter_folder(tmp_path, m
     monkeypatch.setattr(enclave, "MATTERS_DIR", tmp_path / "matters")
     monkeypatch.setattr(enclave, "DB_FILE", tmp_path / "financial_extractions.sqlite3")
     monkeypatch.setattr(enclave, "EXPORT_FILE", tmp_path / "financial_extractions.csv")
-    monkeypatch.setattr(enclave, "_extract_pdf_pages", lambda path: (1, [(1, "Settlement payment was $9,876.54 on receipt.")]))
+    monkeypatch.setattr(enclave, "_extract_document_pages", lambda path: (1, [(1, "Settlement payment was $9,876.54 on receipt.")]))
 
     client = TestClient(app)
     created = client.post("/paralegal/api/matters", json={"name": "Dropped File Matter"}).json()
@@ -116,3 +129,25 @@ def test_status_scan_detects_pdf_dropped_directly_into_matter_folder(tmp_path, m
     extractions = client.get("/paralegal/api/extractions").json()["extractions"]
     assert {row["filename"] for row in extractions} == {"bank-statement.pdf", "invoice.pdf"}
     assert {row["amount_text"] for row in extractions} == {"$9,876.54"}
+
+
+def test_status_scan_detects_image_dropped_directly_into_matter_folder(tmp_path, monkeypatch) -> None:
+    import freyja.paralegal_enclave as enclave
+
+    monkeypatch.setattr(enclave, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(enclave, "MATTERS_DIR", tmp_path / "matters")
+    monkeypatch.setattr(enclave, "DB_FILE", tmp_path / "financial_extractions.sqlite3")
+    monkeypatch.setattr(enclave, "EXPORT_FILE", tmp_path / "financial_extractions.csv")
+    monkeypatch.setattr(enclave, "_extract_document_pages", lambda path: (1, [(1, "Image OCR found reimbursement $222.10.")]))
+
+    client = TestClient(app)
+    created = client.post("/paralegal/api/matters", json={"name": "Scanned Receipts"}).json()
+    dropped_image = tmp_path / "matters" / created["slug"] / "receipt.png"
+    dropped_image.write_bytes(b"fake image bytes")
+
+    status = client.get("/paralegal/api/status").json()
+    assert status["scan"]["processed"] == 1
+    extractions = client.get("/paralegal/api/extractions").json()["extractions"]
+    assert extractions[0]["filename"] == "receipt.png"
+    assert extractions[0]["amount_text"] == "$222.10"
+    assert (tmp_path / "matters" / created["slug"] / "financial_extractions.xlsx").exists()

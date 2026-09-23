@@ -12,6 +12,7 @@ dependencies = [
     "fastapi",
     "httpx",
     "mcp>=2.2.0",
+    "openpyxl",
     "pypdf",
     "pydantic-settings",
     "pyyaml",

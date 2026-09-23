@@ -400,7 +400,8 @@ def _synthetic_route_smoke(
 
 
 def _route_provider_matches(metadata: dict[str, object], identity: SyntheticRouteIdentity) -> bool:
-    if metadata.get("provider") == identity.expected_provider:
+    observed_provider = metadata.get("provider") or metadata.get("inference_endpoint_id")
+    if observed_provider == identity.expected_provider:
         return True
     if metadata.get("freyja3") is True:
         return bool(metadata.get("inference_endpoint_id")) and metadata.get("inference_status") in {"ok", "not_run"}
