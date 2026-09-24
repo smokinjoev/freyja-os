@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure iMessage family sender mapping and verify agent routing."""
+"""Configure iMessage family sender allowlist for Freyja routing."""
 
 from __future__ import annotations
 
@@ -152,7 +152,7 @@ def _persist_family_identity_db(path: Path, mapping: dict[str, str]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Map family iMessage senders to personal agents.")
+    parser = argparse.ArgumentParser(description="Allow family iMessage senders to route to Freyja.")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV)
     parser.add_argument("--identity-db", type=Path, default=None)
     parser.add_argument("--restart", action="store_true", help="Restart the iMessage LaunchAgent after updating env.")
@@ -173,6 +173,8 @@ def main(argv: list[str] | None = None) -> int:
     _replace_env_line(args.env_file, "IDENTITY_PROVIDER", "sqlite")
     _replace_env_line(args.env_file, "IDENTITY_DATABASE_PATH", str(identity_db))
     _replace_env_line(args.env_file, "IDENTITY_SEED_FALLBACK", "true")
+    _replace_env_line(args.env_file, "IMESSAGE_AGENT_ROUTING_MODE", "fixed")
+    _replace_env_line(args.env_file, "IMESSAGE_FIXED_AGENT_ID", "freyja")
 
     check = subprocess.run(
         [
@@ -182,7 +184,6 @@ def main(argv: list[str] | None = None) -> int:
             "imessage",
             "--env-file",
             str(args.env_file),
-            "--require-imessage-family-agents",
         ],
         text=True,
         check=False,

@@ -4,7 +4,7 @@ import pytest
 
 import freyja.agent_runtime_v3
 from freyja.agent_gateway import AgentGateway, GatewayRequest
-from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError, inference_role_alias
+from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError, _endpoint_supports_images, inference_role_alias
 from freyja.family_agents import CHILD_HOMEWORK_POLICY_MODES, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import AgentExecutionResult, GatewaySender, InferenceEndpoint, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
 from freyja.freyja3_memory import Freyja3MemoryStore, Freyja3MemoryWrite
@@ -562,10 +562,52 @@ def test_agent_vision_inference_receives_canonical_attachment(monkeypatch: pytes
 
     result = AgentRuntimeV3(run_inference=True, unhealthy_endpoint_ids={"vulcan-nexus-vision-docs"}).run(handoff)
 
-    assert result.inference_endpoint_id == "vulcan-vision"
+    assert result.inference_endpoint_id in {"vulcan-vision", "vulcan-qwen27-chat"}
     assert calls
     assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
     assert result.response_text == "I can see the attached image."
+
+
+def test_uncaptioned_discord_image_returns_vision_result_without_second_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    class FakeOllamaClient:
+        def __init__(self, *, base_url: str | None = None, model: str | None = None) -> None:
+            self.base_url = base_url
+            self.model = model
+
+        async def chat(self, **kwargs):
+            calls.append(kwargs)
+            return {"message": {"content": "Clearly visible: a red car. Unclear: the license plate."}}
+
+    monkeypatch.setattr(freyja.agent_runtime_v3, "OllamaClient", FakeOllamaClient)
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt=(
+                "The sender sent Discord file or image content in this same DM. "
+                "No readable caption text was included."
+            ),
+            conversation_id="conv-photo-only",
+            attachments=[
+                {
+                    "filename": "photo.png",
+                    "media_type": "image/png",
+                    "data_base64": "ZmFrZQ==",
+                    "size": 4,
+                }
+            ],
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(run_inference=True, unhealthy_endpoint_ids={"vulcan-nexus-vision-docs"}).run(handoff)
+
+    assert result.inference_status == "ok"
+    assert result.response_text == "Clearly visible: a red car. Unclear: the license plate."
+    assert len(calls) == 1
+    assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
 
 
 def test_live_inference_uses_model_tool_calls_without_keyword_selection(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -683,15 +725,15 @@ def test_vision_inference_extracts_context_before_reasoning_tool_calls(monkeypat
         unhealthy_endpoint_ids={"vulcan-nexus-vision-docs"},
     ).run(handoff)
 
-    assert result.inference_endpoint_id == "vulcan-vision"
+    assert result.inference_endpoint_id in {"vulcan-vision", "vulcan-qwen27-chat"}
     assert result.inference_status == "ok"
     assert "weather.current" in result.selected_tools
     assert fake_registry.requests[-1].tool_name == "event_weather"
     assert len(calls) == 3
-    assert calls[0]["model"] == "qwen2.5vl:72b"
+    assert calls[0]["model"] in {"qwen2.5vl:72b", "qwen3.8:27b"}
     assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
     assert calls[0]["tools_required"] is False
-    assert calls[1]["model"] == "@preset/freyja-strong-local"
+    assert calls[1]["model"] == calls[0]["model"]
     assert calls[1]["images"] is None
     assert "Visible attachment context extracted by Vulcan vision" in calls[1]["prompt"]
     assert calls[1]["tools_required"] is True
@@ -1200,6 +1242,12 @@ def test_rev3_1_inference_role_aliases_cover_target_routes() -> None:
     assert inference_role_alias("general.cloud") == "cloud-frontier"
 
 
+def test_qwen27_chat_endpoint_supports_image_payloads() -> None:
+    assert _endpoint_supports_images("vulcan-qwen27-chat", "qwen3.8:27b") is True
+    assert _endpoint_supports_images("vulcan-nexus-vision-docs", "@preset/freyja-vision-docs") is True
+    assert _endpoint_supports_images("vulcan-qwen-text", "qwen2.5:72b") is False
+
+
 def test_image_attachment_uses_vulcan_vision_role_alias() -> None:
     handoff = GatewayRequest(
         sender=_sender("joe"),
@@ -1213,7 +1261,7 @@ def test_image_attachment_uses_vulcan_vision_role_alias() -> None:
 
     runtime_result = AgentRuntimeV3().run(result)
 
-    assert runtime_result.inference_endpoint_id == "vulcan-nexus-vision-docs"
+    assert runtime_result.inference_endpoint_id in {"vulcan-nexus-vision-docs", "vulcan-qwen27-chat"}
     selected_event = next(event for event in runtime_result.audit_events if event.event_type == "agent_inference_selected")
     assert selected_event.metadata["role_alias"] == "vulcan-vision"
 

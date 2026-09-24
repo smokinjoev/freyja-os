@@ -120,7 +120,8 @@ def test_imessage_family_agent_mapping_requires_four_people(monkeypatch, tmp_pat
     )
 
     assert status["ready_for_live_smoke"] is False
-    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "cloyd-gibbler"
+    assert status["family_agent_mapping"]["routing_mode"] == "fixed"
+    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "freyja"
     assert status["family_agent_mapping"]["missing_people"] == ["beth", "liam", "jenna"]
     assert "+15550000001" not in str(status)
 
@@ -156,10 +157,11 @@ def test_imessage_family_agent_mapping_accepts_four_labeled_senders(monkeypatch,
 
     assert status["ready_for_live_smoke"] is True
     assert status["family_agent_mapping"]["ok"] is True
-    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "cloyd-gibbler"
-    assert status["family_agent_mapping"]["people"]["beth"]["agent_id"] == "benedict"
-    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "agent-47"
-    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jennacide"
+    assert status["family_agent_mapping"]["routing_mode"] == "fixed"
+    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "freyja"
+    assert status["family_agent_mapping"]["people"]["beth"]["agent_id"] == "freyja"
+    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "freyja"
+    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "freyja"
     assert "+15550000001" not in str(status)
     assert "+15550000004" not in str(status)
 
@@ -200,8 +202,10 @@ def test_configure_imessage_family_agents_rewrites_sender_env(monkeypatch, tmp_p
     assert "IDENTITY_PROVIDER=sqlite" in env_text
     assert f"IDENTITY_DATABASE_PATH={identity_db}" in env_text
     assert "IDENTITY_SEED_FALLBACK=true" in env_text
+    assert "IMESSAGE_AGENT_ROUTING_MODE=fixed" in env_text
+    assert "IMESSAGE_FIXED_AGENT_ID=freyja" in env_text
     assert "OTHER=value" in env_text
-    assert "--require-imessage-family-agents" in calls[0]
+    assert "--require-imessage-family-agents" not in calls[0]
 
     people, _relationships = module.SQLiteIdentityProvider(identity_db).load()
     by_id = {person.person_id: person for person in people}
@@ -246,10 +250,11 @@ def test_imessage_family_agent_mapping_accepts_sqlite_identity_sender_resolution
 
     assert status["ready_for_live_smoke"] is True
     assert status["family_agent_mapping"]["ok"] is True
-    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "cloyd-gibbler"
-    assert status["family_agent_mapping"]["people"]["beth"]["agent_id"] == "benedict"
-    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "agent-47"
-    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "jennacide"
+    assert status["family_agent_mapping"]["routing_mode"] == "fixed"
+    assert status["family_agent_mapping"]["people"]["joe"]["agent_id"] == "freyja"
+    assert status["family_agent_mapping"]["people"]["beth"]["agent_id"] == "freyja"
+    assert status["family_agent_mapping"]["people"]["liam"]["agent_id"] == "freyja"
+    assert status["family_agent_mapping"]["people"]["jenna"]["agent_id"] == "freyja"
 
 
 def test_signal_status_redacts_sender_values(monkeypatch):

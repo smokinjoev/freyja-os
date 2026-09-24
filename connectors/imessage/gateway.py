@@ -80,6 +80,8 @@ class IMessageGateway:
         self._allowed_identities = settings.allowed_sender_identities
         self._max_message_chars = settings.imessage_max_message_chars
         self._tools_required_mode = settings.imessage_tools_required_mode.strip().lower()
+        self._agent_routing_mode = settings.imessage_agent_routing_mode.strip().lower()
+        self._fixed_agent_id = settings.imessage_fixed_agent_id.strip() or "freyja"
         self._director_url = settings.freyja_director_url.rstrip("/")
         self._director_token = settings.freyja_connector_token
         self._timeout = settings.imessage_request_timeout_seconds
@@ -260,11 +262,7 @@ class IMessageGateway:
         account_owner: str | None = None,
         prompt: str | None = None,
     ) -> IMessageReply | None:
-        agent_context = (
-            household_agents.resolve("family")
-            if account_owner == "person:family"
-            else household_agent_for_sender(identity)
-        )
+        agent_context = self._agent_context(identity, account_owner=account_owner)
         try:
             principal = build_memory_principal(
                 client_type="imessage",
@@ -392,6 +390,13 @@ class IMessageGateway:
             }
         )
         return self._reply_for_message(message, text)
+
+    def _agent_context(self, identity: AuthorizedSender, *, account_owner: str | None = None):
+        if account_owner == "person:family":
+            return household_agents.resolve("family")
+        if self._agent_routing_mode in {"sender", "personal", "household"}:
+            return household_agent_for_sender(identity)
+        return household_agents.resolve(self._fixed_agent_id)
 
     def _prompt_for_message(self, message: IMessage) -> str:
         return self._message_text_for_limits_and_tools(message)

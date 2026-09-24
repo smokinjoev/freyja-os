@@ -43,6 +43,7 @@ from connectors.imessage.models import IMessage, IMessageAttachment  # noqa: E40
 from connectors.gmail.config import GmailSettings  # noqa: E402
 from connectors.signal.config import SignalSettings  # noqa: E402
 from connectors.messaging import household_agent_for_sender  # noqa: E402
+from freyja.agents.household import household_agents  # noqa: E402
 from freyja.agents.hierarchy import AgentHierarchy, PersonName  # noqa: E402
 from freyja.agents.process import create_agent_process  # noqa: E402
 from freyja.memory.store import MemoryStore  # noqa: E402
@@ -613,6 +614,7 @@ def _imessage_family_agent_mapping(
     *,
     required_people: tuple[str, ...] = ("joe", "beth", "liam", "jenna"),
 ) -> dict[str, object]:
+    fixed_agent = household_agents.resolve(settings.imessage_fixed_agent_id)
     people: dict[str, dict[str, object]] = {
         person_id: {"mapped": False, "agent_id": None, "sender_count": 0}
         for person_id in required_people
@@ -621,7 +623,11 @@ def _imessage_family_agent_mapping(
     for identity in settings.allowed_sender_identities.values():
         person_id = (identity.member_id or "").strip().lower()
         if person_id in people:
-            agent = household_agent_for_sender(identity)
+            agent = (
+                household_agent_for_sender(identity)
+                if settings.imessage_agent_routing_mode.strip().lower() in {"sender", "personal", "household"}
+                else fixed_agent
+            )
             people[person_id] = {
                 "mapped": True,
                 "agent_id": agent.agent_id,
@@ -633,6 +639,8 @@ def _imessage_family_agent_mapping(
     return {
         "ok": not missing_people,
         "required_people": list(required_people),
+        "routing_mode": settings.imessage_agent_routing_mode,
+        "fixed_agent_id": fixed_agent.agent_id,
         "people": people,
         "missing_people": missing_people,
         "unmapped_sender_count": unmapped_sender_count,
@@ -902,6 +910,8 @@ def _imessage_status(
         "poll_interval_seconds": settings.imessage_poll_interval_seconds,
         "family_observer_enabled": settings.imessage_family_observer_enabled,
         "family_chat_count": len(settings.family_chat_identifier_set),
+        "agent_routing_mode": settings.imessage_agent_routing_mode,
+        "fixed_agent_id": settings.imessage_fixed_agent_id,
         "provisional_reply_enabled": settings.imessage_provisional_reply_enabled,
     }
     status["runtime_source_drift"] = _imessage_runtime_source_drift()
@@ -1132,7 +1142,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--require-imessage-family-agents",
         action="store_true",
-        help="Require iMessage allowed senders to map all four family members to personal agents.",
+        help="Require iMessage allowed senders to map all four family members. With fixed routing, all may map to Freyja.",
     )
     parser.add_argument("--route-smoke-person-id", default="joe", help="Person ID used by --check-imessage-route-smoke.")
     parser.add_argument("--route-smoke-person-display-name", default="Joe", help="Person display name used by --check-imessage-route-smoke.")

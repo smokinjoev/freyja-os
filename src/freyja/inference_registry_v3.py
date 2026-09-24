@@ -21,7 +21,7 @@ class InferenceRegistryV3:
         domains: tuple[SecurityDomain, ...] = SECURITY_DOMAINS,
         include_configured: bool = True,
     ) -> None:
-        self._endpoints = endpoints + _configured_endpoints() if include_configured and endpoints == INFERENCE_ENDPOINTS else endpoints
+        self._endpoints = _merge_configured_endpoints(endpoints) if include_configured and endpoints == INFERENCE_ENDPOINTS else endpoints
         self._domains = domains_by_id() if domains == SECURITY_DOMAINS else {d.domain_id: d for d in domains}
 
     def all_endpoints(self, *, domain_id: SecurityDomainId | None = None) -> list[InferenceEndpoint]:
@@ -71,3 +71,13 @@ def _configured_endpoints() -> tuple[InferenceEndpoint, ...]:
         except Exception:
             continue
     return tuple(endpoints)
+
+
+def _merge_configured_endpoints(defaults: tuple[InferenceEndpoint, ...]) -> tuple[InferenceEndpoint, ...]:
+    configured = _configured_endpoints()
+    if not configured:
+        return defaults
+    merged = {endpoint.endpoint_id: endpoint for endpoint in defaults}
+    for endpoint in configured:
+        merged[endpoint.endpoint_id] = endpoint
+    return tuple(merged.values())

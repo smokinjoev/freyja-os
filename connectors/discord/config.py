@@ -23,6 +23,10 @@ class DiscordSettings:
     dm_only: bool = True
     text_only: bool = True
     final_only: bool = True
+    seen_reactions_enabled: bool = True
+    seen_reactions: tuple[str, ...] = ("👀", "👀")
+    media_intake_enabled: bool = True
+    media_max_bytes: int = 10 * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> "DiscordSettings":
@@ -32,6 +36,10 @@ class DiscordSettings:
             director_url=os.environ.get("FREYJA_DIRECTOR_URL", "http://127.0.0.1:8000").strip(),
             connector_token=os.environ.get("FREYJA_CONNECTOR_TOKEN", "").strip(),
             user_agent_bindings=parse_user_agent_bindings(os.environ.get("DISCORD_USER_AGENT_MAP", "")),
+            seen_reactions_enabled=_truthy(os.environ.get("DISCORD_SEEN_REACTIONS_ENABLED", "true")),
+            seen_reactions=parse_seen_reactions(os.environ.get("DISCORD_SEEN_REACTIONS", "👀,👀")),
+            media_intake_enabled=_truthy(os.environ.get("DISCORD_MEDIA_INTAKE_ENABLED", "true")),
+            media_max_bytes=_positive_int(os.environ.get("DISCORD_MEDIA_MAX_BYTES", ""), 10 * 1024 * 1024),
         )
 
     @property
@@ -68,5 +76,18 @@ def parse_user_agent_bindings(raw: str) -> tuple[DiscordUserBinding, ...]:
     return tuple(bindings)
 
 
+def parse_seen_reactions(raw: str) -> tuple[str, ...]:
+    reactions = tuple(value.strip() for value in raw.split(",") if value.strip())
+    return reactions or ("👀", "👀")
+
+
 def _truthy(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _positive_int(value: str, default: int) -> int:
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default

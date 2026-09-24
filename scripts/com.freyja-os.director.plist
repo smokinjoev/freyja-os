@@ -27,6 +27,10 @@
         <string>http://100.115.228.56:11434</string>
         <key>OLLAMA_REASONING_BASE_URL</key>
         <string>http://100.115.228.56:11434</string>
+        <key>NEXUS_BASE_URL</key>
+        <string>http://100.94.80.21:3939</string>
+        <key>NEXUS_API_KEY_FILE</key>
+        <string>/Users/freyja/.config/freyja/msty-nexus-token</string>
     </dict>
 
     <key>WorkingDirectory</key>

@@ -48,6 +48,11 @@ Iris runs MacAgent and Apple-native connectors with LaunchAgents/LaunchDaemons
 as appropriate. iMessage live sending still requires local Apple permissions,
 Messages account state, and operator approval gates.
 
+iMessage routes authorized senders to Freyja by default
+(`IMESSAGE_AGENT_ROUTING_MODE=fixed`, `IMESSAGE_FIXED_AGENT_ID=freyja`). Keep
+other personal agents on Discord or their dedicated channels unless iMessage is
+explicitly moved back to sender-based routing.
+
 ## Signal
 
 Freyja uses `signal-cli-rest-api` as the local Signal transport wrapper. That

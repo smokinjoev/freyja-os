@@ -11,6 +11,7 @@ import signal
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -145,20 +146,57 @@ class DiscordDmRunner:
             len(message.attachments),
             len(message.embeds),
         )
+        if self._gateway.would_route(message):
+            await self._send_seen_feedback(message)
+        unsupported_reply = self._gateway.unsupported_message_reply(message)
+        if unsupported_reply is not None:
+            await self._send_message(
+                channel_id=message.channel_id,
+                content=unsupported_reply.text,
+                message_reference_id=unsupported_reply.message_reference_id,
+            )
+            logger.info("Discord unsupported message notice sent message_id=%s", message.message_id)
+            return
         reply = await self._gateway.handle_message(message)
         if reply is None:
             logger.info("Discord message ignored by gateway author_id=%s channel_type=%s", message.author_id, message.channel_type)
             return
+        await self._send_message(
+            channel_id=message.channel_id,
+            content=reply.text,
+            message_reference_id=reply.message_reference_id,
+        )
+        logger.info("Discord reply sent agent_id=%s trace_id=%s", reply.agent_id, reply.trace_id)
+
+    async def _send_message(self, *, channel_id: str, content: str, message_reference_id: str) -> None:
         response = await self._client.post(
-            f"{API_BASE}/channels/{message.channel_id}/messages",
+            f"{API_BASE}/channels/{channel_id}/messages",
             headers=_bot_headers(self._settings.bot_token),
             json={
-                "content": reply.text,
-                "message_reference": {"message_id": reply.message_reference_id},
+                "content": content,
+                "message_reference": {"message_id": message_reference_id},
             },
         )
         response.raise_for_status()
-        logger.info("Discord reply sent agent_id=%s trace_id=%s", reply.agent_id, reply.trace_id)
+
+    async def _send_seen_feedback(self, message: DiscordInboundMessage) -> None:
+        if not self._settings.seen_reactions_enabled:
+            return
+        for reaction in self._settings.seen_reactions:
+            try:
+                response = await self._client.put(
+                    f"{API_BASE}/channels/{message.channel_id}/messages/{message.message_id}/reactions/{quote(reaction, safe='')}/@me",
+                    headers=_bot_headers(self._settings.bot_token),
+                    timeout=5,
+                )
+                response.raise_for_status()
+            except Exception as exc:  # noqa: BLE001 - feedback should never block the actual reply
+                logger.warning(
+                    "Discord seen reaction failed message_id=%s reaction=%r error=%s",
+                    message.message_id,
+                    reaction,
+                    exc,
+                )
 
 
 def _identify_payload(token: str) -> dict[str, Any]:
