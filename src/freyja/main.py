@@ -2369,21 +2369,30 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
     )
     try:
         async with httpx.AsyncClient(timeout=DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                f"{nexus_base_url}/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {nexus_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.2,
-                    "max_tokens": 700,
-                },
+            data = await _post_discord_document_to_nexus(
+                client=client,
+                nexus_base_url=nexus_base_url,
+                nexus_api_key=nexus_api_key,
+                prompt=prompt,
+                max_tokens=700,
             )
-            response.raise_for_status()
-            data = response.json()
+            text, finish_reason = _nexus_chat_text_and_finish_reason(data)
+            if not text:
+                retry_prompt = (
+                    "Summarize the attached document text in 5 concise bullets. "
+                    "If it is a resume, say whether it makes sense and list the clearest improvements. "
+                    "Use only the document text.\n\n"
+                    f"User question: {question}\n\n"
+                    f"{document_context[:8000]}"
+                )
+                data = await _post_discord_document_to_nexus(
+                    client=client,
+                    nexus_base_url=nexus_base_url,
+                    nexus_api_key=nexus_api_key,
+                    prompt=retry_prompt,
+                    max_tokens=450,
+                )
+                text, finish_reason = _nexus_chat_text_and_finish_reason(data)
     except Exception:
         logger.exception("Director Discord document Nexus route failed model=%s", DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL)
         return _discord_document_degraded_response(
@@ -2392,13 +2401,11 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
             reason="nexus_request_failed",
             document_count=len(readable_documents),
         )
-    choices = data.get("choices") or []
-    message = choices[0].get("message") if choices else {}
-    text = str(message.get("content") or "").strip()
     if not text:
+        text = _discord_document_extracted_text_preview(readable_documents, question)
         return _discord_document_degraded_response(
             request,
-            "I received the document and extracted text, but Nexus returned an empty document answer.",
+            text,
             reason="empty_nexus_response",
             document_count=len(readable_documents),
         )
@@ -2425,12 +2432,78 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
             "inference_model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
             "inference_machine_id": "vulcan",
             "inference_status": "ok",
-            "finish_reason": choices[0].get("finish_reason") if choices else None,
+            "finish_reason": finish_reason,
             "document_count": len(readable_documents),
             "document_route": "pushed_to_nexus",
         },
         degraded=False,
         status="ok",
+    )
+
+
+async def _post_discord_document_to_nexus(
+    *,
+    client: httpx.AsyncClient,
+    nexus_base_url: str,
+    nexus_api_key: str,
+    prompt: str,
+    max_tokens: int,
+) -> dict[str, Any]:
+    response = await client.post(
+        f"{nexus_base_url}/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {nexus_api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": max_tokens,
+        },
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, dict) else {}
+
+
+def _nexus_chat_text_and_finish_reason(data: dict[str, Any]) -> tuple[str, object]:
+    choices = data.get("choices") or []
+    if not choices or not isinstance(choices[0], dict):
+        return "", None
+    choice = choices[0]
+    message = choice.get("message")
+    if not isinstance(message, dict):
+        return "", choice.get("finish_reason")
+    content = message.get("content")
+    if isinstance(content, str):
+        return content.strip(), choice.get("finish_reason")
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+        return "\n".join(parts).strip(), choice.get("finish_reason")
+    return "", choice.get("finish_reason")
+
+
+def _discord_document_extracted_text_preview(documents: list[Any], question: str) -> str:
+    snippets: list[str] = []
+    for document in documents[:2]:
+        filename = str(getattr(document, "filename", "document"))
+        text = str(getattr(document, "text", "")).strip()
+        if not text:
+            continue
+        first_lines = [line.strip() for line in text.splitlines() if line.strip()]
+        preview = "\n".join(first_lines[:8]).strip()
+        if preview:
+            snippets.append(f"{filename}:\n{preview[:900]}")
+    if not snippets:
+        return "I received the document and extracted text, but Nexus returned an empty answer."
+    return (
+        "I received the document and extracted text, but Nexus returned an empty answer. "
+        "Here is the text I was able to read so you can tell the file made it through:\n\n"
+        + "\n\n".join(snippets)
     )
 
 
