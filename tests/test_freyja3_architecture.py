@@ -2093,7 +2093,15 @@ def test_discord_pdf_canonical_route_previews_text_when_nexus_stays_empty(monkey
         filename = "resume.pdf"
         mime_type = "application/pdf"
         page_count = 2
-        text = "Joe Verant\\nDirector of Engineering\\nBuilt reliable agent systems."
+        text = (
+            "JOSEPH VERANT\n"
+            "Senior Controls & Automation Engineer\n"
+            "(803) 206-8790\n"
+            "jverant@example.com\n"
+            "CAREER HIGHLIGHTS\n"
+            "\uf0b7 Engineering leadership for major attractions.\n"
+            "\uf0b7 Integrated ride and show systems involving 100+ PLCs.\n"
+        )
         ok = True
 
     class FakeResponse:
@@ -2156,5 +2164,9 @@ def test_discord_pdf_canonical_route_previews_text_when_nexus_stays_empty(monkey
     data = response.json()
     assert data["status"] == "degraded"
     assert data["channel_metadata"]["degraded_reason"] == "empty_nexus_response"
-    assert "Joe Verant" in data["text"]
-    assert "Built reliable agent systems" in data["text"]
+    assert "strong senior controls/automation resume" in data["text"]
+    assert "Role signal: Senior Controls & Automation Engineer" in data["text"]
+    assert "Engineering leadership for major attractions" in data["text"]
+    assert "jverant" not in data["text"]
+    assert "(803)" not in data["text"]
+    assert len(data["text"]) < 1800
