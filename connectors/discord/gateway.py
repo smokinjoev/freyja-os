@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import asyncio
+from io import BytesIO
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from connectors.discord.config import DiscordSettings
 from connectors.messaging import (
@@ -43,6 +45,8 @@ SUPPORTED_ATTACHMENT_MIME_TYPES = frozenset(
         "image/heic",
     }
 )
+MAX_ROUTED_IMAGE_SIDE = 1280
+MAX_ROUTED_IMAGE_BYTES = 1_500_000
 
 
 @dataclass(frozen=True)
@@ -220,13 +224,27 @@ class DiscordGateway:
         close_client = self._director_client is None and self._client is None
         try:
             logger.info("Discord director route start message_id=%s attachments=%s", message.message_id, len(attachments))
-            data = await post_canonical_to_director(
-                client=client,
-                director_url=self.settings.director_url,
-                payload=canonical_director_payload(request, text=prompt_text),
-                headers=headers,
+            data = await asyncio.wait_for(
+                post_canonical_to_director(
+                    client=client,
+                    director_url=self.settings.director_url,
+                    payload=canonical_director_payload(request, text=prompt_text),
+                    headers=headers,
+                ),
+                timeout=170,
             )
             logger.info("Discord director route completed message_id=%s", message.message_id)
+        except (asyncio.TimeoutError, httpx.HTTPError):
+            logger.exception("Discord director route failed message_id=%s attachments=%s", message.message_id, len(attachments))
+            return DiscordOutboundReply(
+                text=(
+                    "I received the attachment, but the vision route timed out before I could finish reading it. "
+                    "Please resend it or send a smaller crop."
+                ),
+                message_reference_id=message.message_id,
+                agent_id=agent.agent_id,
+                trace_id=trace_id,
+            )
         finally:
             if close_client:
                 await client.aclose()
@@ -276,6 +294,12 @@ class DiscordGateway:
                 content = response.content
                 if len(content) > self.settings.media_max_bytes:
                     raise DiscordAttachmentError(f"attachment too large after download: {filename}")
+                if mime_type.startswith("image/"):
+                    content, filename, mime_type = _prepare_image_for_vision(
+                        content=content,
+                        filename=filename,
+                        mime_type=mime_type,
+                    )
                 logger.info("Discord attachment download completed message_id=%s filename=%s bytes=%s", message.message_id, filename, len(content))
                 normalized.append(
                     NormalizedAttachment(
@@ -350,6 +374,29 @@ def _refers_to_recent_attachment(text: str) -> bool:
             " summarize",
         )
     )
+
+
+def _prepare_image_for_vision(*, content: bytes, filename: str, mime_type: str) -> tuple[bytes, str, str]:
+    if len(content) <= MAX_ROUTED_IMAGE_BYTES:
+        return content, filename, mime_type
+    try:
+        with Image.open(BytesIO(content)) as image:
+            image = ImageOps.exif_transpose(image)
+            if image.mode not in {"RGB", "L"}:
+                image = image.convert("RGB")
+            if max(image.size) > MAX_ROUTED_IMAGE_SIDE:
+                image.thumbnail((MAX_ROUTED_IMAGE_SIDE, MAX_ROUTED_IMAGE_SIDE))
+            output = BytesIO()
+            image.save(output, format="JPEG", quality=82, optimize=True)
+    except (OSError, UnidentifiedImageError):
+        logger.warning("Discord image could not be normalized filename=%s bytes=%s", filename, len(content))
+        return content, filename, mime_type
+    prepared = output.getvalue()
+    if len(prepared) >= len(content):
+        return content, filename, mime_type
+    stem = filename.rsplit(".", 1)[0] or "image"
+    logger.info("Discord image normalized filename=%s original_bytes=%s routed_bytes=%s", filename, len(content), len(prepared))
+    return prepared, f"{stem}.jpg", "image/jpeg"
 
 
 async def _get_attachment_with_retries(client: httpx.AsyncClient, url: str) -> httpx.Response:

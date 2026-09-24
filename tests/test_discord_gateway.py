@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+from io import BytesIO
 
 import httpx
 import pytest
+from PIL import Image
 
 from connectors.discord.config import DiscordSettings, parse_seen_reactions, parse_user_agent_bindings
 from connectors.discord.gateway import DiscordGateway, DiscordInboundMessage, DiscordOutboundReply
@@ -240,6 +243,82 @@ async def test_discord_gateway_retries_transient_attachment_download_timeout() -
     assert reply.text == "I read it."
     assert captured["download_attempts"] == 2
     assert captured["json"]["attachments"][0]["filename"] == "plan.pdf"
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_normalizes_large_image_attachment() -> None:
+    captured = {}
+    image_buffer = BytesIO()
+    Image.frombytes("RGB", (1800, 1500), os.urandom(1800 * 1500 * 3)).save(image_buffer, format="JPEG", quality=96)
+    image_bytes = image_buffer.getvalue()
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=image_bytes)
+
+        async def post(self, url, *, json, headers):
+            captured["json"] = json
+            return FakeResponse(payload={"text": "I can see it."})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m4d",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="",
+            attachments=(
+                {
+                    "filename": "large.jpeg",
+                    "content_type": "image/jpeg",
+                    "size": len(image_bytes),
+                    "url": "https://cdn.discordapp.test/large.png",
+                },
+            ),
+        )
+    )
+
+    assert reply is not None
+    attachment = captured["json"]["attachments"][0]
+    assert attachment["filename"] == "large.jpg"
+    assert attachment["media_type"] == "image/jpeg"
+    assert attachment["size"] < len(image_bytes)
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_returns_director_timeout_reply() -> None:
+    class FakeClient:
+        async def post(self, url, *, json, headers):
+            raise httpx.ReadTimeout("slow director")
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m4e",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="hello",
+        )
+    )
+
+    assert reply is not None
+    assert "timed out" in reply.text
+    assert reply.agent_id == "cloyd-gibbler"
 
 
 @pytest.mark.asyncio
