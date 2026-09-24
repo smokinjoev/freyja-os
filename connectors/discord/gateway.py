@@ -38,6 +38,7 @@ DISCORD_AGENT_DISPLAY_NAMES = {
 SUPPORTED_ATTACHMENT_MIME_TYPES = frozenset(
     {
         "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "image/jpeg",
         "image/png",
         "image/gif",
@@ -136,8 +137,8 @@ class DiscordGateway:
         if message.attachments and not self._attachments_supported(message):
             return DiscordUnsupportedMessageReply(
                 text=(
-                    "I saw the attachment, but this Discord connector can only intake PDFs and common image files right now. "
-                    "Send a PDF, image, or paste the text you want me to work from."
+                    "I saw the attachment, but this Discord connector can only intake PDFs, DOCX files, and common image files right now. "
+                    "Send a PDF, DOCX, image, or paste the text you want me to work from."
                 ),
                 message_reference_id=message.message_id,
             )
@@ -433,6 +434,8 @@ def _mime_from_name(filename: str) -> str | None:
     lowered = filename.lower()
     if lowered.endswith(".pdf"):
         return "application/pdf"
+    if lowered.endswith(".docx"):
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     if lowered.endswith((".jpg", ".jpeg")):
         return "image/jpeg"
     if lowered.endswith(".png"):

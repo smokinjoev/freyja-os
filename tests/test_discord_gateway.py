@@ -92,7 +92,7 @@ async def test_discord_gateway_ignores_non_dm_and_non_text_messages() -> None:
         )
     )
     assert unsupported is not None
-    assert "PDFs and common image files" in unsupported.text
+    assert "PDFs, DOCX files, and common image files" in unsupported.text
 
 
 @pytest.mark.asyncio
@@ -729,4 +729,4 @@ async def test_discord_dm_runner_sends_unsupported_attachment_notice_without_rou
     )
 
     assert [event[0] for event in events] == ["post"]
-    assert "PDFs and common image files" in events[0][1]["content"]
+    assert "PDFs, DOCX files, and common image files" in events[0][1]["content"]

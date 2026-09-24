@@ -2402,6 +2402,12 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
             reason="empty_nexus_response",
             document_count=len(readable_documents),
         )
+    logger.info(
+        "Director Discord document pushed to Nexus trace_id=%s documents=%s model=%s",
+        request.trace_id,
+        len(readable_documents),
+        DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+    )
     return CanonicalResponse(
         trace_id=request.trace_id,
         request_message_id=request.message_id,
@@ -2421,6 +2427,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
             "inference_status": "ok",
             "finish_reason": choices[0].get("finish_reason") if choices else None,
             "document_count": len(readable_documents),
+            "document_route": "pushed_to_nexus",
         },
         degraded=False,
         status="ok",
@@ -2453,6 +2460,7 @@ def _discord_document_degraded_response(
             "inference_status": "degraded",
             "degraded_reason": reason,
             "document_count": document_count,
+            "document_route": "pushed_to_nexus",
         },
         degraded=True,
         status="degraded",

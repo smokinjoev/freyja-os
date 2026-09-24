@@ -1855,6 +1855,7 @@ def test_discord_pdf_canonical_route_uses_direct_nexus_document_review(monkeypat
     assert data["channel_metadata"]["director_route"] == "discord_document_direct"
     assert data["channel_metadata"]["inference_provider"] == "nexus"
     assert data["channel_metadata"]["document_count"] == 1
+    assert data["channel_metadata"]["document_route"] == "pushed_to_nexus"
     assert captured["runtime_called"] is False
     assert captured["url"] == "http://nexus.test:3939/v1/chat/completions"
     assert captured["json"]["model"] == "external-ollama/qwen3.8:27b"
@@ -1913,4 +1914,5 @@ def test_discord_pdf_canonical_route_does_not_fall_back_when_document_unreadable
     assert data["status"] == "degraded"
     assert data["channel_metadata"]["director_route"] == "discord_document_direct"
     assert data["channel_metadata"]["degraded_reason"] == "document_text_unavailable"
+    assert data["channel_metadata"]["document_route"] == "pushed_to_nexus"
     assert captured["runtime_called"] is False
