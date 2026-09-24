@@ -1637,3 +1637,70 @@ def test_canonical_route_can_use_freyja3_gateway_runtime(monkeypatch) -> None:
     assert data["channel_metadata"]["freyja3"] is True
     assert "web.search" in {tool["tool_name"] for tool in data["tool_results"]}
     assert data["channel_metadata"]["inference_machine_id"] == "vulcan"
+
+
+def test_discord_image_canonical_route_uses_direct_director_vision(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    captured = {"runtime_called": False}
+    endpoint = InferenceEndpoint(
+        endpoint_id="vulcan-qwen27-chat",
+        display_name="Vulcan Qwen 27B",
+        provider="ollama",
+        machine_id="vulcan",
+        base_url="http://vulcan.test:11434",
+        model="qwen3.8:27b",
+        capabilities=frozenset({"vision.large"}),
+        security_domain_id=SecurityDomainId.HOUSEHOLD,
+    )
+    monkeypatch.setattr(freyja_main, "_director_qwen_vision_endpoint", lambda: endpoint)
+
+    async def fake_chat(self, prompt, *, model=None, images=None, output_tokens=None, **kwargs):
+        captured["prompt"] = prompt
+        captured["model"] = model
+        captured["base_url"] = self.base_url
+        captured["image_count"] = len(images or [])
+        captured["output_tokens"] = output_tokens
+        return {"message": {"content": "A direct Director vision answer."}}
+
+    async def fake_arun(handoff):
+        captured["runtime_called"] = True
+        raise AssertionError("Full agent runtime should not handle image-only Discord messages.")
+
+    monkeypatch.setattr(freyja_main.OllamaClient, "chat", fake_chat)
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-image",
+            "message_id": "msg-discord-image",
+            "channel": "discord",
+            "conversation_id": "conv-discord-image",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "",
+            "attachments": [
+                {
+                    "media_type": "image/jpeg",
+                    "filename": "photo.jpg",
+                    "size": 16,
+                    "data_base64": "ZmFrZSBpbWFnZSBieXRlcw==",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["text"] == "A direct Director vision answer."
+    assert data["resolved_agent_id"] == "cloyd-gibbler"
+    assert data["channel_metadata"]["director_route"] == "discord_image_direct"
+    assert data["channel_metadata"]["inference_endpoint_id"] == "vulcan-qwen27-chat"
+    assert captured["runtime_called"] is False
+    assert captured["model"] == "qwen3.8:27b"
+    assert captured["base_url"] == "http://vulcan.test:11434"
+    assert captured["image_count"] == 1
+    assert captured["output_tokens"] == 256

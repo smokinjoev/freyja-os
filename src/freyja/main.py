@@ -41,6 +41,7 @@ from freyja.continuity import continuity_router
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
+from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.freyja3_memory import Freyja3MemoryStore
 from freyja.freyja5_config import (
     FREYJA5_OPEN_WEBUI_AGENT_MODELS,
@@ -97,6 +98,7 @@ FREYJA5_AGENT_GATEWAY_MODELS = {
     "jenna": "agent/jennacide",
 }
 FREYJA_OPENWEBUI_TIMEZONE = "America/New_York"
+DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS = 95
 
 
 class AgentRunFollowUpRequest(BaseModel):
@@ -2152,6 +2154,10 @@ async def _execute_canonical_request(request: CanonicalRequest, raw_request: Req
 
 
 async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_request: Request) -> CanonicalResponse:
+    direct_image_response = await _director_discord_image_response(request)
+    if direct_image_response is not None:
+        return direct_image_response
+
     sender = GatewaySender(
         sender_id=(
             raw_request.headers.get("x-freyja-client-subject")
@@ -2218,6 +2224,86 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
         degraded=result.degraded,
         status="degraded" if result.degraded else "ok",
     )
+
+
+async def _director_discord_image_response(request: CanonicalRequest) -> CanonicalResponse | None:
+    if request.channel != "discord":
+        return None
+    if not bool(request.channel_metadata.get("discord_media_intake")):
+        return None
+    if not request.attachments or not all(_canonical_attachment_is_image(attachment) for attachment in request.attachments):
+        return None
+    endpoint = _director_qwen_vision_endpoint()
+    if endpoint is None:
+        return None
+    images = _images_from_canonical_attachments(request.attachments)
+    if not images:
+        return None
+    prompt = request.text.strip() or (
+        "Describe the attached image in a concise, conversational way. "
+        "Mention only details that are clearly visible, and say when something is uncertain."
+    )
+    client = OllamaClient(base_url=endpoint.base_url, model=endpoint.model)
+    try:
+        response = await asyncio.wait_for(
+            client.chat(
+                prompt=prompt,
+                model=endpoint.model,
+                images=images,
+                output_tokens=256,
+            ),
+            timeout=DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception("Director Discord image route failed endpoint_id=%s", endpoint.endpoint_id)
+        text = (
+            "I received the image, but the vision route timed out before I could finish reading it. "
+            "Please resend it or send a smaller crop."
+        )
+        status = "degraded"
+        degraded = True
+    else:
+        if "error" in response:
+            logger.warning("Director Discord image route returned error endpoint_id=%s error=%s", endpoint.endpoint_id, response.get("error"))
+            return None
+        text = str(response.get("message", {}).get("content") or "").strip()
+        if not text:
+            return None
+        status = "ok"
+        degraded = False
+    return CanonicalResponse(
+        trace_id=request.trace_id,
+        request_message_id=request.message_id,
+        channel=request.channel,
+        conversation_id=request.conversation_id,
+        resolved_user_id=request.resolved_user_id,
+        resolved_agent_id=request.resolved_agent_id,
+        text=text,
+        tool_results=[],
+        channel_metadata={
+            "freyja3": True,
+            "director_route": "discord_image_direct",
+            "inference_endpoint_id": endpoint.endpoint_id,
+            "inference_model": endpoint.model,
+            "inference_machine_id": endpoint.machine_id,
+            "inference_status": status,
+        },
+        degraded=degraded,
+        status=status,
+    )
+
+
+def _canonical_attachment_is_image(attachment: CanonicalAttachment) -> bool:
+    media_type = (attachment.media_type or "").lower()
+    filename = (attachment.filename or attachment.source or attachment.reference or "").lower()
+    return media_type.startswith("image/") or filename.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"))
+
+
+def _director_qwen_vision_endpoint():
+    for endpoint in InferenceRegistryV3().endpoints_for(capability="vision.large", domain_id=SecurityDomainId.HOUSEHOLD):
+        if endpoint.provider == "ollama" and endpoint.model.startswith("qwen3.8:27b"):
+            return endpoint
+    return None
 
 
 def _security_domain_for_canonical_request(request: CanonicalRequest) -> SecurityDomainId:
