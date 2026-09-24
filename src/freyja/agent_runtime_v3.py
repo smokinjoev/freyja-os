@@ -164,6 +164,7 @@ class AgentRuntimeV3:
         requested_route = self.choose_semantic_route(agent, handoff.prompt, bool(handoff.attachments))
         capability = capability_for_route(requested_route)
         selected_tools = self.choose_tools(agent, handoff.prompt, handoff.available_tools)
+        selected_tools = self._prioritize_attachment_tools(agent, handoff, selected_tools)
         steps: list[AgentStep] = [
             AgentStep(kind="objective_received", detail=handoff.prompt),
         ]
@@ -516,7 +517,7 @@ class AgentRuntimeV3:
         lowered = objective.lower()
         candidates: list[str] = []
         rules = (
-            ("web.search", ("search", "look up", "latest", "current")),
+            ("web.search", ("search", "look up", "latest")),
             ("weather.current", ("weather", "forecast", "temperature")),
             ("browser.control", ("browser", "safari", "front tab", "current tab")),
             (
@@ -601,6 +602,28 @@ class AgentRuntimeV3:
         ):
             candidates.remove("weather.current")
         return candidates
+
+    def _prioritize_attachment_tools(
+        self,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        selected_tools: list[str],
+    ) -> list[str]:
+        if not handoff.attachments:
+            return selected_tools
+        selected = list(selected_tools)
+        if not _explicit_home_context(handoff.prompt):
+            selected = [
+                tool_id
+                for tool_id in selected
+                if tool_id not in {"home-assistant.read", "home-assistant.control", "weather.current"}
+            ]
+        available = set(agent.tool_grants).intersection(set(handoff.available_tools))
+        if _handoff_has_document_attachment(handoff) and "documents.process" in available and "documents.process" not in selected:
+            selected.insert(0, "documents.process")
+        if _handoff_has_image_attachment(handoff) and "vision.inspect" in available and "vision.inspect" not in selected:
+            selected.insert(0, "vision.inspect")
+        return selected
 
     def _follow_up_questions(
         self,
@@ -1900,6 +1923,44 @@ def _tool_effective_success(registry_success: bool, output: dict[str, Any]) -> b
 
 def _images_from_handoff(handoff: GatewayHandoff) -> list[Any]:
     return images_from_attachments(_attachment_inputs_from_handoff(handoff))
+
+
+def _handoff_has_document_attachment(handoff: GatewayHandoff) -> bool:
+    return any(attachment.is_document for attachment in _attachment_inputs_from_handoff(handoff))
+
+
+def _handoff_has_image_attachment(handoff: GatewayHandoff) -> bool:
+    return any(attachment.is_image for attachment in _attachment_inputs_from_handoff(handoff))
+
+
+def _explicit_home_context(objective: str) -> bool:
+    lowered = objective.lower()
+    return any(
+        term in lowered
+        for term in (
+            "home assistant",
+            "house state",
+            "home state",
+            "in my home",
+            "at home",
+            "lights",
+            "sensors",
+            "devices",
+            "thermostat",
+            "humidity",
+            "power",
+            "energy",
+            "battery",
+            "voltage",
+            "electric",
+            "electricity",
+            "outlet",
+            "temperature",
+            "door",
+            "lock",
+            "garage",
+        )
+    )
 
 
 def _endpoint_supports_images(endpoint_id: str | None, model: str | None) -> bool:

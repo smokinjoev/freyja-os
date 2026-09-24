@@ -88,7 +88,7 @@ DEFAULT_HOUSEHOLD_AGENTS = (
             + _SCOPED_LEARNING
             + _NO_CANNED_GREETING
         ),
-        tool_grants=frozenset({"home-assistant.read", "home-assistant.control", "calendar.read", "calendar.write", "messaging.send", "macagent.apple", "memory.shared"}),
+        tool_grants=frozenset({"home-assistant.read", "home-assistant.control", "calendar.read", "calendar.write", "messaging.send", "macagent.apple", "documents.process", "vision.inspect", "memory.shared"}),
         memory_scope="family",
         default_model_preset="@preset/freyja-fast-local",
     ),
@@ -98,7 +98,7 @@ DEFAULT_HOUSEHOLD_AGENTS = (
         owner="person:joe",
         person_id="joe",
         capabilities=frozenset({"code.inspect", "code.edit", "code.test", "code.diff", "code.commit"}),
-        tool_grants=frozenset({"calendar.read", "calendar.write", "messaging.send", "macagent.apple", "shell.run", "filesystem.read", "filesystem.write", "git.inspect", "git.write", "coding.execute", "memory.private", "memory.shared"}),
+        tool_grants=frozenset({"calendar.read", "calendar.write", "messaging.send", "macagent.apple", "shell.run", "filesystem.read", "filesystem.write", "git.inspect", "git.write", "coding.execute", "documents.process", "vision.inspect", "memory.private", "memory.shared"}),
         memory_scope="person:joe",
         default_model_preset="@preset/freyja-coder",
         prompt_role=(

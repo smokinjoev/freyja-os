@@ -849,6 +849,36 @@ def test_agent_home_assistant_read_uses_non_mutating_state_tool() -> None:
     assert fake_registry.requests[0].metadata["approval_granted"] is False
 
 
+def test_document_attachment_suppresses_home_assistant_false_positive() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="Does my current resume make sense?",
+            conversation_id="conv-doc-not-ha",
+            attachments=[
+                {
+                    "filename": "resume.pdf",
+                    "media_type": "application/pdf",
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            permissions=frozenset({"documents.process", "home-assistant.read", "weather.current"}),
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    assert "documents.process" in result.selected_tools
+    assert "home-assistant.read" not in result.selected_tools
+    assert "weather.current" not in result.selected_tools
+    assert not any(request.tool_name == "home_assistant_list_states" for request in fake_registry.requests)
+    assert "lights" not in result.response_text.lower()
+
+
 def test_agent_home_assistant_read_runs_before_inference_for_home_language() -> None:
     gateway = AgentGateway()
     handoff = gateway.handle(

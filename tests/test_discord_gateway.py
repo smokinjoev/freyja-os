@@ -190,6 +190,8 @@ async def test_discord_gateway_downloads_pdf_attachment_for_director() -> None:
     assert captured["json"]["channel_metadata"]["discord_media_intake"] is True
     assert captured["json"]["attachments"][0]["filename"] == "plan.pdf"
     assert captured["json"]["attachments"][0]["data_base64"] == "JVBERi0xLjQgZmFrZQ=="
+    assert "documents.process" in captured["json"]["permissions"]
+    assert "vision.inspect" in captured["json"]["permissions"]
     assert "Trusted Discord metadata" in captured["json"]["text"]
 
 
