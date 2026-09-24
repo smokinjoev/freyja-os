@@ -48,6 +48,7 @@ SUPPORTED_ATTACHMENT_MIME_TYPES = frozenset(
 )
 MAX_ROUTED_IMAGE_SIDE = 1280
 MAX_ROUTED_IMAGE_BYTES = 1_500_000
+RECENT_ATTACHMENT_CONTEXT_SECONDS = 20 * 60
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,12 @@ class DiscordUnsupportedMessageReply:
     message_reference_id: str
 
 
+@dataclass(frozen=True)
+class RecentAttachmentContext:
+    attachments: list[NormalizedAttachment]
+    created_at: datetime
+
+
 class DiscordAttachmentError(Exception):
     pass
 
@@ -94,7 +101,7 @@ class DiscordGateway:
         self._client = client
         self._director_client = director_client
         self._bindings = {binding.discord_user_id: binding.agent_id for binding in settings.user_agent_bindings}
-        self._recent_attachments_by_conversation: dict[str, list[NormalizedAttachment]] = {}
+        self._recent_attachments_by_conversation: dict[str, RecentAttachmentContext] = {}
 
     def validate_startup(self) -> list[str]:
         failures: list[str] = []
@@ -176,17 +183,21 @@ class DiscordGateway:
                 agent_id=agent.agent_id,
                 trace_id=trace_id,
             )
+        now = datetime.now(UTC)
         if attachments:
-            self._recent_attachments_by_conversation[conversation_id] = attachments
-        elif _refers_to_recent_attachment(text):
-            attachments = self._recent_attachments_by_conversation.get(conversation_id, [])
+            self._recent_attachments_by_conversation[conversation_id] = RecentAttachmentContext(
+                attachments=attachments,
+                created_at=now,
+            )
+        else:
+            attachments = self._recent_attachments_for_followup(conversation_id, text, now=now)
         normalized = NormalizedMessage(
             transport="discord",
             sender=message.author_id,
             conversation_id=conversation_id,
             message_id=message.message_id,
             text=text,
-            timestamp=datetime.now(UTC),
+            timestamp=now,
             authorized=True,
             attachments=attachments,
         )
@@ -315,6 +326,28 @@ class DiscordGateway:
                 await client.aclose()
         return normalized
 
+    def _recent_attachments_for_followup(
+        self,
+        conversation_id: str,
+        text: str,
+        *,
+        now: datetime,
+    ) -> list[NormalizedAttachment]:
+        context = self._recent_attachments_by_conversation.get(conversation_id)
+        if context is None:
+            return []
+        age_seconds = (now - context.created_at).total_seconds()
+        if age_seconds > RECENT_ATTACHMENT_CONTEXT_SECONDS:
+            self._recent_attachments_by_conversation.pop(conversation_id, None)
+            return []
+        if _starts_new_topic(text):
+            return []
+        if _refers_to_recent_attachment(text):
+            return context.attachments
+        if any(attachment.is_document for attachment in context.attachments):
+            return context.attachments
+        return []
+
 
 def _agent_by_id(agent_id: str):
     for agent in household_agents.all():
@@ -391,6 +424,27 @@ def _refers_to_recent_attachment(text: str) -> bool:
             " summarize",
         )
     )
+
+
+def _starts_new_topic(text: str) -> bool:
+    normalized = f" {text.lower()} "
+    new_topic_terms = (
+        " home assistant",
+        " lights",
+        " thermostat",
+        " weather",
+        " calendar",
+        " remind me",
+        " text ",
+        " message ",
+        " call ",
+        " docker",
+        " git ",
+        " commit",
+        " service",
+        " restart",
+    )
+    return any(term in normalized for term in new_topic_terms)
 
 
 def _prepare_image_for_vision(*, content: bytes, filename: str, mime_type: str) -> tuple[bytes, str, str]:

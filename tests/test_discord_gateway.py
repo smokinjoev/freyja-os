@@ -474,6 +474,122 @@ async def test_discord_gateway_reuses_recent_attachment_for_followup_reference()
     assert captured_posts[1]["channel_metadata"]["discord_media_intake"] is True
 
 
+@pytest.mark.asyncio
+async def test_discord_gateway_reuses_recent_document_for_short_followup() -> None:
+    captured_posts: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=b"%PDF-1.4 fake")
+
+        async def post(self, url, *, json, headers):
+            captured_posts.append(json)
+            return FakeResponse(payload={"text": "handled"})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    first = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m8",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="does this resume make sense?",
+            attachments=(
+                {
+                    "filename": "resume.pdf",
+                    "content_type": "application/pdf",
+                    "size": 16,
+                    "url": "https://cdn.discordapp.test/resume.pdf",
+                },
+            ),
+        )
+    )
+    followup = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m9",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="improve it",
+        )
+    )
+
+    assert first is not None
+    assert followup is not None
+    assert len(captured_posts) == 2
+    assert captured_posts[1]["attachments"][0]["filename"] == "resume.pdf"
+    assert captured_posts[1]["channel_metadata"]["discord_media_intake"] is True
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_does_not_reuse_recent_document_for_new_topic() -> None:
+    captured_posts: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=b"%PDF-1.4 fake")
+
+        async def post(self, url, *, json, headers):
+            captured_posts.append(json)
+            return FakeResponse(payload={"text": "handled"})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m10",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="does this resume make sense?",
+            attachments=(
+                {
+                    "filename": "resume.pdf",
+                    "content_type": "application/pdf",
+                    "size": 16,
+                    "url": "https://cdn.discordapp.test/resume.pdf",
+                },
+            ),
+        )
+    )
+    await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m11",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="how many lights are on?",
+        )
+    )
+
+    assert len(captured_posts) == 2
+    assert captured_posts[1]["attachments"] == []
+    assert captured_posts[1]["channel_metadata"]["discord_media_intake"] is False
+
+
 def test_discord_verifier_checks_connector_token_leaks(tmp_path) -> None:
     spec = importlib.util.spec_from_file_location("verify_freyja_62_messaging", VERIFY_SCRIPT)
     assert spec is not None
