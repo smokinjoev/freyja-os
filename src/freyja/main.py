@@ -70,7 +70,7 @@ from freyja.inference import InferenceProviderProfile, ProviderReadiness, provid
 from freyja.iris_router import IrisRouterClient
 from freyja.iris_monitor import start_iris_warm_monitor, stop_iris_warm_monitor
 from freyja.macagent import MacAgentClient
-from freyja.media import AttachmentInput, images_from_attachments
+from freyja.media import AttachmentInput, document_texts_from_attachments, images_from_attachments
 from freyja.home_memory import home_memory_router
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
@@ -2056,6 +2056,10 @@ def _sanitize_tool_results(tool_results: list[dict[str, Any]]) -> list[dict[str,
 
 
 def _images_from_canonical_attachments(attachments: list[CanonicalAttachment]) -> list[Any]:
+    return images_from_attachments(_attachment_inputs_from_canonical_attachments(attachments))
+
+
+def _attachment_inputs_from_canonical_attachments(attachments: list[CanonicalAttachment]) -> list[AttachmentInput]:
     attachment_inputs: list[AttachmentInput] = []
     for attachment in attachments:
         path = None
@@ -2070,7 +2074,7 @@ def _images_from_canonical_attachments(attachments: list[CanonicalAttachment]) -
                 size_bytes=attachment.size,
             )
         )
-    return images_from_attachments(attachment_inputs)
+    return attachment_inputs
 
 
 @app.post("/route")
@@ -2159,6 +2163,9 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
     direct_image_response = await _director_discord_image_response(request)
     if direct_image_response is not None:
         return direct_image_response
+    direct_document_response = await _director_discord_document_response(request)
+    if direct_document_response is not None:
+        return direct_document_response
 
     sender = GatewaySender(
         sender_id=(
@@ -2321,10 +2328,97 @@ async def _director_discord_image_response(request: CanonicalRequest) -> Canonic
     )
 
 
+async def _director_discord_document_response(request: CanonicalRequest) -> CanonicalResponse | None:
+    if request.channel != "discord":
+        return None
+    if not bool(request.channel_metadata.get("discord_media_intake")):
+        return None
+    if not request.attachments or not any(_canonical_attachment_is_document(attachment) for attachment in request.attachments):
+        return None
+    nexus_base_url = settings.nexus_base_url.rstrip("/")
+    nexus_api_key = _director_nexus_api_key()
+    if not nexus_base_url or not nexus_api_key:
+        return None
+    documents = document_texts_from_attachments(
+        _attachment_inputs_from_canonical_attachments(request.attachments),
+        max_chars_per_document=12000,
+        max_pages=12,
+    )
+    readable_documents = [document for document in documents if document.ok]
+    if not readable_documents:
+        return None
+    document_context = "\n\n".join(
+        f"Document: {document.filename} ({document.mime_type}, {document.page_count or 1} page(s))\n{document.text}"
+        for document in readable_documents
+    )
+    question = request.text.strip() or "Review this document and tell me if it makes sense."
+    prompt = (
+        "Answer the user's question using only the attached document text below. "
+        "If the document is a resume, give practical, concise feedback about clarity, structure, impact, and confusing points. "
+        "Do not answer from Home Assistant or household state.\n\n"
+        f"User question: {question}\n\n"
+        f"{document_context}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{nexus_base_url}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {nexus_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2,
+                    "max_tokens": 700,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        logger.exception("Director Discord document Nexus route failed model=%s", DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL)
+        return None
+    choices = data.get("choices") or []
+    message = choices[0].get("message") if choices else {}
+    text = str(message.get("content") or "").strip()
+    if not text:
+        return None
+    return CanonicalResponse(
+        trace_id=request.trace_id,
+        request_message_id=request.message_id,
+        channel=request.channel,
+        conversation_id=request.conversation_id,
+        resolved_user_id=request.resolved_user_id,
+        resolved_agent_id=request.resolved_agent_id,
+        text=text,
+        tool_results=[],
+        channel_metadata={
+            "freyja3": True,
+            "director_route": "discord_document_direct",
+            "inference_endpoint_id": "vulcan-nexus-discord-document",
+            "inference_provider": "nexus",
+            "inference_model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+            "inference_machine_id": "vulcan",
+            "inference_status": "ok",
+            "finish_reason": choices[0].get("finish_reason") if choices else None,
+            "document_count": len(readable_documents),
+        },
+        degraded=False,
+        status="ok",
+    )
+
+
 def _canonical_attachment_is_image(attachment: CanonicalAttachment) -> bool:
     media_type = (attachment.media_type or "").lower()
     filename = (attachment.filename or attachment.source or attachment.reference or "").lower()
     return media_type.startswith("image/") or filename.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"))
+
+
+def _canonical_attachment_is_document(attachment: CanonicalAttachment) -> bool:
+    media_type = (attachment.media_type or "").lower()
+    filename = (attachment.filename or attachment.source or attachment.reference or "").lower()
+    return media_type == "application/pdf" or filename.endswith(".pdf") or filename.endswith(".docx")
 
 
 def _director_nexus_api_key() -> str:
