@@ -10,7 +10,13 @@ import pytest
 from PIL import Image
 
 from connectors.discord.config import DiscordSettings, parse_seen_reactions, parse_user_agent_bindings
-from connectors.discord.gateway import DIRECTOR_ROUTE_TIMEOUT_SECONDS, DiscordGateway, DiscordInboundMessage, DiscordOutboundReply
+from connectors.discord.gateway import (
+    DIRECTOR_ROUTE_TIMEOUT_SECONDS,
+    SUPPORTED_ATTACHMENT_MIME_TYPES,
+    DiscordGateway,
+    DiscordInboundMessage,
+    DiscordOutboundReply,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify-freyja-6.2-messaging.py"
@@ -35,6 +41,11 @@ def test_discord_user_agent_bindings_reject_duplicate_user() -> None:
 
 def test_discord_gateway_director_timeout_allows_long_local_generation() -> None:
     assert DIRECTOR_ROUTE_TIMEOUT_SECONDS >= 300
+
+
+def test_discord_gateway_accepts_apple_heif_images() -> None:
+    assert "image/heic" in SUPPORTED_ATTACHMENT_MIME_TYPES
+    assert "image/heif" in SUPPORTED_ATTACHMENT_MIME_TYPES
 
 
 def test_discord_user_agent_bindings_allow_shared_default_agent() -> None:

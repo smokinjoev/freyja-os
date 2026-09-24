@@ -44,6 +44,7 @@ SUPPORTED_ATTACHMENT_MIME_TYPES = frozenset(
         "image/gif",
         "image/webp",
         "image/heic",
+        "image/heif",
     }
 )
 MAX_ROUTED_IMAGE_SIDE = 1280
@@ -501,4 +502,6 @@ def _mime_from_name(filename: str) -> str | None:
         return "image/webp"
     if lowered.endswith(".heic"):
         return "image/heic"
+    if lowered.endswith(".heif"):
+        return "image/heif"
     return None
