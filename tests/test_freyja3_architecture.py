@@ -1859,6 +1859,7 @@ def test_discord_pdf_canonical_route_uses_direct_nexus_document_review(monkeypat
     assert captured["runtime_called"] is False
     assert captured["url"] == "http://nexus.test:3939/v1/chat/completions"
     assert captured["json"]["model"] == "external-ollama/qwen3.8:27b"
+    assert captured["json"]["max_tokens"] == 1400
     assert "Built reliable agent systems" in captured["json"]["messages"][0]["content"]
     assert "Do not answer from Home Assistant" in captured["json"]["messages"][0]["content"]
 

@@ -2374,7 +2374,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
                 nexus_base_url=nexus_base_url,
                 nexus_api_key=nexus_api_key,
                 prompt=prompt,
-                max_tokens=700,
+                max_tokens=1400,
             )
             text, finish_reason = _nexus_chat_text_and_finish_reason(data)
             if not text:
@@ -2390,7 +2390,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
                     nexus_base_url=nexus_base_url,
                     nexus_api_key=nexus_api_key,
                     prompt=retry_prompt,
-                    max_tokens=450,
+                    max_tokens=900,
                 )
                 text, finish_reason = _nexus_chat_text_and_finish_reason(data)
     except Exception:
