@@ -15,13 +15,17 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from connectors.discord.config import DiscordSettings
 from connectors.messaging import (
     AuthorizedSender,
+    NormalizedAttachment,
     NormalizedMessage,
     canonical_director_payload,
     director_headers,
     director_response_text,
     post_canonical_to_director,
-    NormalizedAttachment,
 )
+from freyja.foundation_models import SecurityDomainId
+from freyja.inference_registry_v3 import InferenceRegistryV3
+from freyja.media import images_from_attachments
+from freyja.ollama_client import OllamaClient
 from freyja.agents.household import household_agents
 
 
@@ -47,6 +51,7 @@ SUPPORTED_ATTACHMENT_MIME_TYPES = frozenset(
 )
 MAX_ROUTED_IMAGE_SIDE = 1280
 MAX_ROUTED_IMAGE_BYTES = 1_500_000
+DIRECT_IMAGE_TIMEOUT_SECONDS = 95
 
 
 @dataclass(frozen=True)
@@ -179,6 +184,15 @@ class DiscordGateway:
             self._recent_attachments_by_conversation[conversation_id] = attachments
         elif _refers_to_recent_attachment(text):
             attachments = self._recent_attachments_by_conversation.get(conversation_id, [])
+        if attachments and _image_only_attachments(attachments):
+            direct_reply = await _direct_image_vision_reply(text=text, attachments=attachments)
+            if direct_reply:
+                return DiscordOutboundReply(
+                    text=direct_reply[:2000],
+                    message_reference_id=message.message_id,
+                    agent_id=agent.agent_id,
+                    trace_id=trace_id,
+                )
         normalized = NormalizedMessage(
             transport="discord",
             sender=message.author_id,
@@ -331,6 +345,51 @@ def _discord_safe_reply(text: str, *, has_attachments: bool) -> str:
             "Ask me a specific question about the file and I'll try again."
         )
     return "I received it, but I couldn't produce a useful answer yet. Try rephrasing with a bit more detail."
+
+
+def _image_only_attachments(attachments: list[NormalizedAttachment]) -> bool:
+    return bool(attachments) and all(attachment.is_image for attachment in attachments)
+
+
+async def _direct_image_vision_reply(*, text: str, attachments: list[NormalizedAttachment]) -> str | None:
+    endpoint = _direct_qwen_vision_endpoint()
+    if endpoint is None:
+        return None
+    images = images_from_attachments([attachment.to_attachment_input() for attachment in attachments])
+    if not images:
+        return None
+    prompt = text.strip() or (
+        "Describe the attached image in a concise, conversational way. "
+        "Mention only details that are clearly visible, and say when something is uncertain."
+    )
+    client = OllamaClient(base_url=endpoint.base_url, model=endpoint.model)
+    try:
+        response = await asyncio.wait_for(
+            client.chat(
+                prompt=prompt,
+                model=endpoint.model,
+                images=images,
+                output_tokens=256,
+            ),
+            timeout=DIRECT_IMAGE_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception("Discord direct image vision failed endpoint_id=%s", endpoint.endpoint_id)
+        return (
+            "I received the image, but the direct vision route timed out before I could finish reading it. "
+            "Please resend it or send a smaller crop."
+        )
+    if "error" in response:
+        logger.warning("Discord direct image vision returned error endpoint_id=%s error=%s", endpoint.endpoint_id, response.get("error"))
+        return None
+    return str(response.get("message", {}).get("content") or "").strip() or None
+
+
+def _direct_qwen_vision_endpoint():
+    for endpoint in InferenceRegistryV3().endpoints_for(capability="vision.large", domain_id=SecurityDomainId.HOUSEHOLD):
+        if endpoint.provider == "ollama" and endpoint.model.startswith("qwen3.8:27b"):
+            return endpoint
+    return None
 
 
 def _looks_like_internal_status_reply(text: str) -> bool:

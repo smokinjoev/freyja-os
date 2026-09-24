@@ -11,6 +11,7 @@ from PIL import Image
 
 from connectors.discord.config import DiscordSettings, parse_seen_reactions, parse_user_agent_bindings
 from connectors.discord.gateway import DiscordGateway, DiscordInboundMessage, DiscordOutboundReply
+from freyja.foundation_models import InferenceEndpoint, SecurityDomainId
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify-freyja-6.2-messaging.py"
@@ -246,7 +247,8 @@ async def test_discord_gateway_retries_transient_attachment_download_timeout() -
 
 
 @pytest.mark.asyncio
-async def test_discord_gateway_normalizes_large_image_attachment() -> None:
+async def test_discord_gateway_normalizes_large_image_attachment(monkeypatch) -> None:
+    monkeypatch.setattr("connectors.discord.gateway._direct_qwen_vision_endpoint", lambda: None)
     captured = {}
     image_buffer = BytesIO()
     Image.frombytes("RGB", (1800, 1500), os.urandom(1800 * 1500 * 3)).save(image_buffer, format="JPEG", quality=96)
@@ -296,6 +298,75 @@ async def test_discord_gateway_normalizes_large_image_attachment() -> None:
     assert attachment["filename"] == "large.jpg"
     assert attachment["media_type"] == "image/jpeg"
     assert attachment["size"] < len(image_bytes)
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_routes_image_only_message_directly_to_qwen_vision(monkeypatch) -> None:
+    captured = {"post_called": False, "chat_images": 0}
+
+    endpoint = InferenceEndpoint(
+        endpoint_id="vulcan-qwen27-chat",
+        display_name="Vulcan Qwen 27B",
+        provider="ollama",
+        base_url="http://vulcan.test:11434",
+        model="qwen3.8:27b",
+        capabilities=frozenset({"vision.large"}),
+        security_domain_id=SecurityDomainId.HOUSEHOLD,
+    )
+    monkeypatch.setattr("connectors.discord.gateway._direct_qwen_vision_endpoint", lambda: endpoint)
+
+    async def fake_chat(self, prompt, *, model=None, images=None, output_tokens=None, **kwargs):
+        captured["prompt"] = prompt
+        captured["model"] = model
+        captured["base_url"] = self.base_url
+        captured["chat_images"] = len(images or [])
+        captured["output_tokens"] = output_tokens
+        return {"message": {"content": "A clear image answer."}}
+
+    monkeypatch.setattr("connectors.discord.gateway.OllamaClient.chat", fake_chat)
+
+    class FakeResponse:
+        def __init__(self, *, content=b"fake image bytes") -> None:
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse()
+
+        async def post(self, url, *, json, headers):
+            captured["post_called"] = True
+            raise AssertionError("Director should not be called for direct image-only Discord messages.")
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m4f",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="",
+            attachments=(
+                {
+                    "filename": "photo.jpg",
+                    "content_type": "image/jpeg",
+                    "size": 16,
+                    "url": "https://cdn.discordapp.test/photo.jpg",
+                },
+            ),
+        )
+    )
+
+    assert reply is not None
+    assert reply.text == "A clear image answer."
+    assert captured["post_called"] is False
+    assert captured["chat_images"] == 1
+    assert captured["model"] == "qwen3.8:27b"
+    assert captured["base_url"] == "http://vulcan.test:11434"
+    assert captured["output_tokens"] == 256
 
 
 @pytest.mark.asyncio
@@ -413,7 +484,8 @@ async def test_discord_gateway_suppresses_internal_attachment_status_reply() -> 
 
 
 @pytest.mark.asyncio
-async def test_discord_gateway_reuses_recent_attachment_for_followup_reference() -> None:
+async def test_discord_gateway_reuses_recent_attachment_for_followup_reference(monkeypatch) -> None:
+    monkeypatch.setattr("connectors.discord.gateway._direct_qwen_vision_endpoint", lambda: None)
     captured_posts: list[dict[str, object]] = []
 
     class FakeResponse:
