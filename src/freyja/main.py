@@ -100,6 +100,7 @@ FREYJA5_AGENT_GATEWAY_MODELS = {
 }
 FREYJA_OPENWEBUI_TIMEZONE = "America/New_York"
 DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS = 95
+DIRECTOR_DISCORD_DOCUMENT_TIMEOUT_SECONDS = 240
 DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL = "external-ollama/qwen3.8:27b"
 
 
@@ -2369,7 +2370,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
         f"{document_context}"
     )
     try:
-        async with httpx.AsyncClient(timeout=DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=DIRECTOR_DISCORD_DOCUMENT_TIMEOUT_SECONDS) as client:
             data = await _post_discord_document_to_nexus(
                 client=client,
                 nexus_base_url=nexus_base_url,

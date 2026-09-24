@@ -49,6 +49,7 @@ SUPPORTED_ATTACHMENT_MIME_TYPES = frozenset(
 MAX_ROUTED_IMAGE_SIDE = 1280
 MAX_ROUTED_IMAGE_BYTES = 1_500_000
 RECENT_ATTACHMENT_CONTEXT_SECONDS = 20 * 60
+DIRECTOR_ROUTE_TIMEOUT_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -232,7 +233,7 @@ class DiscordGateway:
             agent_display_name=DISCORD_AGENT_DISPLAY_NAMES.get(agent.agent_id, agent.display_name),
             person_id=agent.person_id,
         )
-        client = self._director_client or self._client or httpx.AsyncClient(timeout=180)
+        client = self._director_client or self._client or httpx.AsyncClient(timeout=DIRECTOR_ROUTE_TIMEOUT_SECONDS)
         close_client = self._director_client is None and self._client is None
         try:
             logger.info("Discord director route start message_id=%s attachments=%s", message.message_id, len(attachments))
@@ -243,7 +244,7 @@ class DiscordGateway:
                     payload=canonical_director_payload(request, text=prompt_text),
                     headers=headers,
                 ),
-                timeout=170,
+                timeout=DIRECTOR_ROUTE_TIMEOUT_SECONDS,
             )
             logger.info("Discord director route completed message_id=%s", message.message_id)
         except (asyncio.TimeoutError, httpx.HTTPError):
