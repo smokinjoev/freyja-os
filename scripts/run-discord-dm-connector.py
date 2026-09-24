@@ -185,7 +185,8 @@ class DiscordDmRunner:
     async def _send_seen_feedback(self, message: DiscordInboundMessage) -> None:
         if not self._settings.seen_reactions_enabled:
             return
-        for reaction in self._settings.seen_reactions:
+        seen_reactions = tuple(dict.fromkeys(self._settings.seen_reactions))
+        for reaction in seen_reactions:
             try:
                 response = await self._client.put(
                     f"{API_BASE}/channels/{message.channel_id}/messages/{message.message_id}/reactions/{quote(reaction, safe='')}/@me",
@@ -193,6 +194,21 @@ class DiscordDmRunner:
                     timeout=5,
                 )
                 response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429:
+                    await self._send_typing_feedback(message.channel_id)
+                    logger.warning(
+                        "Discord seen reaction rate-limited message_id=%s reaction=%r",
+                        message.message_id,
+                        reaction,
+                    )
+                    return
+                logger.warning(
+                    "Discord seen reaction failed message_id=%s reaction=%r error=%s",
+                    message.message_id,
+                    reaction,
+                    exc,
+                )
             except Exception as exc:  # noqa: BLE001 - feedback should never block the actual reply
                 logger.warning(
                     "Discord seen reaction failed message_id=%s reaction=%r error=%s",
@@ -200,6 +216,17 @@ class DiscordDmRunner:
                     reaction,
                     exc,
                 )
+
+    async def _send_typing_feedback(self, channel_id: str) -> None:
+        try:
+            response = await self._client.post(
+                f"{API_BASE}/channels/{channel_id}/typing",
+                headers=_bot_headers(self._settings.bot_token),
+                timeout=5,
+            )
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001 - feedback should never block the actual reply
+            logger.warning("Discord typing feedback failed channel_id=%s error=%s", channel_id, exc)
 
 
 def _identify_payload(token: str) -> dict[str, Any]:

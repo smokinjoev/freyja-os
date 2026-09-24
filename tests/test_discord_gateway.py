@@ -885,6 +885,84 @@ async def test_discord_dm_runner_sends_seen_reactions_before_reply() -> None:
 
 
 @pytest.mark.asyncio
+async def test_discord_dm_runner_falls_back_to_typing_when_seen_reaction_rate_limited() -> None:
+    spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    events: list[tuple[str, str]] = []
+
+    class FakeResponse:
+        status_code = 204
+
+        def __init__(self, *, status_code: int = 204) -> None:
+            self.status_code = status_code
+            self.request = httpx.Request("PUT", "https://discord.test/reaction")
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    "rate limited",
+                    request=self.request,
+                    response=httpx.Response(self.status_code, request=self.request),
+                )
+
+    class FakeClient:
+        async def put(self, url, *, headers, **kwargs):
+            events.append(("put", url))
+            return FakeResponse(status_code=429)
+
+        async def post(self, url, *, headers, json=None, **kwargs):
+            events.append(("post", url))
+            return FakeResponse()
+
+    class FakeGateway:
+        def would_route(self, message):
+            return True
+
+        def unsupported_message_reply(self, message):
+            return None
+
+        async def handle_message(self, message):
+            events.append(("handle", message.message_id))
+            return DiscordOutboundReply(
+                text="final",
+                message_reference_id=message.message_id,
+                agent_id="freyja",
+                trace_id="trace",
+            )
+
+    settings = DiscordSettings(
+        enabled=True,
+        bot_token="not-a-real-token",
+        director_url="http://director.test",
+        connector_token="connector-token",
+        user_agent_bindings=parse_user_agent_bindings("100=freyja"),
+        seen_reactions=("👀", "👀"),
+    )
+    runner = module.DiscordDmRunner(settings=settings, gateway=FakeGateway(), client=FakeClient())
+    await runner._handle_gateway_event(
+        {
+            "op": 0,
+            "t": "MESSAGE_CREATE",
+            "d": {
+                "id": "m1",
+                "channel_id": "dm1",
+                "content": "hello",
+                "author": {"id": "100"},
+                "attachments": [],
+                "embeds": [],
+            },
+        }
+    )
+
+    assert [event[0] for event in events] == ["put", "post", "handle", "post"]
+    assert events[1][1].endswith("/channels/dm1/typing")
+
+
+@pytest.mark.asyncio
 async def test_discord_dm_runner_sends_long_reply_as_multiple_messages() -> None:
     spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
     assert spec is not None
