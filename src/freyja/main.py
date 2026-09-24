@@ -2360,6 +2360,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
         for document in readable_documents
     )
     question = request.text.strip() or "Review this document and tell me if it makes sense."
+    answer_budget = _discord_document_answer_budget(question)
     prompt = (
         "Answer the user's question using only the attached document text below. "
         "If the document is a resume, give practical, concise feedback about clarity, structure, impact, and confusing points. "
@@ -2374,7 +2375,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
                 nexus_base_url=nexus_base_url,
                 nexus_api_key=nexus_api_key,
                 prompt=prompt,
-                max_tokens=1400,
+                max_tokens=answer_budget,
             )
             text, finish_reason = _nexus_chat_text_and_finish_reason(data)
             if not text:
@@ -2390,7 +2391,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
                     nexus_base_url=nexus_base_url,
                     nexus_api_key=nexus_api_key,
                     prompt=retry_prompt,
-                    max_tokens=900,
+                    max_tokens=min(answer_budget, 1200),
                 )
                 text, finish_reason = _nexus_chat_text_and_finish_reason(data)
     except Exception:
@@ -2435,6 +2436,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
             "finish_reason": finish_reason,
             "document_count": len(readable_documents),
             "document_route": "pushed_to_nexus",
+            "answer_budget": answer_budget,
         },
         degraded=False,
         status="ok",
@@ -2485,6 +2487,24 @@ def _nexus_chat_text_and_finish_reason(data: dict[str, Any]) -> tuple[str, objec
                 parts.append(item["text"])
         return "\n".join(parts).strip(), choice.get("finish_reason")
     return "", choice.get("finish_reason")
+
+
+def _discord_document_answer_budget(question: str) -> int:
+    lowered = question.lower()
+    long_intent_terms = (
+        "rewrite",
+        "full",
+        "complete",
+        "detailed",
+        "exhaustive",
+        "go deep",
+        "long",
+        "pages",
+        "everything",
+        "line by line",
+        "section by section",
+    )
+    return 4000 if any(term in lowered for term in long_intent_terms) else 1800
 
 
 def _clean_discord_document_text(text: str) -> str:

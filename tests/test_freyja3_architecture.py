@@ -1859,7 +1859,8 @@ def test_discord_pdf_canonical_route_uses_direct_nexus_document_review(monkeypat
     assert captured["runtime_called"] is False
     assert captured["url"] == "http://nexus.test:3939/v1/chat/completions"
     assert captured["json"]["model"] == "external-ollama/qwen3.8:27b"
-    assert captured["json"]["max_tokens"] == 1400
+    assert captured["json"]["max_tokens"] == 1800
+    assert data["channel_metadata"]["answer_budget"] == 1800
     assert "Built reliable agent systems" in captured["json"]["messages"][0]["content"]
     assert "Do not answer from Home Assistant" in captured["json"]["messages"][0]["content"]
 
@@ -2082,6 +2083,83 @@ def test_discord_pdf_canonical_route_sends_compact_clean_text_to_nexus(monkeypat
     prompt = captured["json"]["messages"][0]["content"]
     assert "\uf0b7" not in prompt
     assert "- Engineering leadership" in prompt
+
+
+def test_discord_pdf_canonical_route_raises_budget_for_rewrite_requests(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {}
+    real_async_client = freyja_main.httpx.AsyncClient
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 2
+        text = "Joe Verant\\nDirector of Engineering\\nBuilt reliable agent systems."
+        ok = True
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "Long rewrite."}, "finish_reason": "stop"}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf-rewrite-budget",
+            "message_id": "msg-discord-pdf-rewrite-budget",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Give me a full detailed rewrite of this resume section by section.",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert captured["json"]["max_tokens"] == 4000
+    assert data["channel_metadata"]["answer_budget"] == 4000
 
 
 def test_discord_pdf_canonical_route_previews_text_when_nexus_stays_empty(monkeypatch) -> None:
