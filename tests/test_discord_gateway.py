@@ -460,7 +460,7 @@ async def test_discord_gateway_reuses_recent_attachment_for_followup_reference()
             author_id="100",
             channel_id="dm-channel",
             channel_type="dm",
-            content="can you tell me what the photo is of?",
+            content="what do you see?",
         )
     )
 

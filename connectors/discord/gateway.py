@@ -343,6 +343,18 @@ def _looks_like_internal_status_reply(text: str) -> bool:
 
 def _refers_to_recent_attachment(text: str) -> bool:
     normalized = f" {text.lower()} "
+    if any(
+        phrase in normalized
+        for phrase in (
+            " what do you see",
+            " what can you see",
+            " what are you seeing",
+            " what do you notice",
+            " look at it",
+            " take a look",
+        )
+    ):
+        return True
     reference_terms = (
         " attachment",
         " file",
@@ -370,6 +382,10 @@ def _refers_to_recent_attachment(text: str) -> bool:
             " whats",
             " tell me",
             " describe",
+            " see",
+            " seeing",
+            " look",
+            " looking",
             " read ",
             " summarize",
         )
