@@ -2345,7 +2345,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
         )
     documents = document_texts_from_attachments(
         _attachment_inputs_from_canonical_attachments(request.attachments),
-        max_chars_per_document=12000,
+        max_chars_per_document=6000,
         max_pages=12,
     )
     readable_documents = [document for document in documents if document.ok]
@@ -2356,7 +2356,7 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
             reason="document_text_unavailable",
         )
     document_context = "\n\n".join(
-        f"Document: {document.filename} ({document.mime_type}, {document.page_count or 1} page(s))\n{document.text}"
+        f"Document: {document.filename} ({document.mime_type}, {document.page_count or 1} page(s))\n{_clean_discord_document_text(document.text)}"
         for document in readable_documents
     )
     question = request.text.strip() or "Review this document and tell me if it makes sense."
@@ -2381,9 +2381,9 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
                 retry_prompt = (
                     "Summarize the attached document text in 5 concise bullets. "
                     "If it is a resume, say whether it makes sense and list the clearest improvements. "
-                    "Use only the document text.\n\n"
+                    "Use only the document text. Do not return an empty answer; if you are unsure, say what you can tell from the text.\n\n"
                     f"User question: {question}\n\n"
-                    f"{document_context[:8000]}"
+                    f"{document_context[:3500]}"
                 )
                 data = await _post_discord_document_to_nexus(
                     client=client,
@@ -2485,6 +2485,23 @@ def _nexus_chat_text_and_finish_reason(data: dict[str, Any]) -> tuple[str, objec
                 parts.append(item["text"])
         return "\n".join(parts).strip(), choice.get("finish_reason")
     return "", choice.get("finish_reason")
+
+
+def _clean_discord_document_text(text: str) -> str:
+    replacements = {
+        "\u2022": "-",
+        "\uf0b7": "-",
+        "\u00a0": " ",
+    }
+    cleaned = text
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+    lines = []
+    for raw_line in cleaned.splitlines():
+        line = " ".join(raw_line.strip().split())
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
 
 
 def _discord_document_extracted_text_preview(documents: list[Any], question: str) -> str:
