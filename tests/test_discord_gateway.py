@@ -722,6 +722,23 @@ def test_discord_dm_runner_translates_dm_payload_and_intents() -> None:
     assert identify["d"]["intents"] == module.INTENT_DIRECT_MESSAGES | module.INTENT_MESSAGE_CONTENT
 
 
+def test_discord_dm_runner_chunks_long_replies_on_boundaries() -> None:
+    spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    text = ("First paragraph. " * 90) + "\n\n" + ("Second paragraph. " * 90)
+
+    chunks = module._discord_message_chunks(text)
+
+    assert len(chunks) > 1
+    assert all(0 < len(chunk) <= module.DISCORD_MESSAGE_LIMIT for chunk in chunks)
+    assert "First paragraph" in chunks[0]
+    assert "Second paragraph" in chunks[-1]
+
+
 @pytest.mark.asyncio
 async def test_discord_dm_runner_sends_seen_reactions_before_reply() -> None:
     spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
@@ -792,6 +809,77 @@ async def test_discord_dm_runner_sends_seen_reactions_before_reply() -> None:
     assert [event[0] for event in events] == ["put", "put", "handle", "post"]
     assert "%F0%9F%91%80" in events[0][1]
     assert "%E2%9C%85" in events[1][1]
+
+
+@pytest.mark.asyncio
+async def test_discord_dm_runner_sends_long_reply_as_multiple_messages() -> None:
+    spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    sent_payloads: list[dict[str, object]] = []
+    long_reply = ("Resume feedback paragraph. " * 180).strip()
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        async def put(self, url, *, headers, **kwargs):
+            return FakeResponse()
+
+        async def get(self, url, **kwargs):
+            return FakeResponse()
+
+        async def post(self, url, *, headers, json):
+            sent_payloads.append(json)
+            return FakeResponse()
+
+    class FakeGateway:
+        def would_route(self, message):
+            return True
+
+        def unsupported_message_reply(self, message):
+            return None
+
+        async def handle_message(self, message):
+            return DiscordOutboundReply(
+                text=long_reply,
+                message_reference_id=message.message_id,
+                agent_id="freyja",
+                trace_id="trace",
+            )
+
+    settings = DiscordSettings(
+        enabled=True,
+        bot_token="not-a-real-token",
+        director_url="http://director.test",
+        connector_token="connector-token",
+        user_agent_bindings=parse_user_agent_bindings("100=freyja"),
+        seen_reactions=(),
+    )
+    runner = module.DiscordDmRunner(settings=settings, gateway=FakeGateway(), client=FakeClient())
+    await runner._handle_gateway_event(
+        {
+            "op": 0,
+            "t": "MESSAGE_CREATE",
+            "d": {
+                "id": "m1",
+                "channel_id": "dm1",
+                "content": "hello",
+                "author": {"id": "100"},
+                "attachments": [],
+                "embeds": [],
+            },
+        }
+    )
+
+    assert len(sent_payloads) > 1
+    assert "".join(str(payload["content"]) for payload in sent_payloads).replace(" ", "") == long_reply.replace(" ", "")
+    assert all(len(str(payload["content"])) <= module.DISCORD_MESSAGE_LIMIT for payload in sent_payloads)
+    assert all(payload["message_reference"]["message_id"] == "m1" for payload in sent_payloads)
 
 
 @pytest.mark.asyncio

@@ -33,6 +33,8 @@ API_BASE = "https://discord.com/api/v10"
 DISCORD_GATEWAY_VERSION = 10
 INTENT_DIRECT_MESSAGES = 1 << 12
 INTENT_MESSAGE_CONTENT = 1 << 15
+DISCORD_MESSAGE_LIMIT = 2000
+DISCORD_SAFE_MESSAGE_LIMIT = 1900
 
 
 def _configure_logging() -> None:
@@ -161,11 +163,12 @@ class DiscordDmRunner:
         if reply is None:
             logger.info("Discord message ignored by gateway author_id=%s channel_type=%s", message.author_id, message.channel_type)
             return
-        await self._send_message(
-            channel_id=message.channel_id,
-            content=reply.text,
-            message_reference_id=reply.message_reference_id,
-        )
+        for chunk in _discord_message_chunks(reply.text):
+            await self._send_message(
+                channel_id=message.channel_id,
+                content=chunk,
+                message_reference_id=reply.message_reference_id,
+            )
         logger.info("Discord reply sent agent_id=%s trace_id=%s", reply.agent_id, reply.trace_id)
 
     async def _send_message(self, *, channel_id: str, content: str, message_reference_id: str) -> None:
@@ -227,6 +230,35 @@ def _message_from_gateway_payload(payload: dict[str, Any]) -> DiscordInboundMess
         attachments=tuple(payload.get("attachments") or ()),
         embeds=tuple(payload.get("embeds") or ()),
     )
+
+
+def _discord_message_chunks(text: str) -> list[str]:
+    content = text.strip()
+    if not content:
+        return []
+    if len(content) <= DISCORD_MESSAGE_LIMIT:
+        return [content]
+    chunks: list[str] = []
+    remaining = content
+    while remaining:
+        if len(remaining) <= DISCORD_SAFE_MESSAGE_LIMIT:
+            chunks.append(remaining)
+            break
+        split_at = _discord_chunk_split_index(remaining, DISCORD_SAFE_MESSAGE_LIMIT)
+        chunk = remaining[:split_at].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[split_at:].strip()
+    return chunks
+
+
+def _discord_chunk_split_index(text: str, limit: int) -> int:
+    window = text[:limit]
+    for separator in ("\n\n", "\n", ". ", "; ", ", ", " "):
+        index = window.rfind(separator)
+        if index >= max(1, limit // 2):
+            return index + len(separator)
+    return limit
 
 
 def _bot_headers(token: str) -> dict[str, str]:

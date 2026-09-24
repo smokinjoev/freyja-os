@@ -265,7 +265,7 @@ class DiscordGateway:
             return None
         reply = _discord_safe_reply(reply, has_attachments=bool(attachments))
         return DiscordOutboundReply(
-            text=reply[:2000],
+            text=reply,
             message_reference_id=message.message_id,
             agent_id=agent.agent_id,
             trace_id=trace_id,
