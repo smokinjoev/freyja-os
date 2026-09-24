@@ -156,6 +156,17 @@ DISCORD_USER_AGENT_MAP=895679349225820212=cloyd-gibbler
 
 Future authorized users should default to `freyja` unless the operator gives a different per-user default. Add each numeric Discord user id privately and re-run deterministic validation before changing live routing.
 
+Current media-routing checkpoint on 2026-09-24:
+
+- Cloyd and Freyja use the shared `scripts/run-discord-dm-connector.py` runner and `connectors.discord.gateway.DiscordGateway`; media handling is not bot-specific.
+- The active Discord funnel is Discord DM -> Director `/canonical/route` -> Vulcan Nexus -> `external-ollama/qwen3.8:27b`.
+- PDF and DOCX attachments are extracted by Director and answered through Nexus document intake.
+- Image attachments are sent through Nexus image intake; HEIC/HEIF is accepted and converted to JPEG when required.
+- Long local document answers are allowed to continue for up to 240 seconds in Director and 300 seconds in the Discord gateway.
+- Long bot replies are split into Discord-sized chunks instead of being truncated.
+- Recent PDF/DOCX/image attachments are reused for short followups for 20 minutes unless the message clearly starts a new topic.
+- The same behavior applies to Benedict, Agent 44, and Smith when they are launched through the same runner with their own private bot token and `DISCORD_USER_AGENT_MAP`.
+
 ## Validation Gates
 
 Run these before enabling the live transport:
