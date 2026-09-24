@@ -346,7 +346,7 @@ class DiscordGateway:
             return []
         if _refers_to_recent_attachment(text):
             return context.attachments
-        if any(attachment.is_document for attachment in context.attachments):
+        if any(attachment.is_document or attachment.is_image for attachment in context.attachments):
             return context.attachments
         return []
 

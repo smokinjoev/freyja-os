@@ -490,6 +490,64 @@ async def test_discord_gateway_reuses_recent_attachment_for_followup_reference()
 
 
 @pytest.mark.asyncio
+async def test_discord_gateway_reuses_recent_image_for_short_followup() -> None:
+    captured_posts: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=b"fake image bytes")
+
+        async def post(self, url, *, json, headers):
+            captured_posts.append(json)
+            return FakeResponse(payload={"text": "handled"})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m7a",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="",
+            attachments=(
+                {
+                    "filename": "comic.png",
+                    "content_type": "image/png",
+                    "size": 16,
+                    "url": "https://cdn.discordapp.test/comic.png",
+                },
+            ),
+        )
+    )
+    followup = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m7b",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="who drew it?",
+        )
+    )
+
+    assert followup is not None
+    assert len(captured_posts) == 2
+    assert captured_posts[1]["attachments"][0]["filename"] == "comic.png"
+    assert captured_posts[1]["channel_metadata"]["discord_media_intake"] is True
+
+
+@pytest.mark.asyncio
 async def test_discord_gateway_reuses_recent_document_for_short_followup() -> None:
     captured_posts: list[dict[str, object]] = []
 
