@@ -1641,32 +1641,56 @@ def test_canonical_route_can_use_freyja3_gateway_runtime(monkeypatch) -> None:
 
 def test_discord_image_canonical_route_uses_direct_director_vision(monkeypatch) -> None:
     monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
     captured = {"runtime_called": False}
-    endpoint = InferenceEndpoint(
-        endpoint_id="vulcan-qwen27-chat",
-        display_name="Vulcan Qwen 27B",
-        provider="ollama",
-        machine_id="vulcan",
-        base_url="http://vulcan.test:11434",
-        model="qwen3.8:27b",
-        capabilities=frozenset({"vision.large"}),
-        security_domain_id=SecurityDomainId.HOUSEHOLD,
-    )
-    monkeypatch.setattr(freyja_main, "_director_qwen_vision_endpoint", lambda: endpoint)
+    real_async_client = freyja_main.httpx.AsyncClient
 
-    async def fake_chat(self, prompt, *, model=None, images=None, output_tokens=None, **kwargs):
-        captured["prompt"] = prompt
-        captured["model"] = model
-        captured["base_url"] = self.base_url
-        captured["image_count"] = len(images or [])
-        captured["output_tokens"] = output_tokens
-        return {"message": {"content": "A direct Director vision answer."}}
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [
+                    {
+                        "message": {"content": "A direct Nexus vision answer."},
+                        "finish_reason": "stop",
+                    }
+                ]
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+            captured["timeout"] = timeout
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
 
     async def fake_arun(handoff):
         captured["runtime_called"] = True
         raise AssertionError("Full agent runtime should not handle image-only Discord messages.")
 
-    monkeypatch.setattr(freyja_main.OllamaClient, "chat", fake_chat)
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
     monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
     client = TestClient(app)
 
@@ -1695,12 +1719,16 @@ def test_discord_image_canonical_route_uses_direct_director_vision(monkeypatch) 
 
     assert response.status_code == 200
     data = response.json()
-    assert data["text"] == "A direct Director vision answer."
+    assert data["text"] == "A direct Nexus vision answer."
     assert data["resolved_agent_id"] == "cloyd-gibbler"
     assert data["channel_metadata"]["director_route"] == "discord_image_direct"
-    assert data["channel_metadata"]["inference_endpoint_id"] == "vulcan-qwen27-chat"
+    assert data["channel_metadata"]["inference_provider"] == "nexus"
+    assert data["channel_metadata"]["inference_endpoint_id"] == "vulcan-nexus-discord-image"
+    assert data["channel_metadata"]["inference_model"] == "external-ollama/qwen3.8:27b"
     assert captured["runtime_called"] is False
-    assert captured["model"] == "qwen3.8:27b"
-    assert captured["base_url"] == "http://vulcan.test:11434"
-    assert captured["image_count"] == 1
-    assert captured["output_tokens"] == 256
+    assert captured["url"] == "http://nexus.test:3939/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer test-nexus-key"
+    assert captured["json"]["model"] == "external-ollama/qwen3.8:27b"
+    assert captured["json"]["max_tokens"] == 256
+    assert captured["json"]["messages"][0]["content"][1]["type"] == "image_url"
+    assert captured["json"]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/jpeg;base64,")

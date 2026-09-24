@@ -8,9 +8,11 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -41,7 +43,6 @@ from freyja.continuity import continuity_router
 from freyja.contracts import CanonicalAttachment, CanonicalRequest, CanonicalResponse
 from freyja.family_agents import FamilyRouteConfig, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import GatewaySender, SecurityDomainId, SemanticEvent
-from freyja.inference_registry_v3 import InferenceRegistryV3
 from freyja.freyja3_memory import Freyja3MemoryStore
 from freyja.freyja5_config import (
     FREYJA5_OPEN_WEBUI_AGENT_MODELS,
@@ -99,6 +100,7 @@ FREYJA5_AGENT_GATEWAY_MODELS = {
 }
 FREYJA_OPENWEBUI_TIMEZONE = "America/New_York"
 DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS = 95
+DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL = "external-ollama/qwen3.8:27b"
 
 
 class AgentRunFollowUpRequest(BaseModel):
@@ -2233,8 +2235,9 @@ async def _director_discord_image_response(request: CanonicalRequest) -> Canonic
         return None
     if not request.attachments or not all(_canonical_attachment_is_image(attachment) for attachment in request.attachments):
         return None
-    endpoint = _director_qwen_vision_endpoint()
-    if endpoint is None:
+    nexus_base_url = settings.nexus_base_url.rstrip("/")
+    nexus_api_key = _director_nexus_api_key()
+    if not nexus_base_url or not nexus_api_key:
         return None
     images = _images_from_canonical_attachments(request.attachments)
     if not images:
@@ -2243,19 +2246,39 @@ async def _director_discord_image_response(request: CanonicalRequest) -> Canonic
         "Describe the attached image in a concise, conversational way. "
         "Mention only details that are clearly visible, and say when something is uncertain."
     )
-    client = OllamaClient(base_url=endpoint.base_url, model=endpoint.model)
     try:
-        response = await asyncio.wait_for(
-            client.chat(
-                prompt=prompt,
-                model=endpoint.model,
-                images=images,
-                output_tokens=256,
-            ),
-            timeout=DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS,
-        )
+        async with httpx.AsyncClient(timeout=DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{nexus_base_url}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {nexus_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                *[
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {"url": image.as_data_url()},
+                                    }
+                                    for image in images
+                                ],
+                            ],
+                        }
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 256,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
     except Exception:
-        logger.exception("Director Discord image route failed endpoint_id=%s", endpoint.endpoint_id)
+        logger.exception("Director Discord image Nexus route failed model=%s", DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL)
         text = (
             "I received the image, but the vision route timed out before I could finish reading it. "
             "Please resend it or send a smaller crop."
@@ -2263,10 +2286,13 @@ async def _director_discord_image_response(request: CanonicalRequest) -> Canonic
         status = "degraded"
         degraded = True
     else:
-        if "error" in response:
-            logger.warning("Director Discord image route returned error endpoint_id=%s error=%s", endpoint.endpoint_id, response.get("error"))
+        choices = data.get("choices") or []
+        message = choices[0].get("message") if choices else {}
+        finish_reason = choices[0].get("finish_reason") if choices else None
+        if data.get("error"):
+            logger.warning("Director Discord image Nexus route returned error model=%s error=%s", DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL, data.get("error"))
             return None
-        text = str(response.get("message", {}).get("content") or "").strip()
+        text = str(message.get("content") or "").strip()
         if not text:
             return None
         status = "ok"
@@ -2283,10 +2309,12 @@ async def _director_discord_image_response(request: CanonicalRequest) -> Canonic
         channel_metadata={
             "freyja3": True,
             "director_route": "discord_image_direct",
-            "inference_endpoint_id": endpoint.endpoint_id,
-            "inference_model": endpoint.model,
-            "inference_machine_id": endpoint.machine_id,
+            "inference_endpoint_id": "vulcan-nexus-discord-image",
+            "inference_provider": "nexus",
+            "inference_model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+            "inference_machine_id": "vulcan",
             "inference_status": status,
+            "finish_reason": finish_reason,
         },
         degraded=degraded,
         status=status,
@@ -2299,11 +2327,15 @@ def _canonical_attachment_is_image(attachment: CanonicalAttachment) -> bool:
     return media_type.startswith("image/") or filename.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"))
 
 
-def _director_qwen_vision_endpoint():
-    for endpoint in InferenceRegistryV3().endpoints_for(capability="vision.large", domain_id=SecurityDomainId.HOUSEHOLD):
-        if endpoint.provider == "ollama" and endpoint.model.startswith("qwen3.8:27b"):
-            return endpoint
-    return None
+def _director_nexus_api_key() -> str:
+    if settings.nexus_api_key:
+        return settings.nexus_api_key
+    if not settings.nexus_api_key_file:
+        return ""
+    try:
+        return Path(settings.nexus_api_key_file).expanduser().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def _security_domain_for_canonical_request(request: CanonicalRequest) -> SecurityDomainId:
