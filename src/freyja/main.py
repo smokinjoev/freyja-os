@@ -2338,7 +2338,11 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
     nexus_base_url = settings.nexus_base_url.rstrip("/")
     nexus_api_key = _director_nexus_api_key()
     if not nexus_base_url or not nexus_api_key:
-        return None
+        return _discord_document_degraded_response(
+            request,
+            "I received the document, but the Nexus document reader is not configured right now.",
+            reason="nexus_not_configured",
+        )
     documents = document_texts_from_attachments(
         _attachment_inputs_from_canonical_attachments(request.attachments),
         max_chars_per_document=12000,
@@ -2346,7 +2350,11 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
     )
     readable_documents = [document for document in documents if document.ok]
     if not readable_documents:
-        return None
+        return _discord_document_degraded_response(
+            request,
+            "I received the document, but I couldn't extract readable text from it yet.",
+            reason="document_text_unavailable",
+        )
     document_context = "\n\n".join(
         f"Document: {document.filename} ({document.mime_type}, {document.page_count or 1} page(s))\n{document.text}"
         for document in readable_documents
@@ -2378,12 +2386,22 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
             data = response.json()
     except Exception:
         logger.exception("Director Discord document Nexus route failed model=%s", DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL)
-        return None
+        return _discord_document_degraded_response(
+            request,
+            "I received the document and extracted text, but the Nexus document route timed out before I could finish reading it.",
+            reason="nexus_request_failed",
+            document_count=len(readable_documents),
+        )
     choices = data.get("choices") or []
     message = choices[0].get("message") if choices else {}
     text = str(message.get("content") or "").strip()
     if not text:
-        return None
+        return _discord_document_degraded_response(
+            request,
+            "I received the document and extracted text, but Nexus returned an empty document answer.",
+            reason="empty_nexus_response",
+            document_count=len(readable_documents),
+        )
     return CanonicalResponse(
         trace_id=request.trace_id,
         request_message_id=request.message_id,
@@ -2406,6 +2424,38 @@ async def _director_discord_document_response(request: CanonicalRequest) -> Cano
         },
         degraded=False,
         status="ok",
+    )
+
+
+def _discord_document_degraded_response(
+    request: CanonicalRequest,
+    text: str,
+    *,
+    reason: str,
+    document_count: int = 0,
+) -> CanonicalResponse:
+    return CanonicalResponse(
+        trace_id=request.trace_id,
+        request_message_id=request.message_id,
+        channel=request.channel,
+        conversation_id=request.conversation_id,
+        resolved_user_id=request.resolved_user_id,
+        resolved_agent_id=request.resolved_agent_id,
+        text=text,
+        tool_results=[],
+        channel_metadata={
+            "freyja3": True,
+            "director_route": "discord_document_direct",
+            "inference_endpoint_id": "vulcan-nexus-discord-document",
+            "inference_provider": "nexus",
+            "inference_model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+            "inference_machine_id": "vulcan",
+            "inference_status": "degraded",
+            "degraded_reason": reason,
+            "document_count": document_count,
+        },
+        degraded=True,
+        status="degraded",
     )
 
 

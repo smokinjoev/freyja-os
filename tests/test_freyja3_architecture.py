@@ -1860,3 +1860,57 @@ def test_discord_pdf_canonical_route_uses_direct_nexus_document_review(monkeypat
     assert captured["json"]["model"] == "external-ollama/qwen3.8:27b"
     assert "Built reliable agent systems" in captured["json"]["messages"][0]["content"]
     assert "Do not answer from Home Assistant" in captured["json"]["messages"][0]["content"]
+
+
+def test_discord_pdf_canonical_route_does_not_fall_back_when_document_unreadable(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {"runtime_called": False}
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 0
+        text = ""
+        ok = False
+        error = "no text"
+
+    async def fake_arun(handoff):
+        captured["runtime_called"] = True
+        raise AssertionError("Full agent runtime should not handle failed Discord PDF intake.")
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf-unreadable",
+            "message_id": "msg-discord-pdf-unreadable",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Does my current resume make sense?",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "couldn't extract readable text" in data["text"]
+    assert data["status"] == "degraded"
+    assert data["channel_metadata"]["director_route"] == "discord_document_direct"
+    assert data["channel_metadata"]["degraded_reason"] == "document_text_unavailable"
+    assert captured["runtime_called"] is False
