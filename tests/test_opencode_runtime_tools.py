@@ -120,6 +120,30 @@ def test_opencode_health_does_not_count_ok_marker(monkeypatch) -> None:
     assert opencode_health(alias="freyja-code")["session_count"] == 1
 
 
+def test_opencode_health_reports_missing_password_file_without_raising(monkeypatch, tmp_path) -> None:
+    missing_password = tmp_path / "missing-password"
+    monkeypatch.setattr(settings, "opencode_password_file", str(missing_password))
+
+    health = opencode_health(alias="freyja-code")
+
+    assert health["ok"] is False
+    assert health["alias"] == "freyja-code"
+    assert str(missing_password) in health["error"]
+
+
+def test_opencode_health_skips_password_when_auth_is_disabled(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(settings, "opencode_auth_enabled", False)
+    monkeypatch.setattr(settings, "opencode_password_file", str(tmp_path / "missing-password"))
+    monkeypatch.setattr(
+        "freyja.tools.opencode_runtime._request",
+        lambda *args, **kwargs: {"ok": True, "session": {"id": "ses_test"}},
+    )
+
+    health = opencode_health(alias="freyja-code")
+
+    assert health["ok"] is True
+
+
 def test_opencode_start_reuses_existing_alias_connection_config(tmp_path: Path, monkeypatch) -> None:
     registry_path = tmp_path / "controller-sessions.json"
     repo_path = tmp_path / "repo"

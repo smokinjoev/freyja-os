@@ -42,12 +42,17 @@ def _request(
     if query:
         path = f"{path}?{urllib.parse.urlencode(query)}"
     data = None if body is None else json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(f"{(base_url or settings.opencode_base_url).rstrip('/')}{path}", data=data, method=method)
-    credentials = f"{username or settings.opencode_username}:{_password(password_file)}".encode("utf-8")
-    request.add_header("authorization", "Basic " + base64.b64encode(credentials).decode("ascii"))
-    if body is not None:
-        request.add_header("content-type", "application/json")
     try:
+        request = urllib.request.Request(
+            f"{(base_url or settings.opencode_base_url).rstrip('/')}{path}",
+            data=data,
+            method=method,
+        )
+        if settings.opencode_auth_enabled:
+            credentials = f"{username or settings.opencode_username}:{_password(password_file)}".encode("utf-8")
+            request.add_header("authorization", "Basic " + base64.b64encode(credentials).decode("ascii"))
+        if body is not None:
+            request.add_header("content-type", "application/json")
         timeout = timeout_seconds if timeout_seconds is not None else float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read()

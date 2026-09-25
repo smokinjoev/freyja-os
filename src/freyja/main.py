@@ -293,6 +293,12 @@ async def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
+@app.get("/endpoints", response_class=HTMLResponse)
+async def endpoint_directory() -> str:
+    """Human-readable, browser-safe directory of Freyja service surfaces."""
+    return _endpoint_directory_html()
+
+
 @app.get("/agent-runs", response_class=HTMLResponse)
 async def agent_runs_page() -> str:
     return _agent_runs_html()
@@ -1010,6 +1016,20 @@ def _record_runtime_reset_on_busy_timeout_jobs(
 
 def _agent_runs_status_payload() -> dict[str, Any]:
     return enrich_loop_status_with_runtime(loop_status_payload(), opencode_health(alias="freyja-code", timeout_seconds=5))
+
+
+def _endpoint_directory_html() -> str:
+    groups = (
+        ("Director and chat", (("GET", "/", "/"), ("GET", "/health", "/health"), ("GET", "/docs", "/docs"), ("GET", "/openapi.json", "/openapi.json"), ("GET", "/v1/models", "/v1/models"), ("POST", "/v1/chat/completions", "/docs"), ("POST", "/chat", "/docs"), ("POST", "/route", "/docs"), ("POST", "/canonical/route", "/docs"), ("POST", "/family/{member}", "/docs"), ("POST", "/shortcuts/message", "/docs"))),
+        ("Agents", (("GET", "/agents/{agent_gateway}/v1/models", "/docs"), ("POST", "/agents/{agent_gateway}/v1/chat/completions", "/docs"), ("POST", "/agents/family/issue-review", "/docs"), ("POST", "/agents/smith/{dry-run,read-only,write-pilot,write-pilot/resume}", "/docs"), ("GET", "/agents/smith/approvals", "/agents/smith/approvals"), ("POST", "/agents/smith/approvals/{approval_id}/{approve,deny}", "/docs"))),
+        ("Tools and state", (("GET", "/tools", "/tools"), ("GET", "/tools/{tool_name}", "/docs"), ("POST", "/tools/{tool_name}/execute", "/docs"), ("GET", "/open-webui-tools", "/open-webui-tools"), ("POST", "/open-webui-tools/invoke", "/docs"), ("GET", "/memory/items", "/memory/items"), ("GET", "/memory/conversations", "/memory/conversations"), ("POST", "/memory/*", "/docs"), ("GET", "/freyja-core/continuity/*", "/docs"), ("POST", "/freyja-core/continuity/memory/*", "/docs"), ("GET", "/freyja-home-memory/*", "/docs"), ("POST/DELETE", "/freyja-home-memory/*", "/docs"))),
+        ("Operations and enclave", (("GET", "/agent-runs", "/agent-runs"), ("GET", "/agent-runs/status", "/agent-runs/status"), ("GET", "/agent-runs/api/{status,runtime/health}", "/agent-runs/api/status"), ("POST", "/agent-runs/api/jobs/*", "/docs"), ("GET/POST", "/events/semantic", "/events/semantic"), ("GET", "/paralegal", "/paralegal"), ("GET", "/paralegal/api/{status,matters,extractions,extractions.csv}", "/paralegal/api/status"), ("POST/PUT", "/paralegal/api/{matters,scan,documents/*}", "/docs"))),
+        ("Health and inference", (("GET", "/providers/health", "/providers/health"), ("GET", "/freyja5/readiness", "/freyja5/readiness"), ("GET", "/ollama/{health,models}", "/ollama/health"), ("GET", "/local-reasoning/health", "/local-reasoning/health"), ("POST", "/local-reasoning/warm", "/docs"), ("GET", "/iris-router/health", "/iris-router/health"), ("POST", "/iris-router/warm", "/docs"), ("GET", "/macagent/health", "/macagent/health"), ("GET/POST", "/openrouter/{health,chat}", "/openrouter/health"))),
+    )
+    external = (("Vulcan Nexus", "http://100.94.80.21:3939"), ("Vulcan Ollama", "http://100.94.80.21:11434"), ("Vulcan OpenAI proxy", "http://100.94.80.21:8088/v1"), ("Vulcan LM Studio", "http://100.94.80.21:1234/v1/models"), ("Atlas Open WebUI", "http://100.119.235.114:3001"), ("Atlas OpenCode", "http://100.119.235.114:4097"), ("Iris Freyja Core", "http://100.115.228.56:8510"), ("Iris MacAgent", "http://iris:8765/health"))
+    group_html = "".join("<section><h2>" + title + "</h2><ul>" + "".join(f'<li><span class="method">{method}</span><a href="{href}" target="_blank" rel="noopener">{path}</a></li>' for method, path, href in entries) + "</ul></section>" for title, entries in groups)
+    external_html = "".join(f'<li><a href="{url}" target="_blank" rel="noopener">{name}</a><code>{url}</code></li>' for name, url in external)
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Freyja endpoint directory</title><style>body{{font-family:system-ui,sans-serif;background:#101820;color:#edf3f8;margin:0;padding:28px;line-height:1.4}}main{{max-width:1180px;margin:auto}}h1{{margin:0 0 6px}}p,footer{{color:#b8c6d3}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}}section{{background:#182632;border:1px solid #304555;border-radius:10px;padding:14px}}h2{{font-size:16px;margin:0 0 8px}}ul{{list-style:none;margin:0;padding:0}}li{{padding:5px 0;border-top:1px solid #263b49}}li:first-child{{border-top:0}}a{{color:#7ed0ff;text-decoration:none;overflow-wrap:anywhere}}a:hover{{text-decoration:underline}}.method{{display:inline-block;color:#f6c56a;font:11px ui-monospace,monospace;min-width:72px}}code{{display:block;color:#96aab9;font-size:11px;margin-top:2px;overflow-wrap:anywhere}}footer{{margin-top:18px;font-size:12px}}</style></head><body><main><h1>Freyja endpoint directory</h1><p>GET links open directly. Action routes open the interactive API documentation.</p><div class="grid">{group_html}<section><h2>Host services</h2><ul>{external_html}</ul></section></div><footer>Telegram, Signal, and iMessage are connector transports, not browser endpoints. MacAgent remains disabled until its Iris service is enabled.</footer></main></body></html>'''
 
 
 def _agent_runs_human_status_html(payload: dict[str, Any]) -> str:
