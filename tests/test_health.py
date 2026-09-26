@@ -687,6 +687,8 @@ def test_open_webui_agent_chat_includes_local_temporal_context(monkeypatch) -> N
 
         async def arun(self, handoff):
             seen["reply_context"] = handoff.reply_context
+            seen["channel"] = handoff.channel
+            seen["conversation_id"] = handoff.conversation_id
             return SimpleNamespace(
                 trace_id=handoff.handoff_id,
                 conversation_id=handoff.conversation_id,
@@ -727,10 +729,14 @@ def test_open_webui_agent_chat_includes_local_temporal_context(monkeypatch) -> N
 
     response = client.post(
         "/v1/chat/completions",
-        headers={"Authorization": "Bearer test-connector-token"},
+        headers={
+            "Authorization": "Bearer test-connector-token",
+            "X-Freyja-Portal": "lobehub",
+            "X-Freyja-Conversation-Id": "lobe-chat-private-id",
+        },
         json={
             "model": "agent/freyja",
-            "user": "joe",
+            "user": "lobe-account-private-id",
             "messages": [{"role": "user", "content": "Add Family Basement Cleanup this weekend."}],
             "stream": False,
         },
@@ -743,6 +749,10 @@ def test_open_webui_agent_chat_includes_local_temporal_context(monkeypatch) -> N
         "local_datetime": "2026-09-15T09:42:00-04:00",
         "timezone": "America/New_York",
     }
+    assert seen["channel"] == "lobehub"
+    assert seen["conversation_id"].startswith("lobehub:agent-freyja:")
+    assert "lobe-chat-private-id" not in seen["conversation_id"]
+    assert seen["reply_context"]["portal_conversation_id"] == seen["conversation_id"]
 
 
 def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatch) -> None:

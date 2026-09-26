@@ -2607,6 +2607,49 @@ def _openai_sender_for_freyja5(request: "OpenAIChatCompletionRequest") -> Gatewa
     )
 
 
+def _openai_portal(raw_request: Request) -> str:
+    """Return a safe source label without trusting it for authorization."""
+    supplied = raw_request.headers.get("x-freyja-portal", "").strip().lower()
+    if supplied and supplied.replace("-", "").replace("_", "").isalnum():
+        return supplied[:40]
+    user_agent = raw_request.headers.get("user-agent", "").lower()
+    if "lobehub" in user_agent or "lobechat" in user_agent:
+        return "lobehub"
+    if "open-webui" in user_agent:
+        return "open-webui"
+    return "openai-compatible"
+
+
+def _openai_conversation_id(
+    request: "OpenAIChatCompletionRequest",
+    raw_request: Request,
+    *,
+    portal: str,
+) -> str:
+    """Build a stable opaque ID for portal-originated memory provenance.
+
+    OpenAI-compatible clients differ on the field they use for a chat ID.  A
+    portal may send an explicit header or extra body field; otherwise its
+    standard ``user`` field is sufficient for a stable per-user/agent memory
+    lane. Raw portal identifiers are hashed before reaching memory metadata.
+    """
+    extra = request.model_extra or {}
+    supplied = raw_request.headers.get("x-freyja-conversation-id", "").strip()
+    if not supplied:
+        for key in ("conversation_id", "conversationId", "chat_id", "chatId", "session_id", "sessionId"):
+            value = extra.get(key)
+            if isinstance(value, str) and value.strip():
+                supplied = value.strip()
+                break
+    identity = supplied or (request.user or "").strip()
+    if not identity:
+        # No standard client identifier was provided. Keep this turn isolated
+        # rather than guessing and joining unrelated anonymous conversations.
+        identity = str(uuid.uuid4())
+    digest = hashlib.sha256(f"{portal}:{request.model}:{identity}".encode("utf-8")).hexdigest()[:24]
+    return f"{portal}:{request.model.replace('/', '-')}:" + digest
+
+
 def _freyja5_openai_response_text(result) -> str:
     trace = result.trace_summary
     route = trace.get("requested_route") or result.requested_route
@@ -2857,7 +2900,10 @@ async def agent_openai_compatible_models(agent_gateway: str) -> dict[str, Any]:
 
 
 @app.post("/v1/chat/completions", response_model=None)
-async def openai_compatible_chat_completions(request: OpenAIChatCompletionRequest) -> dict[str, Any] | StreamingResponse:
+async def openai_compatible_chat_completions(
+    request: OpenAIChatCompletionRequest,
+    raw_request: Request,
+) -> dict[str, Any] | StreamingResponse:
     if request.model not in {"agent-smith", *FREYJA5_OPENAI_MODEL_IDS}:
         raise HTTPException(status_code=404, detail="Unknown model.")
     if request.model == "agent-smith" and (not settings.agent_smith_enabled or not settings.agent_smith_read_only_enabled):
@@ -2884,6 +2930,8 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
             target_agent = str(agent_model["agent_id"])
         else:
             raise HTTPException(status_code=404, detail="Unknown Freyja 5 agent model.")
+        portal = _openai_portal(raw_request)
+        conversation_id = _openai_conversation_id(request, raw_request, portal=portal)
         request_id = f"freyja5-openai-{uuid.uuid4()}"
         start = time.monotonic()
         attachments = _openai_chat_attachments(request.messages)
@@ -2893,14 +2941,16 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
                     sender=_openai_sender_for_freyja5(request),
                     target_agent=target_agent,
                     prompt=objective,
-                    conversation_id=request_id,
-                    channel="open-webui",
+                    conversation_id=conversation_id,
+                    channel=portal,
                     attachments=attachments,
                     permissions=_openai_permissions_for_freyja5(objective),
                     reply_context={
                         "client": "openai-compatible",
+                        "portal": portal,
+                        "portal_conversation_id": conversation_id,
                         "model": request.model,
-                        "originating_channel": "open-webui",
+                        "originating_channel": portal,
                         "temporal_context": _openai_temporal_context(),
                     },
                 )
@@ -2987,12 +3037,13 @@ async def openai_compatible_chat_completions(request: OpenAIChatCompletionReques
 async def agent_openai_compatible_chat_completions(
     agent_gateway: str,
     request: OpenAIChatCompletionRequest,
+    raw_request: Request,
 ) -> dict[str, Any] | StreamingResponse:
     model_id = FREYJA5_AGENT_GATEWAY_MODELS.get(agent_gateway)
     if model_id is None:
         raise HTTPException(status_code=404, detail="Unknown Freyja 5 agent gateway.")
     scoped_request = request.model_copy(update={"model": model_id})
-    return await openai_compatible_chat_completions(scoped_request)
+    return await openai_compatible_chat_completions(scoped_request, raw_request)
 
 
 @app.post("/agents/family/issue-review")
