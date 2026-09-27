@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -97,6 +98,7 @@ FREYJA5_AGENT_GATEWAY_MODELS = {
     "jenna": "agent/jennacide",
 }
 FREYJA_OPENWEBUI_TIMEZONE = "America/New_York"
+FREYJA_OPENAI_EMBEDDING_MODEL = "nomic-embed-text:latest"
 
 
 class AgentRunFollowUpRequest(BaseModel):
@@ -3031,6 +3033,55 @@ async def openai_compatible_chat_completions(
     if request.stream:
         return _openai_chat_stream(response_body)
     return response_body
+
+
+@app.post("/v1/embeddings")
+async def openai_compatible_embeddings(raw_request: Request) -> dict[str, Any]:
+    """Provide the OpenAI embeddings surface expected by LobeHub and Open WebUI.
+
+    Agent chat models are routed through Nexus, while embeddings remain a small,
+    dedicated local model on Vulcan.  The requested model name is deliberately
+    accepted for OpenAI compatibility: portals commonly send their own default
+    embedding-model identifier even when the configured provider is an agent.
+    """
+    try:
+        payload = await raw_request.json()
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Request body must be valid JSON.") from exc
+
+    raw_input = payload.get("input") if isinstance(payload, dict) else None
+    if isinstance(raw_input, str):
+        inputs = [raw_input]
+    elif isinstance(raw_input, list) and all(isinstance(item, str) for item in raw_input):
+        inputs = raw_input
+    else:
+        raise HTTPException(status_code=400, detail="input must be a string or a list of strings.")
+    if not inputs:
+        raise HTTPException(status_code=400, detail="input must not be empty.")
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(
+                f"{settings.ollama_base_url.rstrip('/')}/api/embed",
+                json={"model": FREYJA_OPENAI_EMBEDDING_MODEL, "input": inputs},
+            )
+            response.raise_for_status()
+            embeddings = response.json().get("embeddings")
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.exception("OpenAI-compatible embeddings request failed")
+        raise HTTPException(status_code=502, detail="Local embedding service is unavailable.") from exc
+    if not isinstance(embeddings, list) or len(embeddings) != len(inputs):
+        raise HTTPException(status_code=502, detail="Local embedding service returned an invalid response.")
+
+    return {
+        "object": "list",
+        "data": [
+            {"object": "embedding", "embedding": embedding, "index": index}
+            for index, embedding in enumerate(embeddings)
+        ],
+        "model": FREYJA_OPENAI_EMBEDDING_MODEL,
+        "usage": {"prompt_tokens": 0, "total_tokens": 0},
+    }
 
 
 @app.post("/agents/{agent_gateway}/v1/chat/completions", response_model=None)
