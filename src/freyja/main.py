@@ -3066,6 +3066,114 @@ async def openai_compatible_embeddings(raw_request: Request) -> dict[str, Any]:
     }
 
 
+def _responses_api_messages(raw_input: Any) -> list["OpenAIChatMessage"]:
+    """Translate the useful Responses API input forms into chat messages."""
+    if isinstance(raw_input, str):
+        return [OpenAIChatMessage(role="user", content=raw_input)]
+    if not isinstance(raw_input, list):
+        return []
+    messages: list[OpenAIChatMessage] = []
+    for item in raw_input:
+        if isinstance(item, str):
+            messages.append(OpenAIChatMessage(role="user", content=item))
+            continue
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "user")
+        content = item.get("content")
+        if isinstance(content, str):
+            messages.append(OpenAIChatMessage(role=role, content=content))
+            continue
+        if not isinstance(content, list):
+            continue
+        translated: list[dict[str, Any]] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            part_type = part.get("type")
+            if part_type in {"input_text", "output_text", "text"}:
+                text = part.get("text")
+                if isinstance(text, str):
+                    translated.append({"type": "text", "text": text})
+            elif part_type == "input_image":
+                image_url = part.get("image_url") or part.get("url")
+                if isinstance(image_url, str):
+                    translated.append({"type": "input_image", "image_url": image_url})
+        if translated:
+            messages.append(OpenAIChatMessage(role=role, content=translated))
+    return messages
+
+
+@app.post("/v1/responses", response_model=None)
+async def openai_compatible_responses(raw_request: Request) -> dict[str, Any] | StreamingResponse:
+    """Minimal Responses API adapter for LobeHub's modern OpenAI client."""
+    try:
+        payload = await raw_request.json()
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Request body must be valid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Request body must be an object.")
+    model = payload.get("model")
+    if not isinstance(model, str) or not model.strip():
+        raise HTTPException(status_code=400, detail="model is required.")
+    messages = _responses_api_messages(payload.get("input"))
+    if not messages:
+        raise HTTPException(status_code=400, detail="input must include a user message.")
+    completion = await openai_compatible_chat_completions(
+        OpenAIChatCompletionRequest(
+            model=model,
+            messages=messages,
+            stream=False,
+            temperature=payload.get("temperature"),
+            max_tokens=payload.get("max_output_tokens"),
+            user=payload.get("user") if isinstance(payload.get("user"), str) else None,
+        ),
+        raw_request,
+    )
+    if isinstance(completion, StreamingResponse):  # Defensive: this adapter is deliberately non-streaming.
+        raise HTTPException(status_code=400, detail="Streaming Responses API requests are not supported.")
+    content = str(completion["choices"][0]["message"].get("content") or "")
+    response_id = f"resp_{uuid.uuid4().hex}"
+    response_body = {
+        "id": response_id,
+        "object": "response",
+        "created_at": int(time.time()),
+        "status": "completed",
+        "model": model,
+        "output": [
+            {
+                "id": f"msg_{uuid.uuid4().hex}",
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": content, "annotations": []}],
+            }
+        ],
+        "output_text": content,
+        "usage": completion.get("usage") or {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+        "freyja": completion.get("freyja"),
+    }
+    if not payload.get("stream"):
+        return response_body
+
+    async def events():
+        event_data = (
+            ("response.created", {**response_body, "status": "in_progress", "output": []}),
+            ("response.in_progress", {**response_body, "status": "in_progress", "output": []}),
+            ("response.output_item.added", {"type": "response.output_item.added", "response_id": response_id, "output_index": 0, "item": response_body["output"][0]}),
+            ("response.content_part.added", {"type": "response.content_part.added", "response_id": response_id, "output_index": 0, "content_index": 0, "part": response_body["output"][0]["content"][0]}),
+            ("response.output_text.delta", {"type": "response.output_text.delta", "response_id": response_id, "output_index": 0, "content_index": 0, "delta": content}),
+            ("response.output_text.done", {"type": "response.output_text.done", "response_id": response_id, "output_index": 0, "content_index": 0, "text": content}),
+            ("response.content_part.done", {"type": "response.content_part.done", "response_id": response_id, "output_index": 0, "content_index": 0, "part": response_body["output"][0]["content"][0]}),
+            ("response.output_item.done", {"type": "response.output_item.done", "response_id": response_id, "output_index": 0, "item": response_body["output"][0]}),
+            ("response.completed", response_body),
+        )
+        for event_name, event in event_data:
+            yield f"event: {event_name}\ndata: {json.dumps(jsonable_encoder(event), separators=(',', ':'))}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
 @app.post("/agents/{agent_gateway}/v1/chat/completions", response_model=None)
 async def agent_openai_compatible_chat_completions(
     agent_gateway: str,
