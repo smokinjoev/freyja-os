@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from html import unescape
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import httpx
 
 _DUCKDUCKGO_HTML_URL = "https://duckduckgo.com/html/"
+_BING_RSS_URL = "https://www.bing.com/search"
 _HTTP_TIMEOUT_SECONDS = 25.0
 _MAX_QUERY_CHARS = 300
 _MAX_FETCH_CHARS = 12000
@@ -28,10 +30,41 @@ async def web_search(query: str, *, max_results: int = 5) -> dict:
             )
             response.raise_for_status()
     except Exception as exc:  # noqa: BLE001 - tool result should be model-readable
-        return {"ok": False, "query": cleaned, "results": [], "error": type(exc).__name__}
+        return await _bing_rss_search(cleaned, limit, fallback_error=type(exc).__name__)
 
     results = _parse_duckduckgo_results(response.text)[:limit]
-    return {"ok": True, "query": cleaned, "provider": "duckduckgo_html", "results": results, "count": len(results)}
+    if results:
+        return {"ok": True, "query": cleaned, "provider": "duckduckgo_html", "results": results, "count": len(results)}
+    # DuckDuckGo often returns a successful HTTP response containing a bot
+    # challenge. Do not treat that as a genuine empty search result.
+    return await _bing_rss_search(cleaned, limit, fallback_error="duckduckgo_no_parseable_results")
+
+
+async def _bing_rss_search(query: str, limit: int, *, fallback_error: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS, follow_redirects=True) as client:
+            response = await client.get(
+                _BING_RSS_URL,
+                params={"format": "rss", "q": query},
+                headers={"User-Agent": "Freyja-OS/3.0 (+local-agent-web-search)"},
+            )
+            response.raise_for_status()
+        results = _parse_bing_rss_results(response.text)[:limit]
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "query": query,
+            "results": [],
+            "error": f"{fallback_error}; bing_rss_{type(exc).__name__}",
+        }
+    return {
+        "ok": bool(results),
+        "query": query,
+        "provider": "bing_rss",
+        "results": results,
+        "count": len(results),
+        "fallback_reason": fallback_error,
+    }
 
 
 async def web_fetch(url: str, *, max_chars: int = _MAX_FETCH_CHARS) -> dict:
@@ -83,6 +116,21 @@ def _parse_duckduckgo_results(html: str) -> list[dict[str, str]]:
         url = _clean_result_url(unescape(match.group("url")))
         if title and url and "duckduckgo.com" not in url:
             results.append({"title": title, "url": url, "snippet": ""})
+    return results
+
+
+def _parse_bing_rss_results(xml_text: str) -> list[dict[str, str]]:
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    results: list[dict[str, str]] = []
+    for item in root.findall("./channel/item"):
+        title = " ".join((item.findtext("title") or "").split())
+        url = (item.findtext("link") or "").strip()
+        snippet = " ".join((item.findtext("description") or "").split())
+        if title and url.startswith(("http://", "https://")):
+            results.append({"title": title, "url": url, "snippet": snippet})
     return results
 
 
