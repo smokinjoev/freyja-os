@@ -973,13 +973,36 @@ class AgentRuntimeV3:
                 response = await client.post(f"{target_base_url}/v1/chat/completions", headers=headers, json=payload)
                 response.raise_for_status()
                 data = response.json()
+                choices = data.get("choices") or []
+                message = choices[0].get("message") or {} if choices else {}
+                content = str(message.get("content") or "").strip()
+                if content:
+                    return "ok", content
+
+                # Some vision/tool-capable backends occasionally return an
+                # empty assistant message after processing an objective. Give
+                # them one compact, answer-only retry before reporting a
+                # failure to the portal.
+                retry_payload = dict(payload)
+                retry_payload["messages"] = [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Give the user a concise direct answer now. Do not describe internal "
+                            "routing, tools, traces, or system status unless the user explicitly asked.\n\n"
+                            + self._inference_prompt(agent, handoff, tool_results, recalled_memories)
+                        ),
+                    }
+                ]
+                retry = await client.post(f"{target_base_url}/v1/chat/completions", headers=headers, json=retry_payload)
+                retry.raise_for_status()
+                retry_choices = retry.json().get("choices") or []
+                retry_message = retry_choices[0].get("message") or {} if retry_choices else {}
+                retry_content = str(retry_message.get("content") or "").strip()
+                return ("ok", retry_content or None)
         except Exception:
             return "error", None
-        choices = data.get("choices") or []
-        if not choices:
-            return "error", None
-        message = choices[0].get("message") or {}
-        return "ok", str(message.get("content") or "").strip() or None
+        return "error", None
 
     async def _run_vulcan_tool_calling_inference(
         self,
@@ -1285,11 +1308,10 @@ class AgentRuntimeV3:
             return home_response
         if inference_text:
             return inference_text
-        tool_text = ", ".join(selected_tools) if selected_tools else "no tools"
-        executed = [result for result in tool_results if result.get("success") is True]
-        execution_text = f" and executed {len(executed)} tool(s)" if tool_results else ""
-        memory_text = f" with {len(recalled_memories)} recalled memory record(s)" if recalled_memories else ""
-        return f"{agent.display_name} received the objective and selected {tool_text}{execution_text}{memory_text} using {endpoint_id}."
+        return (
+            "I completed the local processing for your request, but the model did not return a usable written answer. "
+            "Please try once more."
+        )
 
     @staticmethod
     def _arguments_for_tool(capability_id: str, objective: str, handoff: GatewayHandoff) -> dict[str, Any]:

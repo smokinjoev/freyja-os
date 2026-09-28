@@ -2653,26 +2653,8 @@ def _openai_conversation_id(
 
 
 def _freyja5_openai_response_text(result) -> str:
-    trace = result.trace_summary
-    route = trace.get("requested_route") or result.requested_route
-    provider = trace.get("actual_provider") or result.inference_provider or "unavailable"
-    model = trace.get("actual_model") or "unavailable"
-    status = trace.get("inference_status") or ("degraded" if result.degraded else "completed")
     response_text = str(getattr(result, "response_text", "") or "").strip()
-    if not response_text:
-        response_text = "Freyja 5.0 response is unavailable."
-    return "\n".join(
-        (
-            response_text,
-            "",
-            f"Trace: {trace.get('trace_id')}",
-            f"Agent: {trace.get('agent_logical_display_name') or trace.get('agent_display_name') or result.agent_id}",
-            f"Route: {route}",
-            f"Runtime: {provider} {model}",
-            f"Status: {status}",
-            f"Egress: {result.egress_state}",
-        )
-    )
+    return response_text or "I couldn't produce a response for that request. Please try again."
 
 
 def _smith_openai_response_text(summary: dict[str, Any]) -> str:

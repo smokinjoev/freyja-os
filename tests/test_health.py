@@ -777,11 +777,8 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatc
     assert data["object"] == "chat.completion"
     assert data["model"] == "freyja-5"
     content = data["choices"][0]["message"]["content"]
-    assert "Freyja received the objective and selected coding.execute, system.health" in content
-    assert "using vulcan-nexus-coder." in content
-    assert "Trace:" in content
-    assert "Route: code" in content
-    assert "Status: not_run" in content
+    assert "I completed the local processing" in content
+    assert "Trace:" not in content
     assert data["freyja"]["smith_mode"] == "freyja5"
     assert data["freyja"]["trace_id"] == data["freyja"]["trace"]["trace_id"]
     assert data["freyja"]["agent"] == "freyja"
@@ -883,7 +880,8 @@ def test_openai_cloyd_chat_recalls_durable_memory(monkeypatch, tmp_path) -> None
     assert response.status_code == 200
     data = response.json()
     content = data["choices"][0]["message"]["content"]
-    assert "with 1 recalled memory record(s)" in content
+    assert "I completed the local processing" in content
+    assert "Trace:" not in content
     assert data["freyja"]["agent"] == "cloyd-gibbler"
     assert data["freyja"]["trace"]["recalled_memory_count"] == 1
     assert data["freyja"]["trace"]["recalled_memories"][0]["content"] == "Joe wants durable-memory status called out explicitly."
