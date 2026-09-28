@@ -2461,17 +2461,17 @@ def _voice_friendly_response(text: str, *, limit: int = 700) -> str:
 
 
 def _openai_chat_objective(messages: list["OpenAIChatMessage"]) -> str:
-    parts: list[str] = []
-    for message in messages:
-        role = message.role.strip().lower()
-        if role not in {"system", "user"}:
-            continue
-        content = _openai_message_content_text(message.content)
-        if content:
-            parts.append(f"{role}: {content}")
-    if not parts:
-        return ""
-    return "\n".join(parts)[-8000:]
+    # LobeHub sends a substantial system/workflow prompt (including its own
+    # agent-runtime directives) alongside the actual message. Director is
+    # already the source of agent identity, memory, tools, and policy, so
+    # treating that portal prompt as user intent makes route/tool selection
+    # unstable. Preserve the latest real user message instead.
+    user_parts = [
+        _openai_message_content_text(message.content)
+        for message in messages
+        if message.role.strip().lower() == "user"
+    ]
+    return next((content.strip() for content in reversed(user_parts) if content and content.strip()), "")[-8000:]
 
 
 def _openai_temporal_context() -> dict[str, str]:
