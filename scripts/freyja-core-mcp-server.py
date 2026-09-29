@@ -70,6 +70,9 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             agent_id = self._agent_tokens.get(supplied, "")
         if not agent_id:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
+        route_agent = request.url.path.removeprefix("/mcp/")
+        if route_agent and route_agent != "mcp" and route_agent != agent_id:
+            return JSONResponse({"error": "agent route does not match credential"}, status_code=403)
         # Streamable MCP dispatches a tool in a separate task, so ContextVars
         # set here are not guaranteed to reach the tool handler. Carry the
         # authenticated identity in a private request header instead.
@@ -91,9 +94,15 @@ def _json(payload: dict[str, Any]) -> str:
 
 async def _core(tool: str, arguments: dict[str, Any] | None = None, ctx: Context | None = None) -> str:
     headers = ctx.headers if ctx else None
+    request = ctx.request_context.request if ctx else None
+    path_params = getattr(request, "path_params", {}) if request else {}
+    route_agent = path_params.get("agent_id", "")
     authorization = headers.get("authorization", "") if headers else ""
     bearer_token = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
-    agent_id = _AGENT_TOKENS.get(bearer_token) or (headers.get("x-freyja-agent-id", "") if headers else "") or None
+    token_agent = _AGENT_TOKENS.get(bearer_token) or (headers.get("x-freyja-agent-id", "") if headers else "")
+    agent_id = route_agent or token_agent or None
+    if route_agent and token_agent and route_agent != token_agent:
+        return _json({"ok": False, "error": "agent route does not match credential"})
     context_token = set_current_agent(agent_id) if agent_id else None
     try:
         return _json(await dispatch_tool(tool, arguments or {}, call_tool))
@@ -301,7 +310,7 @@ def app() -> Starlette:
     # Publish the named Core tools to every portal.  Authentication establishes
     # the agent identity and `_core` enforces that agent's policy for each call;
     # the portal must not determine which capabilities an agent can use.
-    starlette = mcp.streamable_http_app(streamable_http_path="/mcp", stateless_http=False, host=configured_host)
+    starlette = mcp.streamable_http_app(streamable_http_path="/mcp/{agent_id}", stateless_http=False, host=configured_host)
     aliases = {
         value.strip()
         for value in os.environ.get("FREYJA_CORE_MCP_HOST_ALIASES", "host.docker.internal").split(",")
@@ -317,7 +326,7 @@ def app() -> Starlette:
                 "service": "freyja-core-mcp",
                 "gateway": "freyja-mcp-gateway",
                 "transport": "streamable_http",
-                "path": "/mcp",
+                "path": "/mcp/{agent_id}",
                 "core_tools": list(CORE_TOOL_NAMES),
                 "agent_id_supported": ["freyja", "freyja-test"],
                 "published_tools": list(CORE_TOOL_NAMES),

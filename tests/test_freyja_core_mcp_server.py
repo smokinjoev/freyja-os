@@ -87,7 +87,7 @@ async def test_freyja_core_mcp_health_reports_core_tool_list() -> None:
 
     assert body["ok"] is True
     assert body["service"] == "freyja-core-mcp"
-    assert body["path"] == "/mcp"
+    assert body["path"] == "/mcp/{agent_id}"
     assert body["core_tools"] == list(module.CORE_TOOL_NAMES)
     assert "calendar.list_events" in body["core_tools"]
     assert "home_assistant.list_states" in body["core_tools"]
