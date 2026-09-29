@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Freyja Family Portal</title>
+    <style>
+      :root { color-scheme: dark; --bg: #101827; --panel: #192438; --line: #30405b; --text: #eff5ff; --muted: #aebcd1; --accent: #75b9ff; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; font: 16px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--text); background: radial-gradient(circle at top, #203451 0, var(--bg) 52%); }
+      main { max-width: 1320px; margin: auto; padding: 40px 24px 56px; }
+      header { margin-bottom: 28px; }
+      h1 { margin: 0; font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.03em; }
+      header p { max-width: 720px; margin: 8px 0 0; color: var(--muted); }
+      .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: start; }
+      section { min-height: 270px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--panel) 92%, transparent); box-shadow: 0 18px 45px #050a1444; }
+      h2 { margin: 0 0 4px; font-size: 1.15rem; }
+      section > p { margin: 0 0 18px; color: var(--muted); font-size: .93rem; }
+      a { display: block; margin: 10px 0; padding: 12px 13px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); text-decoration: none; background: #111b2b; transition: .15s ease; }
+      a:hover, a:focus-visible { border-color: var(--accent); background: #1c2c45; outline: none; transform: translateY(-1px); }
+      a strong { display: block; color: var(--accent); }
+      a span { display: block; margin-top: 2px; color: var(--muted); font-size: .82rem; }
+      footer { margin-top: 24px; color: var(--muted); font-size: .85rem; }
+      footer a { display: inline; margin: 0; padding: 0; border: 0; background: none; color: var(--accent); }
+      @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } section { min-height: 0; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Freyja Family Portal</h1>
+        <p>Private household services on the Tailscale network. Start with LibreChat for named agents; use the operations links for health and support.</p>
+      </header>
+      <div class="grid">
+        <section>
+          <h2>Agents &amp; Chat</h2>
+          <p>Canonical named-agent chat lives in LibreChat.</p>
+          <a href="http://100.119.235.114:3080/"><strong>LibreChat</strong><span>Freyja, Cloyd, Benedict, Agent 47, and JennaCide</span></a>
+          <a href="http://100.119.235.114:3001/"><strong>Open WebUI</strong><span>Compatibility model portal</span></a>
+          <a href="http://100.119.235.114:3210/"><strong>LobeHub</strong><span>Compatibility and evaluation portal</span></a>
+        </section>
+        <section>
+          <h2>Home &amp; Files</h2>
+          <p>Household services currently verified on Atlas.</p>
+          <a href="http://100.119.235.114:8123/"><strong>Home Assistant</strong><span>Atlanta home controls and status</span></a>
+          <a href="http://100.119.235.114:8080/"><strong>Nextcloud</strong><span>Private files and sharing</span></a>
+          <a href="http://100.119.235.114:8777/"><strong>Paperless</strong><span>Household document archive</span></a>
+        </section>
+        <section>
+          <h2>Operations</h2>
+          <p>Read-only status and operator references.</p>
+          <a href="http://100.94.80.21:8512/docs"><strong>Freyja Director API</strong><span>Vulcan routing and channel-policy service</span></a>
+          <a href="http://100.115.228.56:8510/docs"><strong>Iris Core API</strong><span>Tool authority, MacAgent, and Apple bridge</span></a>
+          <a href="http://100.115.228.56:8000/agent-runs"><strong>Agent Smith Monitor</strong><span>Read-only job and runtime status</span></a>
+        </section>
+      </div>
+      <footer>Need help operating the system? Read the <a href="https://github.com/smokinjoev/freyja-os/blob/feature/cloyd-upstream-features/OPS_MANUAL.txt">Freyja Ops Manual</a>. Do not put passwords, tokens, or private data into chat.</footer>
+    </main>
+  </body>
+</html>
