@@ -596,8 +596,8 @@ def test_openai_chat_completion_agent_models_map_to_freyja5_runtime(
     data = response.json()
     assert data["model"] == model_id
     assert seen["target_agent_id"] == agent_id
-    assert seen["channel"] == "open-webui"
-    assert seen["reply_context"]["originating_channel"] == "open-webui"
+    assert seen["channel"] == "openai-compatible"
+    assert seen["reply_context"]["originating_channel"] == "openai-compatible"
     assert seen["run_inference"] is False
     assert seen["allow_cloud_fallback"] is False
     assert data["freyja"]["agent"] == agent_id
@@ -608,7 +608,7 @@ def test_openai_chat_completion_agent_models_map_to_freyja5_runtime(
     assert data["freyja"]["agent_model_metadata"]["memory_scopes"] == memory_scopes
     assert data["freyja"]["agent_model_metadata"]["default_nexus_endpoint"] == endpoint
     assert data["freyja"]["agent_model_metadata"]["cloud_fallback"] is False
-    assert data["freyja"]["trace"]["channel"] == "open-webui"
+    assert data["freyja"]["trace"]["channel"] == "openai-compatible"
 
 
 def test_agent_gateway_chat_forces_scoped_agent_model(monkeypatch) -> None:
@@ -785,7 +785,7 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatc
     assert data["freyja"]["route"] == "code"
     assert data["freyja"]["provider"] == "nexus"
     assert data["freyja"]["egress_state"] == "local-only"
-    assert data["freyja"]["trace"]["channel"] == "open-webui"
+    assert data["freyja"]["trace"]["channel"] == "openai-compatible"
     assert data["freyja"]["trace"]["resolved_user"] == "open-webui:open-webui"
     assert data["freyja"]["trace"]["inference_status"] == "not_run"
 
@@ -807,7 +807,7 @@ def test_openai_chat_completion_freyja5_known_user_gets_stable_household_identit
 
     assert response.status_code == 200
     trace = response.json()["freyja"]["trace"]
-    assert trace["channel"] == "open-webui"
+    assert trace["channel"] == "openai-compatible"
     assert trace["resolved_user"] == "person:joe"
     assert trace["authenticated_subject"] == "person:joe"
     assert response.json()["freyja"]["egress_state"] == "local-only"
@@ -843,7 +843,7 @@ def test_openai_agent_chat_writes_explicit_memory(monkeypatch, tmp_path) -> None
         and memory.provenance == "agent-runtime-v3-explicit-remember"
         for memory in memories
     )
-    assert response.json()["freyja"]["trace"]["channel"] == "open-webui"
+    assert response.json()["freyja"]["trace"]["channel"] == "openai-compatible"
 
 
 def test_openai_cloyd_chat_recalls_durable_memory(monkeypatch, tmp_path) -> None:
@@ -1080,9 +1080,8 @@ def test_openai_chat_completion_freyja5_streams_sse(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert '"model":"freyja-5"' in response.text
-    assert "Freyja received the objective and selected no tools" in response.text
-    assert "using vulcan-nexus-vision-docs." in response.text
-    assert "Route: vision" in response.text
+    assert "I completed the local processing" in response.text
+    assert "Trace:" not in response.text
     assert "data: [DONE]" in response.text
 
 
@@ -1093,8 +1092,7 @@ def test_openai_chat_completion_runs_agent_smith_read_only(monkeypatch) -> None:
 
     class FakeSmithRuntime:
         async def run_read_only(self, objective, actor=None, request_id=None):
-            assert "system: You are in a coding console." in objective
-            assert "user: Inspect repo status." in objective
+            assert objective == "Inspect repo status."
             assert actor == "agent_smith:openai-compatible:open-webui"
             return SmithRunSummary(
                 request_id=request_id or "smith-test",
@@ -1171,7 +1169,7 @@ def test_openai_chat_completion_plain_prompt_uses_configured_ollama(monkeypatch)
     assert seen == {
         "base_url": "http://100.115.228.56:11434",
         "model": "qwen2.5:7b",
-        "prompt": "user: say test",
+        "prompt": "say test",
     }
 
 
@@ -1203,7 +1201,7 @@ def test_openai_chat_completion_website_rebuild_uses_chat_model(monkeypatch) -> 
     data = response.json()
     assert data["choices"][0]["message"]["content"] == "Yes. Tell me what stack and files to use."
     assert data["freyja"]["smith_mode"] == "chat"
-    assert seen["prompt"] == "user: can you help me rebuild my website?"
+    assert seen["prompt"] == "can you help me rebuild my website?"
 
 
 def test_openai_chat_completion_streams_sse_when_requested(monkeypatch) -> None:
@@ -1309,7 +1307,7 @@ def test_openai_chat_completion_accepts_structured_content(monkeypatch) -> None:
     )
 
     assert response.status_code == 200
-    assert seen["prompt"] == "user: hello"
+    assert seen["prompt"] == "hello"
     assert "Accepted structured content." in response.json()["choices"][0]["message"]["content"]
 
 

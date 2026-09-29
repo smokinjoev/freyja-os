@@ -33,8 +33,19 @@ def test_librechat_trial_config_routes_only_to_nexus_and_freyja_core() -> None:
         "@preset/freyja-strong-local",
         "@preset/freyja-fast-local",
     }
-    assert config["mcpServers"]["freyja-core"]["url"] == "${FREYJA_CORE_MCP_URL}"
-    assert config["mcpServers"]["freyja-core"]["type"] == "streamable-http"
+    expected_mcp_servers = {
+        "freyja-core-freyja": "${FREYJA_CORE_MCP_FREYJA_TOKEN}",
+        "freyja-core-cloyd": "${FREYJA_CORE_MCP_CLOYD_GIBBLER_TOKEN}",
+        "freyja-core-benedict": "${FREYJA_CORE_MCP_BENEDICT_TOKEN}",
+        "freyja-core-agent47": "${FREYJA_CORE_MCP_AGENT_47_TOKEN}",
+        "freyja-core-jenna": "${FREYJA_CORE_MCP_JENNACIDE_TOKEN}",
+    }
+    assert set(config["mcpServers"]) == set(expected_mcp_servers)
+    for server_name, token_placeholder in expected_mcp_servers.items():
+        server = config["mcpServers"][server_name]
+        assert server["url"] == "${FREYJA_CORE_MCP_URL}"
+        assert server["type"] == "streamable-http"
+        assert server["headers"]["Authorization"] == f"Bearer {token_placeholder}"
     assert "host.docker.internal:8766" in config["mcpSettings"]["allowedAddresses"]
     assert "100.94.80.21:3939" in config["endpoints"]["allowedAddresses"]
 
@@ -43,7 +54,15 @@ def test_librechat_env_example_contains_no_real_secrets() -> None:
     text = ENV_EXAMPLE.read_text(encoding="utf-8")
 
     assert "NEXUS_OPENAI_BASE_URL=http://100.94.80.21:3939/v1" in text
-    assert "FREYJA_CORE_MCP_URL=http://host.docker.internal:8766/mcp" in text
+    assert "FREYJA_CORE_MCP_URL=http://100.115.228.56:8766/mcp" in text
+    for variable in (
+        "FREYJA_CORE_MCP_FREYJA_TOKEN",
+        "FREYJA_CORE_MCP_CLOYD_GIBBLER_TOKEN",
+        "FREYJA_CORE_MCP_BENEDICT_TOKEN",
+        "FREYJA_CORE_MCP_AGENT_47_TOKEN",
+        "FREYJA_CORE_MCP_JENNACIDE_TOKEN",
+    ):
+        assert f"{variable}=replace-with-" in text
     assert "nxs_" not in text
     assert "replace-with-local-nexus-token" in text
 

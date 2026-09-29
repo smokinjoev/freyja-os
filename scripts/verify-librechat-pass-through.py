@@ -34,6 +34,13 @@ REQUIRED_CORE_TOOLS = {
     "memory.search",
     "memory.write",
 }
+REQUIRED_MCP_SERVERS = {
+    "freyja-core-freyja": "${FREYJA_CORE_MCP_FREYJA_TOKEN}",
+    "freyja-core-cloyd": "${FREYJA_CORE_MCP_CLOYD_GIBBLER_TOKEN}",
+    "freyja-core-benedict": "${FREYJA_CORE_MCP_BENEDICT_TOKEN}",
+    "freyja-core-agent47": "${FREYJA_CORE_MCP_AGENT_47_TOKEN}",
+    "freyja-core-jenna": "${FREYJA_CORE_MCP_JENNACIDE_TOKEN}",
+}
 
 
 def _read_env(path: Path) -> dict[str, str]:
@@ -138,7 +145,15 @@ def build_report(config: Path, compose: Path, env_example: Path, msty_db: Path, 
     custom = (raw_config.get("endpoints") or {}).get("custom") or []
     nexus_endpoint = next((endpoint for endpoint in custom if endpoint.get("name") == "Vulcan Nexus"), {})
     mcp_servers = raw_config.get("mcpServers") or {}
-    freyja_core = mcp_servers.get("freyja-core") or {}
+    scoped_mcp = {
+        name: {
+            "type": server.get("type"),
+            "url": server.get("url"),
+            "authorization": (server.get("headers") or {}).get("Authorization"),
+        }
+        for name, server in mcp_servers.items()
+        if isinstance(server, dict)
+    }
     provider = _msty_provider(msty_db)
     nexus_check = _check_nexus(provider)
     core_check = _check_core(core_url)
@@ -150,12 +165,17 @@ def build_report(config: Path, compose: Path, env_example: Path, msty_db: Path, 
         nexus_endpoint.get("baseURL") == "${NEXUS_OPENAI_BASE_URL}"
         and nexus_endpoint.get("apiKey") == "${NEXUS_OPENAI_API_KEY}"
         and REQUIRED_PRESETS <= endpoint_presets
-        and freyja_core.get("type") == "streamable-http"
-        and freyja_core.get("url") == "${FREYJA_CORE_MCP_URL}"
+        and set(scoped_mcp) == set(REQUIRED_MCP_SERVERS)
+        and all(server["type"] == "streamable-http" for server in scoped_mcp.values())
+        and all(server["url"] == "${FREYJA_CORE_MCP_URL}" for server in scoped_mcp.values())
+        and all(
+            scoped_mcp[name]["authorization"] == f"Bearer {token}"
+            for name, token in REQUIRED_MCP_SERVERS.items()
+        )
         and "host.docker.internal:8766" in mcp_allowed
         and "100.94.80.21:3939" in endpoint_allowed
         and env.get("NEXUS_OPENAI_BASE_URL") == "http://100.94.80.21:3939/v1"
-        and env.get("FREYJA_CORE_MCP_URL") == "http://host.docker.internal:8766/mcp"
+        and env.get("FREYJA_CORE_MCP_URL") == "http://100.115.228.56:8766/mcp"
         and nexus_check["ok"]
         and core_check["ok"]
         and compose_check["ok"]
@@ -184,10 +204,13 @@ def build_report(config: Path, compose: Path, env_example: Path, msty_db: Path, 
                 "models": sorted(endpoint_presets),
             },
             "freyja_core_mcp": {
-                "server_name": "freyja-core",
-                "type": freyja_core.get("type"),
-                "url": freyja_core.get("url"),
-                "has_auth_header": bool((freyja_core.get("headers") or {}).get("Authorization")),
+                "server_names": sorted(scoped_mcp),
+                "all_streamable_http": all(server["type"] == "streamable-http" for server in scoped_mcp.values()),
+                "all_use_core_url": all(server["url"] == "${FREYJA_CORE_MCP_URL}" for server in scoped_mcp.values()),
+                "distinct_agent_token_placeholders": all(
+                    scoped_mcp[name]["authorization"] == f"Bearer {token}"
+                    for name, token in REQUIRED_MCP_SERVERS.items()
+                ),
             },
             "ssrf_allowlists": {
                 "endpoints_allowedAddresses": sorted(endpoint_allowed),
@@ -201,7 +224,7 @@ def build_report(config: Path, compose: Path, env_example: Path, msty_db: Path, 
         },
         "acceptance": {
             "can_route_inference_to_nexus_by_config": REQUIRED_PRESETS <= endpoint_presets,
-            "can_route_tools_to_freyja_core_mcp_by_config": freyja_core.get("url") == "${FREYJA_CORE_MCP_URL}",
+            "can_route_tools_to_freyja_core_mcp_by_config": set(scoped_mcp) == set(REQUIRED_MCP_SERVERS),
             "does_not_duplicate_tool_logic": True,
             "existing_services_untouched": True,
             "full_ui_smoke_status": "not_started; config-only safe evaluation completed",
