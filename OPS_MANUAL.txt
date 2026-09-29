@@ -1,0 +1,257 @@
+FREYJA OPERATIONS MANUAL
+=========================
+
+Purpose
+-------
+This is the practical handoff guide for operating Freyja without relying on
+one person to remember the stack. It documents the live system as of
+2026-09-29. It intentionally contains no passwords, API keys, bot tokens, or
+private SSH keys.
+
+Network rule
+------------
+All of these services are intended for the private Tailscale/VPN network.
+Do not expose them to the public Internet. A reachable URL does not grant
+permission to use a consequential tool: Iris Core policy and per-agent MCP
+credentials remain the tool boundary.
+
+
+1. START HERE: HOW TO CHAT WITH FREYJA
+--------------------------------------
+
+Primary named-agent portal (recommended):
+  LibreChat       http://100.119.235.114:3080/
+
+Log in with an existing LibreChat account. Select the desired named agent in
+the chat/agent selector:
+  - Freyja      shared household coordinator
+  - Cloyd       Joe's technical agent
+  - Benedict    research and deep analysis
+  - Agent 47    coding and implementation
+  - JennaCide   Jenna's private conversational agent
+
+Each LibreChat agent has its own memory scope and its own Iris Core MCP
+identity. Do not use a generic model chat when the task needs a named agent's
+memory or tools.
+
+Other web portals (compatibility/evaluation surfaces, not canonical memory):
+  Open WebUI     http://100.119.235.114:3001/
+  LobeHub        http://100.119.235.114:3210/
+  Family page    http://100.119.235.114:9091/
+
+Messaging:
+  - Freyja and Cloyd currently have active Discord DM connectors.
+  - Telegram and Signal are not certified household channels. Do not promise
+    they work until they have been deliberately configured and tested.
+  - Agent Smith is a hardware/watchdog identity, not a normal household chat.
+
+
+2. WHAT RUNS WHERE
+------------------
+
+ATLAS — 100.119.235.114
+  Purpose: web portals, compatibility gateways, OpenClaw runtimes, and
+  container-hosted user-facing services.
+  Operator access: SSH as the approved Atlas operator account.
+  Key web services: LibreChat :3080, Open WebUI :3001, LobeHub :3210,
+  family page :9091.
+
+VULCAN — 100.94.80.21
+  Purpose: local model inference and Director.
+  Nexus OpenAI-compatible API: http://100.94.80.21:3939/v1
+  Ollama API:                  http://100.94.80.21:11434
+  Director health:             http://100.94.80.21:8512/health
+  Director API docs:           http://100.94.80.21:8512/docs
+  Director service:            freyja-paralegal-director.service
+
+IRIS — 100.115.228.56
+  Purpose: Apple/Mac bridge and tool authority.
+  Freyja Core HTTP:            http://100.115.228.56:8510/health
+  Freyja Core MCP:             http://100.115.228.56:8766/mcp
+  MacAgent:                    http://100.115.228.56:8765
+  OpenCode:                    http://100.115.228.56:4097
+  Launch agents: com.freyja-os.core,
+                 com.freyja-os.core-mcp,
+                 com.freyja-os.discord-dm-connector,
+                 com.freyja-os.discord-dm-connector-freyja
+
+Expected protected responses
+  - Nexus /v1/models requires its API token (401 without one is expected).
+  - Core MCP is an MCP endpoint, not a browser health page (404 at /health is
+    expected).
+  - MacAgent and OpenCode may return 401 in a browser because they require
+    their own authorized session.
+
+
+3. CANONICAL REQUEST PATH
+-------------------------
+
+Web chat:
+  LibreChat named agent
+    -> Vulcan Nexus chooses/serves the approved local model
+    -> Iris Core MCP supplies authorized tools and scoped memory operations
+    -> MacAgent, Home Assistant, OpenCode, Apple services, or other tools
+
+Messaging chat:
+  Discord connector
+    -> Director resolves identity and delivery policy
+    -> same canonical named agent identity
+    -> Iris Core for tools
+
+Important: Director is channel identity/delivery policy. It must not become a
+second model-response wrapper for LibreChat, Open WebUI, or LobeHub chats.
+
+
+4. AGENT RESPONSIBILITIES AND MODEL ROUTING
+-------------------------------------------
+
+Freyja
+  Shared household coordination. Strong local reasoning through Nexus.
+
+Cloyd
+  Joe's technical agent. Strong local reasoning; can use Core-governed
+  technical and household tools.
+
+Benedict
+  Research and deliberate analysis. Deep local reasoning with read-oriented
+  tool posture.
+
+Agent 47
+  Software implementation. Uses the coder route and Core-controlled OpenCode
+  lifecycle. Ask it to describe proposed file or system changes before
+  approving consequential work.
+
+JennaCide
+  Jenna's private conversational agent. Fast local route and isolated memory.
+
+Agent Smith
+  Restricted Freyja hardware watchdog. Health, alerts, diagnostics, and only
+  explicitly approved maintenance. It has no shared personal-memory role and
+  must not receive unrestricted shell or home-control access.
+
+Nexus owns model selection. The portal should request the named agent/preset,
+not hard-code a physical Ollama model. The active local presets include fast,
+strong, deep/research, coder, and vision/doc work.
+
+
+5. FIRST-LINE HEALTH CHECKS
+---------------------------
+
+From any VPN-connected machine:
+
+  curl -fsS http://100.94.80.21:8512/health
+  curl -fsS http://100.115.228.56:8510/health
+  curl -fsS http://100.94.80.21:11434/api/tags
+
+Browser checks:
+  1. Open LibreChat and verify the named-agent selector appears.
+  2. Start a fresh chat with Cloyd and ask a simple non-tool question.
+  3. Ask Agent 47 for its role; do not begin with an infrastructure change.
+  4. If Discord is being checked, send a short text-only DM to Freyja or
+     Cloyd and confirm the response identifies the expected agent.
+
+What good looks like:
+  - Web portal loads.
+  - Named agent produces a written response, not only a tool trace.
+  - Tool requests report the correct named identity.
+  - Core health succeeds.
+  - No password, token, or internal secret appears in chat, logs, or commits.
+
+
+6. OPERATOR COMMANDS
+--------------------
+
+Vulcan Director:
+  sudo systemctl status freyja-paralegal-director.service
+  sudo journalctl -u freyja-paralegal-director.service -n 200 --no-pager
+  sudo systemctl restart freyja-paralegal-director.service
+
+Iris launch agents (run on Iris):
+  launchctl print gui/$(id -u)/com.freyja-os.core
+  launchctl print gui/$(id -u)/com.freyja-os.core-mcp
+  launchctl print gui/$(id -u)/com.freyja-os.discord-dm-connector
+  launchctl print gui/$(id -u)/com.freyja-os.discord-dm-connector-freyja
+
+Atlas containers (run on Atlas):
+  docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+  docker compose ls
+
+Use a targeted restart only after identifying the failed service. Never use a
+broad container prune, delete volumes, reset a git worktree, or rotate secrets
+as a first troubleshooting step.
+
+
+7. COMMON FAILURE ROUTES
+------------------------
+
+LibreChat opens but no named agents/tools:
+  - Verify Atlas containers are running.
+  - Verify Nexus and Iris Core health endpoints.
+  - Review LibreChat logs for MCP initialization failures.
+  - Confirm the profile definition at config/librechat-family-agents.yaml has
+    not been changed without updating LibreChat.
+
+Agent gives a trace but no written answer:
+  - This is normally an inference/model response issue, not proof that tools
+    worked. Retry once with a simple text-only question.
+  - Check Nexus availability and the selected agent's preset.
+  - Review Director only for channel traffic; portal chat should go direct to
+    Nexus, not through a Director response wrapper.
+
+Tool call fails:
+  - Check Iris Core health first.
+  - Confirm the agent is using its own MCP identity; do not borrow another
+    agent's token or downgrade its scope to make a test pass.
+  - For Apple-specific work, check MacAgent status on Iris.
+
+Discord fails:
+  - Verify the connector launch agent on Iris.
+  - Check the private runtime environment locally on Iris; never print it.
+  - Confirm the DM resolves to Freyja or Cloyd, not a generic fallback.
+  - Read docs/discord/family-discord-runbook.md before adding an identity.
+
+
+8. SOURCE OF TRUTH AND CHANGE CONTROL
+--------------------------------------
+
+Repository:
+  /home/joe/freyja-os-paralegal
+  GitHub: github.com/smokinjoev/freyja-os
+  Active branch at time of writing: feature/cloyd-upstream-features
+
+Read these before changing architecture:
+  docs/architecture/current.md
+  docs/architecture/freyja.md
+  config/librechat-family-agents.yaml
+  docs/discord/family-discord-runbook.md
+
+Retired experiments are preserved, not active:
+  archive/hermes-validation/
+
+Freyja 3 and Freyja 5 files are still live compatibility dependencies. Do not
+archive, rename, disable, or delete them until their replacement has been
+tested, rollback is documented, and the running services no longer import or
+depend on them.
+
+Before any change:
+  1. State the desired outcome and affected machine/service.
+  2. Check the current service health and git status.
+  3. Make the smallest reversible change.
+  4. Verify the affected endpoint and a real named-agent response.
+  5. Commit documentation/configuration updates; never commit secrets.
+
+
+9. SECURITY / HANDOFF RULES
+---------------------------
+
+  - Keep credentials in private host environment files or approved secret
+    stores. Use file mode 0600 where applicable.
+  - Do not paste secrets into Discord, LibreChat, LobeHub, Open WebUI, git,
+    issue trackers, or this manual.
+  - A VPN is a network boundary, not a replacement for per-agent tool policy.
+  - Require explicit approval for calendar writes, home control, destructive
+    shell actions, credential changes, and agent-wide memory sharing.
+  - Preserve per-person agent memory boundaries. Do not merge private chats
+    into household memory by convenience.
+
+END OF MANUAL
