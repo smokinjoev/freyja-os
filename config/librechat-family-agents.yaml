@@ -6,6 +6,11 @@ inference:
   endpoint: Vulcan Nexus
   transport: openai-compatible
   base_url: http://100.94.80.21:3939/v1
+  agent_max_output_tokens: 1024
+  rationale: >-
+    Keep enough room for a visible written reply when a reasoning-capable
+    local model is selected, while retaining the platform's bounded context
+    policy. This is a per-agent LibreChat model parameter, not a model change.
 
 tools:
   authority: Iris Freyja Core

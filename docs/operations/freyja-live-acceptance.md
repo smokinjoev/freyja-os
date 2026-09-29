@@ -17,6 +17,7 @@ operator-approved durable-memory isolation test.
 | --- | --- | --- |
 | Atlas portals | HTTP 200 from LibreChat (`:3080`), Open WebUI (`:3001`), LobeHub (`:3210`), and family page (`:9091`) | reachable |
 | Vulcan model runtime | Ollama API answered at `:11434`; Nexus answered with expected authorization required at `:3939/v1/models` | reachable and protected |
+| Named-agent inference | Each deployed Nexus preset returned a written reply with a 1,024-token agent output budget | healthy |
 | Director | `GET http://100.94.80.21:8512/health` returned healthy; `freyja-paralegal-director.service` is active as a user service | healthy |
 | Iris Core | `GET http://100.115.228.56:8510/health` returned healthy; Core launch agent is running | healthy |
 | Core MCP | LibreChat startup log initialized five per-agent MCP servers; each exposed `tools.search`, `tools.profile`, and `tools.call` | initialized |
@@ -26,6 +27,21 @@ operator-approved durable-memory isolation test.
 | Agent Smith monitor | Iris monitor status and runtime-health APIs answered at `:8000/agent-runs/api/*` | reachable, no alert route certified |
 | Telegram | No live Telegram connector container was found on Atlas | not activated |
 | Signal | Signal API and connector containers are healthy, but the connector's receive loop is repeatedly rejected by the Signal API | not operational |
+
+### Current Nexus resolutions
+
+These are observed live resolutions, not a recommendation to change routes:
+
+| LibreChat profile(s) | Nexus preset | Current physical model |
+| --- | --- | --- |
+| Freyja, Cloyd | `@preset/freyja-strong-local` | `qwen3.8:27b` |
+| Benedict | `@preset/benedict-paralegal-local` | `qwen3.8:27b` |
+| Agent 47 | `@preset/freyja-coder` | `qwen3.8:27b` |
+| JennaCide | `@preset/freyja-fast-local` | `gpt-oss:20b` |
+
+The intended alternate deep, coding, and vision models remain installed on
+Vulcan. Their selection remains the responsibility of Nexus and has not been
+changed in this acceptance pass.
 
 ## Still requiring an interactive acceptance pass
 
