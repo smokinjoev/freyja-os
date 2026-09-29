@@ -9,7 +9,7 @@ from connectors.discord.config import DiscordSettings, parse_user_agent_bindings
 from connectors.discord.gateway import DiscordGateway, DiscordInboundMessage
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify-freyja-6.2-messaging.py"
+VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify-discord-messaging.py"
 ENV_VALIDATE_SCRIPT = REPO_ROOT / "scripts" / "validate-discord-private-env.py"
 DM_RUNNER_SCRIPT = REPO_ROOT / "scripts" / "run-discord-dm-connector.py"
 
@@ -119,7 +119,7 @@ def test_discord_verifier_checks_connector_token_leaks(tmp_path) -> None:
 
     fake_root = tmp_path
     for relative in (
-        "docs/discord/freyja-6.2-five-agent-runbook.md",
+        "docs/discord/family-discord-runbook.md",
         "connectors/discord/config.py",
         "connectors/discord/gateway.py",
     ):
@@ -127,14 +127,14 @@ def test_discord_verifier_checks_connector_token_leaks(tmp_path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("nothing secret here\n", encoding="utf-8")
     module.ROOT = fake_root
-    (fake_root / "docs/discord/freyja-6.2-five-agent-runbook.md").write_text(
+    (fake_root / "docs/discord/family-discord-runbook.md").write_text(
         "fake-connector-token-for-test\n",
         encoding="utf-8",
     )
 
     failures = module._tracked_secret_failures({"FREYJA_CONNECTOR_TOKEN": "fake-connector-token-for-test"})
 
-    assert failures == ["A live FREYJA_CONNECTOR_TOKEN value appears in tracked Freyja 6.2 files."]
+    assert failures == ["A live FREYJA_CONNECTOR_TOKEN value appears in tracked Discord files."]
 
 
 def test_discord_private_env_validator_reports_redacted_readiness() -> None:

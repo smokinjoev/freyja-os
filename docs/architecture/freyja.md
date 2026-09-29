@@ -1,8 +1,8 @@
-# Freyja 6.2 Architecture
+# Freyja Architecture
 
 **Status:** operational convergence target, established 2026-09-29.
 
-Freyja 6.2 makes the currently working deployment explicit. It is not a new
+This document makes the currently working deployment explicit. It is not a new
 model gateway, an additional agent framework, or a replacement for Iris Core.
 It consolidates the agent identities, web UI, inference path, tool boundary,
 and channels around their actual owners.
@@ -59,12 +59,12 @@ evaluation surfaces. They are not alternate canonical homes for agent memory,
 tool authority, or model routing. Do not remove a preserved service until its
 replacement path has been exercised and rollback is documented.
 
-The 6.0 single `freyja-test` acceptance stack and the 6.1 Hermes-parent work
-remain useful experimental evidence, but they do not define production 6.2.
-Their incomplete acceptance reports must not be reported as failures of the
-live LibreChat/Core path.
+The former single-agent acceptance stack and Hermes-parent work remain useful
+experimental evidence in `archive/hermes-validation/`, but they do not define
+production. Their incomplete acceptance reports must not be reported as
+failures of the live LibreChat/Core path.
 
-## 6.2 completion criteria
+## Completion criteria
 
 1. The six-identity roster is consistent in source manifests, portals, and
    channel configuration.
@@ -74,5 +74,5 @@ live LibreChat/Core path.
    approved maintenance escalation path.
 4. Discord uses the same canonical identities as LibreChat; Telegram or Signal
    is selected and certified before it is described as a household channel.
-5. The legacy 6.0/6.1 documents are marked historical or migrated, without
-   deleting their acceptance evidence.
+5. Legacy validation documents are archived or migrated without deleting their
+   acceptance evidence.

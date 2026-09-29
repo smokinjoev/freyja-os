@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministically verify Freyja 6.2 Discord messaging invariants."""
+"""Deterministically verify the current Discord messaging invariants."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ EXPECTED_AGENTS = {
 def main() -> int:
     failures: list[str] = []
     if APPROVED_AGENT_IDS != set(EXPECTED_AGENTS):
-        failures.append("Approved Discord agent ids must match the Freyja 6.2 five-agent roster.")
+        failures.append("Approved Discord agent ids must match the configured five-agent roster.")
 
     sample = ",".join(f"{10_000_000_000_000_000 + index}={agent_id}" for index, agent_id in enumerate(EXPECTED_AGENTS))
     try:
@@ -99,7 +99,7 @@ def _tracked_secret_failures(env: os._Environ[str] | dict[str, str]) -> list[str
     tracked_text = "\n".join(
         path.read_text(encoding="utf-8", errors="ignore")
         for path in [
-            ROOT / "docs/discord/freyja-6.2-five-agent-runbook.md",
+            ROOT / "docs/discord/family-discord-runbook.md",
             ROOT / "connectors/discord/config.py",
             ROOT / "connectors/discord/gateway.py",
         ]
@@ -112,7 +112,7 @@ def _tracked_secret_failures(env: os._Environ[str] | dict[str, str]) -> list[str
     }
     for key, marker in secret_markers.items():
         if marker in tracked_text:
-            failures.append(f"A live {key} value appears in tracked Freyja 6.2 files.")
+            failures.append(f"A live {key} value appears in tracked Discord files.")
     return failures
 
 

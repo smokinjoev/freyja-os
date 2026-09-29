@@ -1,24 +1,14 @@
-# Family Discord agents
+# Family Discord Agents
 
-The family deployment is opt-in and separate from the existing `freyja-test` validation bot.
+Discord uses the canonical Freyja identities; it does not create a separate
+agent roster. The approved identities are Freyja, Cloyd, Benedict, Agent 47,
+JennaCide, and Agent Smith.
 
-It defines five standalone Discord agents: Freyja (shared household), Cloyd (Joe), Benedict (Beth), Agent 44 (Liam), and Agent Smith. They do not delegate to one another. The paralegal enclave remains agentless.
+Freyja and Cloyd are the only live Discord DM connectors today. Each connector
+runs on Iris, carries its resolved identity to Director, and accesses tools
+only through that identity's Iris Core policy. The full operating procedure is
+in [`docs/discord/family-discord-runbook.md`](../discord/family-discord-runbook.md).
 
-## Before activation
-
-Create or identify one Discord application and one dedicated Discord channel for each agent. Enable the bot's Message Content intent and install it into the family server with permission to view/send messages only in its own channel. Record only the bot token and channel ID.
-
-Store them in `~/.config/freyja-os/family-discord.env` on Iris with mode 600, following `config/freyja6/family-discord.env.example`. Generate a distinct Core MCP token for each agent and map it in `~/.config/freyja-os/core-mcp.env` to these identities: Freyja -> `freyja`; Cloyd -> `cloyd-gibbler`; Benedict -> `benedict`; Agent 44 -> `agent-47`; Agent Smith -> `smith`.
-
-The existing test bot's token, channel, config, and service are not reused.
-
-## Start and verify
-
-After credentials are present, start only the family overlay:
-
-```sh
-cd /Users/freyja/freyja-os/deploy/compose/freyja6
-docker compose --env-file .env --env-file ~/.config/freyja-os/family-discord.env -f compose.yaml -f compose.family-agents.yaml up -d
-```
-
-Verify every service individually, authenticate to Core with its own token, and send a normal message in each dedicated Discord channel. Do not put tokens in source control, command output, or Discord.
+Before enabling another identity, choose its owner, conversation scope, and
+permitted tool posture. Store credentials in Iris's private runtime
+environment with restrictive permissions; never add tokens to source control.
