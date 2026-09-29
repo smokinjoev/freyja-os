@@ -4,6 +4,8 @@ smith_shepherd:
   role: freyja6-service-shepherd
   host_target: atlas
   supervisor_mode: native
+  operation_mode: observe_only
+  escalation: requires_explicit_operator_approved_recipient
   docker_dependency: false
   interval_seconds: 60
   logs:
@@ -38,7 +40,7 @@ smith_shepherd:
       env_file: deploy/compose/freyja6/.env
       files:
         - deploy/compose/freyja6/compose.yaml
-      repair: true
+      repair: false
     - id: open-webui-atlas
       project_dir: /Users/freyja/freyja-os
       env_file: deploy/compose/open-webui/.env

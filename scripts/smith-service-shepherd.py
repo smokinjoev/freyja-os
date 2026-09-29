@@ -98,14 +98,11 @@ def launchctl_state(label: str) -> dict[str, Any]:
     return state
 
 
-def repair_launch_agent(label: str, dry_run: bool) -> dict[str, Any]:
+def observe_launch_agent(label: str) -> dict[str, Any]:
     state = launchctl_state(label)
     if state.get("state") == "running" or state.get("pid"):
-        return {"action": "none", "state": state}
-    if dry_run:
-        return {"action": "would_kickstart", "state": state}
-    domain = f"gui/{os.getuid()}/{label}"
-    return {"action": "kickstart", "state": state, "result": run(["launchctl", "kickstart", "-k", domain], timeout=20)}
+        return {"action": "observe_only", "healthy": True, "state": state}
+    return {"action": "observe_only", "healthy": False, "state": state}
 
 
 def docker_ok() -> bool:
@@ -202,14 +199,15 @@ def one_cycle(dry_run: bool) -> dict[str, Any]:
     shepherd = config.get("smith_shepherd") or {}
     disabled = set(shepherd.get("disabled_launch_agents") or [])
     launch_agents = [
-        repair_launch_agent(label, dry_run)
+        observe_launch_agent(label)
         for label in shepherd.get("managed_launch_agents", [])
         if label not in disabled
     ]
-    docker = open_docker_desktop(dry_run)
-    compose = []
-    if docker_ok():
-        compose = [compose_up(item, dry_run) for item in shepherd.get("managed_compose", [])]
+    docker = {"action": "observe_only", "ok": docker_ok()}
+    compose = [
+        {"action": "observe_only", "status": compose_ps(item)}
+        for item in shepherd.get("managed_compose", [])
+    ]
     report = {
         "time": now(),
         "host": platform.node(),
