@@ -33,7 +33,7 @@ def test_freyja5_agent_export_includes_agents_routes_and_mcp_boundaries() -> Non
     export = load_export_module().build_export()
     agents = {agent["id"]: agent for agent in export["agents"]}
 
-    assert set(agents) == {"freyja", "cloyd-gibbler", "benedict", "benedict-paralegal", "agent-47", "jennacide"}
+    assert set(agents) == {"freyja", "cloyd-gibbler", "smith", "benedict", "benedict-paralegal", "agent-47", "jennacide"}
     assert agents["freyja"]["mcp_tool_count"] == 11
     assert agents["benedict-paralegal"]["cloud_egress_policy"] == "paralegal-local-only"
     assert agents["benedict-paralegal"]["mcp_tool_grants"] == [
@@ -41,6 +41,7 @@ def test_freyja5_agent_export_includes_agents_routes_and_mcp_boundaries() -> Non
         "documents.process",
         "vision.inspect",
     ]
+    assert agents["smith"]["mcp_tool_grants"] == []
     assert set(export["semantic_routes"]["routes"]) == {"fast", "general", "deep", "code", "vision", "embedding", "private"}
     assert export["semantic_routes"]["owner"] == "nexus"
     assert export["semantic_routes"]["cloud_fallback"] == "explicit_only"
@@ -51,6 +52,7 @@ def test_freyja5_agent_export_includes_agents_routes_and_mcp_boundaries() -> Non
     ]
     assert export["mcp"]["default_agent_mcp_servers"] is False
     assert export["mcp"]["agent_consumption"]["freyja"] == "scoped_agent_tool_grants"
+    assert export["mcp"]["agent_consumption"]["smith"] == "no_mcp_watchdog_boundary"
     assert export["gateway_policy"]["no_physical_model_selection"] is True
 
 

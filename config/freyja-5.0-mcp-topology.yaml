@@ -71,9 +71,20 @@ non_mcp_boundaries:
       - voice_input
       - avatar_output
       - perception_events
+  - id: agent-smith-watchdog
+    host: iris
+    protocol: internal-monitor-api
+    role: bounded-hardware-watchdog
+    owns:
+      - read_only_health_observation
+      - explicit_approved_maintenance
+    denies:
+      - general_mcp_tool_access
+      - automatic_repair
 agent_consumption:
   freyja: scoped_agent_tool_grants
   cloyd-gibbler: scoped_agent_tool_grants
+  smith: no_mcp_watchdog_boundary
   benedict: scoped_agent_tool_grants
   benedict-paralegal: scoped_agent_tool_grants
   agent-47: scoped_agent_tool_grants

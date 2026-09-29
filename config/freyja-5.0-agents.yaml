@@ -16,8 +16,6 @@ agents:
       - macagent.apple
       - messaging.send
       - music.control
-      - coding.execute
-      - opencode.session
       - scheduling.create
       - vision.inspect
   - id: cloyd-gibbler
@@ -35,6 +33,14 @@ agents:
       - messaging.send
       - music.control
       - vision.inspect
+  - id: smith
+    display_name: Agent Smith
+    owner: person:joe
+    home_machine: atlas
+    memory: [person:joe, system]
+    # Smith is a bounded watchdog. Its diagnostics are internal and it does
+    # not consume a general-purpose MCP capability server.
+    mcp_tool_grants: []
   - id: benedict
     display_name: Benedict
     owner: person:beth

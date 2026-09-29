@@ -983,10 +983,15 @@ def test_freyja5_agents_consume_mcp_through_scoped_grants() -> None:
     agents = {agent.agent_id: agent for agent in PERSISTENT_AGENTS}
 
     assert set(config["agent_consumption"]) == set(agents)
-    assert set(config["agent_consumption"].values()) == {"scoped_agent_tool_grants"}
+    assert set(config["agent_consumption"].values()) == {"scoped_agent_tool_grants", "no_mcp_watchdog_boundary"}
     for agent in agents.values():
         granted_mcp_tools = exposed_tools.intersection(agent.tool_grants)
-        assert granted_mcp_tools
+        if agent.agent_id == "smith":
+            assert granted_mcp_tools == set()
+            assert config["agent_consumption"][agent.agent_id] == "no_mcp_watchdog_boundary"
+        else:
+            assert granted_mcp_tools
+            assert config["agent_consumption"][agent.agent_id] == "scoped_agent_tool_grants"
         assert granted_mcp_tools <= exposed_tools
     evidence_grants = {grant["agent_id"]: grant for grant in freyja5_mcp_topology_evidence()["agent_grants"]}
     for agent_id, agent in agents.items():
