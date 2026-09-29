@@ -36,7 +36,7 @@ agents:
     mcp_server: freyja-core-agent47
     memory_scope: agent
   - id: jennacide
-    display_name: Jenna
+    display_name: JennaCide
     model: '@preset/freyja-fast-local'
     mcp_server: freyja-core-jenna
     memory_scope: agent

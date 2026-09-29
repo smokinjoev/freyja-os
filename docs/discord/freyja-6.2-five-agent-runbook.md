@@ -1,4 +1,12 @@
-# Freyja 6.2 Five-Agent Discord Runbook
+# Freyja 6.2 Discord Runbook
+
+> **Supersession note — 2026-09-29:** The operational Freyja 6.2 design is a
+> six-identity system: Freyja, Cloyd, Benedict, Agent 47, JennaCide, and Agent
+> Smith. Agent Smith is the restricted Freyja hardware watchdog, not a
+> substitute for JennaCide. The five-agent roster and portal evidence retained
+> below are historical Discord setup evidence; do not use them as the canonical
+> current roster. See
+> [`FREYJA-6.2-ARCHITECTURE.md`](../architecture/FREYJA-6.2-ARCHITECTURE.md).
 
 Status: Discord DM connector is enabled for `Cloyd Bot` only. The private `.env` contains a verified `Cloyd Bot` token, and the live runner has reached Discord Gateway READY as `Cloyd Bot`.
 

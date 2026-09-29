@@ -82,8 +82,8 @@ mcpServers:
     timeout: 120000
     initTimeout: 30000
   freyja-core-jenna:
-    title: "Freyja Core Jenna"
-    description: "Iris-owned Freyja Core tools authenticated as Jenna."
+    title: "Freyja Core JennaCide"
+    description: "Iris-owned Freyja Core tools authenticated as JennaCide."
     type: "streamable-http"
     url: "${FREYJA_CORE_MCP_URL}"
     headers:
