@@ -52,7 +52,10 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._token = token
         self._agent_tokens = agent_tokens or {}
-        _AGENT_TOKENS = self._agent_tokens
+        _AGENT_TOKENS = {
+            **self._agent_tokens,
+            **({self._token: "freyja"} if self._token else {}),
+        }
 
     async def dispatch(self, request: Request, call_next: Any) -> Any:
         if request.url.path in {"/", "/healthz"}:
