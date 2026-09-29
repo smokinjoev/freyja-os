@@ -3,6 +3,10 @@
 This record distinguishes live evidence from configuration-only evidence. It
 is safe to update without recording credentials or private conversation data.
 
+Run `python3 scripts/freyja-live-readiness.py` before an acceptance pass. It
+checks the same no-secret network baseline recorded below, including the
+expected protected Nexus response.
+
 ## Verified on 2026-09-29
 
 | Capability | Evidence | Result |

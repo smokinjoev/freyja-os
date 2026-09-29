@@ -140,6 +140,7 @@ strong, deep/research, coder, and vision/doc work.
 
 From any VPN-connected machine:
 
+  python3 scripts/freyja-live-readiness.py
   curl -fsS http://100.94.80.21:8512/health
   curl -fsS http://100.115.228.56:8510/health
   curl -fsS http://100.94.80.21:11434/api/tags
@@ -157,6 +158,10 @@ What good looks like:
   - Tool requests report the correct named identity.
   - Core health succeeds.
   - No password, token, or internal secret appears in chat, logs, or commits.
+
+`scripts/freyja-live-readiness.py` is the repeatable no-secret baseline. It
+expects Nexus to reject an unauthenticated model-list request; that 401 proves
+the gateway is reachable and still protected.
 
 
 6. OPERATOR COMMANDS
