@@ -1,21 +1,21 @@
-# Freyja LibreChat Pass-Through Evaluation
+# Freyja LibreChat Deployment
 
-Parallel LibreChat deployment for evaluating a tablet-friendly pass-through UI.
-This compose project uses separate containers, ports, volumes, and config from
-`deploy/compose/open-webui`.
+LibreChat is the operational web home for the five named Freyja agents. This
+compose project uses separate containers, ports, volumes, and config from
+`deploy/compose/open-webui`, which remains a raw-model and fallback UI.
 
 The target shape is:
 
 ```text
-iPad -> LibreChat -> Vulcan Nexus for inference
-                  -> Freyja Core MCP for tools
+browser -> LibreChat named agent -> Vulcan Nexus for inference
+                                  -> Iris Freyja Core MCP for tools
 ```
 
-LibreChat should not become a separate Freyja tool authority.
+LibreChat must not become a separate Freyja tool authority or model proxy.
 
 ## Ports
 
-- LibreChat: `http://localhost:3080`
+- LibreChat on Atlas: `http://100.119.235.114:3080`
 - LibreChat admin panel: `http://localhost:3090`
 
 Set `LIBRECHAT_BIND_IP` in `.env` to a Tailscale/LAN address if this should not
@@ -30,32 +30,34 @@ openssl rand -hex 32
 docker compose up -d
 ```
 
-`librechat.yaml` defines the `Vulcan Nexus` OpenAI-compatible custom endpoint
-and one `freyja-core` Streamable HTTP MCP server. Secrets stay in `.env`.
+`librechat.yaml` defines the `Vulcan Nexus` OpenAI-compatible endpoint and five
+Iris Core Streamable HTTP MCP connections. Each MCP connection has its own
+opaque agent token; secrets stay in `.env`.
 
 The intended model path is:
 
 ```text
 LibreChat -> Vulcan Nexus -> @preset/freyja-coder / @preset/freyja-strong-local / @preset/freyja-fast-local
-LibreChat agent/tools -> freyja-core MCP -> Iris-owned Freyja Core tools
+LibreChat agent/tools -> agent-specific Freyja Core MCP -> Iris-owned tools
 ```
 
 ## Freyja Core MCP Backend
 
-Run the backend on Iris before enabling the LibreChat trial:
+Run the backend on Iris before enabling LibreChat. On a cross-host Tailscale
+deployment, bind it specifically to Iris's Tailscale address, not `0.0.0.0`:
 
 ```sh
 cd ~/freyja-os
 FREYJA_CORE_MCP_TOKEN="$(openssl rand -hex 32)" \
-FREYJA_CORE_MCP_HOST=127.0.0.1 \
+FREYJA_CORE_MCP_HOST=100.115.228.56 \
 FREYJA_CORE_MCP_PORT=8766 \
 .venv/bin/python scripts/freyja-core-mcp-server.py
 ```
 
-Set `FREYJA_CORE_MCP_TOKEN` in this directory's `.env` to the same value.
-For Docker Desktop on Iris, LibreChat reaches it as
-`http://host.docker.internal:8766/mcp`. For a LAN/Tailscale host, bind the MCP
-server to the private interface and keep the bearer token enabled.
+Add a separate opaque token for every named agent to Iris's
+`FREYJA_MCP_AGENT_TOKENS_JSON` map, then put the corresponding values in this
+directory's `.env`. The server maps the presented token to its agent identity;
+LibreChat therefore does not decide the tool permission set.
 
 The MCP server wraps `freyja.core.call_tool`; it does not implement separate
 calendar, OpenCode, memory, or policy logic. The available MCP tools are:
@@ -72,18 +74,22 @@ calendar, OpenCode, memory, or policy logic. The available MCP tools are:
 - `memory.search`
 - `memory.write`
 
-## Pass/Fail Questions
+## Source-controlled agent contract
 
-- Can LibreChat use the `Vulcan Nexus` custom endpoint with `@preset/...` model ids?
-- Can LibreChat discover and call the `freyja-core` MCP tools?
-- Does the iPad web experience feel better than OpenWebUI for pass-through chat?
-- Does LibreChat avoid creating a second tool authority?
+The five agent profiles are persisted in LibreChat's database and are described
+in [`config/librechat-family-agents.yaml`](../../../config/librechat-family-agents.yaml).
+The manifest is the recoverable source of truth; it contains no credentials.
 
-## 2026-09-18 Evaluation Status
+## Operational checks
 
-Config and direct backend checks pass: Nexus is reachable with the expected
-Freyja presets, Freyja Core MCP exposes the Core-owned tools, and the compose
-configuration renders without errors. The full browser/iPad smoke is still
-blocked because the initial LibreChat Docker image pull did not complete within
-the bounded trial window. Retry `docker compose up -d` from this directory when
-ready to spend the setup time, then test the UI at `http://localhost:3080`.
+- Can each profile use its mapped `@preset/...` Nexus model?
+- Can each profile discover `tools.search`, `tools.profile`, and `tools.call`?
+- Does Iris reject a token belonging to a different named agent?
+- Does LibreChat remain a client while Iris Core enforces the tool policy?
+
+## 2026-09-29 operational status
+
+LibreChat is live on Atlas. The five named agent profiles use direct Nexus
+presets and each has a separate Iris Core MCP connection. The Iris MCP listener
+is private to the Tailscale address on port 8766 and its bearer tokens remain
+outside the repository.

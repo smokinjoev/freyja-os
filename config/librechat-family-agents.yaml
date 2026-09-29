@@ -1,0 +1,42 @@
+version: 1
+platform: librechat
+purpose: canonical-operational-agent-profiles
+
+inference:
+  endpoint: Vulcan Nexus
+  transport: openai-compatible
+  base_url: http://100.94.80.21:3939/v1
+
+tools:
+  authority: Iris Freyja Core
+  transport: streamable-http-mcp
+  endpoint: http://100.115.228.56:8766/mcp
+  visible_tools: [tools.search, tools.profile, tools.call]
+  policy: Iris maps a separate opaque bearer token to each agent identity.
+
+agents:
+  - id: freyja
+    display_name: Freyja
+    model: '@preset/freyja-strong-local'
+    mcp_server: freyja-core-freyja
+    memory_scope: agent
+  - id: cloyd-gibbler
+    display_name: Cloyd
+    model: '@preset/freyja-strong-local'
+    mcp_server: freyja-core-cloyd
+    memory_scope: agent
+  - id: benedict
+    display_name: Benedict
+    model: '@preset/benedict-paralegal-local'
+    mcp_server: freyja-core-benedict
+    memory_scope: agent
+  - id: agent-47
+    display_name: Agent 47
+    model: '@preset/freyja-coder'
+    mcp_server: freyja-core-agent47
+    memory_scope: agent
+  - id: jennacide
+    display_name: Jenna
+    model: '@preset/freyja-fast-local'
+    mcp_server: freyja-core-jenna
+    memory_scope: agent
