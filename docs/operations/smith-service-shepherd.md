@@ -1,32 +1,25 @@
-# Agent Smith Service Shepherd
+# Agent Smith Watchdog
 
-Agent Smith is the Freyja 6 native service shepherd. He runs outside Docker so a
-Docker outage does not take down the monitor responsible for restoring the stack.
+Agent Smith is the native, observation-only Freyja watchdog. It runs outside
+Docker so it can report service health without sharing the failure domain.
 
 Current Iris service:
 
 - LaunchAgent: `com.freyja-os.smith-service-shepherd`
 - Script: `scripts/smith-service-shepherd.py`
-- Config: `config/freyja6/smith-shepherd.yaml`
+- Config: `config/agent-smith-watchdog.yaml`
 - Status: `~/.local/state/freyja/smith-service-shepherd-status.json`
 - Logs: `logs/smith-service-shepherd.log` and `logs/smith-service-shepherd.jsonl`
 
-Smith watches the active Director/Discord/MacAgent launch agents, Docker, and the
-Freyja 6 base compose stack. Road mode is explicitly listed as disabled and is not
-restarted by Smith.
+Smith watches the active Director, Discord, MacAgent, Core, and loop services.
+It records status only: it never restarts a service, opens Docker, runs Compose,
+reads credentials, or performs automatic repair.
 
 Model routing:
 
 - Primary: Vulcan Ollama `http://100.94.80.21:11434`, model `qwen3.8:27b`
-- OpenClaw back door: the same Ollama API, model from `SMITH_OPENCLAW_MODEL`
-  with default `openclaw`
-
-The OpenClaw route is a direct availability probe/back-door route. It reports
-unavailable until Vulcan exposes a matching Ollama model tag.
-
-The dormant Docker family overlay now also keeps `hermes-smith` on
-`vulcan-general` and carries the OpenClaw route environment, so enabling that
-overlay later does not silently drop Smith back to the 7B `vulcan-fast` lane.
+Smith has no automatic escalation destination. An operator must explicitly
+approve a recipient and a test alert before any health notification is sent.
 
 Install on Iris:
 
@@ -40,10 +33,5 @@ Status:
 scripts/status-smith-service-shepherd.sh
 ```
 
-Atlas native deployment uses the systemd unit template:
-
-```sh
-sudo cp deploy/systemd/freyja6-smith-service-shepherd.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now freyja6-smith-service-shepherd.service
-```
+Do not enable an additional Smith service on Atlas; Iris is the current
+watchdog host.
