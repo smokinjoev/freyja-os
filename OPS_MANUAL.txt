@@ -243,6 +243,9 @@ Read these before changing architecture:
 Retired experiments are preserved, not active:
   archive/hermes-validation/
 
+The Family Portal source is `deploy/family-dashboard/index.html`; its Atlas
+deployment procedure is in `deploy/family-dashboard/README.md`.
+
 Freyja 3 and Freyja 5 files are still live compatibility dependencies. Do not
 archive, rename, disable, or delete them until their replacement has been
 tested, rollback is documented, and the running services no longer import or
