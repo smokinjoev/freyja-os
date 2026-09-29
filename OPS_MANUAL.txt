@@ -238,6 +238,7 @@ Read these before changing architecture:
   docs/architecture/freyja.md
   config/librechat-family-agents.yaml
   docs/discord/family-discord-runbook.md
+  docs/operations/librechat-acceptance-runbook.md
 
 Retired experiments are preserved, not active:
   archive/hermes-validation/

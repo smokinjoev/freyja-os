@@ -7,6 +7,10 @@ Run `python3 scripts/freyja-live-readiness.py` before an acceptance pass. It
 checks the same no-secret network baseline recorded below, including the
 expected protected Nexus response.
 
+Follow `docs/operations/librechat-acceptance-runbook.md` for the exact
+no-write agent and tool checks. It separates those safe checks from the
+operator-approved durable-memory isolation test.
+
 ## Verified on 2026-09-29
 
 | Capability | Evidence | Result |
