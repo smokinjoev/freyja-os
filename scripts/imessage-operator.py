@@ -483,8 +483,11 @@ def _production_check_command(env_file: Path) -> list[str]:
         "imessage",
         "--env-file",
         str(env_file),
-        "--check-imessage-family-route-smoke",
-        "--require-imessage-family-agents",
+        "--check-imessage-route-smoke",
+        "--route-smoke-agent-id",
+        "freyja",
+        "--route-smoke-agent-display-name",
+        "Freyja",
     ]
 
 

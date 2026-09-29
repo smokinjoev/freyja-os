@@ -13,6 +13,7 @@ dependencies = [
     "httpx",
     "mcp>=2.2.0",
     "openpyxl",
+    "Pillow",
     "pypdf",
     "pydantic-settings",
     "pyyaml",

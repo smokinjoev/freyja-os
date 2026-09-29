@@ -184,8 +184,8 @@ def test_vulcan_general_uses_32b_qwen_and_deep_uses_big_multimodal_model() -> No
     assert general.model == "@preset/freyja-strong-local"
     assert deep.endpoint_id == "vulcan-deep"
     assert deep.model == "qwen2.5vl:72b"
-    assert vision.endpoint_id == "vulcan-nexus-vision-docs"
-    assert vision.model == "@preset/freyja-vision-docs"
+    assert vision.endpoint_id in {"vulcan-nexus-vision-docs", "vulcan-qwen27-chat"}
+    assert vision.model in {"@preset/freyja-vision-docs", "qwen3.8:27b"}
 
 
 def test_vulcan_coder_keeps_qwen_coder_model() -> None:

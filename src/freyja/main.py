@@ -8,6 +8,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -69,7 +70,7 @@ from freyja.inference import InferenceProviderProfile, ProviderReadiness, provid
 from freyja.iris_router import IrisRouterClient
 from freyja.iris_monitor import start_iris_warm_monitor, stop_iris_warm_monitor
 from freyja.macagent import MacAgentClient
-from freyja.media import AttachmentInput, images_from_attachments
+from freyja.media import AttachmentInput, document_texts_from_attachments, images_from_attachments
 from freyja.home_memory import home_memory_router
 from freyja.memory import memory_router
 from freyja.memory.principal import principal_from_headers
@@ -99,6 +100,9 @@ FREYJA5_AGENT_GATEWAY_MODELS = {
 }
 FREYJA_OPENWEBUI_TIMEZONE = "America/New_York"
 FREYJA_OPENAI_EMBEDDING_MODEL = "nomic-embed-text:latest"
+DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS = 95
+DIRECTOR_DISCORD_DOCUMENT_TIMEOUT_SECONDS = 240
+DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL = "external-ollama/qwen3.8:27b"
 
 
 class AgentRunFollowUpRequest(BaseModel):
@@ -2074,6 +2078,10 @@ def _sanitize_tool_results(tool_results: list[dict[str, Any]]) -> list[dict[str,
 
 
 def _images_from_canonical_attachments(attachments: list[CanonicalAttachment]) -> list[Any]:
+    return images_from_attachments(_attachment_inputs_from_canonical_attachments(attachments))
+
+
+def _attachment_inputs_from_canonical_attachments(attachments: list[CanonicalAttachment]) -> list[AttachmentInput]:
     attachment_inputs: list[AttachmentInput] = []
     for attachment in attachments:
         path = None
@@ -2088,7 +2096,7 @@ def _images_from_canonical_attachments(attachments: list[CanonicalAttachment]) -
                 size_bytes=attachment.size,
             )
         )
-    return images_from_attachments(attachment_inputs)
+    return attachment_inputs
 
 
 @app.post("/route")
@@ -2174,6 +2182,13 @@ async def _execute_canonical_request(request: CanonicalRequest, raw_request: Req
 
 
 async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_request: Request) -> CanonicalResponse:
+    direct_image_response = await _director_discord_image_response(request)
+    if direct_image_response is not None:
+        return direct_image_response
+    direct_document_response = await _director_discord_document_response(request)
+    if direct_document_response is not None:
+        return direct_document_response
+
     sender = GatewaySender(
         sender_id=(
             raw_request.headers.get("x-freyja-client-subject")
@@ -2240,6 +2255,406 @@ async def _execute_freyja3_canonical_request(request: CanonicalRequest, raw_requ
         degraded=result.degraded,
         status="degraded" if result.degraded else "ok",
     )
+
+
+async def _director_discord_image_response(request: CanonicalRequest) -> CanonicalResponse | None:
+    if request.channel != "discord":
+        return None
+    if not bool(request.channel_metadata.get("discord_media_intake")):
+        return None
+    if not request.attachments or not all(_canonical_attachment_is_image(attachment) for attachment in request.attachments):
+        return None
+    nexus_base_url = settings.nexus_base_url.rstrip("/")
+    nexus_api_key = _director_nexus_api_key()
+    if not nexus_base_url or not nexus_api_key:
+        return None
+    images = _images_from_canonical_attachments(request.attachments)
+    if not images:
+        return None
+    prompt = request.text.strip() or (
+        "Describe the attached image in a concise, conversational way. "
+        "Mention only details that are clearly visible, and say when something is uncertain."
+    )
+    try:
+        async with httpx.AsyncClient(timeout=DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{nexus_base_url}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {nexus_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                *[
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {"url": image.as_data_url()},
+                                    }
+                                    for image in images
+                                ],
+                            ],
+                        }
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 256,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        logger.exception("Director Discord image Nexus route failed model=%s", DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL)
+        text = (
+            "I received the image, but the vision route timed out before I could finish reading it. "
+            "Please resend it or send a smaller crop."
+        )
+        status = "degraded"
+        degraded = True
+    else:
+        choices = data.get("choices") or []
+        message = choices[0].get("message") if choices else {}
+        finish_reason = choices[0].get("finish_reason") if choices else None
+        if data.get("error"):
+            logger.warning("Director Discord image Nexus route returned error model=%s error=%s", DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL, data.get("error"))
+            return None
+        text = str(message.get("content") or "").strip()
+        if not text:
+            return None
+        status = "ok"
+        degraded = False
+    return CanonicalResponse(
+        trace_id=request.trace_id,
+        request_message_id=request.message_id,
+        channel=request.channel,
+        conversation_id=request.conversation_id,
+        resolved_user_id=request.resolved_user_id,
+        resolved_agent_id=request.resolved_agent_id,
+        text=text,
+        tool_results=[],
+        channel_metadata={
+            "freyja3": True,
+            "director_route": "discord_image_direct",
+            "inference_endpoint_id": "vulcan-nexus-discord-image",
+            "inference_provider": "nexus",
+            "inference_model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+            "inference_machine_id": "vulcan",
+            "inference_status": status,
+            "finish_reason": finish_reason,
+        },
+        degraded=degraded,
+        status=status,
+    )
+
+
+async def _director_discord_document_response(request: CanonicalRequest) -> CanonicalResponse | None:
+    if request.channel != "discord":
+        return None
+    if not bool(request.channel_metadata.get("discord_media_intake")):
+        return None
+    if not request.attachments or not any(_canonical_attachment_is_document(attachment) for attachment in request.attachments):
+        return None
+    nexus_base_url = settings.nexus_base_url.rstrip("/")
+    nexus_api_key = _director_nexus_api_key()
+    if not nexus_base_url or not nexus_api_key:
+        return _discord_document_degraded_response(
+            request,
+            "I received the document, but the Nexus document reader is not configured right now.",
+            reason="nexus_not_configured",
+        )
+    documents = document_texts_from_attachments(
+        _attachment_inputs_from_canonical_attachments(request.attachments),
+        max_chars_per_document=6000,
+        max_pages=12,
+    )
+    readable_documents = [document for document in documents if document.ok]
+    if not readable_documents:
+        return _discord_document_degraded_response(
+            request,
+            "I received the document, but I couldn't extract readable text from it yet.",
+            reason="document_text_unavailable",
+        )
+    document_context = "\n\n".join(
+        f"Document: {document.filename} ({document.mime_type}, {document.page_count or 1} page(s))\n{_clean_discord_document_text(document.text)}"
+        for document in readable_documents
+    )
+    question = request.text.strip() or "Review this document and tell me if it makes sense."
+    answer_budget = _discord_document_answer_budget(question)
+    prompt = (
+        "Answer the user's question using only the attached document text below. "
+        "If the document is a resume, give practical, concise feedback about clarity, structure, impact, and confusing points. "
+        "Do not answer from Home Assistant or household state.\n\n"
+        f"User question: {question}\n\n"
+        f"{document_context}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=DIRECTOR_DISCORD_DOCUMENT_TIMEOUT_SECONDS) as client:
+            data = await _post_discord_document_to_nexus(
+                client=client,
+                nexus_base_url=nexus_base_url,
+                nexus_api_key=nexus_api_key,
+                prompt=prompt,
+                max_tokens=answer_budget,
+            )
+            text, finish_reason = _nexus_chat_text_and_finish_reason(data)
+            if not text:
+                retry_prompt = (
+                    "Summarize the attached document text in 5 concise bullets. "
+                    "If it is a resume, say whether it makes sense and list the clearest improvements. "
+                    "Use only the document text. Do not return an empty answer; if you are unsure, say what you can tell from the text.\n\n"
+                    f"User question: {question}\n\n"
+                    f"{document_context[:3500]}"
+                )
+                data = await _post_discord_document_to_nexus(
+                    client=client,
+                    nexus_base_url=nexus_base_url,
+                    nexus_api_key=nexus_api_key,
+                    prompt=retry_prompt,
+                    max_tokens=min(answer_budget, 1200),
+                )
+                text, finish_reason = _nexus_chat_text_and_finish_reason(data)
+    except Exception:
+        logger.exception("Director Discord document Nexus route failed model=%s", DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL)
+        return _discord_document_degraded_response(
+            request,
+            "I received the document and extracted text, but the Nexus document route timed out before I could finish reading it.",
+            reason="nexus_request_failed",
+            document_count=len(readable_documents),
+        )
+    if not text:
+        text = _discord_document_extracted_text_preview(readable_documents, question)
+        return _discord_document_degraded_response(
+            request,
+            text,
+            reason="empty_nexus_response",
+            document_count=len(readable_documents),
+        )
+    logger.info(
+        "Director Discord document pushed to Nexus trace_id=%s documents=%s model=%s",
+        request.trace_id,
+        len(readable_documents),
+        DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+    )
+    return CanonicalResponse(
+        trace_id=request.trace_id,
+        request_message_id=request.message_id,
+        channel=request.channel,
+        conversation_id=request.conversation_id,
+        resolved_user_id=request.resolved_user_id,
+        resolved_agent_id=request.resolved_agent_id,
+        text=text,
+        tool_results=[],
+        channel_metadata={
+            "freyja3": True,
+            "director_route": "discord_document_direct",
+            "inference_endpoint_id": "vulcan-nexus-discord-document",
+            "inference_provider": "nexus",
+            "inference_model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+            "inference_machine_id": "vulcan",
+            "inference_status": "ok",
+            "finish_reason": finish_reason,
+            "document_count": len(readable_documents),
+            "document_route": "pushed_to_nexus",
+            "answer_budget": answer_budget,
+        },
+        degraded=False,
+        status="ok",
+    )
+
+
+async def _post_discord_document_to_nexus(
+    *,
+    client: httpx.AsyncClient,
+    nexus_base_url: str,
+    nexus_api_key: str,
+    prompt: str,
+    max_tokens: int,
+) -> dict[str, Any]:
+    response = await client.post(
+        f"{nexus_base_url}/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {nexus_api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": max_tokens,
+        },
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, dict) else {}
+
+
+def _nexus_chat_text_and_finish_reason(data: dict[str, Any]) -> tuple[str, object]:
+    choices = data.get("choices") or []
+    if not choices or not isinstance(choices[0], dict):
+        return "", None
+    choice = choices[0]
+    message = choice.get("message")
+    if not isinstance(message, dict):
+        return "", choice.get("finish_reason")
+    content = message.get("content")
+    if isinstance(content, str):
+        return content.strip(), choice.get("finish_reason")
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+        return "\n".join(parts).strip(), choice.get("finish_reason")
+    return "", choice.get("finish_reason")
+
+
+def _discord_document_answer_budget(question: str) -> int:
+    lowered = question.lower()
+    long_intent_terms = (
+        "rewrite",
+        "full",
+        "complete",
+        "detailed",
+        "exhaustive",
+        "go deep",
+        "long",
+        "pages",
+        "everything",
+        "line by line",
+        "section by section",
+    )
+    return 4000 if any(term in lowered for term in long_intent_terms) else 1800
+
+
+def _clean_discord_document_text(text: str) -> str:
+    replacements = {
+        "\u2022": "-",
+        "\uf0b7": "-",
+        "\u00a0": " ",
+    }
+    cleaned = text
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+    lines = []
+    for raw_line in cleaned.splitlines():
+        line = " ".join(raw_line.strip().split())
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _discord_document_extracted_text_preview(documents: list[Any], question: str) -> str:
+    lines = _discord_document_clean_lines(documents)
+    if not lines:
+        return "I read the document, but Nexus returned an empty answer before I could produce a full review."
+    lowered = "\n".join(lines).lower()
+    if "resume" in lowered or "career highlights" in lowered or "professional experience" in lowered:
+        return _discord_resume_local_fallback(lines)
+    preview = "\n".join(f"- {line}" for line in lines[:6])
+    return (
+        "I read the document, but Nexus returned an empty answer before I could produce a full review. "
+        "Here is the useful text I could verify:\n\n"
+        f"{preview}"
+    )[:1800]
+
+
+def _discord_document_clean_lines(documents: list[Any]) -> list[str]:
+    lines: list[str] = []
+    for document in documents[:2]:
+        text = _clean_discord_document_text(str(getattr(document, "text", "")))
+        for line in text.splitlines():
+            if _discord_document_line_is_safe_for_preview(line):
+                lines.append(line)
+    return lines
+
+
+def _discord_document_line_is_safe_for_preview(line: str) -> bool:
+    if not line:
+        return False
+    lowered = line.lower()
+    if "@" in line or "phone" in lowered:
+        return False
+    digit_count = sum(character.isdigit() for character in line)
+    return digit_count < 7
+
+
+def _discord_resume_local_fallback(lines: list[str]) -> str:
+    title = next((line for line in lines if "engineer" in line.lower() or "manager" in line.lower()), "senior technical candidate")
+    highlights = [line for line in lines if line.startswith("-")][:4]
+    if not highlights:
+        highlights = [line for line in lines[1:5] if line != title][:4]
+    highlight_text = "\n".join(f"- {line.lstrip('- ').strip()}" for line in highlights[:4])
+    if not highlight_text:
+        highlight_text = "- The document has readable resume content and a senior technical profile."
+    return (
+        "I read the resume, but Nexus returned an empty answer before finishing the full review. "
+        "From the extracted text, it looks like a strong senior controls/automation resume.\n\n"
+        f"Role signal: {title}\n\n"
+        "Strong points I can verify:\n"
+        f"{highlight_text}\n\n"
+        "Best next improvement: tighten the top third into a sharper executive summary and make each major role lead with impact, scale, and outcomes. "
+        "The experience is there; the resume should make the hiring manager see the through-line faster."
+    )[:1800]
+
+
+def _discord_document_degraded_response(
+    request: CanonicalRequest,
+    text: str,
+    *,
+    reason: str,
+    document_count: int = 0,
+) -> CanonicalResponse:
+    return CanonicalResponse(
+        trace_id=request.trace_id,
+        request_message_id=request.message_id,
+        channel=request.channel,
+        conversation_id=request.conversation_id,
+        resolved_user_id=request.resolved_user_id,
+        resolved_agent_id=request.resolved_agent_id,
+        text=text,
+        tool_results=[],
+        channel_metadata={
+            "freyja3": True,
+            "director_route": "discord_document_direct",
+            "inference_endpoint_id": "vulcan-nexus-discord-document",
+            "inference_provider": "nexus",
+            "inference_model": DIRECTOR_DISCORD_IMAGE_NEXUS_MODEL,
+            "inference_machine_id": "vulcan",
+            "inference_status": "degraded",
+            "degraded_reason": reason,
+            "document_count": document_count,
+            "document_route": "pushed_to_nexus",
+        },
+        degraded=True,
+        status="degraded",
+    )
+
+
+def _canonical_attachment_is_image(attachment: CanonicalAttachment) -> bool:
+    media_type = (attachment.media_type or "").lower()
+    filename = (attachment.filename or attachment.source or attachment.reference or "").lower()
+    return media_type.startswith("image/") or filename.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"))
+
+
+def _canonical_attachment_is_document(attachment: CanonicalAttachment) -> bool:
+    media_type = (attachment.media_type or "").lower()
+    filename = (attachment.filename or attachment.source or attachment.reference or "").lower()
+    return media_type == "application/pdf" or filename.endswith(".pdf") or filename.endswith(".docx")
+
+
+def _director_nexus_api_key() -> str:
+    if settings.nexus_api_key:
+        return settings.nexus_api_key
+    if not settings.nexus_api_key_file:
+        return ""
+    try:
+        return Path(settings.nexus_api_key_file).expanduser().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
 
 
 def _security_domain_for_canonical_request(request: CanonicalRequest) -> SecurityDomainId:

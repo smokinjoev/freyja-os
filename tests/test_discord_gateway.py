@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+from io import BytesIO
 
+import httpx
 import pytest
+from PIL import Image
 
-from connectors.discord.config import DiscordSettings, parse_user_agent_bindings
-from connectors.discord.gateway import DiscordGateway, DiscordInboundMessage
+from connectors.discord.config import DiscordSettings, parse_seen_reactions, parse_user_agent_bindings
+from connectors.discord.gateway import (
+    DIRECTOR_ROUTE_TIMEOUT_SECONDS,
+    SUPPORTED_ATTACHMENT_MIME_TYPES,
+    DiscordGateway,
+    DiscordInboundMessage,
+    DiscordOutboundReply,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify-discord-messaging.py"
@@ -29,6 +39,15 @@ def test_discord_user_agent_bindings_reject_duplicate_user() -> None:
         parse_user_agent_bindings("100=freyja,100=smith")
 
 
+def test_discord_gateway_director_timeout_allows_long_local_generation() -> None:
+    assert DIRECTOR_ROUTE_TIMEOUT_SECONDS >= 300
+
+
+def test_discord_gateway_accepts_apple_heif_images() -> None:
+    assert "image/heic" in SUPPORTED_ATTACHMENT_MIME_TYPES
+    assert "image/heif" in SUPPORTED_ATTACHMENT_MIME_TYPES
+
+
 def test_discord_user_agent_bindings_allow_shared_default_agent() -> None:
     bindings = parse_user_agent_bindings("100=freyja,101=freyja")
 
@@ -38,6 +57,11 @@ def test_discord_user_agent_bindings_allow_shared_default_agent() -> None:
 def test_discord_user_agent_bindings_reject_unknown_agent() -> None:
     with pytest.raises(ValueError, match="unapproved"):
         parse_user_agent_bindings("100=jennacide")
+
+
+def test_discord_seen_reactions_default_to_eyes() -> None:
+    assert parse_seen_reactions("") == ("👀", "👀")
+    assert parse_seen_reactions("👀,✅") == ("👀", "✅")
 
 
 @pytest.mark.asyncio
@@ -53,6 +77,15 @@ async def test_discord_gateway_ignores_non_dm_and_non_text_messages() -> None:
             content="hello",
         )
     ) is None
+    assert gateway.would_route(
+        DiscordInboundMessage(
+            message_id="m3",
+            author_id="100",
+            channel_id="c1",
+            channel_type="dm",
+            content="hello",
+        )
+    ) is True
     assert await gateway.handle_message(
         DiscordInboundMessage(
             message_id="m2",
@@ -63,6 +96,18 @@ async def test_discord_gateway_ignores_non_dm_and_non_text_messages() -> None:
             attachments=({"filename": "photo.png"},),
         )
     ) is None
+    unsupported = gateway.unsupported_message_reply(
+        DiscordInboundMessage(
+            message_id="m2",
+            author_id="100",
+            channel_id="c1",
+            channel_type="dm",
+            content="please read this",
+            attachments=({"filename": "archive.zip", "content_type": "application/zip", "url": "https://cdn.test/archive.zip"},),
+        )
+    )
+    assert unsupported is not None
+    assert "PDFs, DOCX files, and common image files" in unsupported.text
 
 
 @pytest.mark.asyncio
@@ -106,6 +151,516 @@ async def test_discord_gateway_routes_approved_dm_to_bound_agent() -> None:
     assert captured["json"]["channel_metadata"]["discord_channel_type"] == "dm"
     assert captured["json"]["channel_metadata"]["discord_text_only"] is True
     assert captured["json"]["channel_metadata"]["discord_final_only"] is True
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_downloads_pdf_attachment_for_director() -> None:
+    captured = {}
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            captured["download_url"] = url
+            return FakeResponse(content=b"%PDF-1.4 fake")
+
+        async def post(self, url, *, json, headers):
+            captured["url"] = url
+            captured["json"] = json
+            captured["headers"] = headers
+            return FakeResponse(payload={"text": "I read the PDF."})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m4",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="what is this?",
+            attachments=(
+                {
+                    "filename": "plan.pdf",
+                    "content_type": "application/pdf",
+                    "size": 13,
+                    "url": "https://cdn.discordapp.test/plan.pdf",
+                },
+            ),
+        )
+    )
+
+    assert reply is not None
+    assert captured["download_url"] == "https://cdn.discordapp.test/plan.pdf"
+    assert captured["json"]["channel_metadata"]["discord_text_only"] is False
+    assert captured["json"]["channel_metadata"]["discord_media_intake"] is True
+    assert captured["json"]["attachments"][0]["filename"] == "plan.pdf"
+    assert captured["json"]["attachments"][0]["data_base64"] == "JVBERi0xLjQgZmFrZQ=="
+    assert "documents.process" in captured["json"]["permissions"]
+    assert "vision.inspect" in captured["json"]["permissions"]
+    assert "Trusted Discord metadata" in captured["json"]["text"]
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_retries_transient_attachment_download_timeout() -> None:
+    captured = {"download_attempts": 0}
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            captured["download_attempts"] += 1
+            if captured["download_attempts"] == 1:
+                raise httpx.ReadTimeout("slow Discord CDN")
+            return FakeResponse(content=b"%PDF-1.4 fake")
+
+        async def post(self, url, *, json, headers):
+            captured["json"] = json
+            return FakeResponse(payload={"text": "I read it."})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m4b",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="what is this?",
+            attachments=(
+                {
+                    "filename": "plan.pdf",
+                    "content_type": "application/pdf",
+                    "size": 13,
+                    "url": "https://cdn.discordapp.test/plan.pdf",
+                },
+            ),
+        )
+    )
+
+    assert reply is not None
+    assert reply.text == "I read it."
+    assert captured["download_attempts"] == 2
+    assert captured["json"]["attachments"][0]["filename"] == "plan.pdf"
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_normalizes_large_image_attachment() -> None:
+    captured = {}
+    image_buffer = BytesIO()
+    Image.frombytes("RGB", (1800, 1500), os.urandom(1800 * 1500 * 3)).save(image_buffer, format="JPEG", quality=96)
+    image_bytes = image_buffer.getvalue()
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=image_bytes)
+
+        async def post(self, url, *, json, headers):
+            captured["json"] = json
+            return FakeResponse(payload={"text": "I can see it."})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m4d",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="",
+            attachments=(
+                {
+                    "filename": "large.jpeg",
+                    "content_type": "image/jpeg",
+                    "size": len(image_bytes),
+                    "url": "https://cdn.discordapp.test/large.png",
+                },
+            ),
+        )
+    )
+
+    assert reply is not None
+    attachment = captured["json"]["attachments"][0]
+    assert attachment["filename"] == "large.jpg"
+    assert attachment["media_type"] == "image/jpeg"
+    assert attachment["size"] < len(image_bytes)
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_returns_director_timeout_reply() -> None:
+    class FakeClient:
+        async def post(self, url, *, json, headers):
+            raise httpx.ReadTimeout("slow director")
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m4e",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="hello",
+        )
+    )
+
+    assert reply is not None
+    assert "timed out" in reply.text
+    assert reply.agent_id == "cloyd-gibbler"
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_returns_download_failure_without_routing() -> None:
+    captured = {"post_called": False}
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            raise httpx.ReadTimeout("slow Discord CDN")
+
+        async def post(self, url, *, json, headers):
+            captured["post_called"] = True
+            raise AssertionError("Director should not be called when attachment download fails.")
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m4c",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="what is this?",
+            attachments=(
+                {
+                    "filename": "plan.pdf",
+                    "content_type": "application/pdf",
+                    "size": 13,
+                    "url": "https://cdn.discordapp.test/plan.pdf",
+                },
+            ),
+        )
+    )
+
+    assert reply is not None
+    assert "timed out" in reply.text
+    assert captured["post_called"] is False
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_suppresses_internal_attachment_status_reply() -> None:
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=b"%PDF-1.4 fake")
+
+        async def post(self, url, *, json, headers):
+            return FakeResponse(
+                payload={
+                    "text": (
+                        "Cloyd Gibbler received the objective and selected vision.inspect "
+                        "with 8 recalled memory record(s) using vulcan-nexus-vision-docs."
+                    )
+                }
+            )
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    reply = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m5",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="what is this?",
+            attachments=(
+                {
+                    "filename": "plan.pdf",
+                    "content_type": "application/pdf",
+                    "size": 13,
+                    "url": "https://cdn.discordapp.test/plan.pdf",
+                },
+            ),
+        )
+    )
+
+    assert reply is not None
+    assert "attachment" in reply.text
+    assert "received the objective" not in reply.text
+    assert "vision.inspect" not in reply.text
+    assert "vulcan" not in reply.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_reuses_recent_attachment_for_followup_reference() -> None:
+    captured_posts: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=b"fake image bytes")
+
+        async def post(self, url, *, json, headers):
+            captured_posts.append(json)
+            return FakeResponse(payload={"text": "handled"})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    first = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m6",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="",
+            attachments=(
+                {
+                    "filename": "photo.png",
+                    "content_type": "image/png",
+                    "size": 16,
+                    "url": "https://cdn.discordapp.test/photo.png",
+                },
+            ),
+        )
+    )
+    followup = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m7",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="what do you see?",
+        )
+    )
+
+    assert first is not None
+    assert followup is not None
+    assert len(captured_posts) == 2
+    assert captured_posts[1]["attachments"][0]["filename"] == "photo.png"
+    assert captured_posts[1]["attachments"][0]["data_base64"] == "ZmFrZSBpbWFnZSBieXRlcw=="
+    assert captured_posts[1]["channel_metadata"]["discord_media_intake"] is True
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_reuses_recent_image_for_short_followup() -> None:
+    captured_posts: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=b"fake image bytes")
+
+        async def post(self, url, *, json, headers):
+            captured_posts.append(json)
+            return FakeResponse(payload={"text": "handled"})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m7a",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="",
+            attachments=(
+                {
+                    "filename": "comic.png",
+                    "content_type": "image/png",
+                    "size": 16,
+                    "url": "https://cdn.discordapp.test/comic.png",
+                },
+            ),
+        )
+    )
+    followup = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m7b",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="who drew it?",
+        )
+    )
+
+    assert followup is not None
+    assert len(captured_posts) == 2
+    assert captured_posts[1]["attachments"][0]["filename"] == "comic.png"
+    assert captured_posts[1]["channel_metadata"]["discord_media_intake"] is True
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_reuses_recent_document_for_short_followup() -> None:
+    captured_posts: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=b"%PDF-1.4 fake")
+
+        async def post(self, url, *, json, headers):
+            captured_posts.append(json)
+            return FakeResponse(payload={"text": "handled"})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    first = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m8",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="does this resume make sense?",
+            attachments=(
+                {
+                    "filename": "resume.pdf",
+                    "content_type": "application/pdf",
+                    "size": 16,
+                    "url": "https://cdn.discordapp.test/resume.pdf",
+                },
+            ),
+        )
+    )
+    followup = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m9",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="improve it",
+        )
+    )
+
+    assert first is not None
+    assert followup is not None
+    assert len(captured_posts) == 2
+    assert captured_posts[1]["attachments"][0]["filename"] == "resume.pdf"
+    assert captured_posts[1]["channel_metadata"]["discord_media_intake"] is True
+
+
+@pytest.mark.asyncio
+async def test_discord_gateway_does_not_reuse_recent_document_for_new_topic() -> None:
+    captured_posts: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, *, payload=None, content=b"") -> None:
+            self._payload = payload or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            return FakeResponse(content=b"%PDF-1.4 fake")
+
+        async def post(self, url, *, json, headers):
+            captured_posts.append(json)
+            return FakeResponse(payload={"text": "handled"})
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+
+    await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m10",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="does this resume make sense?",
+            attachments=(
+                {
+                    "filename": "resume.pdf",
+                    "content_type": "application/pdf",
+                    "size": 16,
+                    "url": "https://cdn.discordapp.test/resume.pdf",
+                },
+            ),
+        )
+    )
+    await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="m11",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="how many lights are on?",
+        )
+    )
+
+    assert len(captured_posts) == 2
+    assert captured_posts[1]["attachments"] == []
+    assert captured_posts[1]["channel_metadata"]["discord_media_intake"] is False
 
 
 def test_discord_verifier_checks_connector_token_leaks(tmp_path) -> None:
@@ -238,3 +793,295 @@ def test_discord_dm_runner_translates_dm_payload_and_intents() -> None:
     assert message.author_id == "u1"
     assert guild_message.channel_type == "guild_text"
     assert identify["d"]["intents"] == module.INTENT_DIRECT_MESSAGES | module.INTENT_MESSAGE_CONTENT
+
+
+def test_discord_dm_runner_chunks_long_replies_on_boundaries() -> None:
+    spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    text = ("First paragraph. " * 90) + "\n\n" + ("Second paragraph. " * 90)
+
+    chunks = module._discord_message_chunks(text)
+
+    assert len(chunks) > 1
+    assert all(0 < len(chunk) <= module.DISCORD_MESSAGE_LIMIT for chunk in chunks)
+    assert "First paragraph" in chunks[0]
+    assert "Second paragraph" in chunks[-1]
+
+
+@pytest.mark.asyncio
+async def test_discord_dm_runner_sends_seen_reactions_before_reply() -> None:
+    spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    events: list[tuple[str, str]] = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        async def put(self, url, *, headers, **kwargs):
+            events.append(("put", url))
+            return FakeResponse()
+
+        async def get(self, url, **kwargs):
+            events.append(("get", url))
+            return FakeResponse()
+
+        async def post(self, url, *, headers, json):
+            events.append(("post", url))
+            return FakeResponse()
+
+    class FakeGateway:
+        def would_route(self, message):
+            return True
+
+        def unsupported_message_reply(self, message):
+            return None
+
+        async def handle_message(self, message):
+            events.append(("handle", message.message_id))
+            return DiscordOutboundReply(
+                text="final",
+                message_reference_id=message.message_id,
+                agent_id="freyja",
+                trace_id="trace",
+            )
+
+    settings = DiscordSettings(
+        enabled=True,
+        bot_token="not-a-real-token",
+        director_url="http://director.test",
+        connector_token="connector-token",
+        user_agent_bindings=parse_user_agent_bindings("100=freyja"),
+        seen_reactions=("👀", "✅"),
+    )
+    runner = module.DiscordDmRunner(settings=settings, gateway=FakeGateway(), client=FakeClient())
+    await runner._handle_gateway_event(
+        {
+            "op": 0,
+            "t": "MESSAGE_CREATE",
+            "d": {
+                "id": "m1",
+                "channel_id": "dm1",
+                "content": "hello",
+                "author": {"id": "100"},
+                "attachments": [],
+                "embeds": [],
+            },
+        }
+    )
+
+    assert [event[0] for event in events] == ["put", "put", "handle", "post"]
+    assert "%F0%9F%91%80" in events[0][1]
+    assert "%E2%9C%85" in events[1][1]
+
+
+@pytest.mark.asyncio
+async def test_discord_dm_runner_falls_back_to_typing_when_seen_reaction_rate_limited() -> None:
+    spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    events: list[tuple[str, str]] = []
+
+    class FakeResponse:
+        status_code = 204
+
+        def __init__(self, *, status_code: int = 204) -> None:
+            self.status_code = status_code
+            self.request = httpx.Request("PUT", "https://discord.test/reaction")
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    "rate limited",
+                    request=self.request,
+                    response=httpx.Response(self.status_code, request=self.request),
+                )
+
+    class FakeClient:
+        async def put(self, url, *, headers, **kwargs):
+            events.append(("put", url))
+            return FakeResponse(status_code=429)
+
+        async def post(self, url, *, headers, json=None, **kwargs):
+            events.append(("post", url))
+            return FakeResponse()
+
+    class FakeGateway:
+        def would_route(self, message):
+            return True
+
+        def unsupported_message_reply(self, message):
+            return None
+
+        async def handle_message(self, message):
+            events.append(("handle", message.message_id))
+            return DiscordOutboundReply(
+                text="final",
+                message_reference_id=message.message_id,
+                agent_id="freyja",
+                trace_id="trace",
+            )
+
+    settings = DiscordSettings(
+        enabled=True,
+        bot_token="not-a-real-token",
+        director_url="http://director.test",
+        connector_token="connector-token",
+        user_agent_bindings=parse_user_agent_bindings("100=freyja"),
+        seen_reactions=("👀", "👀"),
+    )
+    runner = module.DiscordDmRunner(settings=settings, gateway=FakeGateway(), client=FakeClient())
+    await runner._handle_gateway_event(
+        {
+            "op": 0,
+            "t": "MESSAGE_CREATE",
+            "d": {
+                "id": "m1",
+                "channel_id": "dm1",
+                "content": "hello",
+                "author": {"id": "100"},
+                "attachments": [],
+                "embeds": [],
+            },
+        }
+    )
+
+    assert [event[0] for event in events] == ["put", "post", "handle", "post"]
+    assert events[1][1].endswith("/channels/dm1/typing")
+
+
+@pytest.mark.asyncio
+async def test_discord_dm_runner_sends_long_reply_as_multiple_messages() -> None:
+    spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    sent_payloads: list[dict[str, object]] = []
+    long_reply = ("Resume feedback paragraph. " * 180).strip()
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        async def put(self, url, *, headers, **kwargs):
+            return FakeResponse()
+
+        async def get(self, url, **kwargs):
+            return FakeResponse()
+
+        async def post(self, url, *, headers, json):
+            sent_payloads.append(json)
+            return FakeResponse()
+
+    class FakeGateway:
+        def would_route(self, message):
+            return True
+
+        def unsupported_message_reply(self, message):
+            return None
+
+        async def handle_message(self, message):
+            return DiscordOutboundReply(
+                text=long_reply,
+                message_reference_id=message.message_id,
+                agent_id="freyja",
+                trace_id="trace",
+            )
+
+    settings = DiscordSettings(
+        enabled=True,
+        bot_token="not-a-real-token",
+        director_url="http://director.test",
+        connector_token="connector-token",
+        user_agent_bindings=parse_user_agent_bindings("100=freyja"),
+        seen_reactions=(),
+    )
+    runner = module.DiscordDmRunner(settings=settings, gateway=FakeGateway(), client=FakeClient())
+    await runner._handle_gateway_event(
+        {
+            "op": 0,
+            "t": "MESSAGE_CREATE",
+            "d": {
+                "id": "m1",
+                "channel_id": "dm1",
+                "content": "hello",
+                "author": {"id": "100"},
+                "attachments": [],
+                "embeds": [],
+            },
+        }
+    )
+
+    assert len(sent_payloads) > 1
+    assert "".join(str(payload["content"]) for payload in sent_payloads).replace(" ", "") == long_reply.replace(" ", "")
+    assert all(len(str(payload["content"])) <= module.DISCORD_MESSAGE_LIMIT for payload in sent_payloads)
+    assert all(payload["message_reference"]["message_id"] == "m1" for payload in sent_payloads)
+
+
+@pytest.mark.asyncio
+async def test_discord_dm_runner_sends_unsupported_attachment_notice_without_routing() -> None:
+    spec = importlib.util.spec_from_file_location("run_discord_dm_connector", DM_RUNNER_SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    events: list[tuple[str, object]] = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        async def put(self, url, *, headers, **kwargs):
+            events.append(("put", url))
+            return FakeResponse()
+
+        async def post(self, url, *, headers, json):
+            events.append(("post", json))
+            return FakeResponse()
+
+    class FakeGateway:
+        def would_route(self, message):
+            return False
+
+        def unsupported_message_reply(self, message):
+            return DiscordGateway(_settings()).unsupported_message_reply(message)
+
+        async def handle_message(self, message):
+            events.append(("handle", message.message_id))
+            return None
+
+    runner = module.DiscordDmRunner(settings=_settings(), gateway=FakeGateway(), client=FakeClient())
+    await runner._handle_gateway_event(
+        {
+            "op": 0,
+            "t": "MESSAGE_CREATE",
+            "d": {
+                "id": "m1",
+                "channel_id": "dm1",
+                "content": "please read this",
+                "author": {"id": "100"},
+                "attachments": [{"filename": "plan.pdf"}],
+                "embeds": [],
+            },
+        }
+    )
+
+    assert [event[0] for event in events] == ["post"]
+    assert "PDFs, DOCX files, and common image files" in events[0][1]["content"]

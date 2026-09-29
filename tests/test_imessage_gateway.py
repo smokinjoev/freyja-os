@@ -486,7 +486,7 @@ async def test_family_group_addressed_message_routes_to_director(enabled_gateway
 
 
 @pytest.mark.asyncio
-async def test_joe_alias_routes_direct_imessage_to_cloyd_private_agent(enabled_gateway):
+async def test_joe_alias_routes_direct_imessage_to_freyja_agent(enabled_gateway):
     enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567", "imessage")
     enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
 
@@ -498,10 +498,11 @@ async def test_joe_alias_routes_direct_imessage_to_cloyd_private_agent(enabled_g
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
     assert payload["text"] == "Freyja, hello"
-    assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
-    assert headers["X-Freyja-Account-Owner"] == "person:joe"
-    assert headers["X-Freyja-Agent-Id"] == "cloyd-gibbler"
-    assert headers["X-Freyja-Person-Id"] == "joe"
+    assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
+    assert headers["X-Freyja-Account-Owner"] == "person:family"
+    assert headers["X-Freyja-Agent-Id"] == "freyja"
+    assert headers["X-Freyja-Person-Id"] == "family"
+    assert headers["X-Freyja-Family-Member"] == "joe"
     assert "+15551234567" not in str(headers)
 
 
@@ -564,7 +565,7 @@ async def test_direct_imessage_still_requires_address_for_other_allowed_senders(
 
 
 @pytest.mark.asyncio
-async def test_beth_alias_routes_direct_imessage_to_benedict_private_agent(enabled_gateway):
+async def test_beth_alias_routes_direct_imessage_to_freyja_agent(enabled_gateway):
     enabled_gateway._allowed_identities = parse_allowed_senders("beth=beth@example.com", "imessage")
     enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
 
@@ -576,10 +577,11 @@ async def test_beth_alias_routes_direct_imessage_to_benedict_private_agent(enabl
     payload = mock_post.await_args.kwargs["json"]
     headers = mock_post.await_args.kwargs["headers"]
     assert payload["text"] == "Freyja, hello"
-    assert headers["X-Freyja-Client-Subject"] == "agent:benedict"
-    assert headers["X-Freyja-Account-Owner"] == "person:beth"
-    assert headers["X-Freyja-Agent-Id"] == "benedict"
-    assert headers["X-Freyja-Person-Id"] == "beth"
+    assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
+    assert headers["X-Freyja-Account-Owner"] == "person:family"
+    assert headers["X-Freyja-Agent-Id"] == "freyja"
+    assert headers["X-Freyja-Person-Id"] == "family"
+    assert headers["X-Freyja-Family-Member"] == "beth"
 
 
 @pytest.mark.asyncio
@@ -668,7 +670,7 @@ async def test_raw_allowlisted_sender_routes_to_family_freyja_agent(enabled_gate
 
 
 @pytest.mark.asyncio
-async def test_family_member_alias_uses_agent_memory_subject(enabled_gateway):
+async def test_family_member_alias_keeps_sender_identity_but_uses_freyja_agent(enabled_gateway):
     enabled_gateway._allowed_identities = parse_allowed_senders("joe=+15551234567,beth=beth@example.com", "imessage")
     enabled_gateway._allowed_senders = set(enabled_gateway._allowed_identities)
 
@@ -679,8 +681,8 @@ async def test_family_member_alias_uses_agent_memory_subject(enabled_gateway):
     assert result is not None
     headers = mock_post.await_args.kwargs["headers"]
     assert headers["X-Freyja-Family-Member"] == "joe"
-    assert headers["X-Freyja-Client-Subject"] == "agent:cloyd-gibbler"
-    assert headers["X-Freyja-Account-Owner"] == "person:joe"
+    assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
+    assert headers["X-Freyja-Account-Owner"] == "person:family"
     assert "+15551234567" not in str(headers)
 
 
@@ -694,7 +696,7 @@ async def test_family_member_alias_uses_agent_memory_subject(enabled_gateway):
         ("jenna", "+15550000004", "jennacide", "person:jenna"),
     ],
 )
-async def test_family_imessage_phone_identities_route_to_personal_agents(
+async def test_family_imessage_phone_identities_route_to_freyja_agent(
     enabled_gateway,
     person_id,
     sender,
@@ -717,9 +719,10 @@ async def test_family_imessage_phone_identities_route_to_personal_agents(
     assert result is not None
     headers = mock_post.await_args.kwargs["headers"]
     payload = mock_post.await_args.kwargs["json"]
-    assert headers["X-Freyja-Client-Subject"] == f"agent:{agent_id}"
-    assert headers["X-Freyja-Account-Owner"] == owner
-    assert headers["X-Freyja-Agent-Id"] == agent_id
-    assert headers["X-Freyja-Person-Id"] == person_id
-    assert payload["resolved_agent_id"] == agent_id
-    assert payload["resolved_user_id"] == person_id
+    assert headers["X-Freyja-Client-Subject"] == "agent:freyja"
+    assert headers["X-Freyja-Account-Owner"] == "person:family"
+    assert headers["X-Freyja-Agent-Id"] == "freyja"
+    assert headers["X-Freyja-Person-Id"] == "family"
+    assert headers["X-Freyja-Family-Member"] == person_id
+    assert payload["resolved_agent_id"] == "freyja"
+    assert payload["resolved_user_id"] == "family"

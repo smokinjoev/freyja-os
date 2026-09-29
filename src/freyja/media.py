@@ -309,4 +309,20 @@ def _convert_heic_bytes_to_jpeg(payload: bytes) -> bytes | None:
             image.convert("RGB").save(output, format="JPEG", quality=92)
             return output.getvalue()
     except Exception:
+        pass
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "input.heic"
+            output_path = Path(temp_dir) / "output.jpg"
+            input_path.write_bytes(payload)
+            subprocess.run(
+                ["sips", "-s", "format", "jpeg", str(input_path), "--out", str(output_path)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=20,
+            )
+            return output_path.read_bytes()
+    except Exception:
         return None

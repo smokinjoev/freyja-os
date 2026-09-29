@@ -303,11 +303,12 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "home_machine": "atlas",
         "private_memory_scope": "agent:freyja",
         "shared_memory_scopes": ["family", "system"],
-            "tool_grant_count": 16,
+        "tool_grant_count": 17,
         "mcp_tool_grants": [
             "browser.control",
             "calendar.read",
             "calendar.write",
+            "documents.process",
             "email.read",
             "home-assistant.control",
             "home-assistant.read",
@@ -317,7 +318,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
             "scheduling.create",
             "vision.inspect",
         ],
-        "mcp_tool_count": 11,
+        "mcp_tool_count": 12,
         "cloud_egress_policy": "household-default",
     }
     assert agents["cloyd-gibbler"]["owner"] == "person:joe"

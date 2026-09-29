@@ -4,7 +4,7 @@ import pytest
 
 import freyja.agent_runtime_v3
 from freyja.agent_gateway import AgentGateway, GatewayRequest
-from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError, inference_role_alias
+from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError, _endpoint_supports_images, inference_role_alias
 from freyja.family_agents import CHILD_HOMEWORK_POLICY_MODES, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import AgentExecutionResult, GatewaySender, InferenceEndpoint, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
 from freyja.freyja3_memory import Freyja3MemoryStore, Freyja3MemoryWrite
@@ -562,10 +562,52 @@ def test_agent_vision_inference_receives_canonical_attachment(monkeypatch: pytes
 
     result = AgentRuntimeV3(run_inference=True, unhealthy_endpoint_ids={"vulcan-nexus-vision-docs"}).run(handoff)
 
-    assert result.inference_endpoint_id == "vulcan-vision"
+    assert result.inference_endpoint_id in {"vulcan-vision", "vulcan-qwen27-chat"}
     assert calls
     assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
     assert result.response_text == "I can see the attached image."
+
+
+def test_uncaptioned_discord_image_returns_vision_result_without_second_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    class FakeOllamaClient:
+        def __init__(self, *, base_url: str | None = None, model: str | None = None) -> None:
+            self.base_url = base_url
+            self.model = model
+
+        async def chat(self, **kwargs):
+            calls.append(kwargs)
+            return {"message": {"content": "Clearly visible: a red car. Unclear: the license plate."}}
+
+    monkeypatch.setattr(freyja.agent_runtime_v3, "OllamaClient", FakeOllamaClient)
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="cloyd",
+            prompt=(
+                "The sender sent Discord file or image content in this same DM. "
+                "No readable caption text was included."
+            ),
+            conversation_id="conv-photo-only",
+            attachments=[
+                {
+                    "filename": "photo.png",
+                    "media_type": "image/png",
+                    "data_base64": "ZmFrZQ==",
+                    "size": 4,
+                }
+            ],
+        )
+    ).handoff
+    assert handoff is not None
+
+    result = AgentRuntimeV3(run_inference=True, unhealthy_endpoint_ids={"vulcan-nexus-vision-docs"}).run(handoff)
+
+    assert result.inference_status == "ok"
+    assert result.response_text == "Clearly visible: a red car. Unclear: the license plate."
+    assert len(calls) == 1
+    assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
 
 
 def test_live_inference_uses_model_tool_calls_without_keyword_selection(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -683,15 +725,15 @@ def test_vision_inference_extracts_context_before_reasoning_tool_calls(monkeypat
         unhealthy_endpoint_ids={"vulcan-nexus-vision-docs"},
     ).run(handoff)
 
-    assert result.inference_endpoint_id == "vulcan-vision"
+    assert result.inference_endpoint_id in {"vulcan-vision", "vulcan-qwen27-chat"}
     assert result.inference_status == "ok"
     assert "weather.current" in result.selected_tools
     assert fake_registry.requests[-1].tool_name == "event_weather"
     assert len(calls) == 3
-    assert calls[0]["model"] == "qwen2.5vl:72b"
+    assert calls[0]["model"] in {"qwen2.5vl:72b", "qwen3.8:27b"}
     assert calls[0]["images"][0].data_base64 == "ZmFrZQ=="
     assert calls[0]["tools_required"] is False
-    assert calls[1]["model"] == "@preset/freyja-strong-local"
+    assert calls[1]["model"] == calls[0]["model"]
     assert calls[1]["images"] is None
     assert "Visible attachment context extracted by Vulcan vision" in calls[1]["prompt"]
     assert calls[1]["tools_required"] is True
@@ -805,6 +847,36 @@ def test_agent_home_assistant_read_uses_non_mutating_state_tool() -> None:
     assert result.selected_tools == ("home-assistant.read",)
     assert fake_registry.requests[0].tool_name == "home_assistant_list_states"
     assert fake_registry.requests[0].metadata["approval_granted"] is False
+
+
+def test_document_attachment_suppresses_home_assistant_false_positive() -> None:
+    gateway = AgentGateway()
+    handoff = gateway.handle(
+        GatewayRequest(
+            sender=_sender("joe"),
+            target_agent="freyja",
+            prompt="Does my current resume make sense?",
+            conversation_id="conv-doc-not-ha",
+            attachments=[
+                {
+                    "filename": "resume.pdf",
+                    "media_type": "application/pdf",
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            permissions=frozenset({"documents.process", "home-assistant.read", "weather.current"}),
+        )
+    ).handoff
+    assert handoff is not None
+    fake_registry = _FakeToolRegistry()
+
+    result = AgentRuntimeV3(tool_registry=fake_registry).run(handoff)
+
+    assert "documents.process" in result.selected_tools
+    assert "home-assistant.read" not in result.selected_tools
+    assert "weather.current" not in result.selected_tools
+    assert not any(request.tool_name == "home_assistant_list_states" for request in fake_registry.requests)
+    assert "lights" not in result.response_text.lower()
 
 
 def test_agent_home_assistant_read_runs_before_inference_for_home_language() -> None:
@@ -1200,6 +1272,12 @@ def test_rev3_1_inference_role_aliases_cover_target_routes() -> None:
     assert inference_role_alias("general.cloud") == "cloud-frontier"
 
 
+def test_qwen27_chat_endpoint_supports_image_payloads() -> None:
+    assert _endpoint_supports_images("vulcan-qwen27-chat", "qwen3.8:27b") is True
+    assert _endpoint_supports_images("vulcan-nexus-vision-docs", "@preset/freyja-vision-docs") is True
+    assert _endpoint_supports_images("vulcan-qwen-text", "qwen2.5:72b") is False
+
+
 def test_image_attachment_uses_vulcan_vision_role_alias() -> None:
     handoff = GatewayRequest(
         sender=_sender("joe"),
@@ -1213,7 +1291,7 @@ def test_image_attachment_uses_vulcan_vision_role_alias() -> None:
 
     runtime_result = AgentRuntimeV3().run(result)
 
-    assert runtime_result.inference_endpoint_id == "vulcan-nexus-vision-docs"
+    assert runtime_result.inference_endpoint_id in {"vulcan-nexus-vision-docs", "vulcan-qwen27-chat"}
     selected_event = next(event for event in runtime_result.audit_events if event.event_type == "agent_inference_selected")
     assert selected_event.metadata["role_alias"] == "vulcan-vision"
 
@@ -1589,3 +1667,661 @@ def test_canonical_route_can_use_freyja3_gateway_runtime(monkeypatch) -> None:
     assert data["channel_metadata"]["freyja3"] is True
     assert "web.search" in {tool["tool_name"] for tool in data["tool_results"]}
     assert data["channel_metadata"]["inference_machine_id"] == "vulcan"
+
+
+def test_discord_image_canonical_route_uses_direct_director_vision(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {"runtime_called": False}
+    real_async_client = freyja_main.httpx.AsyncClient
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [
+                    {
+                        "message": {"content": "A direct Nexus vision answer."},
+                        "finish_reason": "stop",
+                    }
+                ]
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+            captured["timeout"] = timeout
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    async def fake_arun(handoff):
+        captured["runtime_called"] = True
+        raise AssertionError("Full agent runtime should not handle image-only Discord messages.")
+
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-image",
+            "message_id": "msg-discord-image",
+            "channel": "discord",
+            "conversation_id": "conv-discord-image",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "",
+            "attachments": [
+                {
+                    "media_type": "image/jpeg",
+                    "filename": "photo.jpg",
+                    "size": 16,
+                    "data_base64": "ZmFrZSBpbWFnZSBieXRlcw==",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["text"] == "A direct Nexus vision answer."
+    assert data["resolved_agent_id"] == "cloyd-gibbler"
+    assert data["channel_metadata"]["director_route"] == "discord_image_direct"
+    assert data["channel_metadata"]["inference_provider"] == "nexus"
+    assert data["channel_metadata"]["inference_endpoint_id"] == "vulcan-nexus-discord-image"
+    assert data["channel_metadata"]["inference_model"] == "external-ollama/qwen3.8:27b"
+    assert captured["runtime_called"] is False
+    assert captured["url"] == "http://nexus.test:3939/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer test-nexus-key"
+    assert captured["json"]["model"] == "external-ollama/qwen3.8:27b"
+    assert captured["json"]["max_tokens"] == 256
+    assert captured["json"]["messages"][0]["content"][1]["type"] == "image_url"
+    assert captured["json"]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_discord_pdf_canonical_route_uses_direct_nexus_document_review(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {"runtime_called": False}
+    real_async_client = freyja_main.httpx.AsyncClient
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 2
+        text = "Joe Verant\\nDirector of Engineering\\nBuilt reliable agent systems."
+        ok = True
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [
+                    {
+                        "message": {"content": "The resume mostly makes sense, but tighten the impact bullets."},
+                        "finish_reason": "stop",
+                    }
+                ]
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    async def fake_arun(handoff):
+        captured["runtime_called"] = True
+        raise AssertionError("Full agent runtime should not handle Discord PDF fast lane.")
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf",
+            "message_id": "msg-discord-pdf",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Does my current resume make sense?",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["text"] == "The resume mostly makes sense, but tighten the impact bullets."
+    assert data["channel_metadata"]["director_route"] == "discord_document_direct"
+    assert data["channel_metadata"]["inference_provider"] == "nexus"
+    assert data["channel_metadata"]["document_count"] == 1
+    assert data["channel_metadata"]["document_route"] == "pushed_to_nexus"
+    assert captured["runtime_called"] is False
+    assert captured["url"] == "http://nexus.test:3939/v1/chat/completions"
+    assert captured["json"]["model"] == "external-ollama/qwen3.8:27b"
+    assert captured["json"]["max_tokens"] == 1800
+    assert data["channel_metadata"]["answer_budget"] == 1800
+    assert "Built reliable agent systems" in captured["json"]["messages"][0]["content"]
+    assert "Do not answer from Home Assistant" in captured["json"]["messages"][0]["content"]
+
+
+def test_discord_pdf_canonical_route_does_not_fall_back_when_document_unreadable(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {"runtime_called": False}
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 0
+        text = ""
+        ok = False
+        error = "no text"
+
+    async def fake_arun(handoff):
+        captured["runtime_called"] = True
+        raise AssertionError("Full agent runtime should not handle failed Discord PDF intake.")
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf-unreadable",
+            "message_id": "msg-discord-pdf-unreadable",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Does my current resume make sense?",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "couldn't extract readable text" in data["text"]
+    assert data["status"] == "degraded"
+    assert data["channel_metadata"]["director_route"] == "discord_document_direct"
+    assert data["channel_metadata"]["degraded_reason"] == "document_text_unavailable"
+    assert data["channel_metadata"]["document_route"] == "pushed_to_nexus"
+    assert captured["runtime_called"] is False
+
+
+def test_discord_pdf_canonical_route_retries_empty_nexus_document_answer(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {"posts": [], "runtime_called": False}
+    real_async_client = freyja_main.httpx.AsyncClient
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 2
+        text = "Joe Verant\\nDirector of Engineering\\nBuilt reliable agent systems."
+        ok = True
+
+    class FakeResponse:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": self._text}, "finish_reason": "stop"}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            captured["posts"].append(json)
+            return FakeResponse("" if len(captured["posts"]) == 1 else "Yes, the resume makes sense after review.")
+
+    async def fake_arun(handoff):
+        captured["runtime_called"] = True
+        raise AssertionError("Full agent runtime should not handle empty Nexus Discord PDF responses.")
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(freyja_main.agent_runtime_v3, "arun", fake_arun)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf-empty-retry",
+            "message_id": "msg-discord-pdf-empty-retry",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Does my current resume make sense?",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["text"] == "Yes, the resume makes sense after review."
+    assert data["status"] == "ok"
+    assert len(captured["posts"]) == 2
+    assert "Summarize the attached document text" in captured["posts"][1]["messages"][0]["content"]
+    assert captured["runtime_called"] is False
+
+
+def test_discord_pdf_canonical_route_sends_compact_clean_text_to_nexus(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {}
+    real_async_client = freyja_main.httpx.AsyncClient
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 2
+        text = "JOSEPH VERANT\n\uf0b7 Engineering leadership\n" + ("control systems " * 700)
+        ok = True
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "Compact resume review."}, "finish_reason": "stop"}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf-compact",
+            "message_id": "msg-discord-pdf-compact",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Does my current resume make sense?",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    prompt = captured["json"]["messages"][0]["content"]
+    assert "\uf0b7" not in prompt
+    assert "- Engineering leadership" in prompt
+
+
+def test_discord_document_route_uses_long_document_timeout(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {}
+    real_async_client = freyja_main.httpx.AsyncClient
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 2
+        text = "Joe Verant\\nDirector of Engineering\\nBuilt reliable agent systems."
+        ok = True
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "Review complete."}, "finish_reason": "stop"}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            captured["timeout"] = timeout
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            return FakeResponse()
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf-timeout",
+            "message_id": "msg-discord-pdf-timeout",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Give me a full detailed rewrite of this resume.",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["timeout"] == freyja_main.DIRECTOR_DISCORD_DOCUMENT_TIMEOUT_SECONDS
+    assert captured["timeout"] > freyja_main.DIRECTOR_DISCORD_IMAGE_TIMEOUT_SECONDS
+
+
+def test_discord_pdf_canonical_route_raises_budget_for_rewrite_requests(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    captured = {}
+    real_async_client = freyja_main.httpx.AsyncClient
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 2
+        text = "Joe Verant\\nDirector of Engineering\\nBuilt reliable agent systems."
+        ok = True
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "Long rewrite."}, "finish_reason": "stop"}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf-rewrite-budget",
+            "message_id": "msg-discord-pdf-rewrite-budget",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Give me a full detailed rewrite of this resume section by section.",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert captured["json"]["max_tokens"] == 4000
+    assert data["channel_metadata"]["answer_budget"] == 4000
+
+
+def test_discord_pdf_canonical_route_previews_text_when_nexus_stays_empty(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "freyja3_canonical_enabled", True)
+    monkeypatch.setattr(settings, "nexus_base_url", "http://nexus.test:3939")
+    monkeypatch.setattr(settings, "nexus_api_key", "test-nexus-key")
+    real_async_client = freyja_main.httpx.AsyncClient
+
+    class FakeDocument:
+        filename = "resume.pdf"
+        mime_type = "application/pdf"
+        page_count = 2
+        text = (
+            "JOSEPH VERANT\n"
+            "Senior Controls & Automation Engineer\n"
+            "(803) 206-8790\n"
+            "jverant@example.com\n"
+            "CAREER HIGHLIGHTS\n"
+            "\uf0b7 Engineering leadership for major attractions.\n"
+            "\uf0b7 Integrated ride and show systems involving 100+ PLCs.\n"
+        )
+        ok = True
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": ""}, "finish_reason": "stop"}]}
+
+    class FakeAsyncClient:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            self._delegate = real_async_client(*args, timeout=timeout, **kwargs) if kwargs.get("transport") is not None else None
+
+        async def __aenter__(self):
+            if self._delegate is not None:
+                return await self._delegate.__aenter__()
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            if self._delegate is not None:
+                await self._delegate.__aexit__(exc_type, exc, tb)
+            return None
+
+        async def request(self, method, url, **kwargs):
+            if self._delegate is None:
+                raise AssertionError("Only delegated ASGI test requests should use request().")
+            return await self._delegate.request(method, url, **kwargs)
+
+        async def post(self, url, *, headers, json):
+            return FakeResponse()
+
+    monkeypatch.setattr(freyja_main, "document_texts_from_attachments", lambda attachments, **kwargs: [FakeDocument()])
+    monkeypatch.setattr(freyja_main.httpx, "AsyncClient", FakeAsyncClient)
+    client = TestClient(app)
+
+    response = client.post(
+        "/canonical/route",
+        json={
+            "trace_id": "trace-discord-pdf-empty-preview",
+            "message_id": "msg-discord-pdf-empty-preview",
+            "channel": "discord",
+            "conversation_id": "conv-discord-pdf",
+            "sender": {"channel_id": "discord-user"},
+            "resolved_user_id": "joe",
+            "resolved_agent_id": "cloyd-gibbler",
+            "text": "Does my current resume make sense?",
+            "attachments": [
+                {
+                    "media_type": "application/pdf",
+                    "filename": "resume.pdf",
+                    "size": 16,
+                    "data_base64": "JVBERi0xLjQK",
+                }
+            ],
+            "channel_metadata": {"discord_media_intake": True, "discord_final_only": True},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["channel_metadata"]["degraded_reason"] == "empty_nexus_response"
+    assert "strong senior controls/automation resume" in data["text"]
+    assert "Role signal: Senior Controls & Automation Engineer" in data["text"]
+    assert "Engineering leadership for major attractions" in data["text"]
+    assert "jverant" not in data["text"]
+    assert "(803)" not in data["text"]
+    assert len(data["text"]) < 1800

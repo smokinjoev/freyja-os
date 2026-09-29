@@ -1,0 +1,25 @@
+smith_shepherd:
+  id: smith
+  display_name: Agent Smith
+  host: iris
+  operation_mode: observe_only
+  escalation: requires_explicit_operator_approved_recipient
+  interval_seconds: 60
+  model_routes:
+    primary:
+      provider: ollama
+      base_url: http://100.94.80.21:11434
+      model: qwen3.8:27b
+  managed_launch_agents:
+    - com.freyja-os.director
+    - com.freyja-os.discord-dm-connector
+    - com.freyja-os.discord-dm-connector-freyja
+    - com.freyja-os.macagent
+    - com.freyja-os.core-mcp
+    - com.freyja-os.cloyd-smith-loop
+  denies:
+    - automatic_repair
+    - service_restart
+    - docker_launch
+    - compose_up
+    - credential_access

@@ -164,6 +164,7 @@ class AgentRuntimeV3:
         requested_route = self.choose_semantic_route(agent, handoff.prompt, bool(handoff.attachments))
         capability = capability_for_route(requested_route)
         selected_tools = self.choose_tools(agent, handoff.prompt, handoff.available_tools)
+        selected_tools = self._prioritize_attachment_tools(agent, handoff, selected_tools)
         steps: list[AgentStep] = [
             AgentStep(kind="objective_received", detail=handoff.prompt),
         ]
@@ -516,7 +517,7 @@ class AgentRuntimeV3:
         lowered = objective.lower()
         candidates: list[str] = []
         rules = (
-            ("web.search", ("search", "look up", "latest", "current")),
+            ("web.search", ("search", "look up", "latest")),
             ("weather.current", ("weather", "forecast", "temperature")),
             ("browser.control", ("browser", "safari", "front tab", "current tab")),
             (
@@ -601,6 +602,28 @@ class AgentRuntimeV3:
         ):
             candidates.remove("weather.current")
         return candidates
+
+    def _prioritize_attachment_tools(
+        self,
+        agent: PersistentAgent,
+        handoff: GatewayHandoff,
+        selected_tools: list[str],
+    ) -> list[str]:
+        if not handoff.attachments:
+            return selected_tools
+        selected = list(selected_tools)
+        if not _explicit_home_context(handoff.prompt):
+            selected = [
+                tool_id
+                for tool_id in selected
+                if tool_id not in {"home-assistant.read", "home-assistant.control", "weather.current"}
+            ]
+        available = set(agent.tool_grants).intersection(set(handoff.available_tools))
+        if _handoff_has_document_attachment(handoff) and "documents.process" in available and "documents.process" not in selected:
+            selected.insert(0, "documents.process")
+        if _handoff_has_image_attachment(handoff) and "vision.inspect" in available and "vision.inspect" not in selected:
+            selected.insert(0, "vision.inspect")
+        return selected
 
     def _follow_up_questions(
         self,
@@ -905,7 +928,7 @@ class AgentRuntimeV3:
                 audit_events=audit_events,
             )
         prompt = self._inference_prompt(agent, handoff, tool_results, recalled_memories)
-        images = _images_from_handoff(handoff) if endpoint_id and "vision" in endpoint_id else []
+        images = _images_from_handoff(handoff) if _endpoint_supports_images(endpoint_id, model) else []
         response = await OllamaClient(base_url=base_url, model=model).chat(
             prompt=prompt,
             model=model,
@@ -1021,7 +1044,7 @@ class AgentRuntimeV3:
         client = OllamaClient(base_url=base_url, model=model)
         tools = self._tool_definitions_for_agent(agent, handoff.available_tools)
         available_tool_names = [tool.name for tool in tools]
-        images = _images_from_handoff(handoff) if endpoint_id and "vision" in endpoint_id else []
+        images = _images_from_handoff(handoff) if _endpoint_supports_images(endpoint_id, model) else []
         if images:
             vision_response = await client.chat(
                 prompt=self._vision_extraction_prompt(agent, handoff),
@@ -1042,9 +1065,15 @@ class AgentRuntimeV3:
                     success=True,
                 )
             )
+            if _is_uncaptioned_attachment_prompt(handoff.prompt):
+                return "ok", vision_text
             reasoning_endpoint = self._first_healthy_endpoint(agent, "general.large")
-            reasoning_base_url = reasoning_endpoint.base_url if reasoning_endpoint is not None else base_url
-            reasoning_model = reasoning_endpoint.model if reasoning_endpoint is not None else model
+            if reasoning_endpoint is not None and reasoning_endpoint.provider == "ollama":
+                reasoning_base_url = reasoning_endpoint.base_url
+                reasoning_model = reasoning_endpoint.model
+            else:
+                reasoning_base_url = base_url
+                reasoning_model = model
             reasoning_client = OllamaClient(base_url=reasoning_base_url, model=reasoning_model)
             return await self._run_text_tool_calling_inference(
                 agent=agent,
@@ -1146,8 +1175,10 @@ class AgentRuntimeV3:
     def _vision_extraction_prompt(self, agent: PersistentAgent, handoff: GatewayHandoff) -> str:
         return (
             self._inference_prompt(agent, handoff, [])
-            + "\n\nInspect the attached image(s). Extract visible text, event names, dates, places, addresses, "
-            "and anything relevant to the user's request. Do not call tools in this step. If a detail is unreadable, say it is unreadable."
+            + "\n\nInspect the attached image(s) conservatively. Report only details that are clearly visible. "
+            "Do not infer identities, locations, brands, dates, event names, text, or objects from partial cues. "
+            "Separate clearly visible details from uncertain possibilities. If a detail is unreadable, cropped, small, blurry, "
+            "or ambiguous, say that it is unclear. Do not call tools in this step."
         )
 
     def _tool_definitions_for_agent(
@@ -1639,12 +1670,21 @@ def _openai_compatible_base_url(endpoint_provider: str) -> str:
 
 def _openai_compatible_api_key(endpoint_provider: str) -> str:
     if endpoint_provider == "nexus":
-        return os.environ.get("NEXUS_API_KEY") or settings.nexus_api_key
+        return os.environ.get("NEXUS_API_KEY") or settings.nexus_api_key or _read_secret_file(settings.nexus_api_key_file)
     if endpoint_provider in {"openai-compatible", "litellm"}:
         return os.environ.get("LITELLM_MASTER_KEY") or settings.litellm_master_key
     if endpoint_provider == "openrouter":
         return settings.openrouter_api_key
     return ""
+
+
+def _read_secret_file(path: str) -> str:
+    if not path:
+        return ""
+    try:
+        return Path(path).expanduser().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def _openai_compatible_content(prompt: str, handoff: GatewayHandoff) -> str | list[dict[str, Any]]:
@@ -1907,6 +1947,55 @@ def _images_from_handoff(handoff: GatewayHandoff) -> list[Any]:
     return images_from_attachments(_attachment_inputs_from_handoff(handoff))
 
 
+def _handoff_has_document_attachment(handoff: GatewayHandoff) -> bool:
+    return any(attachment.is_document for attachment in _attachment_inputs_from_handoff(handoff))
+
+
+def _handoff_has_image_attachment(handoff: GatewayHandoff) -> bool:
+    return any(attachment.is_image for attachment in _attachment_inputs_from_handoff(handoff))
+
+
+def _explicit_home_context(objective: str) -> bool:
+    lowered = objective.lower()
+    return any(
+        term in lowered
+        for term in (
+            "home assistant",
+            "house state",
+            "home state",
+            "in my home",
+            "at home",
+            "lights",
+            "sensors",
+            "devices",
+            "thermostat",
+            "humidity",
+            "power",
+            "energy",
+            "battery",
+            "voltage",
+            "electric",
+            "electricity",
+            "outlet",
+            "temperature",
+            "door",
+            "lock",
+            "garage",
+        )
+    )
+
+
+def _endpoint_supports_images(endpoint_id: str | None, model: str | None) -> bool:
+    endpoint = (endpoint_id or "").lower()
+    model_name = (model or "").lower()
+    return (
+        "vision" in endpoint
+        or "vision" in model_name
+        or "vl" in model_name
+        or model_name.startswith("qwen3.8:")
+    )
+
+
 def _document_context_from_handoff(handoff: GatewayHandoff) -> str:
     documents = document_texts_from_attachments(_attachment_inputs_from_handoff(handoff))
     if not documents:
@@ -2064,9 +2153,19 @@ def _handoff_with_vision_context(handoff: GatewayHandoff, vision_text: str) -> G
         f"{handoff.prompt}\n\n"
         "Visible attachment context extracted by Vulcan vision:\n"
         f"{vision_text}\n\n"
-        "Use this extracted context as evidence. If current facts, event dates, location, weather, or web verification are needed, call tools."
+        "Use this extracted context as fallible visual evidence, not certainty. Answer conservatively: say what is clearly visible, "
+        "flag uncertain details, and do not add specifics that are not present in the extracted context. If current facts, event dates, "
+        "location, weather, or web verification are needed, call tools."
     )
     return handoff.model_copy(update={"prompt": prompt})
+
+
+def _is_uncaptioned_attachment_prompt(prompt: str) -> bool:
+    lowered = prompt.lower()
+    return (
+        "the sender sent discord file or image content" in lowered
+        and "no readable caption text was included" in lowered
+    )
 
 
 def _ollama_tool_calls(response: dict[str, Any]) -> list[dict[str, Any]]:

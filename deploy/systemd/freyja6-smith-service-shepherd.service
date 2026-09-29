@@ -1,0 +1,19 @@
+[Unit]
+Description=Freyja 6 Agent Smith native service shepherd
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=freyja
+WorkingDirectory=/Users/freyja/freyja-os
+Environment=FREYJA_REPO=/Users/freyja/freyja-os
+Environment=PYTHONPATH=/Users/freyja/freyja-os/src:/Users/freyja/freyja-os
+Environment=SMITH_SHEPHERD_CONFIG=/Users/freyja/freyja-os/config/freyja6/smith-shepherd.yaml
+Environment=SMITH_OPENCLAW_MODEL=openclaw
+ExecStart=/Users/freyja/freyja-os/.venv/bin/python /Users/freyja/freyja-os/scripts/smith-service-shepherd.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -101,3 +101,15 @@ def test_heic_image_input_converts_to_jpeg_for_providers(monkeypatch) -> None:
     assert image.provider_mime_type() == "image/jpeg"
     assert image.as_data_url() == "data:image/jpeg;base64,anBlZy1ieXRlcw=="
     assert image.as_ollama_image() == "anBlZy1ieXRlcw=="
+
+
+def test_heif_image_input_converts_to_jpeg_for_providers(monkeypatch) -> None:
+    monkeypatch.setattr("freyja.media._convert_heic_bytes_to_jpeg", lambda payload: b"jpeg-bytes")
+    image = ImageInput(
+        filename="photo.heif",
+        mime_type="image/heif",
+        data_base64=base64.b64encode(b"heif-bytes").decode("ascii"),
+    )
+
+    assert image.provider_mime_type() == "image/jpeg"
+    assert image.as_data_url() == "data:image/jpeg;base64,anBlZy1ieXRlcw=="

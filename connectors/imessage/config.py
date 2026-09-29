@@ -25,6 +25,8 @@ class IMessageSettings(BaseSettings):
     imessage_allowed_senders: str = ""
     imessage_max_message_chars: int = 4000
     imessage_tools_required_mode: str = "always"
+    imessage_agent_routing_mode: str = "fixed"
+    imessage_fixed_agent_id: str = "freyja"
     freyja_director_url: str = "http://127.0.0.1:8000"
     freyja_connector_token: str = ""
     imessage_request_timeout_seconds: float = 120.0
