@@ -64,7 +64,9 @@ AGENT_POLICIES: dict[str, tuple[str, ...]] = {
     "cloyd-gibbler": ("status.*", "opencode.*", "memory.*"),
     "smith": ("status.*", "opencode.*", "memory.search"),
     "benedict": ("status.*", "calendar.resolve_date", "memory.*"),
-    "agent-47": ("status.*", "memory.*"),
+    # Agent 47 is the technical executor. It may inspect the managed coding
+    # session, but cannot start, stop, or send work without a later approval.
+    "agent-47": ("status.*", "opencode.status", "opencode.read", "memory.*"),
     "jennacide": ("status.*", "memory.*"),
     "benedict-paralegal": ("status.*",),
     "generic": ("status.*", "memory.search"),
