@@ -7,6 +7,7 @@ from typing import Any
 
 import uvicorn
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.context import Context
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -25,6 +26,7 @@ from freyja.mcp_gateway import (
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8766
+_AGENT_TOKENS: dict[str, str] = {}
 
 
 class MCPHostAliasMiddleware(BaseHTTPMiddleware):
@@ -46,9 +48,11 @@ class MCPHostAliasMiddleware(BaseHTTPMiddleware):
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: Starlette, token: str, agent_tokens: dict[str, str] | None = None) -> None:
+        global _AGENT_TOKENS
         super().__init__(app)
         self._token = token
         self._agent_tokens = agent_tokens or {}
+        _AGENT_TOKENS = self._agent_tokens
 
     async def dispatch(self, request: Request, call_next: Any) -> Any:
         if request.url.path in {"/", "/healthz"}:
@@ -63,6 +67,14 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             agent_id = self._agent_tokens.get(supplied, "")
         if not agent_id:
             return JSONResponse({"error": "unauthorized"}, status_code=401)
+        # Streamable MCP dispatches a tool in a separate task, so ContextVars
+        # set here are not guaranteed to reach the tool handler. Carry the
+        # authenticated identity in a private request header instead.
+        request.scope["headers"] = [
+            (key, value)
+            for key, value in request.scope.get("headers", [])
+            if key.lower() != b"x-freyja-agent-id"
+        ] + [(b"x-freyja-agent-id", agent_id.encode())]
         context_token = set_current_agent(agent_id)
         try:
             return await call_next(request)
@@ -74,8 +86,17 @@ def _json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True)
 
 
-async def _core(tool: str, arguments: dict[str, Any] | None = None) -> str:
-    return _json(await dispatch_tool(tool, arguments or {}, call_tool))
+async def _core(tool: str, arguments: dict[str, Any] | None = None, ctx: Context | None = None) -> str:
+    headers = ctx.headers if ctx else None
+    authorization = headers.get("authorization", "") if headers else ""
+    bearer_token = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
+    agent_id = _AGENT_TOKENS.get(bearer_token) or (headers.get("x-freyja-agent-id", "") if headers else "") or None
+    context_token = set_current_agent(agent_id) if agent_id else None
+    try:
+        return _json(await dispatch_tool(tool, arguments or {}, call_tool))
+    finally:
+        if context_token is not None:
+            reset_current_agent(context_token)
 
 
 mcp = MCPServer(
@@ -122,16 +143,16 @@ async def tools_call(tool: str, arguments_json: str = "{}") -> str:
 
 
 @mcp.tool(name="status.check", description="Report Freyja Core health, host, configured tools, and downstream reachability.")
-async def status_check() -> str:
-    return await _core("status.check")
+async def status_check(ctx: Context | None = None) -> str:
+    return await _core("status.check", ctx=ctx)
 
 
 @mcp.tool(name="calendar.resolve_date", description="Resolve a date phrase deterministically using Freyja Core.")
-async def calendar_resolve_date(phrase: str, base_date: str = "") -> str:
+async def calendar_resolve_date(phrase: str, base_date: str = "", ctx: Context | None = None) -> str:
     arguments: dict[str, Any] = {"phrase": phrase}
     if base_date:
         arguments["base_date"] = base_date
-    return await _core("calendar.resolve_date", arguments)
+    return await _core("calendar.resolve_date", arguments, ctx)
 
 
 @mcp.tool(name="calendar.list_events", description="List calendar events through Freyja Core.")
@@ -140,7 +161,7 @@ async def calendar_list_events(
     end: str = "",
     calendar_ids_json: str = "[]",
     member_ids_json: str = "[]",
-    provider: str = "apple",
+    provider: str = "apple", ctx: Context | None = None,
 ) -> str:
     try:
         calendar_ids = json.loads(calendar_ids_json or "[]")
@@ -155,7 +176,7 @@ async def calendar_list_events(
             "calendar_ids": calendar_ids if isinstance(calendar_ids, list) else [],
             "member_ids": member_ids if isinstance(member_ids, list) else [],
             "provider": provider,
-        },
+        }, ctx,
     )
 
 
@@ -167,7 +188,7 @@ async def calendar_create_event(
     end: str = "",
     description: str = "",
     location: str = "",
-    provider: str = "apple",
+    provider: str = "apple", ctx: Context | None = None,
 ) -> str:
     return await _core(
         "calendar.create_event",
@@ -179,7 +200,7 @@ async def calendar_create_event(
             "description": description,
             "location": location,
             "provider": provider,
-        },
+        }, ctx,
     )
 
 
@@ -187,7 +208,7 @@ async def calendar_create_event(
 async def calendar_delete_event(
     event_id: str = "",
     approval: str = "",
-    provider: str = "apple",
+    provider: str = "apple", ctx: Context | None = None,
 ) -> str:
     return await _core(
         "calendar.delete_event",
@@ -195,83 +216,84 @@ async def calendar_delete_event(
             "event_id": event_id,
             "approval": approval,
             "provider": provider,
-        },
+        }, ctx,
     )
 
 
 @mcp.tool(name="opencode.start", description="Start the single Freyja Core OpenCode session.")
-async def opencode_start(alias: str = "freyja-core-coder", directory: str = "") -> str:
+async def opencode_start(alias: str = "freyja-core-coder", directory: str = "", ctx: Context | None = None) -> str:
     arguments: dict[str, Any] = {"alias": alias}
     if directory:
         arguments["directory"] = directory
-    return await _core("opencode.start", arguments)
+    return await _core("opencode.start", arguments, ctx)
 
 
 @mcp.tool(name="opencode.stop", description="Stop the single Freyja Core OpenCode session.")
-async def opencode_stop(alias: str = "freyja-core-coder") -> str:
-    return await _core("opencode.stop", {"alias": alias})
+async def opencode_stop(alias: str = "freyja-core-coder", ctx: Context | None = None) -> str:
+    return await _core("opencode.stop", {"alias": alias}, ctx)
 
 
 @mcp.tool(name="opencode.status", description="Report the Freyja Core OpenCode session state.")
-async def opencode_status(alias: str = "freyja-core-coder") -> str:
-    return await _core("opencode.status", {"alias": alias})
+async def opencode_status(alias: str = "freyja-core-coder", ctx: Context | None = None) -> str:
+    return await _core("opencode.status", {"alias": alias}, ctx)
 
 
 @mcp.tool(name="opencode.send", description="Send a prompt to the Freyja Core OpenCode session.")
-async def opencode_send(alias: str = "freyja-core-coder", prompt: str = "", timeout_seconds: int = 120) -> str:
+async def opencode_send(alias: str = "freyja-core-coder", prompt: str = "", timeout_seconds: int = 120, ctx: Context | None = None) -> str:
     return await _core(
         "opencode.send",
         {
             "alias": alias,
             "prompt": prompt,
             "timeout_seconds": timeout_seconds,
-        },
+        }, ctx,
     )
 
 
 @mcp.tool(name="opencode.read", description="Read recent output from the Freyja Core OpenCode session.")
-async def opencode_read(alias: str = "freyja-core-coder", limit: int = 20) -> str:
-    return await _core("opencode.read", {"alias": alias, "limit": limit})
+async def opencode_read(alias: str = "freyja-core-coder", limit: int = 20, ctx: Context | None = None) -> str:
+    return await _core("opencode.read", {"alias": alias, "limit": limit}, ctx)
 
 
 @mcp.tool(name="memory.search", description="Search Freyja Core local memory.")
-async def memory_search(query: str = "", limit: int = 10) -> str:
-    return await _core("memory.search", {"query": query, "limit": limit})
+async def memory_search(query: str = "", limit: int = 10, ctx: Context | None = None) -> str:
+    return await _core("memory.search", {"query": query, "limit": limit}, ctx)
 
 
 @mcp.tool(name="memory.write", description="Write a minimal local Freyja Core memory record.")
-async def memory_write(memory_id: str = "", content: str = "", kind: str = "note") -> str:
+async def memory_write(memory_id: str = "", content: str = "", kind: str = "note", ctx: Context | None = None) -> str:
     return await _core(
         "memory.write",
         {
             "memory_id": memory_id,
             "content": content,
             "kind": kind,
-        },
+        }, ctx,
     )
 
 
 @mcp.tool(name="home_assistant.read_state", description="Read one Home Assistant entity through Freyja Core.")
-async def home_assistant_read_state(entity_id: str = "", area: str = "", domain: str = "light") -> str:
+async def home_assistant_read_state(entity_id: str = "", area: str = "", domain: str = "light", ctx: Context | None = None) -> str:
     return await _core(
         "home_assistant.read_state",
         {
             "entity_id": entity_id,
             "area": area,
             "domain": domain,
-        },
+        }, ctx,
     )
 
 
 @mcp.tool(name="home_assistant.list_states", description="List Home Assistant states through Freyja Core.")
-async def home_assistant_list_states(domain: str = "", include_all: bool = False) -> str:
+async def home_assistant_list_states(domain: str = "", include_all: bool = False, ctx: Context | None = None) -> str:
     arguments: dict[str, Any] = {"include_all": include_all}
     if domain:
         arguments["domain"] = domain
-    return await _core("home_assistant.list_states", arguments)
+    return await _core("home_assistant.list_states", arguments, ctx)
 
 
 def app() -> Starlette:
+    global _AGENT_TOKENS
     configured_host = os.environ.get("FREYJA_CORE_MCP_HOST", DEFAULT_HOST)
     # Publish the named Core tools to every portal.  Authentication establishes
     # the agent identity and `_core` enforces that agent's policy for each call;
@@ -312,6 +334,7 @@ def app() -> Starlette:
         for agent_token, agent_id in parsed_agent_tokens.items()
         if isinstance(agent_token, str) and isinstance(agent_id, str)
     } if isinstance(parsed_agent_tokens, dict) else {}
+    _AGENT_TOKENS = agent_tokens
     if token or agent_tokens:
         starlette.add_middleware(BearerAuthMiddleware, token=token, agent_tokens=agent_tokens)
     return starlette
