@@ -62,7 +62,7 @@ VULCAN — 100.94.80.21
   Ollama API:                  http://100.94.80.21:11434
   Director health:             http://100.94.80.21:8512/health
   Director API docs:           http://100.94.80.21:8512/docs
-  Director service:            freyja-paralegal-director.service
+  Director user service:       freyja-paralegal-director.service
 
 IRIS — 100.115.228.56
   Purpose: Apple/Mac bridge and tool authority.
@@ -128,6 +128,7 @@ Agent Smith
   Restricted Freyja hardware watchdog. Health, alerts, diagnostics, and only
   explicitly approved maintenance. It has no shared personal-memory role and
   must not receive unrestricted shell or home-control access.
+  Monitor: http://100.115.228.56:8000/agent-runs
 
 Nexus owns model selection. The portal should request the named agent/preset,
 not hard-code a physical Ollama model. The active local presets include fast,
@@ -161,10 +162,10 @@ What good looks like:
 6. OPERATOR COMMANDS
 --------------------
 
-Vulcan Director:
-  sudo systemctl status freyja-paralegal-director.service
-  sudo journalctl -u freyja-paralegal-director.service -n 200 --no-pager
-  sudo systemctl restart freyja-paralegal-director.service
+Vulcan Director (run as the `joe` desktop user; no sudo):
+  systemctl --user status freyja-paralegal-director.service --no-pager
+  journalctl --user -u freyja-paralegal-director.service -n 200 --no-pager
+  systemctl --user restart freyja-paralegal-director.service
 
 Iris launch agents (run on Iris):
   launchctl print gui/$(id -u)/com.freyja-os.core
@@ -199,10 +200,18 @@ Agent gives a trace but no written answer:
     Nexus, not through a Director response wrapper.
 
 Tool call fails:
-  - Check Iris Core health first.
+  - Check Iris Core health first at its Tailscale address (`:8510`); it is not
+    intended to listen on 127.0.0.1.
   - Confirm the agent is using its own MCP identity; do not borrow another
     agent's token or downgrade its scope to make a test pass.
   - For Apple-specific work, check MacAgent status on Iris.
+
+Agent Smith needs attention:
+  - Check `http://100.115.228.56:8000/agent-runs/api/runtime/health` and
+    `http://100.115.228.56:8000/agent-runs/api/status`.
+  - Treat this as read-only evidence. Smith is not authorized to repair a
+    service unless an operator explicitly approves the specific action.
+  - Follow `docs/operations/agent-smith-watchdog.md` before enabling alerts.
 
 Discord fails:
   - Verify the connector launch agent on Iris.
