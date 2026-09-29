@@ -273,7 +273,10 @@ async def home_assistant_list_states(domain: str = "", include_all: bool = False
 
 def app() -> Starlette:
     configured_host = os.environ.get("FREYJA_CORE_MCP_HOST", DEFAULT_HOST)
-    starlette = gateway_mcp.streamable_http_app(streamable_http_path="/mcp", stateless_http=False, host=configured_host)
+    # Publish the named Core tools to every portal.  Authentication establishes
+    # the agent identity and `_core` enforces that agent's policy for each call;
+    # the portal must not determine which capabilities an agent can use.
+    starlette = mcp.streamable_http_app(streamable_http_path="/mcp", stateless_http=False, host=configured_host)
     aliases = {
         value.strip()
         for value in os.environ.get("FREYJA_CORE_MCP_HOST_ALIASES", "host.docker.internal").split(",")
@@ -292,7 +295,7 @@ def app() -> Starlette:
                 "path": "/mcp",
                 "core_tools": list(CORE_TOOL_NAMES),
                 "agent_id_supported": ["freyja", "freyja-test"],
-                "discovery_tools": ["tools.search", "tools.profile", "tools.call"],
+                "published_tools": list(CORE_TOOL_NAMES),
             }
         )
 

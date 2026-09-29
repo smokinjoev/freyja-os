@@ -27,6 +27,9 @@ async def test_freyja_core_mcp_server_exposes_core_tools_with_canonical_names() 
     assert set(module.CORE_TOOL_NAMES) <= tool_names
     assert gateway_tool_names == {"tools.search", "tools.profile", "tools.call"}
 
+    published_tool_names = {tool.name for tool in await module.mcp.list_tools()}
+    assert {"home_assistant.read_state", "home_assistant.list_states"} <= published_tool_names
+
 
 async def test_freyja_core_mcp_wrapper_delegates_to_core_call_tool(monkeypatch) -> None:
     module = _load_server_module()
@@ -90,4 +93,4 @@ async def test_freyja_core_mcp_health_reports_core_tool_list() -> None:
     assert "home_assistant.list_states" in body["core_tools"]
     assert body["gateway"] == "freyja-mcp-gateway"
     assert "freyja-test" in body["agent_id_supported"]
-    assert body["discovery_tools"] == ["tools.search", "tools.profile", "tools.call"]
+    assert {"home_assistant.read_state", "home_assistant.list_states"} <= set(body["published_tools"])

@@ -20,7 +20,7 @@ operator-approved durable-memory isolation test.
 | Named-agent inference | Each deployed Nexus preset returned a written reply with a 1,024-token agent output budget | healthy |
 | Director | `GET http://100.94.80.21:8512/health` returned healthy; `freyja-paralegal-director.service` is active as a user service | healthy |
 | Iris Core | `GET http://100.115.228.56:8510/health` returned healthy; Core launch agent is running | healthy |
-| Core MCP | LibreChat startup log initialized five per-agent MCP servers; each exposed `tools.search`, `tools.profile`, and `tools.call` | initialized |
+| Core MCP | LibreChat starts five per-agent Core MCP connections. The published catalog contains named Core tools; authorization is determined by the authenticated agent token, not the portal. Freyja includes read-only `home_assistant.read_state` and `home_assistant.list_states`. | initialized |
 | Named web-agent configuration | LibreChat startup log loaded Freyja, Cloyd, Benedict, Agent 47, and Jenna MCP identities with their Nexus presets | configured |
 | Discord Freyja | Iris launch agent is running; connector log reports it ready and authenticated | connected |
 | Discord Cloyd | Iris launch agent is running; connector log reports it ready and authenticated | connected |
