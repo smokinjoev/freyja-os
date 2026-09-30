@@ -56,7 +56,7 @@ result, agent, and timestamp—not chat content or secrets.
 | Freyja | pending | pending | Core protocol memory isolation verified | pending |
 | Cloyd | On 2026-09-29, LibreChat returned an OpenCode status response | On 2026-09-29, scoped `opencode.status` returned alias `freyja-core-coder`, state `idle`, and working directory `/Users/freyja/freyja-os`; no mutation requested | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
 | Benedict | On 2026-09-29, LibreChat returned a scoped Core status response | On 2026-09-29, used scoped `status.check` to report `freyja-core`, `iris.lan`, healthy; no mutation requested | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
-| Agent 47 | Nexus written-response route verified | Scoped `opencode.status` handoff verified, no mutation | Core protocol memory isolation verified | LibreChat UI acceptance pending |
+| Agent 47 | On 2026-09-29, LibreChat returned a scoped OpenCode status response | On 2026-09-29, scoped `opencode.status` returned alias `freyja-core-coder`, state `idle`, and working directory `/Users/freyja/freyja-os`; no mutation requested | Core protocol memory isolation verified | LibreChat written and bounded OpenCode handoff acceptance certified |
 | JennaCide | On 2026-09-29, returned exact `JennaCide LibreChat written-response check.` | On 2026-09-29, used scoped `status.check` to report `freyja-core`, `iris.lan`, healthy; no mutation requested | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
 
 On 2026-09-29, each authenticated Iris Core MCP route wrote a temporary
