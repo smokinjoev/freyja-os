@@ -54,7 +54,7 @@ result, agent, and timestamp—not chat content or secrets.
 | Agent | Plain written reply | MCP read-only call | Memory isolation check | Outcome |
 | --- | --- | --- | --- | --- |
 | Freyja | pending | pending | Core protocol memory isolation verified | pending |
-| Cloyd | pending | pending | Core protocol memory isolation verified | Discord OpenCode status certified; LibreChat acceptance pending |
+| Cloyd | On 2026-09-29, LibreChat returned an OpenCode status response | On 2026-09-29, scoped `opencode.status` returned alias `freyja-core-coder`, state `idle`, and working directory `/Users/freyja/freyja-os`; no mutation requested | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
 | Benedict | pending | pending | Core protocol memory isolation verified | pending |
 | Agent 47 | Nexus written-response route verified | Scoped `opencode.status` handoff verified, no mutation | Core protocol memory isolation verified | LibreChat UI acceptance pending |
 | JennaCide | On 2026-09-29, returned exact `JennaCide LibreChat written-response check.` | On 2026-09-29, used scoped `status.check` to report `freyja-core`, `iris.lan`, healthy; no mutation requested | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
