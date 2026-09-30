@@ -19,7 +19,8 @@ pass from being mistaken for production certification.
 - Atlas portals, Vulcan Director/Nexus/Ollama, Iris Core, per-agent MCP
   initialization, the Agent Smith monitor, and both Discord connector
   processes have current live evidence. Cloyd's Discord DM OpenCode-status
-  path is also certified through the canonical Director and Iris Core.
+  path and Freyja's Discord read-only Home Assistant path are certified through
+  the canonical Director and Iris Core.
 - The focused portal configuration and agent-routing suite passes: `81 passed`
   (`tests/test_librechat_pass_through.py` and `tests/test_health.py`).
 - A full local suite run currently reports `1856 passed, 32 failed, 6 skipped`.
@@ -44,8 +45,8 @@ pass from being mistaken for production certification.
    boundary during any subsequent alert testing.
 3. Keep Signal and Telegram out of the production claim until one is explicitly
    approved and successfully certified. Signal currently has a failing receive
-   loop. Telegram has enabled private configuration and a running Iris launch
-   agent, but no approved end-to-end acceptance evidence.
+   loop. Telegram is intentionally disabled on Iris and has no approved
+   end-to-end acceptance evidence.
 4. Run the repository verification in the matching release environment:
 
    ```sh

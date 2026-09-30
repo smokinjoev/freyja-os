@@ -19,10 +19,11 @@ operator-approved durable-memory isolation test.
 | Vulcan model runtime | Ollama API answered at `:11434`; Nexus answered with expected authorization required at `:3939/v1/models` | reachable and protected |
 | Named-agent inference | On 2026-09-29, all five deployed Nexus presets returned visible written replies with the 1,024-token agent output budget. Freyja, Cloyd, Benedict, and Agent 47 resolved to `qwen3.8:27b`; JennaCide resolved to `gpt-oss:20b`. | healthy |
 | Director | `GET http://100.94.80.21:8512/health` returned healthy; `freyja-paralegal-director.service` is active as a user service | healthy |
+| Canonical Home Assistant read | On 2026-09-29, a canonical Freyja request for current light states was read through Iris Core and returned 29 Atlanta light entities with `source=home_assistant` and `live_data_available=true`. No control action was issued. | certified read-only |
 | Iris Core | `GET http://100.115.228.56:8510/health` returned healthy; Core launch agent is running | healthy |
 | Core MCP | LibreChat starts five per-agent Core MCP connections. The published catalog contains named Core tools; authorization is determined by the authenticated agent token, not the portal. Freyja includes read-only `home_assistant.read_state` and `home_assistant.list_states`. | initialized |
 | Named web-agent configuration | LibreChat startup log loaded Freyja, Cloyd, Benedict, Agent 47, and Jenna MCP identities with their Nexus presets | configured |
-| Discord Freyja | Iris launch agent is running; connector log reports it ready and authenticated | connected |
+| Discord Freyja | Iris launch agent is running and authenticated. On 2026-09-29, its canonical Director route completed a live Home Assistant read through Iris Core; the pre-fix fixture fallback has been removed from this live path. | certified read-only path |
 | Discord Cloyd | On 2026-09-29, Cloyd's live Discord DM returned the scoped Iris Core `opencode.status` fields: alias, session, idle state, working directory, and recent action. The connector is routed through Vulcan's canonical Director. | certified |
 | Agent Smith monitor | Iris monitor status and runtime-health APIs answered at `:8000/agent-runs/api/*`. A controlled Discord delivery test to Joe through Cloyd Bot was accepted; the test stated that no repair was attempted. | certified observe-only alert path |
 | Telegram | Operator-disabled on 2026-09-29: private enablement flags were turned off and the Iris launch agent was unloaded. | disabled, not certified |
