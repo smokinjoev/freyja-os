@@ -69,6 +69,41 @@ def _request(
     return result
 
 
+def _cloyd_core_status(alias: str) -> dict[str, Any] | None:
+    """Read status through Iris Core; never falls back silently on auth errors."""
+    token_path = Path(settings.cloyd_core_mcp_token_file).expanduser()
+    if not token_path.is_file():
+        return None
+    token = token_path.read_text(encoding="utf-8").strip()
+    if not token:
+        return None
+    url = settings.cloyd_core_mcp_url
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    def post(payload: dict[str, Any], session_id: str | None = None) -> tuple[dict[str, Any], str | None]:
+        request = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+        if session_id:
+            request.add_header("Mcp-Session-Id", session_id)
+        with urllib.request.urlopen(request, timeout=20) as response:
+            raw = response.read().decode("utf-8")
+            if not raw.strip():
+                return {}, response.headers.get("Mcp-Session-Id")
+            payload = raw
+            if raw.lstrip().startswith("event:"):
+                payload = next((line.removeprefix("data: ") for line in raw.splitlines() if line.startswith("data: ")), "{}")
+            return json.loads(payload), response.headers.get("Mcp-Session-Id")
+    try:
+        _, session_id = post({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"freyja-director","version":"1"}}})
+        if not session_id:
+            return {"ok": False, "error": "Iris Core did not create an MCP session."}
+        post({"jsonrpc":"2.0","method":"notifications/initialized"}, session_id)
+        result, _ = post({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"opencode.status","arguments":{"alias":alias}}}, session_id)
+        content = ((result.get("result") or {}).get("content") or [{}])[0].get("text", "")
+        decoded = json.loads(content) if content else {"ok": False, "error": "Iris Core returned no status."}
+        return decoded if isinstance(decoded, dict) else {"ok": False, "error": "Invalid Iris Core status."}
+    except (OSError, ValueError, urllib.error.HTTPError) as exc:
+        return {"ok": False, "error": f"Iris Core status request failed: {exc}"}
+
+
 def opencode_health(*, alias: str | None = None, timeout_seconds: float = 5.0) -> dict[str, Any]:
     """Check whether the configured OpenCode runtime answers authenticated status calls."""
     config = _session_config(alias) if alias else {}
@@ -282,6 +317,10 @@ async def _opencode_shell(request: ToolExecutionRequest) -> dict[str, Any]:
 async def _opencode_status(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
+    if request.actor == "agent:cloyd-gibbler":
+        core_result = _cloyd_core_status("freyja-core-coder")
+        if core_result is not None:
+            return core_result
     session_config = _session_config(alias)
     if not session_config:
         return {"ok": False, "error": f"Unknown OpenCode session alias: {alias}"}

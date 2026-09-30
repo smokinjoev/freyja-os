@@ -130,6 +130,8 @@ class Settings(BaseSettings):
         default=str(_default_state_dir() / "opencode" / "controller-sessions.json"),
         alias="OPENCODE_SESSION_REGISTRY_PATH",
     )
+    cloyd_core_mcp_url: str = Field(default="http://100.115.228.56:8766/mcp/cloyd-gibbler", alias="CLOYD_CORE_MCP_URL")
+    cloyd_core_mcp_token_file: str = Field(default=str(_default_state_dir() / "core-mcp" / "cloyd-token"), alias="CLOYD_CORE_MCP_TOKEN_FILE")
     cloyd_smith_loop_database_path: str = Field(
         default=str(_default_state_dir() / "cloyd-smith-loop.db"),
         alias="CLOYD_SMITH_LOOP_DATABASE_PATH",
