@@ -23,7 +23,7 @@ operator-approved durable-memory isolation test.
 | Core MCP | LibreChat starts five per-agent Core MCP connections. The published catalog contains named Core tools; authorization is determined by the authenticated agent token, not the portal. Freyja includes read-only `home_assistant.read_state` and `home_assistant.list_states`. | initialized |
 | Named web-agent configuration | LibreChat startup log loaded Freyja, Cloyd, Benedict, Agent 47, and Jenna MCP identities with their Nexus presets | configured |
 | Discord Freyja | Iris launch agent is running; connector log reports it ready and authenticated | connected |
-| Discord Cloyd | Iris launch agent is running; connector log reports it ready and authenticated | connected |
+| Discord Cloyd | Iris connector is ready and authenticated. Director's read-only `opencode.status` now passes through Cloyd's scoped Iris Core route; awaiting one live Discord reply for certification. | connected, certification pending |
 | Agent Smith monitor | Iris monitor status and runtime-health APIs answered at `:8000/agent-runs/api/*` | reachable, no alert route certified |
 | Telegram | No live Telegram connector container was found on Atlas | not activated |
 | Signal | Signal API and connector containers are healthy, but the connector's receive loop is repeatedly rejected by the Signal API | not operational |
