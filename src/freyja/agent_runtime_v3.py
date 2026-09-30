@@ -518,6 +518,16 @@ class AgentRuntimeV3:
         allowed = set(agent.tool_grants).intersection(set(available_tool_ids))
         lowered = objective.lower()
         candidates: list[str] = []
+        # Treat a request that names OpenCode plus an observational field as a
+        # status request even when the words are not adjacent (for example,
+        # "what is the OpenCode working directory?").  Otherwise the broad
+        # "code" matcher below can incorrectly select the write lane.
+        if (
+            "opencode.status" in allowed
+            and "opencode" in lowered
+            and any(term in lowered for term in ("status", "state", "session", "working directory", "read-only"))
+        ):
+            return ["opencode.status"]
         rules = (
             ("web.search", ("search", "look up", "latest")),
             ("weather.current", ("weather", "forecast", "temperature")),

@@ -164,6 +164,22 @@ def test_agent_runtime_binds_read_only_opencode_status_to_managed_alias() -> Non
     }
 
 
+def test_agent_runtime_prioritizes_non_adjacent_opencode_status_words() -> None:
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=GatewaySender(sender_id="person:joe", display_name="Joe", security_domain_id=SecurityDomainId.PERSON_JOE),
+            target_agent="cloyd-gibbler",
+            prompt="What is the OpenCode working directory and session state?",
+            conversation_id="test-cloyd-status-words",
+            channel="discord",
+        )
+    ).handoff
+
+    assert handoff is not None
+    runtime = AgentRuntimeV3()
+    assert runtime.choose_tools(runtime._agent("cloyd-gibbler"), handoff.prompt, handoff.available_tools) == ["opencode.status"]
+
+
 def test_opencode_start_reuses_existing_alias_connection_config(tmp_path: Path, monkeypatch) -> None:
     registry_path = tmp_path / "controller-sessions.json"
     repo_path = tmp_path / "repo"
