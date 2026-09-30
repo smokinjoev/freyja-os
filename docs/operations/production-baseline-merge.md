@@ -21,7 +21,7 @@ pass from being mistaken for production certification.
   processes have current live evidence.
 - The focused portal configuration and agent-routing suite passes: `81 passed`
   (`tests/test_librechat_pass_through.py` and `tests/test_health.py`).
-- A full local suite run currently reports `1852 passed, 35 failed, 6 skipped`.
+- A full local suite run currently reports `1856 passed, 32 failed, 6 skipped`.
   The failures are primarily legacy Open WebUI evidence expectations and
   macOS-specific launch-agent/tmux paths evaluated on Linux. They must be
   triaged, fixed, or formally separated from this release before a production
