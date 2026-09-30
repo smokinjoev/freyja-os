@@ -185,6 +185,9 @@ class Settings(BaseSettings):
     )
     home_assistant_location_name: str = "Atlanta"
     home_assistant_allowed_control_domains: str = "light"
+    # When the Director does not hold HA credentials, it may use the Core's
+    # read-only endpoint.  Core remains the single live HA authority.
+    home_assistant_core_base_url: str = ""
     home_assistant_state_fixture: str = '{"light.downstairs":"on"}'
     home_assistant_focus_config_path: str = "config/home-assistant-focuses.yaml"
     home_assistant_inventory_snapshot_path: str = str(_default_state_dir() / "home-assistant-inventory.json")

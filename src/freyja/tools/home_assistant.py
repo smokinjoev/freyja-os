@@ -26,6 +26,10 @@ def _home_assistant_configured() -> bool:
     return bool(settings.home_assistant_base_url and settings.home_assistant_access_token)
 
 
+def _home_assistant_core_configured() -> bool:
+    return bool(settings.home_assistant_core_base_url)
+
+
 def _allowed_control_domains() -> set[str]:
     return {
         item.strip().lower()
@@ -122,6 +126,22 @@ async def _ha_post(path: str, payload: dict[str, Any]) -> Any:
         return response.json()
 
 
+async def _core_read_only(tool: str, arguments: dict[str, Any]) -> dict[str, Any] | None:
+    """Delegate an HA read to Iris Core when this process has no HA credential.
+
+    This deliberately supports only read operations.  Control remains local to
+    the configured HA authority and is never proxied by the Director.
+    """
+    if not _home_assistant_core_configured():
+        return None
+    url = f"{settings.home_assistant_core_base_url.rstrip('/')}/tools/call"
+    async with httpx.AsyncClient(timeout=12) as client:
+        response = await client.post(url, json={"tool": tool, "arguments": arguments})
+        response.raise_for_status()
+        payload = response.json()
+    return payload if isinstance(payload, dict) else None
+
+
 async def _current_state_summaries(args: dict[str, Any]) -> tuple[bool, list[dict[str, Any]], str]:
     requested_domain = str(args.get("domain") or "").strip().lower()
     include_all = bool(args.get("include_all"))
@@ -134,6 +154,14 @@ async def _current_state_summaries(args: dict[str, Any]) -> tuple[bool, list[dic
         summaries = [_state_summary(item) for item in items if isinstance(item, dict)]
         source = "home_assistant"
         live_data_available = True
+    elif _home_assistant_core_configured():
+        payload = await _core_read_only("home_assistant.list_states", args)
+        if not payload or not payload.get("ok"):
+            raise RuntimeError("Iris Core could not complete the Home Assistant read")
+        entities = payload.get("entities")
+        summaries = [item for item in entities if isinstance(item, dict)] if isinstance(entities, list) else []
+        source = str(payload.get("source") or "freyja_core")
+        live_data_available = bool(payload.get("live_data_available"))
     else:
         states = _configured_state_fixture()
         summaries = [
@@ -191,6 +219,17 @@ async def _read_state(request: ToolExecutionRequest) -> dict[str, Any]:
             }
         )
         return summary
+
+    if _home_assistant_core_configured():
+        payload = await _core_read_only("home_assistant.read_state", args)
+        if not payload or not payload.get("ok"):
+            return {
+                "live_data_available": False,
+                "entity_id": entity_id,
+                "source": "freyja_core",
+                "error": "Iris Core could not complete the Home Assistant read",
+            }
+        return payload
 
     states = _configured_state_fixture()
     state = states.get(entity_id)

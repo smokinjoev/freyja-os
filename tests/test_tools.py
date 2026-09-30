@@ -10,6 +10,7 @@ from freyja.config import settings
 from freyja.main import app
 from freyja.memory.models import AppendMessageRequest, CreateConversationRequest
 from freyja.memory.store import MemoryStore, set_store
+from freyja.tools import home_assistant
 from freyja.tools.builtin import _BUILTIN_TOOL_NAMES, register_builtin_tools
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLevel
 from freyja.tools.registry import DisabledToolRegistry, ToolRegistry, get_registry, set_registry
@@ -736,6 +737,69 @@ def test_home_assistant_read_allows_director_authorized_joe(
     )
     assert result.success is True
     assert result.output["state"] == "on"
+
+
+def test_home_assistant_read_uses_iris_core_when_director_has_no_ha_credentials(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "home_assistant_base_url", "")
+    monkeypatch.setattr(settings, "home_assistant_access_token", "")
+    monkeypatch.setattr(settings, "home_assistant_core_base_url", "http://iris.example:8510")
+
+    async def core_read(tool: str, arguments: dict[str, object]) -> dict[str, object]:
+        assert tool == "home_assistant.read_state"
+        assert arguments == {"entity_id": "light.kitchen"}
+        return {
+            "ok": True,
+            "live_data_available": True,
+            "entity_id": "light.kitchen",
+            "state": "off",
+            "source": "home_assistant",
+        }
+
+    monkeypatch.setattr(home_assistant, "_core_read_only", core_read)
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_read_state",
+                arguments={"entity_id": "light.kitchen"},
+                metadata={
+                    "director_authorized": True,
+                    "memory_principal": {"client_type": "imessage", "client_subject": "family-member:abc"},
+                    "person": {"person_id": "joe"},
+                },
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["live_data_available"] is True
+    assert result.output["source"] == "home_assistant"
+
+
+def test_home_assistant_list_uses_iris_core_when_director_has_no_ha_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "home_assistant_base_url", "")
+    monkeypatch.setattr(settings, "home_assistant_access_token", "")
+    monkeypatch.setattr(settings, "home_assistant_core_base_url", "http://iris.example:8510")
+
+    async def core_read(tool: str, arguments: dict[str, object]) -> dict[str, object]:
+        assert tool == "home_assistant.list_states"
+        assert arguments == {"domain": "light"}
+        return {
+            "ok": True,
+            "live_data_available": True,
+            "source": "home_assistant",
+            "entities": [{"entity_id": "light.kitchen", "domain": "light", "state": "off"}],
+        }
+
+    monkeypatch.setattr(home_assistant, "_core_read_only", core_read)
+    live, entities, source = asyncio_run(home_assistant._current_state_summaries({"domain": "light"}))
+    assert live is True
+    assert source == "home_assistant"
+    assert entities == [{"entity_id": "light.kitchen", "domain": "light", "state": "off"}]
 
 
 @pytest.mark.parametrize(
