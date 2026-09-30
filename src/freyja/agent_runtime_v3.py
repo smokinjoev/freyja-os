@@ -187,7 +187,9 @@ class AgentRuntimeV3:
         executable_tools = [tool_id for tool_id in selected_tools if tool_id not in _MUTATION_CAPABILITIES or not follow_up_questions]
         tool_results = await self._run_tool_loop(agent, handoff, selected_tools, executable_tools, steps, audit_events)
 
-        deterministic_response = None if follow_up_questions else _home_assistant_response(handoff.prompt, tool_results)
+        deterministic_response = None if follow_up_questions else (
+            _opencode_status_response(tool_results) or _home_assistant_response(handoff.prompt, tool_results)
+        )
         if deterministic_response:
             memory_candidates = self._propose_memory_candidates(agent, handoff, steps, audit_events)
             written_memories = self._write_agent_memories(agent, handoff, selected_tools, tool_results, steps, audit_events)
@@ -1738,6 +1740,26 @@ def _home_assistant_read_arguments(objective: str) -> dict[str, Any]:
     if "sensor" in lowered:
         return {"domain": "sensor"}
     return {}
+
+
+def _opencode_status_response(tool_results: list[dict[str, Any]]) -> str | None:
+    for result in tool_results:
+        if result.get("capability_id") != "opencode.status" or result.get("success") is not True:
+            continue
+        output = result.get("output")
+        if not isinstance(output, dict):
+            continue
+        fields = (
+            ("Alias", output.get("alias")),
+            ("Session", output.get("session")),
+            ("State", output.get("state")),
+            ("Working directory", output.get("working_directory")),
+            ("Recent action", output.get("recent_action")),
+        )
+        lines = [f"{label}: {value}" for label, value in fields if value not in (None, "")]
+        if lines:
+            return "OpenCode status\n" + "\n".join(lines)
+    return None
 
 
 def _home_assistant_response(objective: str, tool_results: list[dict[str, Any]]) -> str | None:
