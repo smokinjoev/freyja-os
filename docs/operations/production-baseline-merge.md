@@ -6,8 +6,10 @@ pass from being mistaken for production certification.
 
 ## Current branch state (2026-09-29)
 
-- `feature/cloyd-upstream-features` is clean and is 77 commits ahead of
-  `origin/main`, with no commits unique to `origin/main`.
+- `feature/cloyd-upstream-features` is ahead of `origin/main`, with no commits
+  unique to `origin/main` at the time of review. Confirm the live count before
+  merging with `git rev-list --left-right --count origin/main...HEAD` rather
+  than relying on a stale number in this gate.
 - The no-secret operational baseline passes with:
 
   ```sh
