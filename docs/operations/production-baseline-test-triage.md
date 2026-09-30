@@ -1,9 +1,10 @@
 # Production Baseline Test Triage
 
 This is an evidence record for the full suite run on Vulcan on 2026-09-29.
-Result: **1859 passed, 32 failed, 6 skipped**. None of the groups below is an
-approved exclusion. The production-baseline gate remains closed until each is
-resolved or explicitly accepted with matching-host evidence.
+Result: **1859 passed, 32 failed, 6 skipped**. On 2026-09-29, the operator
+approved a narrow production-baseline exception for the exact failure groups
+below. This exception does not claim that Telegram or Signal are operational,
+does not apply to new failures, and does not waive post-merge verification.
 
 ## Groups requiring a matching host or a deliberate operational choice
 
@@ -13,6 +14,22 @@ resolved or explicitly accepted with matching-host evidence.
 | `test_openwebui_terminal_bridge.py` | 1 | The bridge is configured for the macOS Homebrew `tmux` path, unavailable on Vulcan. | Validate on Iris or make the executable path host-configurable and add an equivalent Linux fixture. |
 | `test_freyja_channels_atlas_deployment.py` | 2 | The verifier expects an Atlas readiness artifact produced from private channel configuration. Telegram and Signal are intentionally not enabled or certified. | Keep channels out of the release claim; either add a non-secret, clearly pending fixture or run an approved Atlas readiness check without activating either channel. |
 | `test_freyja5_architecture.py::test_freyja5_certification_provider_exercises_gateway_runtime` | 1 | Its local provider is intentionally configured with inference disabled, so it cannot produce a written answer. | Replace with a deterministic non-inference architecture assertion, or run a bounded live Nexus smoke and preserve its trace. |
+
+## Approved production-baseline exception
+
+The 32 failures above are accepted only for this baseline because they are
+either wrong-host checks, intentionally unapproved messaging prerequisites, or
+obsolete Open WebUI artifact-chain assertions. They are bounded by the
+following current evidence:
+
+- 107 focused platform tests passing on Vulcan;
+- 21 matching-host macOS tests passing on Iris;
+- all five named LibreChat agents accepted with scoped Core tools;
+- the ten-check live readiness baseline passing.
+
+This is a release exception, not test deletion or a permanent exclusion.
+Future changes must rerun the full suite and triage any failure outside these
+exact groups. The obsolete Open WebUI evidence chain remains a cleanup item.
 
 ### Matching-host evidence
 
@@ -44,7 +61,7 @@ proxy assumptions are no longer the canonical LibreChat/Core path.
 - plus the two Atlas readiness-artifact failures above when their generated
   evidence is consumed by this chain
 
-Before a production merge, choose one path deliberately:
+After this baseline, choose one path deliberately for a later cleanup:
 
 1. Rebuild and validate that evidence chain against the current compatibility
    role of Open WebUI; or

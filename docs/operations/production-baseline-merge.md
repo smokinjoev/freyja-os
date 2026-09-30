@@ -25,10 +25,11 @@ pass from being mistaken for production certification.
   (Home Assistant/Core MCP, Smith watchdog, Discord, and OpenCode runtime
   coverage), followed by the 10-check live readiness baseline.
 - A full local suite run on 2026-09-29 currently reports `1859 passed, 32 failed, 6 skipped`.
-  The failures are primarily legacy Open WebUI evidence expectations and
-  macOS-specific launch-agent/tmux paths evaluated on Linux. They must be
-  triaged, fixed, or formally separated from this release before a production
-  merge; they are not evidence that the live portal path is certified.
+  The operator approved a narrow baseline exception for those exact legacy
+  Open WebUI artifact expectations, intentional messaging prerequisites, and
+  macOS-specific checks evaluated on Linux. The scope and compensating evidence
+  are recorded in `docs/operations/production-baseline-test-triage.md`; this
+  does not apply to any new failure.
 
 ## Required before merge
 
@@ -55,9 +56,9 @@ pass from being mistaken for production certification.
    ```
 
   The full suite must pass, or every remaining failure must have an approved,
-  documented exclusion with a matching-host verification plan.
-  See `docs/operations/production-baseline-test-triage.md` for the current
-  unapproved triage record.
+  documented exception with matching-host or focused live evidence. The current
+  32 failures have that baseline exception; see
+  `docs/operations/production-baseline-test-triage.md`.
 5. Review the diff against `origin/main`, confirm no secret files are staged,
    and obtain the operator's explicit merge approval.
 
