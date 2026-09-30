@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from freyja.config import settings
 from freyja.tools.builtin import register_builtin_tools
 from freyja.tools.models import ToolExecutionRequest, ToolRiskLevel
 from freyja.tools.opencode_runtime import PROMPT_GUARDRAILS, _opencode_send, _opencode_shell, _opencode_start, _session_config, opencode_health
