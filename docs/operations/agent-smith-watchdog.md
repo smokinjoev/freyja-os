@@ -32,15 +32,16 @@ authorize Smith to repair a service.
 
 ## Required alert contract before enabling Smith
 
-1. Choose one initial recipient: Cloyd is recommended for technical alerts.
-2. Choose one delivery path: the existing Cloyd Discord DM connector is the
-   least-expansive option because it is already live.
+1. Initial recipient: Joe through the existing Cloyd Discord DM bot.
+2. Delivery path: direct Discord delivery using the fixed recipient and the
+   existing Cloyd Bot credential; it is not a general messaging capability.
 3. Define alert severity:
    - informational: record only;
    - warning: one Cloyd notification with a monitor link;
    - critical: one Cloyd notification plus a clear statement that no automatic
      repair was attempted.
-4. Run a synthetic read-only health check and verify the alert arrives once.
+4. On 2026-09-29, the controlled delivery test was accepted by Discord. Its
+   message stated that no repair was attempted.
 5. Record the timestamp and outcome in
    `docs/operations/freyja-live-acceptance.md`.
 

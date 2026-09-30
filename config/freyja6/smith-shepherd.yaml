@@ -1,0 +1,61 @@
+smith_shepherd:
+  id: smith
+  display_name: Agent Smith
+  role: freyja6-service-shepherd
+  host_target: iris
+  supervisor_mode: native
+  operation_mode: observe_only
+  escalation: requires_explicit_operator_approved_recipient
+  interval_seconds: 60
+  alert_delivery:
+    transport: discord
+    recipient: joe-via-cloyd-discord
+    enabled: true
+    send_only_for: [controlled_test, critical_transition]
+    no_automatic_repair: true
+  docker_dependency: false
+  logs:
+    jsonl: /Users/freyja/freyja-os/logs/smith-service-shepherd.jsonl
+    status: /Users/freyja/.local/state/freyja/smith-service-shepherd-status.json
+  model_routes:
+    primary:
+      id: vulcan-qwen27
+      provider: ollama
+      base_url: http://100.94.80.21:11434
+      model: qwen3.8:27b
+      purpose: default Smith diagnostics and service reasoning
+    openclaw_backdoor:
+      id: vulcan-openclaw-ollama
+      provider: ollama
+      base_url: http://100.94.80.21:11434
+      model_env: SMITH_OPENCLAW_MODEL
+      default_model: openclaw
+      purpose: opt-in direct Ollama API route for OpenClaw when present
+  managed_launch_agents:
+    - com.freyja-os.director
+    - com.freyja-os.discord-dm-connector
+    - com.freyja-os.discord-dm-connector-freyja
+    - com.freyja-os.macagent
+    - com.freyja-os.core-mcp
+    - com.freyja-os.cloyd-smith-loop
+  disabled_launch_agents:
+    - com.freyja-os.road-mode
+  managed_compose:
+    - id: freyja6-base
+      project_dir: /Users/freyja/freyja-os
+      env_file: deploy/compose/freyja6/.env
+      files:
+        - deploy/compose/freyja6/compose.yaml
+      repair: false
+    - id: open-webui-atlas
+      project_dir: /Users/freyja/freyja-os
+      env_file: deploy/compose/open-webui/.env
+      files:
+        - deploy/compose/open-webui/compose.yaml
+      repair: false
+  denies:
+    - automatic_repair
+    - service_restart
+    - docker_launch
+    - compose_up
+    - credential_access_except_fixed_discord_delivery_token

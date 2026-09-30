@@ -4,6 +4,12 @@ smith_shepherd:
   host: iris
   operation_mode: observe_only
   escalation: requires_explicit_operator_approved_recipient
+  alert_delivery:
+    transport: discord
+    recipient: joe-via-cloyd-discord
+    enabled: true
+    send_only_for: [controlled_test, critical_transition]
+    no_automatic_repair: true
   interval_seconds: 60
   model_routes:
     primary:

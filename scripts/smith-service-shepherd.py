@@ -28,6 +28,7 @@ STATUS_PATH = Path(
         Path.home() / ".local/state/freyja/smith-service-shepherd-status.json",
     )
 )
+ALERT_ENV_PATH = Path(os.environ.get("SMITH_ALERT_ENV_FILE", Path.home() / ".config/freyja-os/smith-alert.env"))
 
 
 def now() -> str:
@@ -67,6 +68,24 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def read_alert_env(path: Path) -> dict[str, str]:
+    """Read only the dedicated fixed-recipient Discord delivery credential."""
+    values = {
+        key: os.environ.get(key, "").strip()
+        for key in ("SMITH_DISCORD_ALERT_BOT_TOKEN", "SMITH_DISCORD_ALERT_RECIPIENT_ID")
+    }
+    if not path.is_file():
+        return {key: value for key, value in values.items() if value}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key in {"SMITH_DISCORD_ALERT_BOT_TOKEN", "SMITH_DISCORD_ALERT_RECIPIENT_ID"} and not values.get(key):
+            values[key] = value.strip()
+    return {key: value for key, value in values.items() if value}
+
+
 def http_json(url: str, *, method: str = "GET", body: dict[str, Any] | None = None, timeout: int = 8) -> dict[str, Any]:
     data = None
     headers: dict[str, str] = {}
@@ -81,6 +100,45 @@ def http_json(url: str, *, method: str = "GET", body: dict[str, Any] | None = No
             return {"ok": 200 <= response.status < 300, "status": response.status, "body": parsed}
     except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
         return {"ok": False, "status": None, "error": str(exc)}
+
+
+def send_discord_alert(config: dict[str, Any], text: str) -> dict[str, Any]:
+    delivery = ((config.get("smith_shepherd") or {}).get("alert_delivery") or {})
+    if not delivery.get("enabled") or delivery.get("transport") != "discord":
+        return {"ok": False, "reason": "discord alert delivery is disabled"}
+    values = read_alert_env(ALERT_ENV_PATH)
+    token = values.get("SMITH_DISCORD_ALERT_BOT_TOKEN", "")
+    recipient_id = values.get("SMITH_DISCORD_ALERT_RECIPIENT_ID", "")
+    if not token or not recipient_id:
+        return {"ok": False, "reason": "dedicated Discord alert credential is unavailable"}
+    headers = {
+        "Authorization": f"Bot {token}",
+        "User-Agent": "FreyjaDiscordDmConnector/0.1",
+        "Content-Type": "application/json",
+    }
+    try:
+        open_dm = urllib.request.Request(
+            "https://discord.com/api/v10/users/@me/channels",
+            data=json.dumps({"recipient_id": recipient_id}).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(open_dm, timeout=15) as response:
+            channel = json.loads(response.read().decode("utf-8"))
+        channel_id = str(channel.get("id") or "")
+        if not channel_id:
+            return {"ok": False, "reason": "Discord did not return a DM channel"}
+        message = urllib.request.Request(
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            data=json.dumps({"content": text[:1800]}).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(message, timeout=15) as response:
+            delivered = 200 <= response.status < 300
+        return {"ok": delivered, "transport": "discord", "recipient": delivery.get("recipient"), "delivery": "accepted" if delivered else "rejected"}
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        return {"ok": False, "transport": "discord", "recipient": delivery.get("recipient"), "reason": type(exc).__name__}
 
 
 def launchctl_state(label: str) -> dict[str, Any]:
@@ -231,10 +289,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run Agent Smith's native service shepherd.")
     parser.add_argument("--once", action="store_true", help="run one cycle and exit")
     parser.add_argument("--dry-run", action="store_true", help="observe and log without repairing")
+    parser.add_argument("--test-alert", action="store_true", help="send one controlled Discord delivery test; never repairs services")
     parser.add_argument("--interval", type=int, default=None, help="override poll interval seconds")
     args = parser.parse_args()
 
     config = read_yaml(CONFIG_PATH)
+    if args.test_alert:
+        result = send_discord_alert(
+            config,
+            "Agent Smith controlled alert test: Discord delivery path verified. No repair was attempted.",
+        )
+        print(json.dumps({"alert_test": result}, sort_keys=True), flush=True)
+        return 0 if result.get("ok") else 1
     interval = args.interval or int((config.get("smith_shepherd") or {}).get("interval_seconds") or 60)
     while True:
         report = one_cycle(args.dry_run)

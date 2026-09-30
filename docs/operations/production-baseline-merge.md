@@ -38,9 +38,10 @@ pass from being mistaken for production certification.
      JennaCide (the authenticated Core protocol check passed on 2026-09-29;
      retain the portal acceptance evidence separately);
    - bounded, non-destructive OpenCode handoff for Agent 47.
-2. Choose and test Agent Smith's one-recipient alert route. The recommended
-   initial route is Cloyd through the already-running Discord DM connector.
-   Do not grant repair authority during this test.
+2. Agent Smith's one-recipient alert route is configured as Joe through the
+   existing Cloyd Discord DM bot. The 2026-09-29 controlled delivery test was
+   accepted, and no repair authority was granted. Retain this observe-only
+   boundary during any subsequent alert testing.
 3. Keep Signal and Telegram out of the production claim until one is explicitly
    approved and successfully certified. Signal currently has a failing receive
    loop. Telegram has enabled private configuration and a running Iris launch
