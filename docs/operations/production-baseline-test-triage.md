@@ -1,7 +1,7 @@
 # Production Baseline Test Triage
 
 This is an evidence record for the full suite run on Vulcan on 2026-09-29.
-Result: **1856 passed, 32 failed, 6 skipped**. None of the groups below is an
+Result: **1859 passed, 32 failed, 6 skipped**. None of the groups below is an
 approved exclusion. The production-baseline gate remains closed until each is
 resolved or explicitly accepted with matching-host evidence.
 
