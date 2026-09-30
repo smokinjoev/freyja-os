@@ -17,7 +17,7 @@ operator-approved durable-memory isolation test.
 | --- | --- | --- |
 | Atlas portals | HTTP 200 from LibreChat (`:3080`), Open WebUI (`:3001`), LobeHub (`:3210`), and family page (`:9091`) | reachable |
 | Vulcan model runtime | Ollama API answered at `:11434`; Nexus answered with expected authorization required at `:3939/v1/models` | reachable and protected |
-| Named-agent inference | Each deployed Nexus preset returned a written reply with a 1,024-token agent output budget | healthy |
+| Named-agent inference | On 2026-09-29, all five deployed Nexus presets returned visible written replies with the 1,024-token agent output budget. Freyja, Cloyd, Benedict, and Agent 47 resolved to `qwen3.8:27b`; JennaCide resolved to `gpt-oss:20b`. | healthy |
 | Director | `GET http://100.94.80.21:8512/health` returned healthy; `freyja-paralegal-director.service` is active as a user service | healthy |
 | Iris Core | `GET http://100.115.228.56:8510/health` returned healthy; Core launch agent is running | healthy |
 | Core MCP | LibreChat starts five per-agent Core MCP connections. The published catalog contains named Core tools; authorization is determined by the authenticated agent token, not the portal. Freyja includes read-only `home_assistant.read_state` and `home_assistant.list_states`. | initialized |
@@ -54,7 +54,7 @@ result, agent, and timestamp—not chat content or secrets.
 | Freyja | pending | pending | Core protocol memory isolation verified | pending |
 | Cloyd | pending | pending | Core protocol memory isolation verified | Discord OpenCode status certified; LibreChat acceptance pending |
 | Benedict | pending | pending | Core protocol memory isolation verified | pending |
-| Agent 47 | pending | pending | Core protocol memory isolation verified | pending |
+| Agent 47 | Nexus written-response route verified | Scoped `opencode.status` handoff verified, no mutation | Core protocol memory isolation verified | LibreChat UI acceptance pending |
 | JennaCide | pending | pending | Core protocol memory isolation verified | pending |
 
 On 2026-09-29, each authenticated Iris Core MCP route wrote a temporary
