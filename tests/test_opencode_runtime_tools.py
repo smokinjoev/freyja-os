@@ -9,6 +9,8 @@ from freyja.tools.models import ToolExecutionRequest, ToolRiskLevel
 from freyja.tools.opencode_runtime import PROMPT_GUARDRAILS, _opencode_send, _opencode_shell, _opencode_start, _session_config, opencode_health
 from freyja.tools.registry import ToolRegistry
 from freyja.agent_runtime_v3 import AgentRuntimeV3
+from freyja.agent_gateway import AgentGateway, GatewayRequest
+from freyja.foundation_models import GatewaySender, SecurityDomainId
 from freyja.foundation_seed import PERSISTENT_AGENTS
 
 
@@ -143,6 +145,23 @@ def test_opencode_health_skips_password_when_auth_is_disabled(monkeypatch, tmp_p
     health = opencode_health(alias="freyja-code")
 
     assert health["ok"] is True
+
+
+def test_agent_runtime_binds_read_only_opencode_status_to_managed_alias() -> None:
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=GatewaySender(sender_id="person:joe", display_name="Joe", security_domain_id=SecurityDomainId.PERSON_JOE),
+            target_agent="cloyd-gibbler",
+            prompt="Use your read-only OpenCode status tool.",
+            conversation_id="test-cloyd-status",
+            channel="discord",
+        )
+    ).handoff
+
+    assert handoff is not None
+    assert AgentRuntimeV3._arguments_for_tool("opencode.status", handoff.prompt, handoff) == {
+        "alias": "freyja-core-coder"
+    }
 
 
 def test_opencode_start_reuses_existing_alias_connection_config(tmp_path: Path, monkeypatch) -> None:

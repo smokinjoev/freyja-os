@@ -1374,6 +1374,10 @@ class AgentRuntimeV3:
             return _home_assistant_control_arguments(objective)
         if capability_id == "calendar.write":
             return _calendar_write_arguments(objective, handoff)
+        if capability_id == "opencode.status":
+            # The Discord technical-agent status lane is deliberately bound to
+            # the managed Iris Core session.  This is observational only.
+            return {"alias": "freyja-core-coder"}
         return {}
 
     @staticmethod
