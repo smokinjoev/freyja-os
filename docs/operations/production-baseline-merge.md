@@ -42,8 +42,9 @@ pass from being mistaken for production certification.
    initial route is Cloyd through the already-running Discord DM connector.
    Do not grant repair authority during this test.
 3. Keep Signal and Telegram out of the production claim until one is explicitly
-   configured and successfully certified. Signal currently has a failing
-   receive loop; Telegram has no live connector.
+   approved and successfully certified. Signal currently has a failing receive
+   loop. Telegram has enabled private configuration and a running Iris launch
+   agent, but no approved end-to-end acceptance evidence.
 4. Run the repository verification in the matching release environment:
 
    ```sh

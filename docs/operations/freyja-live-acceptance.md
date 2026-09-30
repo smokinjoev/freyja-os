@@ -25,7 +25,7 @@ operator-approved durable-memory isolation test.
 | Discord Freyja | Iris launch agent is running; connector log reports it ready and authenticated | connected |
 | Discord Cloyd | On 2026-09-29, Cloyd's live Discord DM returned the scoped Iris Core `opencode.status` fields: alias, session, idle state, working directory, and recent action. The connector is routed through Vulcan's canonical Director. | certified |
 | Agent Smith monitor | Iris monitor status and runtime-health APIs answered at `:8000/agent-runs/api/*` | reachable, no alert route certified |
-| Telegram | No live Telegram connector container was found on Atlas | not activated |
+| Telegram | Iris has a running Telegram launch agent and enabled private configuration, but no end-to-end household acceptance has been performed. It is excluded from the production claim and must not be used or treated as certified until the operator explicitly approves an activation test. | configured, not certified |
 | Signal | Signal API and connector containers are healthy, but the connector's receive loop is repeatedly rejected by the Signal API | not operational |
 
 ### Current Nexus resolutions
