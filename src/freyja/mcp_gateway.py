@@ -29,6 +29,7 @@ TOOL_CATALOG = (
     GatewayTool("opencode.read", "coding", "Read recent managed OpenCode output."),
     GatewayTool("memory.search", "memory", "Search the caller's authorized local memory."),
     GatewayTool("memory.write", "memory", "Write an authorized local memory record.", "write"),
+    GatewayTool("memory.delete", "memory", "Delete a caller-owned local memory record.", "destructive"),
 )
 
 AGENT_POLICIES: dict[str, tuple[str, ...]] = {
@@ -59,6 +60,8 @@ AGENT_POLICIES: dict[str, tuple[str, ...]] = {
         "home_assistant.read_state",
         "home_assistant.list_states",
         "memory.search",
+        "memory.write",
+        "memory.delete",
     ),
     "freyja61-coding": ("status.*", "opencode.status", "opencode.read", "memory.search"),
     "cloyd-gibbler": ("status.*", "opencode.*", "memory.*"),

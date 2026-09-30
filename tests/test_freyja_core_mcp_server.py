@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +50,7 @@ async def test_freyja_core_mcp_wrapper_delegates_to_core_call_tool(monkeypatch) 
         opencode = json.loads(await module.opencode_status("freyja-test"))
         ha = json.loads(await module.home_assistant_list_states("sensor"))
         memory = json.loads(await module.memory_write("id-1", "hello", "project_state"))
+        deleted = json.loads(await module.memory_delete("id-1"))
     finally:
         module.reset_current_agent(context)
 
@@ -58,6 +60,7 @@ async def test_freyja_core_mcp_wrapper_delegates_to_core_call_tool(monkeypatch) 
     assert opencode["arguments"] == {"alias": "freyja-test"}
     assert ha["arguments"] == {"include_all": False, "domain": "sensor"}
     assert memory["arguments"] == {"memory_id": "id-1", "content": "hello", "kind": "project_state"}
+    assert deleted["arguments"] == {"memory_id": "id-1"}
     assert calls == [
         ("status.check", {}),
         ("calendar.resolve_date", {"phrase": "this weekend"}),
@@ -74,7 +77,36 @@ async def test_freyja_core_mcp_wrapper_delegates_to_core_call_tool(monkeypatch) 
         ("opencode.status", {"alias": "freyja-test"}),
         ("home_assistant.list_states", {"include_all": False, "domain": "sensor"}),
         ("memory.write", {"memory_id": "id-1", "content": "hello", "kind": "project_state"}),
+        ("memory.delete", {"memory_id": "id-1"}),
     ]
+
+
+async def test_mcp_route_identity_overrides_client_memory_principal(monkeypatch) -> None:
+    module = _load_server_module()
+    captured = {}
+
+    async def fake_dispatch(tool, arguments, caller):
+        captured["tool"] = tool
+        captured["arguments"] = arguments
+        return {"ok": True}
+
+    monkeypatch.setattr(module, "dispatch_tool", fake_dispatch)
+    module._AGENT_TOKENS["test-token"] = "benedict"
+    context = SimpleNamespace(
+        headers={"authorization": "Bearer test-token"},
+        request_context=SimpleNamespace(request=SimpleNamespace(path_params={"agent_id": "benedict"})),
+    )
+
+    try:
+        result = json.loads(await module._core("memory.search", {"client_subject": "agent:forged"}, context))
+    finally:
+        module._AGENT_TOKENS.pop("test-token", None)
+
+    assert result == {"ok": True}
+    assert captured == {
+        "tool": "memory.search",
+        "arguments": {"client_subject": "agent:benedict", "client_type": "agent"},
+    }
 
 
 async def test_freyja_core_mcp_health_reports_core_tool_list() -> None:

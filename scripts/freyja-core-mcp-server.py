@@ -103,9 +103,16 @@ async def _core(tool: str, arguments: dict[str, Any] | None = None, ctx: Context
     agent_id = route_agent or token_agent or None
     if route_agent and token_agent and route_agent != token_agent:
         return _json({"ok": False, "error": "agent route does not match credential"})
+    # The route/token identity is authoritative. Never accept a memory
+    # principal supplied by the client, or every MCP route would share Core's
+    # default principal (agent:freyja).
+    tool_arguments = dict(arguments or {})
+    if agent_id:
+        tool_arguments["client_type"] = "agent"
+        tool_arguments["client_subject"] = f"agent:{agent_id}"
     context_token = set_current_agent(agent_id) if agent_id else None
     try:
-        return _json(await dispatch_tool(tool, arguments or {}, call_tool))
+        return _json(await dispatch_tool(tool, tool_arguments, call_tool))
     finally:
         if context_token is not None:
             reset_current_agent(context_token)
@@ -282,6 +289,11 @@ async def memory_write(memory_id: str = "", content: str = "", kind: str = "note
             "kind": kind,
         }, ctx,
     )
+
+
+@mcp.tool(name="memory.delete", description="Delete a caller-owned Freyja Core memory record.")
+async def memory_delete(memory_id: str = "", ctx: Context | None = None) -> str:
+    return await _core("memory.delete", {"memory_id": memory_id}, ctx)
 
 
 @mcp.tool(name="home_assistant.read_state", description="Read one Home Assistant entity through Freyja Core.")

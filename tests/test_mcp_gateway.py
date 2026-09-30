@@ -39,6 +39,7 @@ def test_discovery_filters_catalog_by_authenticated_agent() -> None:
             "calendar.resolve_date",
             "memory.search",
             "memory.write",
+            "memory.delete",
         }
         assert "opencode.send" not in names
         assert profile()["agent_id"] == "benedict"
@@ -61,6 +62,7 @@ def test_freyja_test_policy_exposes_phase_one_core_tools_only() -> None:
             "opencode.send",
             "memory.search",
             "memory.write",
+            "memory.delete",
         } <= names
         assert "calendar.delete_event" not in names
     finally:

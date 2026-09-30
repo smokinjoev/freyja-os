@@ -57,6 +57,7 @@ CORE_TOOL_NAMES = (
     "opencode.read",
     "memory.search",
     "memory.write",
+    "memory.delete",
 )
 
 
@@ -244,6 +245,8 @@ async def call_tool(tool: str, arguments: dict[str, Any] | None = None) -> dict[
             return memory_search_tool(arguments)
         if tool == "memory.write":
             return memory_write_tool(arguments)
+        if tool == "memory.delete":
+            return memory_delete_tool(arguments)
         return {"ok": False, "error": f"Unknown Freyja Core tool: {tool}", "configured_tools": list(CORE_TOOL_NAMES)}
     except Exception as exc:
         logger.exception("Freyja Core tool failed: %s", tool)
@@ -373,6 +376,15 @@ def memory_write_tool(arguments: dict[str, Any]) -> dict[str, Any]:
     )
     memory = get_store().put_shared_memory(_memory_principal(arguments), request)
     return {"ok": True, "memory": memory.model_dump(mode="json")}
+
+
+def memory_delete_tool(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Delete only a record owned by the authenticated memory principal."""
+    memory_id = str(arguments.get("memory_id") or "").strip()
+    if not memory_id:
+        return {"ok": False, "error": "memory.delete requires memory_id."}
+    deleted = get_store().delete_shared_memory(_memory_principal(arguments), memory_id)
+    return {"ok": True, "deleted": deleted, "memory_id": memory_id}
 
 
 async def home_assistant_read_state_tool(arguments: dict[str, Any]) -> dict[str, Any]:
