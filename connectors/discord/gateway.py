@@ -268,11 +268,18 @@ class DiscordGateway:
             logger.info("Discord director route completed message_id=%s", message.message_id)
         except (asyncio.TimeoutError, httpx.HTTPError):
             logger.exception("Discord director route failed message_id=%s attachments=%s", message.message_id, len(attachments))
-            return DiscordOutboundReply(
-                text=(
+            if attachments:
+                failure_text = (
                     "I received the attachment, but the vision route timed out before I could finish reading it. "
                     "Please resend it or send a smaller crop."
-                ),
+                )
+            else:
+                failure_text = (
+                    "The Freyja Director request timed out or could not be reached. "
+                    "Please try it again in a moment."
+                )
+            return DiscordOutboundReply(
+                text=failure_text,
                 message_reference_id=message.message_id,
                 agent_id=agent.agent_id,
                 trace_id=trace_id,
