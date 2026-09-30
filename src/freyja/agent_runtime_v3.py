@@ -598,6 +598,11 @@ class AgentRuntimeV3:
             candidates.append("home-assistant.read")
         if "home-assistant.control" in candidates and "home-assistant.read" in candidates:
             candidates.remove("home-assistant.read")
+        # An explicit OpenCode status request is observational. Do not let
+        # broad words such as "read", "status", or "code" also select file,
+        # git, or write-oriented coding capabilities.
+        if "opencode.status" in candidates:
+            return ["opencode.status"]
         if (
             "weather.current" in candidates
             and "home-assistant.read" in candidates
