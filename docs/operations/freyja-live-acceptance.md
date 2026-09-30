@@ -16,6 +16,7 @@ operator-approved durable-memory isolation test.
 | Capability | Evidence | Result |
 | --- | --- | --- |
 | Atlas portals | HTTP 200 from LibreChat (`:3080`), Open WebUI (`:3001`), LobeHub (`:3210`), and family page (`:9091`) | reachable |
+| Family-page operational links | On 2026-09-29, every visible portal link returned HTTP 200: LibreChat, Open WebUI, LobeHub, Nextcloud, Home Assistant, Paperless, Director docs, Iris Core docs, Agent Smith, and the versioned Ops Manual. | verified; only working targets are displayed |
 | Vulcan model runtime | Ollama API answered at `:11434`; Nexus answered with expected authorization required at `:3939/v1/models` | reachable and protected |
 | Named-agent inference | On 2026-09-29, all five deployed Nexus presets returned visible written replies with the 1,024-token agent output budget. Freyja, Cloyd, Benedict, and Agent 47 resolved to `qwen3.8:27b`; JennaCide resolved to `gpt-oss:20b`. | healthy |
 | Director | `GET http://100.94.80.21:8512/health` returned healthy; `freyja-paralegal-director.service` is active as a user service | healthy |
@@ -27,7 +28,7 @@ operator-approved durable-memory isolation test.
 | Discord Cloyd | On 2026-09-29, Cloyd's live Discord DM returned the scoped Iris Core `opencode.status` fields: alias, session, idle state, working directory, and recent action. The connector is routed through Vulcan's canonical Director. | certified |
 | Agent Smith monitor | Iris monitor status and runtime-health APIs answered at `:8000/agent-runs/api/*`. A controlled Discord delivery test to Joe through Cloyd Bot was accepted; the test stated that no repair was attempted. | certified observe-only alert path |
 | Telegram | Operator-disabled on 2026-09-29: private enablement flags were turned off and the Iris launch agent was unloaded. | disabled, not certified |
-| Signal | Signal API and connector containers are healthy, but the connector's receive loop is repeatedly rejected by the Signal API | not operational |
+| Signal | Signal API and connector containers are healthy, but on 2026-09-29 the connector receive loop was repeatedly rejected by the Signal API with HTTP 400. | not operational |
 
 ### Current Nexus resolutions
 
