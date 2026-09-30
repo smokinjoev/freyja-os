@@ -41,8 +41,10 @@ pass from being mistaken for production certification.
    - bounded, non-destructive OpenCode handoff for Agent 47.
 2. Agent Smith's one-recipient alert route is configured as Joe through the
    existing Cloyd Discord DM bot. The 2026-09-29 controlled delivery test was
-   accepted, and no repair authority was granted. Retain this observe-only
-   boundary during any subsequent alert testing.
+   accepted, and no repair authority was granted. The active watchdog detects
+   only known-healthy→critical transitions and cannot repair services; its
+   dedicated delivery credential still needs an explicit provisioning choice
+   before automatic alert delivery can be claimed.
 3. Keep Signal and Telegram out of the production claim until one is explicitly
    approved and successfully certified. Signal currently has a failing receive
    loop. Telegram is intentionally disabled on Iris and has no approved

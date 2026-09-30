@@ -252,6 +252,57 @@ def probe_smith_routes(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _previous_critical_reasons() -> list[str] | None:
+    """Return the last recorded critical state without treating a restart as one."""
+    try:
+        previous = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    escalation = previous.get("escalation") if isinstance(previous, dict) else None
+    reasons = escalation.get("critical_reasons") if isinstance(escalation, dict) else None
+    return [str(reason) for reason in reasons] if isinstance(reasons, list) else []
+
+
+def critical_reasons(report: dict[str, Any], config: dict[str, Any]) -> list[str]:
+    """Identify bounded service-health transitions; this never initiates repair."""
+    reasons: list[str] = []
+    for item in report.get("launch_agents") or []:
+        if not item.get("healthy"):
+            label = ((item.get("state") or {}).get("label") or "unknown launch agent")
+            reasons.append(f"launch_agent_unhealthy:{label}")
+    routes = report.get("routes") or {}
+    primary = routes.get("primary") if isinstance(routes, dict) else None
+    if not isinstance(primary, dict) or not primary.get("available"):
+        reasons.append("primary_model_route_unavailable")
+    shepherd = config.get("smith_shepherd") or {}
+    if shepherd.get("docker_dependency") and not (report.get("docker") or {}).get("ok"):
+        reasons.append("docker_unavailable")
+    return sorted(set(reasons))
+
+
+def _transition_escalation(report: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    current = critical_reasons(report, config)
+    previous = _previous_critical_reasons()
+    escalation: dict[str, Any] = {
+        "critical": bool(current),
+        "critical_reasons": current,
+        "previous_critical_reasons": previous or [],
+        "transition": "unchanged",
+        "automatic_repair": False,
+    }
+    # Do not alert on initial startup: an operator needs one healthy observation
+    # before a subsequent failure is meaningful. Send at most once per transition.
+    if current and previous == []:
+        escalation["transition"] = "entered_critical"
+        escalation["alert"] = send_discord_alert(
+            config,
+            "Agent Smith health alert: " + ", ".join(current) + ". No repair was attempted.",
+        )
+    elif previous and not current:
+        escalation["transition"] = "recovered"
+    return escalation
+
+
 def one_cycle(dry_run: bool) -> dict[str, Any]:
     config = read_yaml(CONFIG_PATH)
     shepherd = config.get("smith_shepherd") or {}
@@ -277,6 +328,7 @@ def one_cycle(dry_run: bool) -> dict[str, Any]:
         "docker": docker,
         "compose": compose,
     }
+    report["escalation"] = _transition_escalation(report, config)
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with LOG_PATH.open("a", encoding="utf-8") as log:

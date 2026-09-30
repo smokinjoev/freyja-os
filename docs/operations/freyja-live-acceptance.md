@@ -26,7 +26,7 @@ operator-approved durable-memory isolation test.
 | Named web-agent configuration | LibreChat startup log loaded Freyja, Cloyd, Benedict, Agent 47, and Jenna MCP identities with their Nexus presets | configured |
 | Discord Freyja | Iris launch agent is running and authenticated. On 2026-09-29, its canonical Director route completed a live Home Assistant read through Iris Core; the pre-fix fixture fallback has been removed from this live path. | certified read-only path |
 | Discord Cloyd | On 2026-09-29, Cloyd's live Discord DM returned the scoped Iris Core `opencode.status` fields: alias, session, idle state, working directory, and recent action. The connector is routed through Vulcan's canonical Director. | certified |
-| Agent Smith monitor | Iris monitor status and runtime-health APIs answered at `:8000/agent-runs/api/*`. A controlled Discord delivery test to Joe through Cloyd Bot was accepted; the test stated that no repair was attempted. | certified observe-only alert path |
+| Agent Smith monitor | Iris monitor status and runtime-health APIs answered at `:8000/agent-runs/api/*`. A controlled Discord delivery test to Joe through Cloyd Bot was accepted; the test stated that no repair was attempted. On 2026-09-29, the active observe-only shepherd was updated to detect only a known-healthy→critical transition, send no startup/repeat alert, and never repair a service. Its dedicated alert credential is not provisioned, so automatic delivery remains dormant. | bounded workflow certified; delivery provisioning pending |
 | Telegram | Operator-disabled on 2026-09-29: private enablement flags were turned off and the Iris launch agent was unloaded. | disabled, not certified |
 | Signal | Signal API and connector containers are healthy, but on 2026-09-29 the connector receive loop was repeatedly rejected by the Signal API with HTTP 400. | not operational |
 
@@ -57,7 +57,7 @@ result, agent, and timestamp—not chat content or secrets.
 | Cloyd | pending | pending | Core protocol memory isolation verified | Discord OpenCode status certified; LibreChat acceptance pending |
 | Benedict | pending | pending | Core protocol memory isolation verified | pending |
 | Agent 47 | Nexus written-response route verified | Scoped `opencode.status` handoff verified, no mutation | Core protocol memory isolation verified | LibreChat UI acceptance pending |
-| JennaCide | pending | pending | Core protocol memory isolation verified | pending |
+| JennaCide | On 2026-09-29, returned exact `JennaCide LibreChat written-response check.` | On 2026-09-29, used scoped `status.check` to report `freyja-core`, `iris.lan`, healthy; no mutation requested | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
 
 On 2026-09-29, each authenticated Iris Core MCP route wrote a temporary
 caller-owned marker, read it as its owner, was unable to read each of the other
