@@ -45,11 +45,11 @@ The intended alternate deep, coding, and vision models remain installed on
 Vulcan. Their selection remains the responsibility of Nexus and has not been
 changed in this acceptance pass.
 
-## Still requiring an interactive acceptance pass
+## Interactive acceptance results
 
-The following cannot be truthfully certified by an unauthenticated HTTP probe.
-Run them in LibreChat using an approved local account and record only the
-result, agent, and timestamp—not chat content or secrets.
+These checks cannot be truthfully certified by an unauthenticated HTTP probe.
+They were run in LibreChat using an approved local account; this record retains
+only the result, agent, and date—not private chat content or secrets.
 
 | Agent | Plain written reply | MCP read-only call | Memory isolation check | Outcome |
 | --- | --- | --- | --- | --- |
@@ -72,6 +72,8 @@ unapproved filesystem change occurred.
 
 ## Gate for production-baseline merge
 
-The branch is eligible only when every row above has a recorded interactive
-result and Agent Smith's watchdog check has a tested alert route. Portal
-reachability and MCP initialization alone are necessary but not sufficient.
+Every named-agent row now has a recorded interactive result, and Agent Smith's
+observe-only alert route has a controlled delivery test. The separate
+production-baseline gate remains open for the documented full-suite
+disposition and explicit operator merge approval; portal reachability and MCP
+initialization alone are not a merge authorization.

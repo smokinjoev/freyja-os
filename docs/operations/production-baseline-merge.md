@@ -31,14 +31,10 @@ pass from being mistaken for production certification.
 
 ## Required before merge
 
-1. Complete every row in `docs/operations/freyja-live-acceptance.md` using an
-   approved LibreChat account:
-   - written response;
-   - read-only Core MCP action;
-   - isolated-memory check for Freyja, Cloyd, Benedict, Agent 47, and
-     JennaCide (the authenticated Core protocol check passed on 2026-09-29;
-     retain the portal acceptance evidence separately);
-   - bounded, non-destructive OpenCode handoff for Agent 47.
+1. Retain the completed interactive evidence in
+   `docs/operations/freyja-live-acceptance.md`: written response, read-only
+   Core MCP action, Core protocol memory isolation for all five agents, and
+   the bounded Agent 47 OpenCode handoff.
 2. Agent Smith's one-recipient alert route is configured as Joe through the
    existing Cloyd Discord DM bot. The 2026-09-29 controlled delivery test was
    accepted, and no repair authority was granted. The active watchdog detects
