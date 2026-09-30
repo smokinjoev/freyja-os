@@ -23,7 +23,7 @@ operator-approved durable-memory isolation test.
 | Core MCP | LibreChat starts five per-agent Core MCP connections. The published catalog contains named Core tools; authorization is determined by the authenticated agent token, not the portal. Freyja includes read-only `home_assistant.read_state` and `home_assistant.list_states`. | initialized |
 | Named web-agent configuration | LibreChat startup log loaded Freyja, Cloyd, Benedict, Agent 47, and Jenna MCP identities with their Nexus presets | configured |
 | Discord Freyja | Iris launch agent is running; connector log reports it ready and authenticated | connected |
-| Discord Cloyd | Iris connector is ready and authenticated. Director's read-only `opencode.status` now passes through Cloyd's scoped Iris Core route; awaiting one live Discord reply for certification. | connected, certification pending |
+| Discord Cloyd | On 2026-09-29, Cloyd's live Discord DM returned the scoped Iris Core `opencode.status` fields: alias, session, idle state, working directory, and recent action. The connector is routed through Vulcan's canonical Director. | certified |
 | Agent Smith monitor | Iris monitor status and runtime-health APIs answered at `:8000/agent-runs/api/*` | reachable, no alert route certified |
 | Telegram | No live Telegram connector container was found on Atlas | not activated |
 | Signal | Signal API and connector containers are healthy, but the connector's receive loop is repeatedly rejected by the Signal API | not operational |
@@ -51,11 +51,17 @@ result, agent, and timestamp—not chat content or secrets.
 
 | Agent | Plain written reply | MCP read-only call | Memory isolation check | Outcome |
 | --- | --- | --- | --- | --- |
-| Freyja | pending | pending | pending | pending |
-| Cloyd | pending | pending | pending | pending |
-| Benedict | pending | pending | pending | pending |
-| Agent 47 | pending | pending | pending | pending |
-| JennaCide | pending | pending | pending | pending |
+| Freyja | pending | pending | Core protocol memory isolation verified | pending |
+| Cloyd | pending | pending | Core protocol memory isolation verified | Discord OpenCode status certified; LibreChat acceptance pending |
+| Benedict | pending | pending | Core protocol memory isolation verified | pending |
+| Agent 47 | pending | pending | Core protocol memory isolation verified | pending |
+| JennaCide | pending | pending | Core protocol memory isolation verified | pending |
+
+On 2026-09-29, each authenticated Iris Core MCP route wrote a temporary
+caller-owned marker, read it as its owner, was unable to read each of the other
+four markers, deleted its own marker, and confirmed it was absent. The test
+left no marker records behind. This is protocol-level isolation evidence; it
+does not substitute for the remaining portal acceptance rows.
 
 For Agent 47, add one bounded OpenCode handoff check after the plain and
 read-only checks: request a non-destructive status or repository inspection,

@@ -18,7 +18,8 @@ pass from being mistaken for production certification.
 
 - Atlas portals, Vulcan Director/Nexus/Ollama, Iris Core, per-agent MCP
   initialization, the Agent Smith monitor, and both Discord connector
-  processes have current live evidence.
+  processes have current live evidence. Cloyd's Discord DM OpenCode-status
+  path is also certified through the canonical Director and Iris Core.
 - The focused portal configuration and agent-routing suite passes: `81 passed`
   (`tests/test_librechat_pass_through.py` and `tests/test_health.py`).
 - A full local suite run currently reports `1856 passed, 32 failed, 6 skipped`.
@@ -34,7 +35,8 @@ pass from being mistaken for production certification.
    - written response;
    - read-only Core MCP action;
    - isolated-memory check for Freyja, Cloyd, Benedict, Agent 47, and
-     JennaCide;
+     JennaCide (the authenticated Core protocol check passed on 2026-09-29;
+     retain the portal acceptance evidence separately);
    - bounded, non-destructive OpenCode handoff for Agent 47.
 2. Choose and test Agent Smith's one-recipient alert route. The recommended
    initial route is Cloyd through the already-running Discord DM connector.
