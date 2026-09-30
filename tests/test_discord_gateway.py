@@ -154,6 +154,51 @@ async def test_discord_gateway_routes_approved_dm_to_bound_agent() -> None:
 
 
 @pytest.mark.asyncio
+async def test_discord_gateway_includes_only_immediate_same_dm_exchange_for_followup() -> None:
+    captured: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"text": "OpenCode status\nState: idle"}
+
+    class FakeClient:
+        async def post(self, url, *, json, headers):
+            captured.append(json)
+            return FakeResponse()
+
+    gateway = DiscordGateway(_settings(), client=FakeClient())
+    first = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="context-1",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="Use your read-only OpenCode status tool.",
+        )
+    )
+    followup = await gateway.handle_message(
+        DiscordInboundMessage(
+            message_id="context-2",
+            author_id="100",
+            channel_id="dm-channel",
+            channel_type="dm",
+            content="go ahead",
+        )
+    )
+
+    assert first is not None
+    assert followup is not None
+    assert captured[0]["text"] == "Use your read-only OpenCode status tool."
+    assert "Immediate prior exchange in this same authorized Discord DM:" in captured[1]["text"]
+    assert "User: Use your read-only OpenCode status tool." in captured[1]["text"]
+    assert "Agent: OpenCode status" in captured[1]["text"]
+    assert captured[1]["text"].endswith("Current user message: go ahead")
+
+
+@pytest.mark.asyncio
 async def test_discord_gateway_downloads_pdf_attachment_for_director() -> None:
     captured = {}
 

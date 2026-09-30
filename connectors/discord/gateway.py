@@ -50,6 +50,8 @@ SUPPORTED_ATTACHMENT_MIME_TYPES = frozenset(
 MAX_ROUTED_IMAGE_SIDE = 1280
 MAX_ROUTED_IMAGE_BYTES = 1_500_000
 RECENT_ATTACHMENT_CONTEXT_SECONDS = 20 * 60
+RECENT_CONVERSATION_CONTEXT_SECONDS = 20 * 60
+RECENT_CONVERSATION_CONTEXT_MAX_CHARS = 4_000
 DIRECTOR_ROUTE_TIMEOUT_SECONDS = 300
 
 
@@ -85,6 +87,13 @@ class RecentAttachmentContext:
     created_at: datetime
 
 
+@dataclass(frozen=True)
+class RecentConversationContext:
+    user_text: str
+    agent_text: str
+    created_at: datetime
+
+
 class DiscordAttachmentError(Exception):
     pass
 
@@ -104,6 +113,10 @@ class DiscordGateway:
         self._director_client = director_client
         self._bindings = {binding.discord_user_id: binding.agent_id for binding in settings.user_agent_bindings}
         self._recent_attachments_by_conversation: dict[str, RecentAttachmentContext] = {}
+        # This is deliberately volatile, bounded context for one DM thread.  It
+        # lets a plain follow-up ("go ahead") refer to the immediately prior
+        # request without creating another memory store or crossing agents.
+        self._recent_conversation_by_conversation: dict[str, RecentConversationContext] = {}
 
     def validate_startup(self) -> list[str]:
         failures: list[str] = []
@@ -210,6 +223,11 @@ class DiscordGateway:
             ),
             metadata_label="Trusted Discord metadata: attachment(s)",
         )
+        prompt_text = self._conversation_prompt(
+            conversation_id=conversation_id,
+            current_text=prompt_text,
+            now=now,
+        )
         request = normalized.to_canonical_request(
             authorized_sender=identity,
             resolved_user_id=agent.person_id,
@@ -266,6 +284,11 @@ class DiscordGateway:
         if not reply:
             return None
         reply = _discord_safe_reply(reply, has_attachments=bool(attachments))
+        self._recent_conversation_by_conversation[conversation_id] = RecentConversationContext(
+            user_text=text,
+            agent_text=reply,
+            created_at=now,
+        )
         return DiscordOutboundReply(
             text=reply,
             message_reference_id=message.message_id,
@@ -349,6 +372,24 @@ class DiscordGateway:
         if any(attachment.is_document or attachment.is_image for attachment in context.attachments):
             return context.attachments
         return []
+
+    def _conversation_prompt(self, *, conversation_id: str, current_text: str, now: datetime) -> str:
+        """Add one bounded prior exchange for natural same-DM follow-ups."""
+        context = self._recent_conversation_by_conversation.get(conversation_id)
+        if context is None:
+            return current_text
+        age_seconds = (now - context.created_at).total_seconds()
+        if age_seconds > RECENT_CONVERSATION_CONTEXT_SECONDS:
+            self._recent_conversation_by_conversation.pop(conversation_id, None)
+            return current_text
+        prior_user = context.user_text[-RECENT_CONVERSATION_CONTEXT_MAX_CHARS:]
+        prior_agent = context.agent_text[-RECENT_CONVERSATION_CONTEXT_MAX_CHARS:]
+        return (
+            "Immediate prior exchange in this same authorized Discord DM:\n"
+            f"User: {prior_user}\n"
+            f"Agent: {prior_agent}\n\n"
+            f"Current user message: {current_text}"
+        )
 
 
 def _agent_by_id(agent_id: str):
