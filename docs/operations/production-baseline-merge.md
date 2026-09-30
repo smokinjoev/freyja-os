@@ -21,8 +21,9 @@ pass from being mistaken for production certification.
   processes have current live evidence. Cloyd's Discord DM OpenCode-status
   path and Freyja's Discord read-only Home Assistant path are certified through
   the canonical Director and Iris Core.
-- The focused portal configuration and agent-routing suite passes: `81 passed`
-  (`tests/test_librechat_pass_through.py` and `tests/test_health.py`).
+- The current focused platform suite passes: `107 passed`
+  (Home Assistant/Core MCP, Smith watchdog, Discord, and OpenCode runtime
+  coverage), followed by the 10-check live readiness baseline.
 - A full local suite run on 2026-09-29 currently reports `1859 passed, 32 failed, 6 skipped`.
   The failures are primarily legacy Open WebUI evidence expectations and
   macOS-specific launch-agent/tmux paths evaluated on Linux. They must be
