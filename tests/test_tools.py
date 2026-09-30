@@ -10,7 +10,7 @@ from freyja.config import settings
 from freyja.main import app
 from freyja.memory.models import AppendMessageRequest, CreateConversationRequest
 from freyja.memory.store import MemoryStore, set_store
-from freyja.tools.builtin import register_builtin_tools
+from freyja.tools.builtin import _BUILTIN_TOOL_NAMES, register_builtin_tools
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLevel
 from freyja.tools.registry import DisabledToolRegistry, ToolRegistry, get_registry, set_registry
 
@@ -82,45 +82,7 @@ def test_discovery(registry: ToolRegistry) -> None:
     assert registry.list_tools() == []
     register_builtin_tools(registry)
     names = {t.name for t in registry.list_tools()}
-    assert names == {
-        "system_health",
-        "list_models",
-        "recall_conversation",
-        "get_weather",
-        "event_weather",
-        "web_search",
-        "web_fetch",
-        "macagent_health",
-        "apple_contacts_list",
-        "apple_messages_recent",
-        "apple_messages_send",
-        "apple_mailbox_counts",
-        "apple_music_current_track",
-        "apple_browser_front_tab",
-        "apple_shortcuts_run",
-        "hostname",
-        "current_time",
-        "disk_usage",
-        "director_health",
-        "repository_status",
-        "calendar_today_schedule",
-        "calendar_tomorrow_schedule",
-        "calendar_free_busy",
-        "calendar_list_events",
-        "calendar_search_events",
-        "calendar_create_event",
-        "calendar_modify_event",
-        "calendar_delete_event",
-        "calendar_find_time",
-        "calendar_move_event_if_conflict",
-        "identity_resolution",
-        "identity_relationships",
-        "home_assistant_read_state",
-        "home_assistant_list_states",
-        "home_assistant_inventory_changes",
-        "home_assistant_control_state",
-        "memory_recall_shared",
-    }
+    assert names == set(_BUILTIN_TOOL_NAMES)
 
 
 def test_disable_tool_rejects_execution(registry: ToolRegistry) -> None:
@@ -404,7 +366,7 @@ def test_api_list_tools(client: TestClient, registry: ToolRegistry) -> None:
     response = client.get("/tools")
     assert response.status_code == 200
     tools = response.json()["tools"]
-    assert len(tools) == 37
+    assert {tool["name"] for tool in tools} == set(_BUILTIN_TOOL_NAMES)
 
 
 def test_api_get_tool(client: TestClient, registry: ToolRegistry) -> None:

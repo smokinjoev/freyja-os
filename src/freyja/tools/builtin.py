@@ -387,6 +387,7 @@ _BUILTIN_TOOL_NAMES = (
     "apple_messages_send",
     "apple_mailbox_counts",
     "apple_music_current_track",
+    "apple_music_play_query",
     "apple_browser_front_tab",
     "apple_shortcuts_run",
     "hostname",
@@ -421,6 +422,11 @@ _BUILTIN_TOOL_NAMES = (
     "cloyd_smith_status",
     "cloyd_smith_record",
     "cloyd_smith_stop",
+    "cloyd_smith_retry",
+    "cloyd_smith_mark_done",
+    "cloyd_smith_mark_blocked",
+    "cloyd_smith_follow_up",
+    "cloyd_smith_replace",
 )
 
 
