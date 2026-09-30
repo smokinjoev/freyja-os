@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime as _datetime
 import json
+import logging
 import os
 import re
 import time
@@ -40,6 +41,9 @@ from freyja.semantic_routes import SemanticRoute, capability_for_route, route_fo
 from freyja.tools.models import ToolDefinition, ToolExecutionRequest
 from freyja.tools.registry import ToolRegistry
 from freyja.tools.weather import classify_weather_request
+
+
+logger = logging.getLogger(__name__)
 
 
 _HOME_ASSISTANT_FOCUS_DEFAULTS: dict[str, dict[str, Any]] = {
@@ -186,6 +190,16 @@ class AgentRuntimeV3:
 
         executable_tools = [tool_id for tool_id in selected_tools if tool_id not in _MUTATION_CAPABILITIES or not follow_up_questions]
         tool_results = await self._run_tool_loop(agent, handoff, selected_tools, executable_tools, steps, audit_events)
+        if handoff.channel == "discord" and ("opencode.status" in selected_tools or "coding.execute" in selected_tools):
+            logger.info(
+                "Discord coding-route trace agent=%s selected=%s results=%s",
+                agent.agent_id,
+                selected_tools,
+                [
+                    {"capability": item.get("capability_id"), "success": item.get("success"), "error": item.get("error_code")}
+                    for item in tool_results
+                ],
+            )
 
         deterministic_response = None if follow_up_questions else (
             _opencode_status_response(tool_results) or _home_assistant_response(handoff.prompt, tool_results)

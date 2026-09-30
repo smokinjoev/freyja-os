@@ -50,8 +50,10 @@ pass from being mistaken for production certification.
    python3 scripts/freyja-live-readiness.py
    ```
 
-   The full suite must pass, or every remaining failure must have an approved,
-   documented exclusion with a matching-host verification plan.
+  The full suite must pass, or every remaining failure must have an approved,
+  documented exclusion with a matching-host verification plan.
+  See `docs/operations/production-baseline-test-triage.md` for the current
+  unapproved triage record.
 5. Review the diff against `origin/main`, confirm no secret files are staged,
    and obtain the operator's explicit merge approval.
 
