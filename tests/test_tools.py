@@ -802,6 +802,36 @@ def test_home_assistant_list_uses_iris_core_when_director_has_no_ha_credentials(
     assert entities == [{"entity_id": "light.kitchen", "domain": "light", "state": "off"}]
 
 
+def test_home_assistant_list_includes_authoritative_state_counts(
+    registry: ToolRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "home_assistant_base_url", "")
+    monkeypatch.setattr(settings, "home_assistant_access_token", "")
+    monkeypatch.setattr(settings, "home_assistant_core_base_url", "")
+    monkeypatch.setattr(
+        settings,
+        "home_assistant_state_fixture",
+        '{"light.a":"on","light.b":"off","light.c":"unavailable"}',
+    )
+    register_builtin_tools(registry)
+    result = asyncio_run(
+        registry.execute(
+            ToolExecutionRequest(
+                tool_name="home_assistant_list_states",
+                arguments={"domain": "light"},
+                metadata={
+                    "director_authorized": True,
+                    "memory_principal": {"client_type": "imessage", "client_subject": "family-member:abc"},
+                    "person": {"person_id": "joe"},
+                },
+            )
+        )
+    )
+    assert result.success is True
+    assert result.output["state_counts"] == {"off": 1, "on": 1, "unavailable": 1}
+
+
 @pytest.mark.parametrize(
     ("person_id", "permission"),
     [

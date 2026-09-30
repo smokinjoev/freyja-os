@@ -53,7 +53,7 @@ result, agent, and timestamp—not chat content or secrets.
 
 | Agent | Plain written reply | MCP read-only call | Memory isolation check | Outcome |
 | --- | --- | --- | --- | --- |
-| Freyja | pending | pending | Core protocol memory isolation verified | pending |
+| Freyja | On 2026-09-29, LibreChat returned the current Atlanta light inventory | On 2026-09-29, scoped `home_assistant.list_states` returned 29 live entities with no control or memory write. Core now returns authoritative `state_counts` alongside entities to prevent prose-count drift. | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
 | Cloyd | On 2026-09-29, LibreChat returned an OpenCode status response | On 2026-09-29, scoped `opencode.status` returned alias `freyja-core-coder`, state `idle`, and working directory `/Users/freyja/freyja-os`; no mutation requested | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
 | Benedict | On 2026-09-29, LibreChat returned a scoped Core status response | On 2026-09-29, used scoped `status.check` to report `freyja-core`, `iris.lan`, healthy; no mutation requested | Core protocol memory isolation verified | LibreChat written and Core MCP read-only acceptance certified |
 | Agent 47 | On 2026-09-29, LibreChat returned a scoped OpenCode status response | On 2026-09-29, scoped `opencode.status` returned alias `freyja-core-coder`, state `idle`, and working directory `/Users/freyja/freyja-os`; no mutation requested | Core protocol memory isolation verified | LibreChat written and bounded OpenCode handoff acceptance certified |

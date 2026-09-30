@@ -254,10 +254,15 @@ async def _read_state(request: ToolExecutionRequest) -> dict[str, Any]:
 async def _list_states(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     live_data_available, entities, source = await _current_state_summaries(args)
+    state_counts: dict[str, int] = {}
+    for entity in entities:
+        state = str(entity.get("state") or "unknown").lower()
+        state_counts[state] = state_counts.get(state, 0) + 1
     return {
         "live_data_available": live_data_available,
         "location": settings.home_assistant_location_name,
         "count": len(entities),
+        "state_counts": dict(sorted(state_counts.items())),
         "entities": entities,
         "source": source,
     }
@@ -402,6 +407,7 @@ def register_home_assistant_tools(registry: ToolRegistry) -> None:
                     "live_data_available": {"type": "boolean"},
                     "location": {"type": "string"},
                     "count": {"type": "integer"},
+                    "state_counts": {"type": "object"},
                     "entities": {"type": "array"},
                     "source": {"type": "string"},
                 },
