@@ -10,6 +10,7 @@ agents:
       - browser.control
       - calendar.read
       - calendar.write
+      - documents.process
       - email.read
       - home-assistant.control
       - home-assistant.read
@@ -32,6 +33,7 @@ agents:
       - macagent.apple
       - messaging.send
       - music.control
+      - opencode.status
       - vision.inspect
   - id: smith
     display_name: Agent Smith
@@ -79,6 +81,7 @@ agents:
       - email.read
       - messaging.send
       - music.control
+      - opencode.status
       - vision.inspect
   - id: jennacide
     display_name: JennaCide

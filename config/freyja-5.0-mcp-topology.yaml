@@ -44,6 +44,15 @@ servers:
       - vision.inspect
     consumers: scoped_agent_tool_grants
     egress: local_processing
+  - id: iris-opencode-mcp
+    host: iris
+    protocol: mcp
+    role: managed-opencode-session-status-server
+    status: live_read_only
+    exposes:
+      - opencode.status
+    consumers: scoped_agent_tool_grants
+    egress: local_iris_service
 non_mcp_boundaries:
   - id: vulcan-nexus
     host: vulcan

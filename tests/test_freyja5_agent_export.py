@@ -34,7 +34,7 @@ def test_freyja5_agent_export_includes_agents_routes_and_mcp_boundaries() -> Non
     agents = {agent["id"]: agent for agent in export["agents"]}
 
     assert set(agents) == {"freyja", "cloyd-gibbler", "smith", "benedict", "benedict-paralegal", "agent-47", "jennacide"}
-    assert agents["freyja"]["mcp_tool_count"] == 11
+    assert agents["freyja"]["mcp_tool_count"] == 12
     assert agents["benedict-paralegal"]["cloud_egress_policy"] == "paralegal-local-only"
     assert agents["benedict-paralegal"]["mcp_tool_grants"] == [
         "browser.control",
@@ -49,6 +49,7 @@ def test_freyja5_agent_export_includes_agents_routes_and_mcp_boundaries() -> Non
         "iris-apple-mcp",
         "atlas-household-mcp",
         "atlas-media-mcp",
+        "iris-opencode-mcp",
     ]
     assert export["mcp"]["default_agent_mcp_servers"] is False
     assert export["mcp"]["agent_consumption"]["freyja"] == "scoped_agent_tool_grants"

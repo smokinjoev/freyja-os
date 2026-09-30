@@ -285,8 +285,9 @@ def test_freyja5_readiness_mcp_evidence_is_compact_topology_view() -> None:
         "iris-apple-mcp",
         "atlas-household-mcp",
         "atlas-media-mcp",
+        "iris-opencode-mcp",
     ]
-    assert evidence["tool_count"] == 12
+    assert evidence["tool_count"] == 13
 
 
 def test_freyja5_readiness_certification_evidence_is_compact_target_view() -> None:
