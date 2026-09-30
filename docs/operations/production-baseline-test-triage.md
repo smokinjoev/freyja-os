@@ -14,6 +14,18 @@ resolved or explicitly accepted with matching-host evidence.
 | `test_freyja_channels_atlas_deployment.py` | 2 | The verifier expects an Atlas readiness artifact produced from private channel configuration. Telegram and Signal are intentionally not enabled or certified. | Keep channels out of the release claim; either add a non-secret, clearly pending fixture or run an approved Atlas readiness check without activating either channel. |
 | `test_freyja5_architecture.py::test_freyja5_certification_provider_exercises_gateway_runtime` | 1 | Its local provider is intentionally configured with inference disabled, so it cannot produce a written answer. | Replace with a deterministic non-inference architecture assertion, or run a bounded live Nexus smoke and preserve its trace. |
 
+### Matching-host evidence
+
+On 2026-09-29, Iris ran the host-specific selection successfully:
+`21 passed` covering `test_gmail_launchagent.py`,
+`test_macagent_launchagent.py`,
+`test_macagent.py::test_macagent_osascript_timeout_reports_concrete_error`,
+and `test_openwebui_terminal_bridge.py`. This confirms the eight Vulcan
+failures in those files are host-mismatch results, not a failure of the
+deployed macOS runtime. They remain excluded from neither the full-suite
+count nor the production gate; the final release evidence must retain this
+matching-host result.
+
 ## Legacy evidence/report chain
 
 The following 21 failures belong to an older Open WebUI home-agent bundle,
