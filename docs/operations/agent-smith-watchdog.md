@@ -6,7 +6,10 @@ chat assistant and is disabled by default in the policy configuration.
 ## Current boundary
 
 - Read-only diagnostics and status work are permitted.
-- Source configuration: `config/agent-smith-policy.yaml`.
+- Service-watchdog configuration: `config/agent-smith-watchdog.yaml`.
+- Repository-agent policy: `config/agent-smith-policy.yaml`. This is a
+  separate, disabled-by-default policy for bounded repository work; it does
+  not authorize the service watchdog to repair infrastructure.
 - The policy denies credential access, arbitrary shell execution, arbitrary
   filesystem writes, package installation, service termination, and destructive
   Git actions.

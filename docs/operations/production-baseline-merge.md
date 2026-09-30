@@ -6,7 +6,7 @@ pass from being mistaken for production certification.
 
 ## Current branch state (2026-09-29)
 
-- `feature/cloyd-upstream-features` is clean and is 32 commits ahead of
+- `feature/cloyd-upstream-features` is clean and is 77 commits ahead of
   `origin/main`, with no commits unique to `origin/main`.
 - The no-secret operational baseline passes with:
 
