@@ -356,11 +356,12 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         "home_machine": "atlas",
         "private_memory_scope": "agent:freyja",
         "shared_memory_scopes": ["family", "system"],
-        "tool_grant_count": 15,
+        "tool_grant_count": 17,
         "mcp_tool_grants": [
             "browser.control",
             "calendar.read",
             "calendar.write",
+            "documents.process",
             "email.read",
             "home-assistant.control",
             "home-assistant.read",
@@ -370,7 +371,7 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
             "scheduling.create",
             "vision.inspect",
         ],
-        "mcp_tool_count": 11,
+        "mcp_tool_count": 12,
         "cloud_egress_policy": "household-default",
     }
     assert agent_evidence["benedict-paralegal"]["owner"] == "enclave:paralegal"
@@ -471,9 +472,19 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
             "consumers": "scoped_agent_tool_grants",
             "egress": "local_processing",
         },
+        {
+            "id": "iris-opencode-mcp",
+            "host": "iris",
+            "protocol": "mcp",
+            "role": "managed-opencode-session-status-server",
+            "status": "live_read_only",
+            "exposes": ["opencode.status"],
+            "consumers": "scoped_agent_tool_grants",
+            "egress": "local_iris_service",
+        },
     ]
     assert expected_mcp_topology["mcp_hosts"] == ["atlas", "iris"]
-    assert expected_mcp_topology["mcp_tool_count"] == 12
+    assert expected_mcp_topology["mcp_tool_count"] == 13
     assert expected_mcp_topology["vulcan_protocol"] == "openai-compatible"
     assert expected_mcp_topology["gateway_policy"]["no_agent_reasoning"] is True
     assert expected_mcp_topology["gateway_policy"]["no_physical_model_selection"] is True
@@ -514,8 +525,8 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         "raw_payload_included": False,
         "requested_route": "vision",
         "vision_route_selected": True,
-        "actual_model": "@preset/freyja-vision-docs",
-        "actual_runtime": "nexus",
+            "actual_model": "qwen3.8:27b",
+            "actual_runtime": "ollama",
     }
     enclave_case = next(case for case in report.cases if case.name == "f-benedict-enclave-local-only")
     enclave_tools = enclave_case.runtime_context["rev2_evidence"]["freyja5_tools"]

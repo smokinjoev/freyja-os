@@ -10,7 +10,7 @@
         <string>/Users/freyja/freyja-os/.venv/bin/python</string>
         <string>/Users/freyja/freyja-os/scripts/cloyd-smith-loop-daemon.py</string>
         <string>--interval</string>
-        <string>15</string>
+        <string>10</string>
     </array>
 
     <key>EnvironmentVariables</key>
@@ -28,7 +28,7 @@
         <key>CLOYD_SMITH_LOOP_DATABASE_PATH</key>
         <string>/Users/freyja/.local/state/freyja/cloyd-smith-loop.db</string>
         <key>OPENCODE_REQUEST_TIMEOUT_SECONDS</key>
-        <string>90</string>
+        <string>300</string>
     </dict>
 
     <key>WorkingDirectory</key>

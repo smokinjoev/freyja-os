@@ -89,10 +89,11 @@ def test_cloyd_export_delegates_coding() -> None:
 
     assert cloyd["freyja"]["model_profile"] == "strong_reasoning"
     assert "planning brain" in cloyd["params"]["system"]
-    assert "free-running Iris Qwen Code/OpenCode session" in cloyd["params"]["system"]
-    assert "send Qwen Code a precise task prompt" in cloyd["params"]["system"]
-    assert "cloyd_smith.replace" in cloyd["params"]["system"]
+    assert "single active Iris OpenCode worker" in cloyd["params"]["system"]
+    assert "durable Cloyd-Smith loop" in cloyd["params"]["system"]
+    assert "status telemetry is unknown" in cloyd["params"]["system"]
     assert cloyd["freyja"]["tools"]["coding"] == [
+        "opencode.run",
         "opencode.start",
         "opencode.send",
         "opencode.shell",

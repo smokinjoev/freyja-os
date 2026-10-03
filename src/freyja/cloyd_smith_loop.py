@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
 import uuid
+import hashlib
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -16,9 +18,15 @@ from freyja.config import settings
 class CloydSmithJobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
+    UNKNOWN = "unknown"
+    WAITING_FOR_INPUT = "waiting_for_input"
+    VERIFYING = "verifying"
+    VERIFIED = "verified"
+    NEEDS_ATTENTION = "needs_attention"
     NEEDS_REVIEW = "needs_review"
     BLOCKED = "blocked"
     DONE = "done"
+    STOPPING = "stopping"
     STOPPED = "stopped"
     STALE = "stale"
 
@@ -28,7 +36,9 @@ class CloydSmithJobCreate(BaseModel):
 
     objective: str = Field(min_length=1)
     smith_alias: str = "freyja-code"
+    scope: str = ""
     acceptance_criteria: list[str] = Field(default_factory=list)
+    check_commands: list[str] = Field(default_factory=list)
     current_prompt: str = Field(min_length=1)
     created_by: str = "joe"
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -38,9 +48,14 @@ class CloydSmithJobUpdate(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     status: CloydSmithJobStatus | None = None
+    phase: str | None = None
     current_prompt: str | None = None
     next_action: str | None = None
+    session_id: str | None = None
+    submission_id: str | None = None
+    stop_intent: str | None = None
     last_evidence: dict[str, Any] | None = None
+    revision_evidence: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
     error: str | None = None
 
@@ -49,13 +64,20 @@ class CloydSmithJob(BaseModel):
     job_id: str
     objective: str
     smith_alias: str
+    scope: str
     acceptance_criteria: list[str]
+    check_commands: list[str]
     current_prompt: str
     status: CloydSmithJobStatus
+    phase: str
     created_by: str
     metadata: dict[str, Any]
     next_action: str | None = None
+    session_id: str | None = None
+    submission_id: str | None = None
+    stop_intent: str | None = None
     last_evidence: dict[str, Any] | None = None
+    revision_evidence: dict[str, Any] | None = None
     error: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -166,9 +188,12 @@ class CloydSmithJobStore:
             job_id=f"freyja52-{uuid.uuid4().hex[:12]}",
             objective=request.objective,
             smith_alias=request.smith_alias,
+            scope=request.scope,
             acceptance_criteria=request.acceptance_criteria,
+            check_commands=request.check_commands,
             current_prompt=request.current_prompt,
             status=CloydSmithJobStatus.QUEUED,
+            phase="queued",
             created_by=request.created_by,
             metadata=request.metadata,
             next_action="send_to_smith",
@@ -179,12 +204,14 @@ class CloydSmithJobStore:
             conn.execute(
                 """
                 INSERT INTO cloyd_smith_jobs (
-                    job_id, objective, smith_alias, acceptance_criteria_json,
-                    current_prompt, status, created_by, metadata_json,
-                    next_action, last_evidence_json, error,
+                    job_id, objective, smith_alias, scope,
+                    acceptance_criteria_json, check_commands_json,
+                    current_prompt, status, phase, created_by, metadata_json,
+                    next_action, session_id, submission_id, stop_intent,
+                    last_evidence_json, revision_evidence_json, error,
                     created_at, updated_at, completed_at
                 )
-                VALUES (?, ?, ?, json(?), ?, ?, ?, json(?), ?, json(?), ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, json(?), ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?)
                 """,
                 _row_values(job),
             )
@@ -202,14 +229,19 @@ class CloydSmithJobStore:
             rows = conn.execute(
                 """
                 SELECT * FROM cloyd_smith_jobs
-                WHERE status IN (?, ?, ?, ?)
+                WHERE status IN (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ORDER BY created_at ASC, job_id ASC
                 LIMIT ?
                 """,
                 (
                     CloydSmithJobStatus.QUEUED.value,
                     CloydSmithJobStatus.RUNNING.value,
+                    CloydSmithJobStatus.UNKNOWN.value,
+                    CloydSmithJobStatus.WAITING_FOR_INPUT.value,
+                    CloydSmithJobStatus.VERIFYING.value,
+                    CloydSmithJobStatus.NEEDS_ATTENTION.value,
                     CloydSmithJobStatus.NEEDS_REVIEW.value,
+                    CloydSmithJobStatus.STOPPING.value,
                     CloydSmithJobStatus.STALE.value,
                     max(1, min(limit, 500)),
                 ),
@@ -221,11 +253,12 @@ class CloydSmithJobStore:
             rows = conn.execute(
                 """
                 SELECT * FROM cloyd_smith_jobs
-                WHERE status IN (?, ?, ?)
+                WHERE status IN (?, ?, ?, ?)
                 ORDER BY completed_at DESC, updated_at DESC
                 LIMIT ?
                 """,
                 (
+                    CloydSmithJobStatus.VERIFIED.value,
                     CloydSmithJobStatus.DONE.value,
                     CloydSmithJobStatus.BLOCKED.value,
                     CloydSmithJobStatus.STOPPED.value,
@@ -241,6 +274,7 @@ class CloydSmithJobStore:
         if status in {
             CloydSmithJobStatus.BLOCKED,
             CloydSmithJobStatus.DONE,
+            CloydSmithJobStatus.VERIFIED,
             CloydSmithJobStatus.STOPPED,
             CloydSmithJobStatus.STALE,
         }:
@@ -248,6 +282,7 @@ class CloydSmithJobStore:
         elif current.status in {
             CloydSmithJobStatus.BLOCKED,
             CloydSmithJobStatus.DONE,
+            CloydSmithJobStatus.VERIFIED,
             CloydSmithJobStatus.STOPPED,
             CloydSmithJobStatus.STALE,
         }:
@@ -255,9 +290,14 @@ class CloydSmithJobStore:
         updated = current.model_copy(
             update={
                 "status": status,
+                "phase": update.phase if update.phase is not None else current.phase,
                 "current_prompt": update.current_prompt if update.current_prompt is not None else current.current_prompt,
                 "next_action": update.next_action if update.next_action is not None else current.next_action,
+                "session_id": update.session_id if update.session_id is not None else current.session_id,
+                "submission_id": update.submission_id if update.submission_id is not None else current.submission_id,
+                "stop_intent": update.stop_intent if update.stop_intent is not None else current.stop_intent,
                 "last_evidence": update.last_evidence if update.last_evidence is not None else current.last_evidence,
+                "revision_evidence": update.revision_evidence if update.revision_evidence is not None else current.revision_evidence,
                 "metadata": update.metadata if update.metadata is not None else current.metadata,
                 "error": update.error if update.error is not None else current.error,
                 "updated_at": datetime.now(UTC),
@@ -268,17 +308,23 @@ class CloydSmithJobStore:
             conn.execute(
                 """
                 UPDATE cloyd_smith_jobs
-                SET current_prompt = ?, status = ?, next_action = ?,
-                    last_evidence_json = json(?), metadata_json = json(?),
-                    error = ?, updated_at = ?,
+                SET current_prompt = ?, status = ?, phase = ?, next_action = ?,
+                    session_id = ?, submission_id = ?, stop_intent = ?,
+                    last_evidence_json = json(?), revision_evidence_json = json(?),
+                    metadata_json = json(?), error = ?, updated_at = ?,
                     completed_at = ?
                 WHERE job_id = ?
                 """,
                 (
                     updated.current_prompt,
                     updated.status.value,
+                    updated.phase,
                     updated.next_action,
+                    updated.session_id,
+                    updated.submission_id,
+                    updated.stop_intent,
                     json.dumps(updated.last_evidence or {}),
+                    json.dumps(updated.revision_evidence or {}),
                     json.dumps(updated.metadata),
                     updated.error,
                     _iso(updated.updated_at),
@@ -357,36 +403,38 @@ class CloydSmithJobStore:
         return (checked_at - heartbeat.updated_at).total_seconds() > heartbeat.stale_after_seconds
 
     def mark_stale_runs(self, *, now: datetime | None = None) -> list[AgentRunHeartbeat]:
-        stale: list[AgentRunHeartbeat] = []
+        warnings: list[AgentRunHeartbeat] = []
         for job in self.list_active():
             heartbeat = self.get_heartbeat(job.job_id)
             if not heartbeat or job.status != CloydSmithJobStatus.RUNNING:
                 continue
             if not self.heartbeat_is_stale(heartbeat, now=now):
                 continue
+            if heartbeat.phase == "no_activity_warning":
+                continue
             updated = heartbeat.model_copy(
                 update={
-                    "state": CloydSmithJobStatus.STALE.value,
-                    "phase": "stale",
-                    "last_action": "operator_review",
-                    "last_error": f"No meaningful progress for {heartbeat.stale_after_seconds} seconds",
+                    "state": CloydSmithJobStatus.RUNNING.value,
+                    "phase": "no_activity_warning",
+                    "last_action": "opencode_status",
+                    "last_error": f"No meaningful progress observed for {heartbeat.stale_after_seconds} seconds; warning only.",
                     "updated_at": now or datetime.now(UTC),
-                    "stop_reason": "stale_timeout",
+                    "stop_reason": None,
                 }
             )
             self.record_heartbeat(updated)
             self.update(
                 job.job_id,
                 CloydSmithJobUpdate(
-                    status=CloydSmithJobStatus.STALE,
-                    next_action="inspect_opencode_output_or_restart",
+                    status=CloydSmithJobStatus.RUNNING,
+                    next_action="continue observing; warning is not proof of failure",
                     error=updated.last_error,
                     last_evidence={"heartbeat": heartbeat_summary(updated, now=now)},
                 ),
             )
-            self.add_event(job.job_id, "run_stale", {"heartbeat": heartbeat_summary(updated, now=now)})
-            stale.append(updated)
-        return stale
+            self.add_event(job.job_id, "no_activity_warning", {"heartbeat": heartbeat_summary(updated, now=now)})
+            warnings.append(updated)
+        return warnings
 
     def status_rows(self, *, active_limit: int = 50, recent_limit: int = 10, now: datetime | None = None) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -403,13 +451,20 @@ class CloydSmithJobStore:
                     job_id TEXT PRIMARY KEY,
                     objective TEXT NOT NULL,
                     smith_alias TEXT NOT NULL,
+                    scope TEXT NOT NULL DEFAULT '',
                     acceptance_criteria_json TEXT NOT NULL DEFAULT '[]',
+                    check_commands_json TEXT NOT NULL DEFAULT '[]',
                     current_prompt TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    phase TEXT NOT NULL DEFAULT 'queued',
                     created_by TEXT NOT NULL,
                     metadata_json TEXT NOT NULL DEFAULT '{}',
                     next_action TEXT,
+                    session_id TEXT,
+                    submission_id TEXT,
+                    stop_intent TEXT,
                     last_evidence_json TEXT,
+                    revision_evidence_json TEXT,
                     error TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -417,6 +472,13 @@ class CloydSmithJobStore:
                 )
                 """
             )
+            self._ensure_column(conn, "cloyd_smith_jobs", "scope", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "cloyd_smith_jobs", "check_commands_json", "TEXT NOT NULL DEFAULT '[]'")
+            self._ensure_column(conn, "cloyd_smith_jobs", "phase", "TEXT NOT NULL DEFAULT 'queued'")
+            self._ensure_column(conn, "cloyd_smith_jobs", "session_id", "TEXT")
+            self._ensure_column(conn, "cloyd_smith_jobs", "submission_id", "TEXT")
+            self._ensure_column(conn, "cloyd_smith_jobs", "stop_intent", "TEXT")
+            self._ensure_column(conn, "cloyd_smith_jobs", "revision_evidence_json", "TEXT")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS cloyd_smith_job_events (
@@ -454,6 +516,12 @@ class CloydSmithJobStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cloyd_smith_job_events_job ON cloyd_smith_job_events(job_id, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cloyd_smith_run_heartbeats_state ON cloyd_smith_run_heartbeats(state, updated_at)")
 
+    @staticmethod
+    def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.database_path)
         conn.row_factory = sqlite3.Row
@@ -467,13 +535,20 @@ def _row_values(job: CloydSmithJob) -> tuple[object, ...]:
         job.job_id,
         job.objective,
         job.smith_alias,
+        job.scope,
         json.dumps(job.acceptance_criteria),
+        json.dumps(job.check_commands),
         job.current_prompt,
         job.status.value,
+        job.phase,
         job.created_by,
         json.dumps(job.metadata),
         job.next_action,
+        job.session_id,
+        job.submission_id,
+        job.stop_intent,
         json.dumps(job.last_evidence or {}),
+        json.dumps(job.revision_evidence or {}),
         job.error,
         _iso(job.created_at),
         _iso(job.updated_at),
@@ -505,13 +580,20 @@ def _job_from_row(row: sqlite3.Row) -> CloydSmithJob:
         job_id=row["job_id"],
         objective=row["objective"],
         smith_alias=row["smith_alias"],
+        scope=row["scope"],
         acceptance_criteria=_decode(row["acceptance_criteria_json"], []),
+        check_commands=_decode(row["check_commands_json"], []),
         current_prompt=row["current_prompt"],
         status=CloydSmithJobStatus(row["status"]),
+        phase=row["phase"],
         created_by=row["created_by"],
         metadata=_decode(row["metadata_json"], {}),
         next_action=row["next_action"],
+        session_id=row["session_id"],
+        submission_id=row["submission_id"],
+        stop_intent=row["stop_intent"],
         last_evidence=_decode(row["last_evidence_json"], {}) if row["last_evidence_json"] else None,
+        revision_evidence=_decode(row["revision_evidence_json"], {}) if row["revision_evidence_json"] else None,
         error=row["error"],
         created_at=_dt(row["created_at"]),
         updated_at=_dt(row["updated_at"]),
@@ -542,13 +624,13 @@ def heartbeat_summary(heartbeat: AgentRunHeartbeat, *, now: datetime | None = No
     checked_at = now or datetime.now(UTC)
     elapsed = int((checked_at - (heartbeat.started_at or heartbeat.updated_at)).total_seconds())
     age = int((checked_at - heartbeat.updated_at).total_seconds())
-    stale = heartbeat.state == CloydSmithJobStatus.RUNNING.value and age > heartbeat.stale_after_seconds
+    stale = False
     return {
         "job_id": heartbeat.job_id,
         "agent": heartbeat.agent,
         "alias": heartbeat.alias,
         "session_id": heartbeat.session_id,
-        "state": "stale" if stale and heartbeat.state == "running" else heartbeat.state,
+        "state": heartbeat.state,
         "phase": heartbeat.phase,
         "last_action": heartbeat.last_action,
         "last_message": heartbeat.last_message,
@@ -560,6 +642,59 @@ def heartbeat_summary(heartbeat: AgentRunHeartbeat, *, now: datetime | None = No
         "stale_after_seconds": heartbeat.stale_after_seconds,
         "is_stale": stale,
         "stop_reason": heartbeat.stop_reason,
+    }
+
+
+def capture_revision_evidence(
+    *,
+    repository: str | Path | None = None,
+    check_commands: list[str] | None = None,
+    check_results: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Bind verification evidence to HEAD plus working-tree content."""
+    repo = Path(repository or settings.repository_root).expanduser()
+
+    def git(args: list[str], *, binary: bool = False) -> str | bytes:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            check=False,
+            capture_output=True,
+            text=not binary,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr if isinstance(result.stderr, str) else result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(stderr.strip() or f"git {' '.join(args)} failed with {result.returncode}")
+        return result.stdout
+
+    head = str(git(["rev-parse", "HEAD"])).strip()
+    status = str(git(["status", "--short"]))
+    changed_files = [line[3:] for line in status.splitlines() if len(line) > 3]
+    diff_binary = git(["diff", "--binary", "HEAD"], binary=True)
+    assert isinstance(diff_binary, bytes)
+    untracked_text = str(git(["ls-files", "--others", "--exclude-standard"]))
+    untracked_files = [line for line in untracked_text.splitlines() if line.strip()]
+    untracked_hashes: dict[str, str] = {}
+    for relative in untracked_files:
+        path = repo / relative
+        if path.is_file():
+            untracked_hashes[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    content_hasher = hashlib.sha256()
+    content_hasher.update(diff_binary)
+    for relative in sorted(untracked_hashes):
+        content_hasher.update(relative.encode("utf-8"))
+        content_hasher.update(untracked_hashes[relative].encode("ascii"))
+    return {
+        "repository": str(repo),
+        "head": head,
+        "status": status,
+        "changed_files": changed_files,
+        "tracked_diff_sha256": hashlib.sha256(diff_binary).hexdigest(),
+        "untracked_file_sha256": untracked_hashes,
+        "working_tree_sha256": content_hasher.hexdigest(),
+        "check_commands": check_commands or [],
+        "check_results": check_results or [],
+        "captured_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -596,8 +731,12 @@ def job_status_summary(
     error = (hb["last_error"] if hb else "") or job.error
     elapsed_seconds = hb["elapsed_seconds"] if hb else int(((now or datetime.now(UTC)) - job.created_at).total_seconds())
     next_action = job.next_action or "inspect_recent_events"
-    if state == "stale":
+    if state == "unknown":
+        next_action = "telemetry unavailable; freeze dispatch and reconcile OpenCode before deciding outcome"
+    elif state == "stale":
         next_action = "inspect OpenCode output, then restart or stop the job"
+    elif hb and hb["phase"] == "no_activity_warning":
+        next_action = "continue observing; no-activity warning is not proof of failure"
     elif job.status == CloydSmithJobStatus.QUEUED:
         next_action = (
             "ensure the local cloyd-smith loop daemon is running"
@@ -608,6 +747,20 @@ def job_status_summary(
         next_action = job.next_action or "review Smith evidence and mark done or queue follow-up"
         if "INFERENCE_QUEUE_TIMEOUT" in last_message:
             next_action = "do not mark done; evidence is timeout-only, so send one bounded follow-up or mark blocked"
+    elif job.status == CloydSmithJobStatus.VERIFYING:
+        next_action = job.next_action or "run independent checks and bind evidence to the current revision"
+    elif job.status == CloydSmithJobStatus.VERIFIED:
+        next_action = job.next_action or "verified by independent checks; report evidence"
+    elif job.status == CloydSmithJobStatus.NEEDS_ATTENTION:
+        next_action = job.next_action or "checks failed or acceptance is unmet; repair in the same Smith session or ask for input"
+    elif job.status == CloydSmithJobStatus.WAITING_FOR_INPUT:
+        next_action = (
+            job.next_action
+            if job.next_action and job.next_action not in {"send_to_smith", "check_smith_output", "await_smith_send_result"}
+            else "operator or model input required before continuing"
+        )
+    elif job.status == CloydSmithJobStatus.STOPPING:
+        next_action = job.next_action or "confirm worker termination before allowing restart"
     elif job.status in {CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STOPPED}:
         next_action = job.next_action or "operator review required"
         if job.status == CloydSmithJobStatus.BLOCKED and job.next_action == "blocked_pending_new_prompt_or_runtime_fix":
@@ -626,6 +779,8 @@ def job_status_summary(
     retry_attempts = retry.get("attempts", 0) if isinstance(retry, dict) else 0
     follow_up = job.metadata.get("follow_up") if isinstance(job.metadata, dict) else {}
     follow_up_attempts = follow_up.get("attempts", 0) if isinstance(follow_up, dict) else 0
+    repair = job.metadata.get("repair") if isinstance(job.metadata, dict) else {}
+    repair_attempts = repair.get("attempts", 0) if isinstance(repair, dict) else 0
     runtime_reset = job.metadata.get("runtime_reset") if isinstance(job.metadata, dict) else {}
     runtime_reset_attempts = runtime_reset.get("attempts", 0) if isinstance(runtime_reset, dict) else 0
     expected_alias = expected_smith_alias(job)
@@ -634,6 +789,8 @@ def job_status_summary(
         next_action = "retry limit reached; inspect error/output and change prompt or runtime before requeueing"
     if follow_up_attempts >= 1 and job.status in {CloydSmithJobStatus.NEEDS_REVIEW, CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STALE}:
         next_action = "bounded follow-up already used; mark done only with evidence or mark blocked with reason"
+    if repair_attempts >= 2 and job.status in {CloydSmithJobStatus.NEEDS_ATTENTION, CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STALE}:
+        next_action = "repair limit reached; request operator attention"
     if alias_mismatch and job.status not in {CloydSmithJobStatus.DONE, CloydSmithJobStatus.STOPPED}:
         next_action = f"wrong Smith alias for target; reroute or create a new job with smith_alias={expected_alias}"
     suggested_prompt = ""
@@ -658,8 +815,11 @@ def job_status_summary(
         "job_id": job.job_id,
         "agent": heartbeat.agent if heartbeat else "smith",
         "alias": heartbeat.alias if heartbeat else job.smith_alias,
+        "session_id": job.session_id or (heartbeat.session_id if heartbeat else None),
+        "submission_id": job.submission_id,
         "state": state,
         "job_status": job.status.value,
+        "job_phase": job.phase,
         "phase": hb["phase"] if hb else job.status.value,
         "last_action": last_action,
         "last_message": last_message,
@@ -670,10 +830,16 @@ def job_status_summary(
         "stale_after_seconds": hb["stale_after_seconds"] if hb else None,
         "is_stale": bool(hb and hb["is_stale"]),
         "stop_reason": hb["stop_reason"] if hb else None,
+        "stop_intent": job.stop_intent,
         "objective": job.objective,
+        "scope": job.scope,
+        "acceptance_criteria": job.acceptance_criteria,
+        "check_commands": job.check_commands,
+        "revision_evidence": job.revision_evidence,
         "metadata": job.metadata,
         "retry_attempts": retry_attempts,
         "follow_up_attempts": follow_up_attempts,
+        "repair_attempts": repair_attempts,
         "runtime_reset_attempts": runtime_reset_attempts,
         "expected_alias": expected_alias,
         "alias_mismatch": alias_mismatch,
@@ -695,15 +861,31 @@ def loop_status_payload(store: CloydSmithJobStore | None = None) -> dict[str, An
     queue = {
         "queued": sum(1 for status in visible_statuses if status == "queued"),
         "running": sum(1 for status in visible_statuses if status == "running"),
+        "unknown": sum(1 for status in visible_statuses if status == "unknown"),
+        "waiting_for_input": sum(1 for status in visible_statuses if status == "waiting_for_input"),
+        "verifying": sum(1 for status in visible_statuses if status == "verifying"),
+        "verified": sum(1 for status in visible_statuses if status == "verified"),
+        "needs_attention": sum(1 for status in visible_statuses if status == "needs_attention"),
         "needs_review": sum(1 for status in visible_statuses if status == "needs_review"),
         "blocked": sum(1 for status in visible_statuses if status == "blocked"),
         "stale": sum(1 for run, status in zip(runs, visible_statuses) if status == "stale" or run.get("is_stale")),
         "done": sum(1 for status in visible_statuses if status == "done"),
+        "stopping": sum(1 for status in visible_statuses if status == "stopping"),
         "stopped": sum(1 for status in visible_statuses if status == "stopped"),
     }
-    active_count = queue["queued"] + queue["running"] + queue["needs_review"] + queue["stale"]
-    attention_count = queue["needs_review"] + queue["blocked"] + queue["stale"]
-    terminal_count = queue["done"] + queue["blocked"] + queue["stopped"]
+    active_count = (
+        queue["queued"]
+        + queue["running"]
+        + queue["unknown"]
+        + queue["waiting_for_input"]
+        + queue["verifying"]
+        + queue["needs_attention"]
+        + queue["needs_review"]
+        + queue["stale"]
+        + queue["stopping"]
+    )
+    attention_count = queue["unknown"] + queue["waiting_for_input"] + queue["needs_attention"] + queue["needs_review"] + queue["blocked"] + queue["stale"]
+    terminal_count = queue["verified"] + queue["done"] + queue["blocked"] + queue["stopped"]
     cycle = simple_loop_cycle(queue, supervisor=supervisor)
     return {
         "ok": True,
@@ -725,9 +907,15 @@ def simple_loop_cycle(queue: dict[str, int], *, supervisor: dict[str, Any] | Non
     if supervisor and not supervisor.get("ok"):
         current_step = "report_result"
         summary = "Supervisor heartbeat is not healthy; report that the loop cannot be trusted until it is restarted or inspected."
-    elif int(queue.get("blocked") or 0) or int(queue.get("stale") or 0) or int(queue.get("needs_review") or 0):
+    elif int(queue.get("unknown") or 0):
         current_step = "report_result"
-        summary = "Work reached a review, stale, or blocked outcome; report it clearly before doing more."
+        summary = "OpenCode telemetry is unknown; freeze new dispatch and reconcile the worker before deciding success or failure."
+    elif int(queue.get("needs_attention") or 0) or int(queue.get("waiting_for_input") or 0) or int(queue.get("blocked") or 0) or int(queue.get("stale") or 0) or int(queue.get("needs_review") or 0):
+        current_step = "report_result"
+        summary = "Work reached an attention, review, stale, or blocked outcome; report it clearly before doing more."
+    elif int(queue.get("verifying") or 0):
+        current_step = "finish_or_block"
+        summary = "Smith finished a turn; the controller is running independent checks before deciding outcome."
     elif int(queue.get("running") or 0):
         current_step = "do_bounded_work"
         summary = "Smith/OpenCode is working a bounded unit; the supervisor will poll, harvest output, or stop it on timeout."
@@ -791,7 +979,21 @@ def enrich_loop_status_with_runtime(payload: dict[str, Any], runtime: dict[str, 
 
 def _visible_run_status(run: dict[str, Any]) -> str:
     state = str(run.get("state") or "")
-    if state in {"running", "needs_review", "blocked", "stale", "done", "stopped", "queued"}:
+    if state in {
+        "running",
+        "unknown",
+        "waiting_for_input",
+        "verifying",
+        "verified",
+        "needs_attention",
+        "needs_review",
+        "blocked",
+        "stale",
+        "done",
+        "stopping",
+        "stopped",
+        "queued",
+    }:
         return state
     return str(run["job_status"])
 
@@ -814,6 +1016,14 @@ def agent_runs_diagnostics(runs: list[dict[str, Any]], *, supervisor: dict[str, 
                 "level": "blocked",
                 "title": "Supervisor heartbeat stale",
                 "detail": f"Cloyd-Smith loop heartbeat is {supervisor.get('status')}; restart or inspect the LaunchAgent before trusting idle queue state.",
+            }
+        )
+    if any(run.get("state") == "unknown" for run in runs):
+        diagnostics.append(
+            {
+                "level": "blocked",
+                "title": "OpenCode telemetry unknown",
+                "detail": "A running job lost trustworthy OpenCode telemetry. New dispatch should stay frozen until the session is reconciled from status/output snapshots.",
             }
         )
     alias_mismatches = [

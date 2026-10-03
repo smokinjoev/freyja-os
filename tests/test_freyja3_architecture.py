@@ -1238,6 +1238,7 @@ def test_iris_fast_is_fallback_when_vulcan_general_and_code_are_unhealthy() -> N
             "vulcan-nexus-fast",
             "vulcan-code",
             "vulcan-reason",
+            "vulcan-qwen27-chat",
         }
     ).run(handoff)
 
@@ -1519,6 +1520,7 @@ def test_rev3_1_degraded_response_names_vulcan_iris_and_cloud_policy() -> None:
             "vulcan-nexus-fast",
             "vulcan-code",
             "vulcan-reason",
+            "vulcan-qwen27-chat",
             "iris-fast",
             "approved-cloud-premium",
         }

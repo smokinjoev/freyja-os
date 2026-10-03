@@ -1,7 +1,6 @@
 # Cloyd Runtime
 
-Cloyd is Joe's technical brain. Smith is the free-running Iris Qwen Code
-programmer.
+Cloyd is Joe's technical brain. Smith is the single active Iris OpenCode worker.
 
 Runtime:
 

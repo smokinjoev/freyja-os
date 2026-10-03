@@ -967,10 +967,10 @@ def test_openai_chat_completion_freyja5_inline_image_uses_vision_route(monkeypat
     assert response.status_code == 200
     data = response.json()
     assert data["freyja"]["route"] == "vision"
-    assert data["freyja"]["endpoint"] == "vulcan-nexus-vision-docs"
+    assert data["freyja"]["endpoint"] == "vulcan-qwen27-chat"
     assert data["freyja"]["attachment_count"] == 1
     assert data["freyja"]["trace"]["requested_route"] == "vision"
-    assert data["freyja"]["trace"]["actual_model"] == "@preset/freyja-vision-docs"
+    assert data["freyja"]["trace"]["actual_model"] == "qwen3.8:27b"
 
 
 def test_openai_chat_completion_freyja5_inline_pdf_file_uses_vision_route(monkeypatch) -> None:
@@ -1004,10 +1004,10 @@ def test_openai_chat_completion_freyja5_inline_pdf_file_uses_vision_route(monkey
     assert response.status_code == 200
     data = response.json()
     assert data["freyja"]["route"] == "vision"
-    assert data["freyja"]["endpoint"] == "vulcan-nexus-vision-docs"
+    assert data["freyja"]["endpoint"] == "vulcan-qwen27-chat"
     assert data["freyja"]["attachment_count"] == 1
     assert data["freyja"]["trace"]["requested_route"] == "vision"
-    assert data["freyja"]["trace"]["actual_runtime"] == "nexus"
+    assert data["freyja"]["trace"]["actual_runtime"] == "ollama"
 
 
 def test_openai_chat_completion_freyja5_live_inference_flag_is_explicit(monkeypatch) -> None:
