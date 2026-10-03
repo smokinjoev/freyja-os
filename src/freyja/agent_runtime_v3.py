@@ -1371,8 +1371,10 @@ class AgentRuntimeV3:
             return home_response
         if inference_text:
             return inference_text
+        tool_context = f" with {', '.join(selected_tools)}" if selected_tools else ""
         return (
-            "I completed the local processing for your request, but the model did not return a usable written answer. "
+            f"{agent.display_name}: I completed the local processing for your request{tool_context}, "
+            "but the model did not return a usable written answer. "
             "Please try once more."
         )
 

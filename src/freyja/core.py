@@ -24,6 +24,7 @@ from freyja.calendar.service import parse_datetime
 from freyja.macagent import MacAgentClient
 from freyja.memory.models import MemoryPrincipal, PutSharedMemoryRequest
 from freyja.memory.store import get_store
+from freyja.opencode_feedback import OpenCodeFeedback
 from freyja.tools.calendar import get_calendar_service
 from freyja.tools.home_assistant import _list_states as _home_assistant_list_states
 from freyja.tools.home_assistant import _read_state as _home_assistant_read_state
@@ -37,6 +38,7 @@ from freyja.tools.opencode_runtime import (
 )
 
 logger = logging.getLogger(__name__)
+opencode_feedback = OpenCodeFeedback()
 
 DEFAULT_NEXUS_BASE_URL = "http://100.94.80.21:3939"
 DEFAULT_CORE_MODEL = "@preset/freyja-fast-local"
@@ -51,6 +53,7 @@ CORE_TOOL_NAMES = (
     "home_assistant.read_state",
     "home_assistant.list_states",
     "opencode.start",
+    "opencode.run",
     "opencode.stop",
     "opencode.status",
     "opencode.send",
@@ -167,9 +170,22 @@ class ToolCall:
 def create_app() -> FastAPI:
     app = FastAPI(title="Freyja Core", version="0.1.0")
 
+    @app.on_event("startup")
+    async def start_opencode_feedback() -> None:
+        opencode_feedback.start()
+
+    @app.on_event("shutdown")
+    async def stop_opencode_feedback() -> None:
+        await opencode_feedback.stop()
+
     @app.get("/health")
     async def health() -> dict[str, Any]:
         return {"ok": True, "service": "freyja-core", "nexus_base_url": _nexus_base_url()}
+
+    @app.get("/opencode/feedback")
+    async def get_opencode_feedback() -> dict[str, Any]:
+        """Small live snapshot suitable for Cloyd now and Hera later."""
+        return opencode_feedback.status()
 
     @app.get("/tools")
     async def list_core_tools() -> dict[str, Any]:
@@ -348,7 +364,31 @@ async def delete_calendar_event_tool(arguments: dict[str, Any]) -> dict[str, Any
 async def opencode_tool(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
     action = tool.split(".", 1)[1]
     action_map = {"read": "output"}
-    return await agent_control({"action": action_map.get(action, action), **arguments})
+    result = await agent_control({"action": action_map.get(action, action), **arguments})
+    if action in {"status", "read"}:
+        feedback = opencode_feedback.status()
+        # The event subscription starts fresh after a Core restart.  The
+        # authoritative session status fills that short gap so callers never
+        # see an idle dashboard while OpenCode reports a busy worker.
+        if result.get("state") == {"type": "busy"}:
+            feedback.update(
+                {
+                    "state": "working",
+                    "session": result.get("session"),
+                    "last_activity": (result.get("recent_action") or {}).get("tool") or "model working",
+                }
+            )
+        elif result.get("state") == "idle":
+            feedback.update(
+                {
+                    "state": "idle",
+                    "session": result.get("session"),
+                    "last_activity": "idle",
+                }
+            )
+            feedback.pop("reason", None)
+        result["feedback"] = feedback
+    return result
 
 
 def memory_search_tool(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -519,8 +559,32 @@ async def agent_control(arguments: dict[str, Any]) -> dict[str, Any]:
     try:
         if action == "start":
             result = await _opencode_start(req)
+        elif action == "run":
+            # One durable coding request must not rely on the coordinator
+            # remembering to call start and then send in separate turns.
+            # Always begin with an isolated session for this alias.
+            start_args = {"alias": alias, "directory": str(arguments.get("directory") or settings.repository_root)}
+            started = await _opencode_start(
+                ToolExecutionRequest(tool_name="agent_control:run:start", arguments=start_args, actor="freyja-core")
+            )
+            if not started.get("ok"):
+                result = started
+            else:
+                send_args = {**arguments, "alias": alias}
+                sent = await asyncio.to_thread(
+                    lambda: asyncio.run(
+                        _opencode_send(
+                            ToolExecutionRequest(tool_name="agent_control:run:send", arguments=send_args, actor="freyja-core")
+                        )
+                    )
+                )
+                result = {**sent, "started": started}
         elif action in {"send", "input"}:
-            result = await _opencode_send(req)
+            # OpenCode holds this request open while the model reasons and
+            # runs tools.  Its client is synchronous, so keep that wait off
+            # Core's event loop; otherwise status/feedback requests freeze
+            # for the entire coding turn.
+            result = await asyncio.to_thread(lambda: asyncio.run(_opencode_send(req)))
             if not result.get("ok") and "timed out" in str(result.get("error", "")).lower():
                 status = await _opencode_status(
                     ToolExecutionRequest(

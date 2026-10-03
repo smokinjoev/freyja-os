@@ -39,6 +39,7 @@ agents:
     display_name: Agent Smith
     owner: person:joe
     home_machine: atlas
+    aliases: [agent smith, smith, coder, freyja-coder]
     memory: [person:joe, system]
     # Smith is a bounded watchdog. Its diagnostics are internal and it does
     # not consume a general-purpose MCP capability server.

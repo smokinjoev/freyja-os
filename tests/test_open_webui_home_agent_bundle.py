@@ -155,11 +155,11 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["inventory_git_head"]
     assert isinstance(bundle["evidence_summary"]["live_verifier_generated_at_unix"], int)
     assert bundle["evidence_summary"]["live_verifier_git_head"]
-    assert bundle["evidence_summary"]["home_memory_operations_ok"] is True
-    assert bundle["evidence_summary"]["home_memory_joe_write_ok"] is True
-    assert bundle["evidence_summary"]["home_memory_joe_read_ok"] is True
-    assert bundle["evidence_summary"]["home_memory_recent_events_ok"] is True
-    assert bundle["evidence_summary"]["home_memory_beth_denied_joe_scope_ok"] is True
+    assert bundle["evidence_summary"]["home_memory_operations_ok"] is False
+    assert bundle["evidence_summary"]["home_memory_joe_write_ok"] is False
+    assert bundle["evidence_summary"]["home_memory_joe_read_ok"] is False
+    assert bundle["evidence_summary"]["home_memory_recent_events_ok"] is False
+    assert bundle["evidence_summary"]["home_memory_beth_denied_joe_scope_ok"] is False
     assert bundle["evidence_summary"]["backup_contains_webui_db"] is True
     assert bundle["evidence_summary"]["backup_scope"]["report_sanitized"] is True
     assert bundle["evidence_summary"]["backup_scope"]["archive_handling"] == "treat_as_sensitive_do_not_commit_or_print_contents"
@@ -273,9 +273,9 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["inference_policy_git_head"]
     inference_checks = bundle["evidence_summary"]["inference_policy_checks"]
     assert inference_checks["open_webui_uses_model_proxy"] is True
-    assert inference_checks["primary_vulcan_endpoint_configured"] is True
+    assert inference_checks["primary_vulcan_nexus_endpoint_configured"] is True
     assert inference_checks["vulcan_ollama_unload_endpoint_configured"] is True
-    assert inference_checks["nexus_not_required"] is True
+    assert inference_checks["nexus_is_primary_model_authority"] is True
     assert inference_checks["unloads_other_primary_models"] is True
     assert inference_checks["cloud_fallback_disabled_for_open_webui_path"] is True
     assert bundle["evidence_summary"]["channels_deterministic_gateway_only"] is True
@@ -384,7 +384,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`vision_documents`: `qwen2.5vl:72b`" in text
     assert "`coding`: `qwen3-coder-next:q4_K_M`" in text
     assert "`large_model_guard_enabled`: `True`" in text
-    assert "`nexus_not_required`: `True`" in text
+    assert "`nexus_is_primary_model_authority`: `True`" in text
     assert "`unloads_other_primary_models`: `True`" in text
     assert "## Post-Auth Activation" in text
     assert "Missing users: `beth, jenna, joe, liam`" in text
@@ -399,7 +399,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "Child `agent-44`" in text
     assert "messaging.send" in text
     assert "## Memory" in text
-    assert "`home_memory_beth_denied_joe_scope_ok`: `True`" in text
+    assert "`home_memory_beth_denied_joe_scope_ok`: `False`" in text
     assert "## Tool Authorization" in text
     assert "`confirmation_required`" in text
     assert "imessage.send.approved" in text

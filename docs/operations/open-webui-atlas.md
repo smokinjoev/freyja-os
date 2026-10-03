@@ -123,8 +123,8 @@ Current endpoint map:
 | Atlas model proxy | `http://model-proxy:8080/v1` | Open WebUI provider boundary |
 | Vulcan Ollama native | `http://100.94.80.21:11434` | Canonical model runtime and loaded-model state |
 | Vulcan Ollama OpenAI | `http://100.94.80.21:11434/v1` | Direct OpenAI-compatible diagnostic path |
-| Vulcan Ollama TCP proxy | `http://100.94.80.21:8088/v1` | Open WebUI/model-proxy primary upstream |
-| Vulcan Nexus | `http://100.94.80.21:3939/v1` | Stable preset/routing layer over Ollama |
+| Vulcan Nexus | `http://100.94.80.21:3939/v1` | Shared OpenWebUI/Terminal Smith model authority and stable preset/routing layer over Ollama |
+| Vulcan Ollama TCP proxy | `http://100.94.80.21:8088/v1` | Legacy direct diagnostic path |
 | OpenCode | `http://100.119.235.114:4097` | Atlas coding-session surface; Basic Auth challenge is expected |
 | OpenCodex | `http://100.115.228.56:8510` | Freyja Core/Codex-style operator workflow surface on Iris |
 | Iris fallback Ollama | `http://100.115.228.56:11434/v1` | 7B-class fallback only |
@@ -140,8 +140,10 @@ Current Nexus presets:
 | `@preset/benedict-paralegal-local` | `external-ollama/qwen3.8:27b` |
 | `@preset/freyja-vision-docs` | `external-ollama/qwen2.5vl:72b` |
 
-The model proxy checks Vulcan first and Iris second. Iris fallback is only for
-7B/12B-class active models installed on Iris.
+The model proxy checks Vulcan Nexus first and Iris second. It keeps OpenWebUI's
+familiar Ollama model names visible, then aliases them to Nexus canonical IDs
+such as `external-ollama/qwen3.8:27b` before forwarding. Iris fallback is only
+for 7B/12B-class active models installed on Iris.
 
 When the Freyja 5.0 gateway is ready for live Open WebUI traffic, switch Open
 WebUI to the Atlas-local Freyja `/v1` endpoint and select `freyja-5`.

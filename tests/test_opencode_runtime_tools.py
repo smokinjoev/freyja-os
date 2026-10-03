@@ -63,15 +63,13 @@ def test_opencode_send_passes_request_timeout(tmp_path: Path, monkeypatch) -> No
     registry_path = tmp_path / "controller-sessions.json"
     registry_path.write_text('{"atlas-dashboard": {"base_url": "http://atlas.test", "session": "ses_remote", "username": "joe"}}', encoding="utf-8")
     monkeypatch.setattr("freyja.tools.opencode_runtime.settings.opencode_session_registry_path", str(registry_path))
-    captured = {}
+    calls = []
 
     def fake_request(method, path, body=None, **kwargs):
-        captured.update({"method": method, "path": path, "body": body, **kwargs})
-        return {
-            "ok": True,
-            "parts": [{"type": "text", "text": "sent"}],
-            "info": {"time": {"completed": 1}, "path": {"cwd": "/repo"}, "id": "msg_1"},
-        }
+        calls.append({"method": method, "path": path, "body": body, **kwargs})
+        if path.endswith("/prompt_async"):
+            return {"ok": True}
+        return {"ok": True, "directory": "/repo"}
 
     monkeypatch.setattr("freyja.tools.opencode_runtime._request", fake_request)
 
@@ -86,9 +84,13 @@ def test_opencode_send_passes_request_timeout(tmp_path: Path, monkeypatch) -> No
     )
 
     assert result["ok"] is True
-    assert captured["timeout_seconds"] == 45
-    assert captured["base_url"] == "http://atlas.test"
-    assert captured["body"]["parts"][0]["text"].startswith(PROMPT_GUARDRAILS)
+    assert result["state"] == "submitted"
+    submit = calls[0]
+    assert submit["path"] == "/session/ses_remote/prompt_async"
+    assert submit["timeout_seconds"] == 45
+    assert submit["base_url"] == "http://atlas.test"
+    assert submit["body"]["tools"]["task"] is False
+    assert submit["body"]["parts"][0]["text"].startswith(PROMPT_GUARDRAILS)
 
 
 def test_opencode_start_rejects_missing_directory(tmp_path: Path, monkeypatch) -> None:

@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="/Users/freyja/freyja-os"
 export PYTHONPATH="${repo_root}/src:${repo_root}"
-export FREYJA_CORE_MCP_HOST="127.0.0.1"
+export FREYJA_CORE_MCP_HOST="100.115.228.56"
 export FREYJA_CORE_MCP_PORT="8766"
 
 # Keep runtime credentials outside the repository and LaunchAgent plist.

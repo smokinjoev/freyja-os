@@ -62,16 +62,16 @@ def build_audit() -> dict[str, Any]:
             "ok": open_webui_env.get("OPENAI_API_BASE_URL") == "${OPENAI_API_BASE_URL:-http://model-proxy:8080/v1}",
         },
         {
-            "name": "primary_vulcan_endpoint_configured",
-            "ok": "100.94.80.21:8088/v1" in proxy_env.get("PRIMARY_BASE_URL", "") or "OPENAI_PRIMARY_BASE_URL=http://100.94.80.21:8088/v1" in env_example,
+            "name": "primary_vulcan_nexus_endpoint_configured",
+            "ok": "100.94.80.21:3939/v1" in proxy_env.get("PRIMARY_BASE_URL", "") or "OPENAI_PRIMARY_BASE_URL=http://100.94.80.21:3939/v1" in env_example,
         },
         {
             "name": "vulcan_ollama_unload_endpoint_configured",
             "ok": "100.94.80.21:11434" in proxy_env.get("PRIMARY_OLLAMA_BASE_URL", "") or "OPENAI_PRIMARY_OLLAMA_BASE_URL=http://100.94.80.21:11434" in env_example,
         },
         {
-            "name": "nexus_not_required",
-            "ok": "NEXUS" not in env_example and "NEXUS" not in source,
+            "name": "nexus_is_primary_model_authority",
+            "ok": "100.94.80.21:3939/v1" in proxy_env.get("PRIMARY_BASE_URL", "") and bool(proxy.PRIMARY_MODEL_ALIASES),
         },
         {
             "name": "model_profiles_complete",
@@ -85,6 +85,15 @@ def build_audit() -> dict[str, Any]:
         {
             "name": "unloads_other_primary_models",
             "ok": "_unload_other_primary_models(requested_model)" in source and "keep_alive\": 0" in source,
+        },
+        {
+            "name": "compatible_qwen_resident_pair_configured",
+            "ok": (
+                "qwen3.8:27b" in proxy_env.get("COMPATIBLE_RESIDENT_MODELS", "")
+                and "qwen3-coder-next:q4_K_M" in proxy_env.get("COMPATIBLE_RESIDENT_MODELS", "")
+                and "COMPATIBLE_RESIDENT_MODELS" in source
+            ),
+            "evidence": {"compatible_residents": sorted(proxy.COMPATIBLE_RESIDENT_MODELS)},
         },
         {
             "name": "large_model_guard_enabled",

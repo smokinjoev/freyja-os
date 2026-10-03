@@ -10,9 +10,11 @@ services:
     environment:
       APPROVED_MODELS: ${OPEN_WEBUI_APPROVED_MODELS:-qwen3.8:27b,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b}
       FALLBACK_MODELS: ${OPEN_WEBUI_FALLBACK_MODELS:-qwen2.5:7b}
-      PRIMARY_BASE_URL: ${OPENAI_PRIMARY_BASE_URL:-http://100.94.80.21:8088/v1}
+      PRIMARY_BASE_URL: ${OPENAI_PRIMARY_BASE_URL:-http://100.94.80.21:3939/v1}
       PRIMARY_API_KEY: ${OPENAI_PRIMARY_API_KEY:-not-needed}
+      PRIMARY_API_KEY_FILE: ${OPENAI_PRIMARY_API_KEY_FILE_CONTAINER:-/run/secrets/nexus-token}
       PRIMARY_OLLAMA_BASE_URL: ${OPENAI_PRIMARY_OLLAMA_BASE_URL:-http://100.94.80.21:11434}
+      PRIMARY_MODEL_ALIASES: ${OPEN_WEBUI_PRIMARY_MODEL_ALIASES:-qwen3.8:27b=external-ollama/qwen3.8:27b,qwen2.5vl:72b=external-ollama/qwen2.5vl:72b,qwen3:30b-a3b=external-ollama/qwen3:30b-a3b,qwen3-coder-next:q4_K_M=external-ollama/qwen3-coder-next:q4_K_M,gpt-oss:20b=external-ollama/gpt-oss:20b,gpt-oss:120b=external-ollama/gpt-oss:120b}
       FALLBACK_BASE_URL: ${OPENAI_FALLBACK_BASE_URL:-http://100.115.228.56:11434/v1}
       FALLBACK_API_KEY: ${OPENAI_FALLBACK_API_KEY:-not-needed}
       FREYJA5_BASE_URL: ${OPEN_WEBUI_FREYJA5_BASE_URL:-http://100.94.80.21:8512/v1}
@@ -23,6 +25,7 @@ services:
       FREYJA_CORE_MODELS: ${OPEN_WEBUI_FREYJA_CORE_MODELS:-freyja-core}
       MODEL_LIST_TIMEOUT_SECONDS: ${OPEN_WEBUI_MODEL_LIST_TIMEOUT_SECONDS:-5}
       PROBE_MODELS: ${OPEN_WEBUI_PROBE_MODELS:-gpt-oss:120b}
+      COMPATIBLE_RESIDENT_MODELS: ${OPEN_WEBUI_COMPATIBLE_RESIDENT_MODELS:-qwen3.8:27b,qwen3-coder-next:q4_K_M}
       PROBE_TIMEOUT_SECONDS: ${OPEN_WEBUI_PROBE_TIMEOUT_SECONDS:-45}
       GARBAGE_GUARD_MODELS: ${OPEN_WEBUI_GARBAGE_GUARD_MODELS:-gpt-oss:120b,gpt-oss-freyja:20b-analysis-prefill}
       GARBAGE_GUARD_MIN_TOKENS: ${OPEN_WEBUI_GARBAGE_GUARD_MIN_TOKENS:-512}
@@ -31,6 +34,7 @@ services:
       TOOL_MODEL: ${OPEN_WEBUI_TOOL_MODEL:-qwen3.8:27b}
     volumes:
       - ./model-proxy.py:/app/model-proxy.py:ro
+      - ${OPENAI_PRIMARY_API_KEY_FILE:-/dev/null}:${OPENAI_PRIMARY_API_KEY_FILE_CONTAINER:-/run/secrets/nexus-token}:ro
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main

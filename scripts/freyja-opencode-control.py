@@ -17,7 +17,7 @@ DEFAULT_URL = "http://127.0.0.1:4097"
 DEFAULT_USERNAME = "joe"
 DEFAULT_PASSWORD_FILE = Path.home() / ".local" / "state" / "freyja" / "opencode" / "server-password"
 STATE_FILE = Path.home() / ".local" / "state" / "freyja" / "opencode" / "controller-sessions.json"
-MODEL = {"providerID": "vulcan-nexus", "modelID": "@preset/freyja-coder"}
+MODEL = {"providerID": "vulcan-coder", "modelID": "qwen3-coder-next:q4_K_M"}
 PROMPT_GUARDRAILS = (
     "OpenCode safety guardrails: stay in the configured working directory; "
     "do not use nonexistent Linux paths such as /home/joe/freyja-config on this Mac; "

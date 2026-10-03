@@ -79,6 +79,7 @@ from freyja.openrouter_client import OpenRouterClient
 from freyja.open_webui_tools import open_webui_tools_router
 from freyja.router import RouteRequest, router
 from freyja.semantic_events import SemanticEventPermissionError, SemanticEventQuery, SemanticEventStore
+from freyja.terminal_smith import TerminalSmithConfig, TerminalSmithController
 from freyja.tools.api import tools_router
 from freyja.tools.builtin import register_builtin_tools, register_smith_read_only_tools, register_smith_write_pilot_tools
 from freyja.tools.cloyd_smith_loop import _opencode_status_is_busy
@@ -329,9 +330,45 @@ async def agent_runs_events() -> StreamingResponse:
             if payload != last_payload:
                 yield f"event: status\ndata: {payload}\n\n"
                 last_payload = payload
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/agent-runs/api/jobs/{job_id}/start")
+async def agent_runs_start_job(job_id: str) -> dict[str, Any]:
+    store = CloydSmithJobStore()
+    try:
+        job = store.get(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job.status != CloydSmithJobStatus.QUEUED:
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only queued jobs can be started manually.")
+    store.add_event(job_id, "operator_start_requested", {"source": "agent-runs-page", "previous_status": job.status.value})
+    updated = store.update(
+        job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.QUEUED,
+            phase="operator_start_requested",
+            next_action="send_to_smith",
+            last_evidence={"operator_action": "start_requested"},
+            error="",
+        ),
+    )
+    store.record_heartbeat(
+        AgentRunHeartbeat(
+            job_id=job_id,
+            agent="smith",
+            alias=job.smith_alias,
+            session_id=job.session_id,
+            state="queued",
+            phase="operator_start_requested",
+            last_action="operator_start",
+            last_message="Manual Start requested from Agent Runs monitor; daemon will dispatch when worker is free.",
+            working_directory="",
+        )
+    )
+    return {"ok": True, "action": "start", "job": updated.model_dump(mode="json")}
 
 
 @app.post("/agent-runs/api/jobs/{job_id}/retry")
@@ -403,6 +440,8 @@ async def agent_runs_retry_job(job_id: str) -> dict[str, Any]:
         job_id,
         CloydSmithJobUpdate(
             status=CloydSmithJobStatus.QUEUED,
+            phase="operator_requeued",
+            submission_id="",
             next_action="send_to_smith",
             last_evidence={"operator_action": "retry", "attempt": attempts, "runtime": runtime},
             metadata=metadata,
@@ -576,7 +615,9 @@ async def agent_runs_follow_up_job(job_id: str, request: AgentRunFollowUpRequest
         job_id,
         CloydSmithJobUpdate(
             status=CloydSmithJobStatus.QUEUED,
+            phase="operator_follow_up_queued",
             current_prompt=follow_up_prompt,
+            submission_id="",
             next_action="send_to_smith",
             last_evidence={"operator_action": "follow_up", "attempt": attempts},
             metadata=metadata,
@@ -788,15 +829,18 @@ async def agent_runs_stop_job(job_id: str) -> dict[str, Any]:
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
-    if job.status not in {CloydSmithJobStatus.QUEUED, CloydSmithJobStatus.RUNNING}:
-        raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only queued or running jobs can be stopped from the monitor.")
+    if job.status not in {CloydSmithJobStatus.QUEUED, CloydSmithJobStatus.RUNNING, CloydSmithJobStatus.STOPPING}:
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only queued, running, or stopping jobs can be stopped from the monitor.")
     store.add_event(job_id, "operator_stop", {"source": "agent-runs-page", "previous_status": job.status.value})
-    updated = store.update(
+    stopping = store.update(
         job_id,
         CloydSmithJobUpdate(
-            status=CloydSmithJobStatus.STOPPED,
-            next_action="operator_stopped",
-            last_evidence={"operator_action": "stopped"},
+            status=CloydSmithJobStatus.STOPPING,
+            phase="operator_immediate_stop_requested",
+            stop_intent="immediate",
+            next_action="confirm OpenCode termination",
+            last_evidence={"operator_action": "stop_requested", "previous_status": job.status.value},
+            error="",
         ),
     )
     store.record_heartbeat(
@@ -804,6 +848,98 @@ async def agent_runs_stop_job(job_id: str) -> dict[str, Any]:
             job_id=job_id,
             agent="smith",
             alias=job.smith_alias,
+            session_id=job.session_id,
+            state="stopping",
+            phase="operator_immediate_stop_requested",
+            last_action="operator_stop",
+            last_message="Immediate Stop requested from Agent Runs monitor.",
+            working_directory="",
+            stop_reason="immediate_stop_requested",
+        )
+    )
+    stopped_runtime = None
+    runtime_status_before_stop = None
+    if job.status in {CloydSmithJobStatus.RUNNING, CloydSmithJobStatus.STOPPING}:
+        try:
+            runtime_status_before_stop = await _opencode_status(
+                ToolExecutionRequest(
+                    tool_name="opencode_status",
+                    arguments={"alias": job.smith_alias},
+                    actor="agent-runs-page",
+                )
+            )
+        except Exception as exc:
+            runtime_status_before_stop = {"ok": False, "error": str(exc), "exception": exc.__class__.__name__}
+        stopped_runtime = await _opencode_stop(
+            ToolExecutionRequest(
+                tool_name="opencode_stop",
+                arguments={"alias": job.smith_alias},
+                actor="agent-runs-page",
+            )
+        )
+        store.add_event(
+            job_id,
+            "operator_stop_runtime",
+            {
+                "source": "agent-runs-page",
+                "runtime_status_before_stop": runtime_status_before_stop,
+                "runtime_stop": stopped_runtime,
+            },
+        )
+        if not stopped_runtime.get("ok"):
+            failed = store.update(
+                job_id,
+                CloydSmithJobUpdate(
+                    status=CloydSmithJobStatus.STOPPING,
+                    phase="operator_stop_failed",
+                    stop_intent="immediate",
+                    next_action="OpenCode stop failed; reconcile runtime before restart",
+                    last_evidence={
+                        "operator_action": "stop_failed",
+                        "runtime_status_before_stop": runtime_status_before_stop,
+                        "runtime_stop": stopped_runtime,
+                    },
+                    error=str(stopped_runtime.get("error") or "OpenCode stop failed"),
+                ),
+            )
+            store.record_heartbeat(
+                AgentRunHeartbeat(
+                    job_id=job_id,
+                    agent="smith",
+                    alias=job.smith_alias,
+                    session_id=job.session_id,
+                    state="stopping",
+                    phase="operator_stop_failed",
+                    last_action="opencode_stop",
+                    last_error=failed.error or "",
+                    working_directory="",
+                    stop_reason="operator_stop_failed",
+                )
+            )
+            raise HTTPException(status_code=503, detail=failed.error or "OpenCode stop failed")
+    updated = store.update(
+        job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.STOPPED,
+            phase="operator_stopped",
+            stop_intent="immediate",
+            next_action="operator_stopped",
+            session_id=str((stopped_runtime or {}).get("session") or job.session_id or "") or None,
+            last_evidence={
+                "operator_action": "stopped",
+                "runtime_status_before_stop": runtime_status_before_stop,
+                "runtime_stop": stopped_runtime,
+                "stopping": stopping.model_dump(mode="json"),
+            },
+            error="" if not stopped_runtime or stopped_runtime.get("ok") else str(stopped_runtime.get("error") or "OpenCode stop failed"),
+        ),
+    )
+    store.record_heartbeat(
+        AgentRunHeartbeat(
+            job_id=job_id,
+            agent="smith",
+            alias=job.smith_alias,
+            session_id=updated.session_id,
             state="stopped",
             phase="operator_stopped",
             last_action="operator_stop",
@@ -812,7 +948,45 @@ async def agent_runs_stop_job(job_id: str) -> dict[str, Any]:
             stop_reason="operator_stopped",
         )
     )
-    return {"ok": True, "action": "stop", "job": updated.model_dump(mode="json")}
+    return {"ok": True, "action": "stop", "runtime_stop": stopped_runtime, "job": updated.model_dump(mode="json")}
+
+
+@app.post("/agent-runs/api/jobs/{job_id}/stop-after-current-turn")
+async def agent_runs_stop_after_current_turn_job(job_id: str) -> dict[str, Any]:
+    store = CloydSmithJobStore()
+    try:
+        job = store.get(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job.status != CloydSmithJobStatus.RUNNING:
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only running jobs can stop after the current turn.")
+    store.add_event(job_id, "operator_stop_after_current_turn", {"source": "agent-runs-page", "previous_status": job.status.value})
+    updated = store.update(
+        job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.RUNNING,
+            phase="stop_after_current_turn_requested",
+            stop_intent="after_current_turn",
+            next_action="waiting for current turn boundary before stopping",
+            last_evidence={"operator_action": "stop_after_current_turn", "previous_status": job.status.value},
+            error="",
+        ),
+    )
+    store.record_heartbeat(
+        AgentRunHeartbeat(
+            job_id=job_id,
+            agent="smith",
+            alias=job.smith_alias,
+            session_id=job.session_id,
+            state="running",
+            phase="stop_after_current_turn_requested",
+            last_action="operator_stop_after_current_turn",
+            last_message="Stop after current turn requested from Agent Runs monitor.",
+            working_directory="",
+            stop_reason="after_current_turn_requested",
+        )
+    )
+    return {"ok": True, "action": "stop-after-current-turn", "job": updated.model_dump(mode="json")}
 
 
 @app.post("/agent-runs/api/jobs/requeue-incomplete")
@@ -833,6 +1007,8 @@ async def agent_runs_requeue_incomplete_jobs() -> dict[str, Any]:
             job.job_id,
             CloydSmithJobUpdate(
                 status=CloydSmithJobStatus.QUEUED,
+                phase="operator_bulk_requeued",
+                submission_id="",
                 next_action="send_to_smith",
                 last_evidence={"operator_action": "bulk_requeue", "previous_status": job.status.value, "runtime_stop": stopped_runtime},
                 metadata=metadata,
@@ -895,8 +1071,13 @@ def _incomplete_agent_run_jobs(store: CloydSmithJobStore) -> list[Any]:
     incomplete_statuses = {
         CloydSmithJobStatus.QUEUED,
         CloydSmithJobStatus.RUNNING,
+        CloydSmithJobStatus.UNKNOWN,
+        CloydSmithJobStatus.WAITING_FOR_INPUT,
+        CloydSmithJobStatus.VERIFYING,
+        CloydSmithJobStatus.NEEDS_ATTENTION,
         CloydSmithJobStatus.NEEDS_REVIEW,
         CloydSmithJobStatus.BLOCKED,
+        CloydSmithJobStatus.STOPPING,
         CloydSmithJobStatus.STALE,
     }
     for job in [*store.list_active(limit=200), *store.list_recent_terminal(limit=200)]:
@@ -906,7 +1087,7 @@ def _incomplete_agent_run_jobs(store: CloydSmithJobStore) -> list[Any]:
 
 
 async def _stop_runtime_if_jobs_running(jobs: list[Any], *, always: bool = False) -> dict[str, Any] | None:
-    if not always and not any(job.status == CloydSmithJobStatus.RUNNING for job in jobs):
+    if not always and not any(job.status in {CloydSmithJobStatus.RUNNING, CloydSmithJobStatus.STOPPING} for job in jobs):
         return None
     result = await _opencode_stop(
         ToolExecutionRequest(
@@ -915,6 +1096,42 @@ async def _stop_runtime_if_jobs_running(jobs: list[Any], *, always: bool = False
             actor="agent-runs-page",
         )
     )
+    return result
+
+
+def _terminal_smith_controller() -> TerminalSmithController:
+    return TerminalSmithController(TerminalSmithConfig.from_environment(repository_root=settings.repository_root))
+
+
+@app.get("/agent-runs/api/terminal-smith/health")
+async def agent_runs_terminal_smith_health() -> dict[str, Any]:
+    return await asyncio.to_thread(_terminal_smith_controller().status)
+
+
+@app.post("/agent-runs/api/terminal-smith/interrupt")
+async def agent_runs_terminal_smith_interrupt() -> dict[str, Any]:
+    result = await asyncio.to_thread(_terminal_smith_controller().interrupt)
+    if not result.get("ok"):
+        raise HTTPException(status_code=503, detail=result.get("error") or str(result))
+    return result
+
+
+@app.post("/agent-runs/api/terminal-smith/restart")
+async def agent_runs_terminal_smith_restart() -> dict[str, Any]:
+    try:
+        result = await asyncio.to_thread(_terminal_smith_controller().restart)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    if not result.get("ok"):
+        raise HTTPException(status_code=503, detail=result.get("start", {}).get("stderr") or str(result))
+    return result
+
+
+@app.post("/agent-runs/api/terminal-smith/ping")
+async def agent_runs_terminal_smith_ping() -> dict[str, Any]:
+    result = await asyncio.to_thread(_terminal_smith_controller().ping)
+    if not result.get("ok"):
+        raise HTTPException(status_code=504, detail=result.get("error") or str(result))
     return result
 
 
@@ -1360,6 +1577,18 @@ def _agent_runs_html() -> str:
     .diagnostic.ok { border-left-color: var(--ok); }
     .diagnostic strong { display: block; margin-bottom: 4px; }
     .diagnostic span { color: var(--muted); font-size: 13px; line-height: 1.35; }
+    .pane-output {
+      max-height: 180px;
+      overflow: auto;
+      margin: 8px 0 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: #d5dde2;
+      background: #0d0f11;
+      font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+    }
     .copybar {
       display: grid;
       grid-template-columns: 1fr auto auto auto auto auto;
@@ -1396,6 +1625,20 @@ def _agent_runs_html() -> str:
       min-height: 34px;
     }
     button:hover { border-color: var(--accent); }
+    a.button-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #20262b;
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    a.button-link:hover { border-color: var(--accent); }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
     .run {
       background: var(--panel);
@@ -1403,6 +1646,18 @@ def _agent_runs_html() -> str:
       border-radius: 8px;
       padding: 14px;
       min-height: 220px;
+    }
+    .run.current {
+      grid-column: 1 / -1;
+      border-color: var(--accent);
+      background: #15191d;
+    }
+    .current-label {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      text-transform: uppercase;
     }
     .top { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
     .state { font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: .04em; color: var(--accent); }
@@ -1470,10 +1725,16 @@ def _agent_runs_html() -> str:
       summaryEl.innerHTML = [
         metric('Supervisor', supervisor.ok ? 'OK' : 'Check', supervisor.ok ? 'running' : 'blocked'),
         metric('Active', payload.active_count || 0, 'running'),
+        metric('Unknown', queue.unknown || 0, 'blocked'),
+        metric('Waiting', queue.waiting_for_input || 0, 'review'),
+        metric('Verifying', queue.verifying || 0, 'review'),
+        metric('Verified', queue.verified || 0, 'done'),
+        metric('Attention', queue.needs_attention || 0, 'blocked'),
         metric('Needs Review', queue.needs_review || 0, 'review'),
         metric('Blocked', queue.blocked || 0, 'blocked'),
         metric('Stale', queue.stale || 0, 'stale'),
         metric('Queued', queue.queued || 0, ''),
+        metric('Stopping', queue.stopping || 0, 'blocked'),
         metric('Done', queue.done || 0, '')
       ].join('');
       diagnosticsEl.innerHTML = (payload.diagnostics || []).map(item => `
@@ -1485,37 +1746,56 @@ def _agent_runs_html() -> str:
       renderSupervisor(supervisor);
       if (!payload.runs.length) {
         runsEl.innerHTML = '<div class="empty">No active or recent agent runs.</div>';
+        updateRuntimeHealth();
+        updateTerminalSmithHealth();
         return;
       }
-      runsEl.innerHTML = payload.runs.map(run => `
-        <article class="run">
+      const terminalStates = new Set(['done', 'verified', 'stopped']);
+      const currentJobId = (payload.runs.find(run => !terminalStates.has(run.job_status || run.state || '')) || payload.runs[0] || {}).job_id;
+      const renderedRuns = [...payload.runs].sort((left, right) => (left.job_id === currentJobId ? -1 : 0) - (right.job_id === currentJobId ? -1 : 0));
+      runsEl.innerHTML = renderedRuns.map(run => `
+        <article class="run ${run.job_id === currentJobId ? 'current' : ''}">
+          ${run.job_id === currentJobId ? '<div class="current-label">Current task</div>' : ''}
           <div class="top">
             <div class="state ${run.state}">${run.state}</div>
             <div class="pill">${run.alias}</div>
           </div>
 	          <div class="copybar">
 	            <div class="jobid">${escapeHtml(run.job_id)}</div>
+	            ${openSessionLink(run)}
+	            ${actionButton(run, 'start', 'Start')}
 	            <button type="button" data-copy="${escapeAttr(run.job_id)}">Copy ID</button>
 	            <button type="button" data-copy="${escapeAttr(reviewPrompt(run))}">Copy Cloyd Prompt</button>
 	            ${replacementPromptButton(run)}
 	            ${actionButton(run, 'queue-replacement', 'Queue Suggested Replacement')}
-	            ${actionButton(run, 'retry', 'Retry')}
+	            ${actionButton(run, 'retry', 'Resume/Retry')}
 	            ${actionButton(run, 'done', 'Mark Done')}
 	            ${actionButton(run, 'clear', 'Clear')}
 	            ${actionButton(run, 'follow-up', 'Follow Up')}
-	            ${actionButton(run, 'replace', 'Create Replacement')}
+            ${actionButton(run, 'replace', 'Create Replacement')}
             ${actionButton(run, 'block', 'Mark Blocked')}
+            ${actionButton(run, 'stop-after-current-turn', 'Stop After Turn')}
             ${actionButton(run, 'stop', 'Stop')}
           </div>
           <div class="objective">${escapeHtml(run.objective)}</div>
           <dl>
             <dt>Phase</dt><dd>${escapeHtml(run.phase || '')}</dd>
+            <dt>Job phase</dt><dd>${escapeHtml(run.job_phase || '')}</dd>
+            <dt>Session</dt><dd>${escapeHtml(run.session_id || '')}</dd>
+            <dt>Submission</dt><dd>${escapeHtml(run.submission_id || '')}</dd>
             <dt>Last action</dt><dd>${escapeHtml(run.last_action || '')}</dd>
             <dt>Message</dt><dd>${escapeHtml(run.last_message || '')}</dd>
             <dt>Error</dt><dd>${escapeHtml(run.last_error || '')}</dd>
             <dt>Age</dt><dd>${seconds(run.elapsed_seconds)}</dd>
+            <dt>Scope</dt><dd>${escapeHtml(run.scope || '')}</dd>
+            <dt>Checks</dt><dd>${escapeHtml((run.check_commands || []).join('\\n'))}</dd>
+            <dt>Check results</dt><dd>${escapeHtml(checkResultsSummary(run.revision_evidence))}</dd>
+            <dt>Files/diff</dt><dd>${escapeHtml(filesDiffSummary(run.revision_evidence))}</dd>
+            <dt>Checked rev</dt><dd>${escapeHtml(revisionSummary(run.revision_evidence))}</dd>
+            <dt>Blocker</dt><dd>${escapeHtml(blockerSummary(run))}</dd>
             <dt>Retries</dt><dd>${run.retry_attempts || 0}</dd>
             <dt>Follow-ups</dt><dd>${run.follow_up_attempts || 0}</dd>
+            <dt>Repairs</dt><dd>${run.repair_attempts || 0}</dd>
             <dt>Stale</dt><dd>${run.is_stale ? 'yes' : 'no'}</dd>
             <dt>Workdir</dt><dd>${escapeHtml(run.working_directory || '')}</dd>
           </dl>
@@ -1534,6 +1814,7 @@ def _agent_runs_html() -> str:
         while (feedEl.children.length > 20) feedEl.removeChild(feedEl.lastChild);
       }
       updateRuntimeHealth();
+      updateTerminalSmithHealth();
     }
 
     function metric(label, value, cls) {
@@ -1558,6 +1839,7 @@ def _agent_runs_html() -> str:
 	    function actionButton(run, action, label) {
       const status = run.job_status || run.state || '';
       const enabled = (
+		        (action === 'start' && status === 'queued') ||
 		        (action === 'retry' && ['blocked', 'stale', 'stopped'].includes(status)) ||
 		        (action === 'done' && status === 'needs_review') ||
 		        (action === 'clear' && status === 'done') ||
@@ -1565,10 +1847,19 @@ def _agent_runs_html() -> str:
 		        (action === 'queue-replacement' && status === 'blocked' && !!run.replacement_prompt) ||
 		        (action === 'replace' && status === 'blocked' && !!run.suggested_prompt) ||
 		        (action === 'block' && ['needs_review', 'queued', 'running', 'stale'].includes(status)) ||
-		        (action === 'stop' && ['queued', 'running'].includes(status))
+		        (action === 'stop-after-current-turn' && status === 'running' && run.stop_intent !== 'after_current_turn') ||
+		        (action === 'stop' && ['queued', 'running', 'stopping'].includes(status))
 	      );
-      if (!enabled) return '';
+	      if (!enabled) return '';
 	      return `<button type="button" data-action="${action}" data-job-id="${escapeAttr(run.job_id)}">${label}</button>`;
+	    }
+
+	    function openSessionLink(run) {
+	      if (!run.session_id) return '';
+	      const runtime = latestPayload.runtime || {};
+	      const base = String(runtime.base_url || 'http://100.115.228.56:4097').replace(/[/]+$/, '');
+	      const url = `${base}/session/${encodeURIComponent(run.session_id)}`;
+	      return `<a class="button-link" target="_blank" rel="noreferrer" href="${escapeAttr(url)}">Open Session</a>`;
 	    }
 
 	    function replacementPromptButton(run) {
@@ -1607,7 +1898,7 @@ def _agent_runs_html() -> str:
 	      ].join('\\n');
 	    }
 
-	    function replacementPrompt(run) {
+    function replacementPrompt(run) {
 	      if (run.replacement_prompt) return run.replacement_prompt;
 	      return [
 	        'Smith, this is a bounded replacement for a blocked Cloyd-Smith job. Do not retry the old session and do not broaden the task.',
@@ -1626,7 +1917,39 @@ def _agent_runs_html() -> str:
 	        '- State whether any existing change is present.',
 	        '- Name the smallest safe next task, or say no action is needed.',
 	        '- Include verification evidence or the exact reason verification was not possible.'
-	      ].join('\\n');
+      ].join('\\n');
+    }
+
+	    function revisionSummary(evidence) {
+	      if (!evidence) return '';
+	      if (evidence.capture_error) return `capture failed: ${evidence.capture_error}`;
+	      return [
+	        evidence.head ? `HEAD ${String(evidence.head).slice(0, 12)}` : '',
+	        evidence.working_tree_sha256 ? `tree ${String(evidence.working_tree_sha256).slice(0, 12)}` : '',
+	        evidence.captured_at ? `at ${String(evidence.captured_at).slice(0, 19)}` : ''
+	      ].filter(Boolean).join(' | ');
+	    }
+
+	    function checkResultsSummary(evidence) {
+	      if (!evidence || !(evidence.check_results || []).length) return '';
+	      return (evidence.check_results || [])
+	        .map(item => `${item.command || item.tool || 'check'}:${item.exit_code ?? item.status ?? 'unknown'}${item.timed_out ? ':timeout' : ''}`)
+	        .join(', ');
+	    }
+
+	    function filesDiffSummary(evidence) {
+	      if (!evidence) return '';
+	      const files = (evidence.changed_files || []).slice(0, 8).join(', ');
+	      const more = (evidence.changed_files || []).length > 8 ? ' ...' : '';
+	      const diff = evidence.tracked_diff_sha256 ? `diff ${String(evidence.tracked_diff_sha256).slice(0, 12)}` : '';
+	      const untracked = evidence.untracked_file_sha256 ? Object.keys(evidence.untracked_file_sha256).length : 0;
+	      return [files ? `files ${files}${more}` : '', diff, untracked ? `untracked ${untracked}` : ''].filter(Boolean).join(' | ');
+	    }
+
+	    function blockerSummary(run) {
+	      if (run.last_error) return run.last_error;
+	      if (['blocked', 'needs_attention', 'unknown', 'waiting_for_input', 'stopping', 'stale'].includes(run.job_status || run.state || '')) return run.next_action || run.last_message || '';
+	      return '';
 	    }
 
 	    function escapeHtml(value) {
@@ -1792,6 +2115,37 @@ def _agent_runs_html() -> str:
 	      }
 	    }
 
+	    async function updateTerminalSmithHealth() {
+	      try {
+	        const health = await fetch('/agent-runs/api/terminal-smith/health').then(item => item.json());
+	        const existing = document.getElementById('terminal-smith-health');
+	        const level = health.ok ? 'ok' : 'blocked';
+	        const title = health.ok ? 'Terminal Smith running' : 'Terminal Smith missing';
+	        const detail = health.ok
+	          ? `session=${health.session}; pid=${health.pane_pid || 'unknown'}; command=${health.pane_command || 'unknown'}; cwd=${health.pane_path || health.workdir || 'unknown'}; model=${health.model}; base=${health.base_url}`
+	          : `${health.session || 'agent-smith'} is not running: ${health.error || 'tmux session missing'}`;
+	        const terminalUrl = health.terminal_url || `http://${location.hostname}:8010/`;
+	        const output = String(health.recent_output || '').split('\\n').slice(-24).join('\\n');
+	        const restartButton = '<button type="button" data-terminal-action="restart">Restart Smith</button>';
+	        const interruptButton = health.ok ? '<button type="button" data-terminal-action="interrupt">Interrupt</button>' : '';
+	        const pingButton = health.ok ? '<button type="button" data-terminal-action="ping">Ping</button>' : '';
+	        const openButton = `<a class="button-link" target="_blank" rel="noreferrer" href="${escapeAttr(terminalUrl)}">Open Terminal</a>`;
+	        const html = `<div id="terminal-smith-health" class="diagnostic ${level}">
+	          <strong>${escapeHtml(title)}</strong>
+	          <span>${escapeHtml(detail)}</span>
+	          ${interruptButton}${restartButton}${pingButton}${openButton}
+	          <pre class="pane-output">${escapeHtml(output || 'No recent pane output captured.')}</pre>
+	        </div>`;
+	        if (existing) existing.outerHTML = html;
+	        else diagnosticsEl.insertAdjacentHTML('afterbegin', html);
+	      } catch (error) {
+	        const existing = document.getElementById('terminal-smith-health');
+	        const html = `<div id="terminal-smith-health" class="diagnostic blocked"><strong>Terminal Smith check failed</strong><span>${escapeHtml(error.message || String(error))}</span></div>`;
+	        if (existing) existing.outerHTML = html;
+	        else diagnosticsEl.insertAdjacentHTML('afterbegin', html);
+	      }
+	    }
+
 		    diagnosticsEl.addEventListener('click', async event => {
 		      const button = event.target.closest('button[data-runtime-action]');
 		      if (!button) return;
@@ -1809,6 +2163,33 @@ def _agent_runs_html() -> str:
 		        if (!response.ok || !body.ok) throw new Error(body.detail || body.error || 'Runtime action failed');
 		        button.textContent = action === 'reset' ? 'Reset' : 'Stopped';
 		        await updateRuntimeHealth();
+		      } catch (error) {
+		        button.disabled = false;
+		        button.textContent = 'Failed';
+		        alert(error.message || String(error));
+		        setTimeout(() => { button.textContent = original; }, 1400);
+		      }
+		    });
+
+		    diagnosticsEl.addEventListener('click', async event => {
+		      const button = event.target.closest('button[data-terminal-action]');
+		      if (!button) return;
+		      const action = button.dataset.terminalAction;
+		      const original = button.textContent;
+		      const confirmText = action === 'restart'
+		        ? 'Restart only the terminal Smith tmux/Qwen session? This captures current output, interrupts any hung request, and leaves other Freyja services alone.'
+		        : action === 'interrupt'
+		          ? 'Send Ctrl-C to the terminal Smith tmux/Qwen session?'
+		          : 'Send a SMITH_READY ping to terminal Smith?';
+		      if (!confirm(confirmText)) return;
+		      button.disabled = true;
+		      button.textContent = action === 'restart' ? 'Restarting...' : action === 'interrupt' ? 'Interrupting...' : 'Pinging...';
+		      try {
+		        const response = await fetch(`/agent-runs/api/terminal-smith/${action}`, { method: 'POST' });
+		        const body = await response.json();
+		        if (!response.ok || !body.ok) throw new Error(body.detail || body.error || 'Terminal Smith action failed');
+		        button.textContent = action === 'ping' ? 'Ready' : 'Done';
+		        await updateTerminalSmithHealth();
 		      } catch (error) {
 		        button.disabled = false;
 		        button.textContent = 'Failed';
