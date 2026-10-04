@@ -585,16 +585,15 @@ class Tools:
         smith_alias: str = "freyja-code",
         acceptance_criteria: str = "",
     ) -> str:
-        """Deprecated: ask Joe/Codex to create new jobs through Freyja, then use status/actions here."""
-        return json.dumps(
-            {
-                "ok": False,
-                "status": "submit_not_exposed",
-                "objective": objective,
-                "next_action": "Use the Agent Runs monitor to create/reconcile jobs; this OpenWebUI tool only reviews and clears canonical jobs.",
-                "monitor": f"{self.base_url}/agent-runs",
-            }
-        )
+        """Create a durable Cloyd-Smith job and return a visible Agent Runs receipt."""
+        criteria = [line.strip() for line in acceptance_criteria.splitlines() if line.strip()]
+        body = {
+            "objective": objective,
+            "prompt": prompt or objective,
+            "smith_alias": smith_alias or "freyja-code",
+            "acceptance_criteria": criteria,
+        }
+        return self._request("POST", "/agent-runs/api/jobs", body)
 
     def cloyd_smith_status(self, job_id: str = "") -> str:
         """Return canonical Agent Runs status; job_id filters the returned runs client-side."""

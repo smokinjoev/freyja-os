@@ -82,8 +82,11 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     assert "family webpage" in cloyd["system_prompt"]
     assert "cloyd-dashboard-web" in cloyd["system_prompt"]
     assert "/home/joe/cloyd-services/dashboard" in cloyd["system_prompt"]
-    assert "For quick checks use the OpenCode tools directly" in cloyd["system_prompt"]
+    assert "Direct OpenCode tools are only for single-turn status" in cloyd["system_prompt"]
+    assert "iterative, exploratory, background" in cloyd["system_prompt"]
     assert "durable Cloyd-Smith loop" in cloyd["system_prompt"]
+    assert "http://100.115.228.56:8000/agent-runs" in cloyd["system_prompt"]
+    assert "Never leave a direct OpenCode tool call without a visible final answer" in cloyd["system_prompt"]
     assert "may outlive the browser connection" in cloyd["system_prompt"]
     assert "job ledger" in cloyd["system_prompt"]
     assert "games/<slug>/index.html" in cloyd["system_prompt"]
@@ -137,6 +140,9 @@ def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
     assert "Every Qwen Code prompt must include a hard action budget" in text
     assert "Default budget for read-only checks: at most 3 runtime actions" in text
     assert "detached supervision" in text
+    assert "iterative or exploratory coding tasks" in text
+    assert "Receipt: answer immediately with the job id and monitor URL" in text
+    assert "Always finish with a visible answer" in text
     assert "not done yet" in text
     assert "browser, iPad, or OpenWebUI stream disconnects" in text
     assert "If output repeats the same conclusion twice" in text

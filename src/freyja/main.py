@@ -121,6 +121,15 @@ class AgentRunReplacementRequest(BaseModel):
     acceptance_criteria: list[str] = Field(default_factory=list, max_length=10)
 
 
+class AgentRunSubmitRequest(BaseModel):
+    objective: str = Field(min_length=1, max_length=1000)
+    prompt: str | None = Field(default=None, max_length=6000)
+    smith_alias: str | None = Field(default=None, max_length=80)
+    scope: str | None = Field(default=None, max_length=500)
+    acceptance_criteria: list[str] = Field(default_factory=list, max_length=10)
+    check_commands: list[str] = Field(default_factory=list, max_length=10)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_iris_warm_monitor()
@@ -325,6 +334,41 @@ async def agent_runs_human_status() -> str:
 @app.get("/agent-runs/api/status")
 async def agent_runs_status() -> dict[str, Any]:
     return _agent_runs_status_payload()
+
+
+@app.post("/agent-runs/api/jobs")
+async def agent_runs_submit_job(request: AgentRunSubmitRequest) -> dict[str, Any]:
+    objective = request.objective.strip()
+    prompt = (request.prompt or objective).strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+    store = CloydSmithJobStore()
+    job = store.create(
+        CloydSmithJobCreate(
+            objective=objective,
+            smith_alias=(request.smith_alias or "freyja-code").strip() or "freyja-code",
+            scope=(request.scope or "").strip(),
+            acceptance_criteria=[item.strip() for item in request.acceptance_criteria if item.strip()],
+            check_commands=[item.strip() for item in request.check_commands if item.strip()],
+            current_prompt=prompt,
+            created_by="agent-runs-api",
+            metadata={"source": "agent-runs-api"},
+        )
+    )
+    store.add_event(job.job_id, "submitted", {"source": "agent-runs-api"})
+    return {
+        "ok": True,
+        "monitor": "http://100.115.228.56:8000/agent-runs",
+        "status_endpoint": "http://100.115.228.56:8000/agent-runs/api/status",
+        "job": {
+            "job_id": job.job_id,
+            "status": job.status.value,
+            "objective": job.objective,
+            "smith_alias": job.smith_alias,
+            "next_action": job.next_action,
+            "status_prompt": f"Ask Cloyd: status {job.job_id}",
+        },
+    }
 
 
 @app.get("/agent-runs/events")

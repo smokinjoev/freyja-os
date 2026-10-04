@@ -109,6 +109,16 @@ def test_cloyd_export_delegates_coding() -> None:
     ]
     assert "cloyd_smith.status" in cloyd["freyja"]["tools"]["allow"]
     assert "unrestricted_shell" in cloyd["freyja"]["tools"]["deny"]
+    assert set(cloyd["meta"]["toolIds"]) >= {
+        "opencode_runtime",
+        "cloyd_smith_loop",
+        "freyja_home_memory",
+        "atlas_internal_fetch",
+    }
+    assert cloyd["meta"]["capabilities"]["tools"] is True
+    assert cloyd["meta"]["capabilities"]["function_calling"] is True
+    assert cloyd["meta"]["capabilities"]["builtin_tools"] is False
+    assert cloyd["meta"]["knowledge"] is None
 
 
 def test_agent_export_validation_rejects_missing_required_agent() -> None:
@@ -178,6 +188,7 @@ def test_agent_export_validation_rejects_smith_policy_drift() -> None:
     smith["freyja"]["tools"]["coding"] = ["opencode.start"]
     smith["freyja"]["tools"]["confirm"] = ["calendar.create"]
     smith["freyja"]["tools"]["deny"] = ["cloud_fallback"]
+    smith["meta"]["toolIds"] = []
 
     errors = module.validate_export(export)
 
@@ -186,6 +197,20 @@ def test_agent_export_validation_rejects_smith_policy_drift() -> None:
     assert "Agent Smith must have the OpenCode coding runtime tools" in errors
     assert "Agent Smith must deny calendar.create" in errors
     assert "Agent Smith must not have household confirm tools" in errors
+    assert "Agent Smith must retain OpenWebUI OpenCode and Cloyd-Smith tools" in errors
+
+
+def test_agent_export_validation_rejects_cloyd_openwebui_tool_drift() -> None:
+    module = _module()
+    export = module.build_export()
+    cloyd = next(record for record in export["records"] if record["freyja"]["agent_id"] == "cloyd")
+    cloyd["meta"]["toolIds"] = []
+    cloyd["meta"]["capabilities"]["builtin_tools"] = True
+
+    errors = module.validate_export(export)
+
+    assert "Cloyd must retain OpenWebUI OpenCode, Cloyd-Smith, memory, and Atlas tools" in errors
+    assert "Cloyd must disable crashing OpenWebUI builtin tools" in errors
 
 
 def test_open_webui_home_agent_export_cli_writes_json(tmp_path: Path, capsys) -> None:
