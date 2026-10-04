@@ -48,6 +48,7 @@ class CloydSmithJobUpdate(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     status: CloydSmithJobStatus | None = None
+    iteration: int | None = Field(default=None, ge=0)
     phase: str | None = None
     current_prompt: str | None = None
     next_action: str | None = None
@@ -69,6 +70,7 @@ class CloydSmithJob(BaseModel):
     check_commands: list[str]
     current_prompt: str
     status: CloydSmithJobStatus
+    iteration: int = 0
     phase: str
     created_by: str
     metadata: dict[str, Any]
@@ -99,6 +101,8 @@ class AgentRunHeartbeat(BaseModel):
     working_directory: str = ""
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     started_at: datetime | None = None
+    last_activity_at: datetime | None = None
+    last_verified_progress_at: datetime | None = None
     stale_after_seconds: int = Field(default=300, ge=1)
     stop_reason: str | None = None
 
@@ -206,12 +210,12 @@ class CloydSmithJobStore:
                 INSERT INTO cloyd_smith_jobs (
                     job_id, objective, smith_alias, scope,
                     acceptance_criteria_json, check_commands_json,
-                    current_prompt, status, phase, created_by, metadata_json,
+                    current_prompt, status, iteration, phase, created_by, metadata_json,
                     next_action, session_id, submission_id, stop_intent,
                     last_evidence_json, revision_evidence_json, error,
                     created_at, updated_at, completed_at
                 )
-                VALUES (?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, json(?), ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?, ?, json(?), ?, ?, ?, ?, json(?), json(?), ?, ?, ?, ?)
                 """,
                 _row_values(job),
             )
@@ -290,6 +294,7 @@ class CloydSmithJobStore:
         updated = current.model_copy(
             update={
                 "status": status,
+                "iteration": update.iteration if update.iteration is not None else current.iteration,
                 "phase": update.phase if update.phase is not None else current.phase,
                 "current_prompt": update.current_prompt if update.current_prompt is not None else current.current_prompt,
                 "next_action": update.next_action if update.next_action is not None else current.next_action,
@@ -308,7 +313,7 @@ class CloydSmithJobStore:
             conn.execute(
                 """
                 UPDATE cloyd_smith_jobs
-                SET current_prompt = ?, status = ?, phase = ?, next_action = ?,
+                SET current_prompt = ?, status = ?, iteration = ?, phase = ?, next_action = ?,
                     session_id = ?, submission_id = ?, stop_intent = ?,
                     last_evidence_json = json(?), revision_evidence_json = json(?),
                     metadata_json = json(?), error = ?, updated_at = ?,
@@ -318,6 +323,7 @@ class CloydSmithJobStore:
                 (
                     updated.current_prompt,
                     updated.status.value,
+                    updated.iteration,
                     updated.phase,
                     updated.next_action,
                     updated.session_id,
@@ -364,16 +370,27 @@ class CloydSmithJobStore:
     def record_heartbeat(self, heartbeat: AgentRunHeartbeat) -> AgentRunHeartbeat:
         existing = self.get_heartbeat(heartbeat.job_id)
         started_at = heartbeat.started_at or (existing.started_at if existing else heartbeat.updated_at)
-        stored = heartbeat.model_copy(update={"started_at": started_at})
+        last_activity_at = heartbeat.last_activity_at or (existing.last_activity_at if existing else heartbeat.updated_at)
+        last_verified_progress_at = heartbeat.last_verified_progress_at or (existing.last_verified_progress_at if existing else None)
+        if heartbeat.state == CloydSmithJobStatus.VERIFIED.value and last_verified_progress_at is None:
+            last_verified_progress_at = heartbeat.updated_at
+        stored = heartbeat.model_copy(
+            update={
+                "started_at": started_at,
+                "last_activity_at": last_activity_at,
+                "last_verified_progress_at": last_verified_progress_at,
+            }
+        )
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO cloyd_smith_run_heartbeats (
                     job_id, agent, alias, session_id, state, phase, last_action,
                     last_message, last_error, working_directory, started_at,
-                    updated_at, stale_after_seconds, stop_reason
+                    updated_at, last_activity_at, last_verified_progress_at,
+                    stale_after_seconds, stop_reason
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(job_id) DO UPDATE SET
                     agent = excluded.agent,
                     alias = excluded.alias,
@@ -386,6 +403,8 @@ class CloydSmithJobStore:
                     working_directory = excluded.working_directory,
                     started_at = excluded.started_at,
                     updated_at = excluded.updated_at,
+                    last_activity_at = excluded.last_activity_at,
+                    last_verified_progress_at = excluded.last_verified_progress_at,
                     stale_after_seconds = excluded.stale_after_seconds,
                     stop_reason = excluded.stop_reason
                 """,
@@ -400,7 +419,8 @@ class CloydSmithJobStore:
 
     def heartbeat_is_stale(self, heartbeat: AgentRunHeartbeat, *, now: datetime | None = None) -> bool:
         checked_at = now or datetime.now(UTC)
-        return (checked_at - heartbeat.updated_at).total_seconds() > heartbeat.stale_after_seconds
+        activity_at = heartbeat.last_activity_at or heartbeat.updated_at
+        return (checked_at - activity_at).total_seconds() > heartbeat.stale_after_seconds
 
     def mark_stale_runs(self, *, now: datetime | None = None) -> list[AgentRunHeartbeat]:
         warnings: list[AgentRunHeartbeat] = []
@@ -456,6 +476,7 @@ class CloydSmithJobStore:
                     check_commands_json TEXT NOT NULL DEFAULT '[]',
                     current_prompt TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    iteration INTEGER NOT NULL DEFAULT 0,
                     phase TEXT NOT NULL DEFAULT 'queued',
                     created_by TEXT NOT NULL,
                     metadata_json TEXT NOT NULL DEFAULT '{}',
@@ -474,6 +495,7 @@ class CloydSmithJobStore:
             )
             self._ensure_column(conn, "cloyd_smith_jobs", "scope", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(conn, "cloyd_smith_jobs", "check_commands_json", "TEXT NOT NULL DEFAULT '[]'")
+            self._ensure_column(conn, "cloyd_smith_jobs", "iteration", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "cloyd_smith_jobs", "phase", "TEXT NOT NULL DEFAULT 'queued'")
             self._ensure_column(conn, "cloyd_smith_jobs", "session_id", "TEXT")
             self._ensure_column(conn, "cloyd_smith_jobs", "submission_id", "TEXT")
@@ -506,6 +528,8 @@ class CloydSmithJobStore:
                     working_directory TEXT NOT NULL DEFAULT '',
                     started_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
+                    last_activity_at TEXT,
+                    last_verified_progress_at TEXT,
                     stale_after_seconds INTEGER NOT NULL DEFAULT 300,
                     stop_reason TEXT,
                     FOREIGN KEY(job_id) REFERENCES cloyd_smith_jobs(job_id)
@@ -515,6 +539,8 @@ class CloydSmithJobStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cloyd_smith_jobs_status ON cloyd_smith_jobs(status, updated_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cloyd_smith_job_events_job ON cloyd_smith_job_events(job_id, created_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_cloyd_smith_run_heartbeats_state ON cloyd_smith_run_heartbeats(state, updated_at)")
+            self._ensure_column(conn, "cloyd_smith_run_heartbeats", "last_activity_at", "TEXT")
+            self._ensure_column(conn, "cloyd_smith_run_heartbeats", "last_verified_progress_at", "TEXT")
 
     @staticmethod
     def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -540,6 +566,7 @@ def _row_values(job: CloydSmithJob) -> tuple[object, ...]:
         json.dumps(job.check_commands),
         job.current_prompt,
         job.status.value,
+        job.iteration,
         job.phase,
         job.created_by,
         json.dumps(job.metadata),
@@ -570,6 +597,8 @@ def _heartbeat_values(heartbeat: AgentRunHeartbeat) -> tuple[object, ...]:
         heartbeat.working_directory,
         _iso(heartbeat.started_at or heartbeat.updated_at),
         _iso(heartbeat.updated_at),
+        _iso(heartbeat.last_activity_at) if heartbeat.last_activity_at else None,
+        _iso(heartbeat.last_verified_progress_at) if heartbeat.last_verified_progress_at else None,
         heartbeat.stale_after_seconds,
         heartbeat.stop_reason,
     )
@@ -585,6 +614,7 @@ def _job_from_row(row: sqlite3.Row) -> CloydSmithJob:
         check_commands=_decode(row["check_commands_json"], []),
         current_prompt=row["current_prompt"],
         status=CloydSmithJobStatus(row["status"]),
+        iteration=int(row["iteration"] or 0),
         phase=row["phase"],
         created_by=row["created_by"],
         metadata=_decode(row["metadata_json"], {}),
@@ -615,6 +645,8 @@ def _heartbeat_from_row(row: sqlite3.Row) -> AgentRunHeartbeat:
         working_directory=row["working_directory"],
         started_at=_dt(row["started_at"]),
         updated_at=_dt(row["updated_at"]),
+        last_activity_at=_dt(row["last_activity_at"]) if row["last_activity_at"] else None,
+        last_verified_progress_at=_dt(row["last_verified_progress_at"]) if row["last_verified_progress_at"] else None,
         stale_after_seconds=row["stale_after_seconds"],
         stop_reason=row["stop_reason"],
     )
@@ -623,8 +655,12 @@ def _heartbeat_from_row(row: sqlite3.Row) -> AgentRunHeartbeat:
 def heartbeat_summary(heartbeat: AgentRunHeartbeat, *, now: datetime | None = None) -> dict[str, Any]:
     checked_at = now or datetime.now(UTC)
     elapsed = int((checked_at - (heartbeat.started_at or heartbeat.updated_at)).total_seconds())
-    age = int((checked_at - heartbeat.updated_at).total_seconds())
-    stale = False
+    process_age = int((checked_at - heartbeat.updated_at).total_seconds())
+    activity_at = heartbeat.last_activity_at or heartbeat.updated_at
+    activity_age = int((checked_at - activity_at).total_seconds())
+    verified_at = heartbeat.last_verified_progress_at
+    verified_age = int((checked_at - verified_at).total_seconds()) if verified_at else None
+    stale = heartbeat.state == CloydSmithJobStatus.RUNNING.value and activity_age > heartbeat.stale_after_seconds
     return {
         "job_id": heartbeat.job_id,
         "agent": heartbeat.agent,
@@ -637,8 +673,13 @@ def heartbeat_summary(heartbeat: AgentRunHeartbeat, *, now: datetime | None = No
         "last_error": heartbeat.last_error,
         "working_directory": heartbeat.working_directory,
         "updated_at": heartbeat.updated_at.isoformat(),
+        "process_heartbeat_at": heartbeat.updated_at.isoformat(),
+        "last_activity_at": activity_at.isoformat(),
+        "last_verified_progress_at": verified_at.isoformat() if verified_at else None,
         "elapsed_seconds": max(elapsed, 0),
-        "heartbeat_age_seconds": max(age, 0),
+        "heartbeat_age_seconds": max(process_age, 0),
+        "last_activity_age_seconds": max(activity_age, 0),
+        "verified_progress_age_seconds": max(verified_age, 0) if verified_age is not None else None,
         "stale_after_seconds": heartbeat.stale_after_seconds,
         "is_stale": stale,
         "stop_reason": heartbeat.stop_reason,
@@ -811,6 +852,18 @@ def job_status_summary(
     elif next_action == "Smith busy timeout stopped the runtime; inspect evidence before retrying or queue a smaller replacement" and not repeated_busy_timeout:
         suggested_prompt = replacement_job_prompt(job, heartbeat=heartbeat, error=error)
         replacement_prompt = bounded_replacement_prompt(job, heartbeat=heartbeat, error=error, mode="smaller_after_busy_timeout")
+    checked_at = now or datetime.now(UTC)
+    verified_progress_at = hb["last_verified_progress_at"] if hb else None
+    verified_progress_age_seconds = hb["verified_progress_age_seconds"] if hb else None
+    if not verified_progress_at and job.status == CloydSmithJobStatus.VERIFIED and isinstance(job.revision_evidence, dict):
+        captured_at = str(job.revision_evidence.get("captured_at") or "")
+        if captured_at:
+            try:
+                captured_dt = _dt(captured_at)
+                verified_progress_at = captured_dt.isoformat()
+                verified_progress_age_seconds = max(int((checked_at - captured_dt).total_seconds()), 0)
+            except ValueError:
+                verified_progress_at = captured_at
     return {
         "job_id": job.job_id,
         "agent": heartbeat.agent if heartbeat else "smith",
@@ -819,6 +872,7 @@ def job_status_summary(
         "submission_id": job.submission_id,
         "state": state,
         "job_status": job.status.value,
+        "iteration": job.iteration,
         "job_phase": job.phase,
         "phase": hb["phase"] if hb else job.status.value,
         "last_action": last_action,
@@ -826,6 +880,12 @@ def job_status_summary(
         "last_error": error,
         "working_directory": hb["working_directory"] if hb else "",
         "updated_at": (heartbeat.updated_at if heartbeat else job.updated_at).isoformat(),
+        "process_heartbeat_at": hb["process_heartbeat_at"] if hb else job.updated_at.isoformat(),
+        "heartbeat_age_seconds": hb["heartbeat_age_seconds"] if hb else int((checked_at - job.updated_at).total_seconds()),
+        "last_activity_at": hb["last_activity_at"] if hb else job.updated_at.isoformat(),
+        "last_activity_age_seconds": hb["last_activity_age_seconds"] if hb else int((checked_at - job.updated_at).total_seconds()),
+        "last_verified_progress_at": verified_progress_at,
+        "verified_progress_age_seconds": verified_progress_age_seconds,
         "elapsed_seconds": elapsed_seconds,
         "stale_after_seconds": hb["stale_after_seconds"] if hb else None,
         "is_stale": bool(hb and hb["is_stale"]),

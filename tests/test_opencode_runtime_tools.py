@@ -32,6 +32,8 @@ def test_builtin_registry_includes_opencode_control_tools() -> None:
         assert definition is not None
         assert definition.risk_level == risk
         assert definition.host_service == "opencode"
+    send_schema = registry.get_tool("opencode_send").input_schema
+    assert "timeout_seconds" in send_schema["properties"]
 
 
 def test_opencode_alias_registry_accepts_remote_session_entries(tmp_path: Path, monkeypatch) -> None:
@@ -91,6 +93,36 @@ def test_opencode_send_passes_request_timeout(tmp_path: Path, monkeypatch) -> No
     assert submit["base_url"] == "http://atlas.test"
     assert submit["body"]["tools"]["task"] is False
     assert submit["body"]["parts"][0]["text"].startswith(PROMPT_GUARDRAILS)
+
+
+def test_opencode_send_defaults_to_long_first_response_timeout(tmp_path: Path, monkeypatch) -> None:
+    registry_path = tmp_path / "controller-sessions.json"
+    registry_path.write_text('{"freyja-code": {"session": "ses_local"}}', encoding="utf-8")
+    monkeypatch.setattr("freyja.tools.opencode_runtime.settings.opencode_session_registry_path", str(registry_path))
+    monkeypatch.delenv("CLOYD_SMITH_FIRST_RESPONSE_BUDGET_SECONDS", raising=False)
+    monkeypatch.delenv("OPENCODE_REQUEST_TIMEOUT_SECONDS", raising=False)
+    calls = []
+
+    def fake_request(method, path, body=None, **kwargs):
+        calls.append({"method": method, "path": path, "body": body, **kwargs})
+        if path.endswith("/prompt_async"):
+            return {"ok": True}
+        return {"ok": True, "directory": "/repo"}
+
+    monkeypatch.setattr("freyja.tools.opencode_runtime._request", fake_request)
+
+    result = asyncio.run(
+        _opencode_send(
+            ToolExecutionRequest(
+                tool_name="opencode_send",
+                arguments={"alias": "freyja-code", "prompt": "Wait for Vulcan if needed."},
+                actor="test",
+            )
+        )
+    )
+
+    assert result["ok"] is True
+    assert calls[0]["timeout_seconds"] == 900
 
 
 def test_opencode_start_rejects_missing_directory(tmp_path: Path, monkeypatch) -> None:

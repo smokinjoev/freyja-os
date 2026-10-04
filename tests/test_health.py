@@ -31,6 +31,37 @@ def test_health() -> None:
     assert response.json() == {"status": "healthy"}
 
 
+def test_root_exposes_agent_runs_home_links() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["release"] == "freyja-6.4"
+    assert body["home"] == "/endpoints"
+    assert body["agent_runs"] == "/agent-runs"
+    assert body["agent_runs_status"] == "/agent-runs/api/status"
+    assert body["agent_runs_worker_output"] == "/agent-runs/api/worker-output"
+    assert body["agent_runs_cleanup"] == "/agent-runs/api/jobs/clear-old"
+
+
+def test_endpoint_directory_exposes_agent_runs_cleanup_links() -> None:
+    response = client.get("/endpoints")
+
+    assert response.status_code == 200
+    assert "/agent-runs" in response.text
+    assert "/agent-runs/api/worker-output" in response.text
+    assert "/agent-runs/api/jobs/clear-old" in response.text
+
+
+def test_endpoint_directory_remains_public_when_connector_auth_is_enabled(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get("/endpoints")
+    assert response.status_code == 200
+    assert "/agent-runs" in response.text
+
+
 def test_health_remains_public_when_connector_auth_is_enabled(monkeypatch) -> None:
     from freyja.config import settings
 

@@ -117,6 +117,7 @@ def test_cloyd_smith_job_persists_scope_checks_session_submission_and_revision(t
     assert loaded.check_commands == ["pytest -q"]
     assert loaded.session_id == "ses_one"
     assert loaded.submission_id == "msg_one"
+    assert loaded.iteration == 0
     assert loaded.phase == "sent_to_smith"
     assert loaded.revision_evidence == revision
     assert summary["session_id"] == "ses_one"
@@ -185,11 +186,14 @@ def test_heartbeat_create_update_stale_and_summary(tmp_path) -> None:
     summary = heartbeat_summary(loaded, now=started + timedelta(seconds=12))
     assert summary["state"] == "running"
     assert summary["heartbeat_age_seconds"] == 12
+    assert summary["last_activity_age_seconds"] == 12
+    assert summary["last_activity_at"] == started.isoformat()
+    assert summary["last_verified_progress_at"] is None
     assert summary["elapsed_seconds"] == 12
 
     rows = store.status_rows(now=started + timedelta(seconds=12))
     assert rows[0]["job_id"] == job.job_id
-    assert rows[0]["is_stale"] is False
+    assert rows[0]["is_stale"] is True
     assert rows[0]["retry_attempts"] == 0
     assert rows[0]["follow_up_attempts"] == 0
     assert rows[0]["metadata"] == {}
@@ -333,6 +337,37 @@ def test_job_status_summary_gives_timeout_review_action(tmp_path) -> None:
 
     assert "do not mark done" in summary["next_action"]
     assert "bounded follow-up" in summary["next_action"]
+
+
+def test_job_status_summary_uses_revision_capture_as_verified_progress_fallback(tmp_path) -> None:
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    captured_at = "2026-09-14T01:00:00+00:00"
+    job = store.create(CloydSmithJobCreate(objective="Verified before telemetry schema.", current_prompt="Done."))
+    job = store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.VERIFIED,
+            revision_evidence={"captured_at": captured_at, "check_results": [{"command": "true", "exit_code": 0}]},
+        ),
+    )
+    heartbeat = store.record_heartbeat(
+        AgentRunHeartbeat(
+            job_id=job.job_id,
+            agent="smith",
+            alias="freyja-code",
+            state="verified",
+            phase="verified",
+            last_action="verification_recheck",
+            updated_at=datetime(2026, 9, 14, 1, 0, 5, tzinfo=UTC),
+            stop_reason="checks_passed",
+        )
+    )
+    heartbeat = heartbeat.model_copy(update={"last_verified_progress_at": None})
+
+    summary = job_status_summary(job, heartbeat=heartbeat, now=datetime(2026, 9, 14, 1, 0, 12, tzinfo=UTC))
+
+    assert summary["last_verified_progress_at"] == captured_at
+    assert summary["verified_progress_age_seconds"] == 12
 
 
 def test_job_status_summary_gives_retry_limit_action(tmp_path) -> None:
@@ -579,7 +614,7 @@ def test_daemon_run_once_writes_heartbeat_transitions(tmp_path, monkeypatch) -> 
         assert sending.status == CloydSmithJobStatus.RUNNING
         assert sending.next_action == "await_smith_send_result"
         assert request.arguments["timeout_seconds"] == module.DEFAULT_SEND_TIMEOUT_SECONDS
-        assert module.DEFAULT_SEND_TIMEOUT_SECONDS < 90
+        assert module.DEFAULT_SEND_TIMEOUT_SECONDS == 900
         return {
             "ok": True,
             "session": "ses_daemon",
@@ -595,6 +630,7 @@ def test_daemon_run_once_writes_heartbeat_transitions(tmp_path, monkeypatch) -> 
 
     monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
+    monkeypatch.setattr(module, "opencode_health", lambda *, alias=None, timeout_seconds=5: {"ok": True, "session_count": 0})
 
     result = asyncio.run(module._run_once(store))
 
@@ -605,6 +641,7 @@ def test_daemon_run_once_writes_heartbeat_transitions(tmp_path, monkeypatch) -> 
     assert heartbeat.phase == "sent_to_smith"
     assert heartbeat.working_directory == "/repo"
     assert heartbeat.started_at > old
+    assert store.get(job.job_id).iteration == 1
 
 
 def test_daemon_harvests_output_after_send_timeout_when_session_idle(tmp_path, monkeypatch) -> None:
@@ -627,6 +664,7 @@ def test_daemon_harvests_output_after_send_timeout_when_session_idle(tmp_path, m
     monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
     monkeypatch.setattr(module, "_opencode_status", fake_status)
+    monkeypatch.setattr(module, "opencode_health", lambda *, alias=None, timeout_seconds=5: {"ok": True, "session_count": 0})
     monkeypatch.setattr(module, "_opencode_output", fake_output)
 
     result = asyncio.run(module._run_once(store))
@@ -667,6 +705,7 @@ def test_daemon_keeps_job_running_after_send_timeout_when_session_busy(tmp_path,
     monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
     monkeypatch.setattr(module, "_opencode_status", fake_status)
+    monkeypatch.setattr(module, "opencode_health", lambda *, alias=None, timeout_seconds=5: {"ok": True, "session_count": 0})
 
     result = asyncio.run(module._run_once(store))
 
@@ -1101,6 +1140,7 @@ def test_daemon_repair_reuses_existing_session_without_new_start(tmp_path, monke
         raise AssertionError("repair must reuse the existing Smith session")
 
     async def fake_send(request):
+        assert request.arguments["alias"] == "ses_repair"
         assert "Repair attempt 1" in request.arguments["prompt"]
         return {"ok": True, "session": "ses_repair", "submission_id": "msg_repair", "result": "sent"}
 
@@ -1443,6 +1483,10 @@ def test_daemon_repeated_busy_poll_refreshes_observation_timestamp(tmp_path, mon
     assert result == [{"job_id": job.job_id, "status": "running", "action": "still_running"}]
     heartbeat = store.get_heartbeat(job.job_id)
     assert heartbeat.updated_at > meaningful_at
+    assert heartbeat.last_activity_at == meaningful_at
+    summary = job_status_summary(store.get(job.job_id), heartbeat=heartbeat)
+    assert summary["process_heartbeat_at"] == heartbeat.updated_at.isoformat()
+    assert summary["last_activity_at"] == meaningful_at.isoformat()
     assert store.get(job.job_id).next_action == "check_smith_output"
 
 
@@ -1501,6 +1545,51 @@ def test_daemon_warns_without_stopping_after_first_response_budget(tmp_path, mon
     assert heartbeat.phase == "first_response_warning"
     assert heartbeat.stop_reason is None
     assert store.events(job.job_id)[0]["event_type"] == "first_response_warning"
+
+
+def test_daemon_warning_poll_does_not_reset_activity_without_new_evidence(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Watch warned task.", current_prompt="Keep working."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING))
+    old_activity = datetime.now(UTC) - timedelta(seconds=310)
+    recent_process = datetime.now(UTC) - timedelta(seconds=5)
+    store.record_heartbeat(
+        AgentRunHeartbeat(
+            job_id=job.job_id,
+            agent="smith",
+            alias="freyja-code",
+            session_id="ses_busy",
+            state="running",
+            phase="no_activity_warning",
+            last_action="opencode_status",
+            last_message='{"state": {"type": "busy"}}',
+            working_directory="/repo",
+            started_at=old_activity,
+            updated_at=recent_process,
+            last_activity_at=old_activity,
+            stale_after_seconds=300,
+        )
+    )
+
+    async def fake_status(request):
+        return {
+            "ok": True,
+            "session": "ses_busy",
+            "state": {"type": "busy"},
+            "working_directory": "/repo",
+        }
+
+    monkeypatch.setattr(module, "_summary_text", lambda payload: '{"state": {"type": "busy"}}')
+    monkeypatch.setattr(module, "_opencode_status", fake_status)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "running", "action": "still_running"}]
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.phase == "smith_busy"
+    assert heartbeat.updated_at > recent_process
+    assert heartbeat.last_activity_at == old_activity
 
 
 def test_daemon_recovers_stale_job_when_worker_is_still_busy(tmp_path, monkeypatch) -> None:
@@ -2120,6 +2209,8 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
     assert "action === 'queue-replacement'" in page.text
     assert "Clear" in page.text
     assert "action === 'clear'" in page.text
+    assert "Clear Old Jobs From Screen" in page.text
+    assert "clear-old" in page.text
     assert "Reset Runtime Session" in page.text
     assert "data-runtime-action=\"reset\"" in page.text
     assert "Create Replacement" in page.text
@@ -2720,6 +2811,43 @@ def test_agent_runs_api_rejects_clear_for_unfinished_job(tmp_path, monkeypatch) 
     response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/clear")
 
     assert response.status_code == 409
+
+
+def test_agent_runs_api_can_clear_old_terminal_jobs_from_monitor(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+    store = CloydSmithJobStore(database)
+    verified = store.create(CloydSmithJobCreate(objective="Verified work.", current_prompt="Verified."))
+    done = store.create(CloydSmithJobCreate(objective="Done work.", current_prompt="Done."))
+    stopped = store.create(CloydSmithJobCreate(objective="Stopped work.", current_prompt="Stopped."))
+    blocked = store.create(CloydSmithJobCreate(objective="Blocked work.", current_prompt="Blocked."))
+    queued = store.create(CloydSmithJobCreate(objective="Queued work.", current_prompt="Queued."))
+    store.update(verified.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.VERIFIED))
+    store.update(done.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.DONE))
+    store.update(stopped.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.STOPPED, next_action="operator_stopped_all_work"))
+    store.update(blocked.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.BLOCKED, error="needs a decision"))
+
+    response = TestClient(freyja_main.app).post("/agent-runs/api/jobs/clear-old")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["action"] == "clear-old"
+    assert set(body["updated_jobs"]) == {verified.job_id, done.job_id, stopped.job_id}
+    assert store.get(verified.job_id).status == CloydSmithJobStatus.STOPPED
+    assert store.get(done.job_id).status == CloydSmithJobStatus.STOPPED
+    assert store.get(stopped.job_id).next_action == "cleared_from_monitor"
+    assert store.get(blocked.job_id).status == CloydSmithJobStatus.BLOCKED
+    assert store.get(queued.job_id).status == CloydSmithJobStatus.QUEUED
+    assert store.get_heartbeat(done.job_id).phase == "cleared"
+    assert store.get(done.job_id).metadata["cleared_from_monitor"]["bulk"] is True
+
+    status = TestClient(freyja_main.app).get("/agent-runs/api/status").json()
+    visible_ids = {run["job_id"] for run in status["runs"]}
+    assert visible_ids == {queued.job_id, blocked.job_id}
+    assert status["queue"]["blocked"] == 1
+    assert status["queue"]["queued"] == 1
+    assert status["hidden_terminal_count"] == 3
 
 
 def test_agent_runs_api_can_mark_timeout_review_job_blocked(tmp_path, monkeypatch) -> None:

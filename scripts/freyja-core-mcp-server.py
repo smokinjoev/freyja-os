@@ -248,7 +248,7 @@ async def opencode_start(alias: str = "freyja-core-coder", directory: str = "", 
 
 
 @mcp.tool(name="opencode.run", description="Start a fresh isolated OpenCode session and send one coding task atomically. Use this for a new coding request; do not call start and send separately.")
-async def opencode_run(alias: str = "freyja-code", prompt: str = "", directory: str = "", timeout_seconds: int = 840, ctx: Context | None = None) -> str:
+async def opencode_run(alias: str = "freyja-code", prompt: str = "", directory: str = "", timeout_seconds: int = 900, ctx: Context | None = None) -> str:
     arguments: dict[str, Any] = {"alias": alias, "prompt": prompt, "timeout_seconds": timeout_seconds}
     if directory:
         arguments["directory"] = directory
@@ -266,7 +266,7 @@ async def opencode_status(alias: str = "freyja-core-coder", ctx: Context | None 
 
 
 @mcp.tool(name="opencode.send", description="Send a prompt to the Freyja Core OpenCode session.")
-async def opencode_send(alias: str = "freyja-core-coder", prompt: str = "", timeout_seconds: int = 120, ctx: Context | None = None) -> str:
+async def opencode_send(alias: str = "freyja-core-coder", prompt: str = "", timeout_seconds: int = 900, ctx: Context | None = None) -> str:
     return await _core(
         "opencode.send",
         {
