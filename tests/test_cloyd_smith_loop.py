@@ -2245,6 +2245,32 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
     assert body["runs"][0]["objective"] == "Monitor OpenCode without a terminal."
 
 
+def test_agent_runs_submit_api_creates_durable_job(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+
+    response = TestClient(freyja_main.app).post(
+        "/agent-runs/api/jobs",
+        json={
+            "objective": "Learn Freyja network endpoints.",
+            "prompt": "Inspect Freyja network endpoints and report findings.",
+            "acceptance_criteria": ["List relevant endpoints."],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["monitor"] == "http://100.115.228.56:8000/agent-runs"
+    assert body["job"]["job_id"].startswith("freyja52-")
+    assert body["job"]["status"] == "queued"
+
+    job = CloydSmithJobStore(database).get(body["job"]["job_id"])
+    assert job.objective == "Learn Freyja network endpoints."
+    assert job.current_prompt == "Inspect Freyja network endpoints and report findings."
+    assert job.acceptance_criteria == ["List relevant endpoints."]
+
+
 def test_agent_runs_api_counts_blocked_jobs_as_attention(tmp_path, monkeypatch) -> None:
     database = tmp_path / "jobs.db"
     monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))

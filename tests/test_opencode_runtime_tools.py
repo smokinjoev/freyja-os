@@ -214,6 +214,51 @@ def test_agent_runtime_prioritizes_non_adjacent_opencode_status_words() -> None:
     assert runtime.choose_tools(runtime._agent("cloyd-gibbler"), handoff.prompt, handoff.available_tools) == ["opencode.status"]
 
 
+def test_agent_runtime_surfaces_coding_tool_feedback_when_inference_is_empty() -> None:
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=GatewaySender(sender_id="person:joe", display_name="Joe", security_domain_id=SecurityDomainId.PERSON_JOE),
+            target_agent="cloyd-gibbler",
+            prompt="Use OpenCode to look around and learn Freyja network endpoints.",
+            conversation_id="test-cloyd-opencode-feedback",
+            channel="open-webui",
+        )
+    ).handoff
+
+    assert handoff is not None
+    runtime = AgentRuntimeV3()
+    response = runtime._compose_response(
+        runtime._agent("cloyd-gibbler"),
+        handoff,
+        ["coding.execute"],
+        [
+            {
+                "capability_id": "coding.execute",
+                "tool_name": "opencode_send",
+                "success": True,
+                "output": {
+                    "session": "ses_feedback",
+                    "submission_id": "msg_feedback",
+                    "state": "submitted",
+                    "working_directory": "/Users/freyja/freyja-os",
+                },
+            }
+        ],
+        [],
+        [],
+        "vulcan-nexus-coder",
+        None,
+        False,
+    )
+
+    assert "I ran local coding tooling" in response
+    assert "opencode_send succeeded" in response
+    assert "session=ses_feedback" in response
+    assert "submission=msg_feedback" in response
+    assert "Direct OpenCode tool calls are not durable Agent Runs jobs" in response
+    assert "http://100.115.228.56:8000/agent-runs" in response
+
+
 def test_opencode_start_reuses_existing_alias_connection_config(tmp_path: Path, monkeypatch) -> None:
     registry_path = tmp_path / "controller-sessions.json"
     repo_path = tmp_path / "repo"
