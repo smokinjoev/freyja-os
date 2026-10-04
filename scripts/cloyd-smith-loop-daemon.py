@@ -31,8 +31,8 @@ from freyja.tools.opencode_runtime import _opencode_output, _opencode_send, _ope
 
 
 DEFAULT_STALE_AFTER_SECONDS = 300
-DEFAULT_SEND_TIMEOUT_SECONDS = 45
-DEFAULT_FIRST_RESPONSE_BUDGET_SECONDS = 900
+DEFAULT_SEND_TIMEOUT_SECONDS = int(os.environ.get("CLOYD_SMITH_FIRST_RESPONSE_BUDGET_SECONDS", "900") or "900")
+DEFAULT_FIRST_RESPONSE_BUDGET_SECONDS = int(os.environ.get("CLOYD_SMITH_FIRST_RESPONSE_BUDGET_SECONDS", "900") or "900")
 DEFAULT_CHECK_TIMEOUT_SECONDS = int(os.environ.get("CLOYD_SMITH_CHECK_TIMEOUT_SECONDS", "300") or "300")
 DEFAULT_MAX_REPAIR_ATTEMPTS = 2
 # The dedicated coder is large and can take several minutes to inspect a
@@ -96,6 +96,7 @@ async def _run_once(store: CloydSmithJobStore) -> list[dict[str, Any]]:
                     job.job_id,
                     CloydSmithJobUpdate(
                         status=CloydSmithJobStatus.RUNNING,
+                        iteration=job.iteration + 1,
                         phase="reconciled_existing_submission",
                         next_action="check_smith_output",
                         last_evidence={"session_id": job.session_id, "submission_id": job.submission_id},
@@ -167,6 +168,7 @@ async def _run_once(store: CloydSmithJobStore) -> list[dict[str, Any]]:
                 job.job_id,
                 CloydSmithJobUpdate(
                     status=CloydSmithJobStatus.RUNNING,
+                    iteration=job.iteration + 1,
                     phase="fresh_session_created",
                     session_id=str(started.get("session") or "") or None,
                     next_action="await_smith_send_result",
@@ -187,7 +189,11 @@ async def _run_once(store: CloydSmithJobStore) -> list[dict[str, Any]]:
             output = await _opencode_send(
                 ToolExecutionRequest(
                     tool_name="opencode_send",
-                    arguments={"alias": job.smith_alias, "prompt": prompt, "timeout_seconds": DEFAULT_SEND_TIMEOUT_SECONDS},
+                    arguments={
+                        "alias": str(started.get("session") or job.smith_alias) if started.get("reused") else job.smith_alias,
+                        "prompt": prompt,
+                        "timeout_seconds": DEFAULT_SEND_TIMEOUT_SECONDS,
+                    },
                     actor="cloyd-smith-loop-5.2",
                 )
             )
@@ -278,6 +284,7 @@ async def _run_once(store: CloydSmithJobStore) -> list[dict[str, Any]]:
                 job.job_id,
                 CloydSmithJobUpdate(
                     status=next_status,
+                    iteration=job.iteration + 1,
                     phase="sent_to_smith" if output.get("ok") else "send_failed",
                     session_id=session_id,
                     submission_id=str(output.get("submission_id") or output.get("message") or "") or None,
@@ -358,7 +365,6 @@ async def _run_once(store: CloydSmithJobStore) -> list[dict[str, Any]]:
                 existing = store.get_heartbeat(job.job_id)
                 meaningful = (
                     existing is None
-                    or existing.phase != "smith_busy"
                     or existing.last_action != last_action
                     or existing.last_message != last_message
                 )
@@ -1276,6 +1282,10 @@ def _record_heartbeat(
 ) -> AgentRunHeartbeat:
     existing = store.get_heartbeat(job_id)
     updated_at = datetime.now(UTC)
+    last_activity_at = updated_at if meaningful else (existing.last_activity_at if existing else updated_at)
+    last_verified_progress_at = existing.last_verified_progress_at if existing else None
+    if state == CloydSmithJobStatus.VERIFIED.value:
+        last_verified_progress_at = updated_at
     heartbeat = AgentRunHeartbeat(
         job_id=job_id,
         agent="smith",
@@ -1288,6 +1298,8 @@ def _record_heartbeat(
         last_error=last_error[-1000:],
         working_directory=working_directory or (existing.working_directory if existing else ""),
         started_at=updated_at if reset_started_at else (existing.started_at if existing else None),
+        last_activity_at=last_activity_at,
+        last_verified_progress_at=last_verified_progress_at,
         updated_at=updated_at,
         stale_after_seconds=DEFAULT_STALE_AFTER_SECONDS,
         stop_reason=stop_reason,
@@ -1406,7 +1418,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Freyja 5.2 durable Cloyd-Smith supervisor loop.")
     parser.add_argument("--database")
     parser.add_argument("--once", action="store_true")
-    parser.add_argument("--interval", type=float, default=15.0)
+    parser.add_argument("--interval", type=float, default=10.0)
     parser.add_argument("--stop-job")
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--lock-file")

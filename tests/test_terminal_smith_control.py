@@ -133,7 +133,19 @@ def test_agent_runs_page_exposes_terminal_smith_controls() -> None:
 
     assert page.status_code == 200
     assert "Terminal Smith" in page.text
+    assert "id=\"terminal-smith-panel\"" in page.text
+    assert "id=\"worker-output-panel\"" in page.text
+    assert "Coding Worker Output" in page.text
+    assert "/agent-runs/api/worker-output" in page.text
+    assert "Open Worker Session" in page.text
+    assert "height: 112px" in page.text
     assert "/agent-runs/api/terminal-smith/health" in page.text
+    assert "preservedHealthPanels" in page.text
+    assert "terminalSmithHealthInFlight" in page.text
+    assert "terminalSmithHealthFailureCount < 3" in page.text
+    assert "terminalOutputTail" in page.text
+    assert "terminalSmithEl.innerHTML = html" in page.text
+    assert "updateTerminalSmithHealth({ force: true })" in page.text
     assert "Restart Smith" in page.text
     assert "data-terminal-action=\"restart\"" in page.text
     assert "data-terminal-action=\"interrupt\"" in page.text
@@ -170,3 +182,33 @@ def test_agent_runs_terminal_smith_api_uses_controller(monkeypatch) -> None:
     assert client.post("/agent-runs/api/terminal-smith/restart").json()["action"] == "restart"
     assert client.post("/agent-runs/api/terminal-smith/ping").json()["expected"] == "SMITH_READY"
     assert calls == ["status", "interrupt", "restart", "ping"]
+
+
+def test_agent_runs_worker_output_api_summarizes_opencode_session(monkeypatch) -> None:
+    async def fake_output(request):
+        assert request.arguments["alias"] == "ses_test"
+        return {
+            "ok": True,
+            "session": "ses_test",
+            "messages": [
+                {
+                    "info": {"role": "assistant", "id": "msg_1234567890"},
+                    "parts": [
+                        {"type": "text", "text": "I changed the game restart behavior."},
+                        {"type": "tool", "tool": "bash", "state": {"status": "completed", "output": "tests passed"}},
+                        {"type": "patch", "files": ["/repo/games/agent-smith-loop-acceptance/index.html"]},
+                    ],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(freyja_main, "_opencode_output", fake_output)
+
+    body = TestClient(freyja_main.app).get("/agent-runs/api/worker-output?session_id=ses_test").json()
+
+    assert body["ok"] is True
+    assert body["session"] == "ses_test"
+    assert body["message_count"] == 1
+    assert any("I changed the game restart behavior" in line for line in body["lines"])
+    assert any("tool bash: completed" in line for line in body["lines"])
+    assert any("games/agent-smith-loop-acceptance/index.html" in line for line in body["lines"])

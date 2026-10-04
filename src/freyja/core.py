@@ -555,7 +555,10 @@ async def agent_control(arguments: dict[str, Any]) -> dict[str, Any]:
     alias = str(arguments.get("alias") or "freyja-core-coder").strip()
     req = ToolExecutionRequest(tool_name=f"agent_control:{action}", arguments={**arguments, "alias": alias}, actor="freyja-core")
     old_timeout = os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS")
-    os.environ["OPENCODE_REQUEST_TIMEOUT_SECONDS"] = os.environ.get("FREYJA_CORE_AGENT_TIMEOUT_SECONDS", "90")
+    os.environ["OPENCODE_REQUEST_TIMEOUT_SECONDS"] = os.environ.get(
+        "FREYJA_CORE_AGENT_TIMEOUT_SECONDS",
+        os.environ.get("CLOYD_SMITH_FIRST_RESPONSE_BUDGET_SECONDS", "900"),
+    )
     try:
         if action == "start":
             result = await _opencode_start(req)

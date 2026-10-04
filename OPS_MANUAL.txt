@@ -128,7 +128,28 @@ Agent Smith
   Restricted Freyja hardware watchdog. Health, alerts, diagnostics, and only
   explicitly approved maintenance. It has no shared personal-memory role and
   must not receive unrestricted shell or home-control access.
+  Home links: http://100.115.228.56:8000/ and
+    http://100.115.228.56:8000/endpoints
   Monitor: http://100.115.228.56:8000/agent-runs
+  The Agent Runs page has two separate live feedback panels:
+  - Terminal Smith console: a persistent, compact view of the manual
+    `agent-smith` tmux/Qwen console. Use this for direct operator pokes; click
+    Open Terminal when full-size interaction is needed.
+  - Coding Worker Output: a persistent, compact view of the actual OpenCode
+    worker session (`ses_...`) used by the Cloyd-Smith coding loop. This is
+    where implementation feedback, tool output, patch summaries, and worker
+    replies appear. It is separate from the manual tmux console by design.
+  Worker output API:
+    http://100.115.228.56:8000/agent-runs/api/worker-output
+    Optional query parameters: `job_id=...`, `session_id=ses_...`, `limit=N`.
+    With no query parameters it follows the current active worker session, or
+    the most recent session if the queue is quiet.
+  Clear old jobs from screen:
+    POST http://100.115.228.56:8000/agent-runs/api/jobs/clear-old
+    Hides old verified, done, and stopped jobs from the Agent Runs monitor by
+    marking them as cleared/stopped. It does not erase the durable ledger,
+    events, worker evidence, or job database history. Blocked and active jobs
+    stay visible because they still need a decision or work.
 
 Nexus owns model selection. The portal should request the named agent/preset,
 not hard-code a physical Ollama model. The active local presets include fast,
@@ -214,6 +235,14 @@ Tool call fails:
 Agent Smith needs attention:
   - Check `http://100.115.228.56:8000/agent-runs/api/runtime/health` and
     `http://100.115.228.56:8000/agent-runs/api/status`.
+  - Check `http://100.115.228.56:8000/agent-runs/api/worker-output` for the
+    actual coding worker transcript. Do not expect coding-loop work to appear
+    in the Terminal Smith tmux console; that pane is for manual operator
+    interaction only.
+  - To clean up completed monitor clutter, use the bottom button on
+    `http://100.115.228.56:8000/agent-runs` or POST to
+    `http://100.115.228.56:8000/agent-runs/api/jobs/clear-old`. This is a
+    screen clear, not ledger deletion.
   - Treat this as read-only evidence. Smith is not authorized to repair a
     service unless an operator explicitly approves the specific action.
   - Follow `docs/operations/agent-smith-watchdog.md` before enabling alerts.

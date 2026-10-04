@@ -19,6 +19,7 @@ from freyja.tools.registry import ToolRegistry
 # survives a tool result.  Keep general Qwen on the coordinator lane; route
 # repository work to the dedicated coder runtime.
 MODEL = {"providerID": "vulcan-coder", "modelID": "qwen3-coder-next:q4_K_M"}
+DEFAULT_FIRST_RESPONSE_TIMEOUT_SECONDS = "900"
 PROMPT_GUARDRAILS = (
     "OpenCode safety guardrails: stay in the configured working directory; "
     "do not use nonexistent Linux paths such as /home/joe/freyja-config on this Mac; "
@@ -57,7 +58,7 @@ def _request(
             request.add_header("authorization", "Basic " + base64.b64encode(credentials).decode("ascii"))
         if body is not None:
             request.add_header("content-type", "application/json")
-        timeout = timeout_seconds if timeout_seconds is not None else float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
+        timeout = timeout_seconds if timeout_seconds is not None else float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", DEFAULT_FIRST_RESPONSE_TIMEOUT_SECONDS))
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read()
     except urllib.error.HTTPError as exc:
@@ -268,7 +269,11 @@ async def _opencode_send(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
     prompt = str(args.get("prompt") or "").strip()
-    timeout_seconds = float(args.get("timeout_seconds") or os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
+    timeout_seconds = float(
+        args.get("timeout_seconds")
+        or os.environ.get("CLOYD_SMITH_FIRST_RESPONSE_BUDGET_SECONDS")
+        or os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", DEFAULT_FIRST_RESPONSE_TIMEOUT_SECONDS)
+    )
     session_config = _session_config(alias)
     if not session_config:
         directory = str(args.get("directory") or settings.repository_root).strip()
@@ -437,7 +442,16 @@ def register_opencode_tools(registry: ToolRegistry) -> None:
             ToolDefinition(
                 name="opencode_send",
                 description="Send a natural-language coding prompt to an OpenCode session, starting it first if needed.",
-                input_schema={"type": "object", "required": ["prompt"], "properties": {"alias": {"type": "string"}, "prompt": {"type": "string"}, "directory": {"type": "string"}}},
+                input_schema={
+                    "type": "object",
+                    "required": ["prompt"],
+                    "properties": {
+                        "alias": {"type": "string"},
+                        "prompt": {"type": "string"},
+                        "directory": {"type": "string"},
+                        "timeout_seconds": {"type": "number"},
+                    },
+                },
                 output_schema={"type": "object", "properties": {}},
                 risk_level=ToolRiskLevel.CONTROLLED_WRITE,
                 host_service="opencode",

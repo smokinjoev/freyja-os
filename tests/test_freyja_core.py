@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -81,6 +83,7 @@ async def test_core_loop_infers_agent_control(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_agent_control_send_timeout_reports_working(monkeypatch) -> None:
     async def fake_send(request):
+        assert os.environ["OPENCODE_REQUEST_TIMEOUT_SECONDS"] == "900"
         return {"ok": False, "error": "timed out"}
 
     async def fake_status(request):
