@@ -2,8 +2,8 @@
 
 Cloyd is Joe's technical brain. Smith is the single active Iris OpenCode worker.
 
-- Cloyd: `qwen3:30b-a3b`
-- Smith: `qwen3-coder-next:q4_K_M`
+- Cloyd: `qwen3.8:27b`
+- Smith: `qwen3.8:27b`
 - Iris OpenCode endpoint: `http://100.115.228.56:4097`
 
 Reuse/start OpenCode. Inspect first, then send one bounded prompt with paths,

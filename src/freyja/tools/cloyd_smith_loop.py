@@ -12,6 +12,7 @@ from freyja.cloyd_smith_loop import (
     enrich_loop_status_with_runtime,
     expected_smith_alias,
     heartbeat_summary,
+    job_is_archived,
     job_status_summary,
     loop_status_payload,
     read_supervisor_heartbeat,
@@ -205,6 +206,8 @@ async def _cloyd_smith_follow_up(request: ToolExecutionRequest) -> dict[str, Any
     store = CloydSmithJobStore()
     try:
         job = store.get(job_id)
+        if job_is_archived(job):
+            return {"ok": False, "error": f"Job {job_id} is archived; restore it from Agent Runs before follow-up."}
         if job.status not in {CloydSmithJobStatus.NEEDS_REVIEW, CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STALE}:
             return {"ok": False, "error": f"Job {job_id} is {job.status.value}; only needs_review, blocked, or stale jobs can receive a bounded follow-up."}
         metadata = dict(job.metadata or {})
@@ -263,6 +266,8 @@ async def _cloyd_smith_retry(request: ToolExecutionRequest) -> dict[str, Any]:
     store = CloydSmithJobStore()
     try:
         job = store.get(job_id)
+        if job_is_archived(job):
+            return {"ok": False, "error": f"Job {job_id} is archived; restore it from Agent Runs before retrying."}
         if job.status not in {CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STALE, CloydSmithJobStatus.STOPPED}:
             return {"ok": False, "error": f"Job {job_id} is {job.status.value}; only blocked, stale, or stopped jobs can be retried."}
         expected_alias = expected_smith_alias(job)

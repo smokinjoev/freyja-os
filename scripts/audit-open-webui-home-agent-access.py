@@ -16,7 +16,7 @@ EXPECTED = {
     "agent/freyja": {"groups": {"beth", "joe"}, "name": "Freyja"},
     "agent/cloyd-gibbler": {"groups": {"joe"}, "name": "Cloyd"},
     "agent/benedict": {"groups": {"beth"}, "name": "Benedict"},
-    "agent/agent-47": {"groups": {"beth", "joe", "liam"}, "name": "Agent 44"},
+    "agent/agent-47": {"groups": {"beth", "joe", "liam"}, "name": "Agent 47"},
     "agent/jennacide": {"groups": {"beth", "jenna", "joe"}, "name": "Jenna"},
 }
 

@@ -34,6 +34,7 @@ from freyja.cloyd_smith_loop import (
     bounded_replacement_prompt,
     expected_smith_alias,
     enrich_loop_status_with_runtime,
+    job_is_archived,
     job_status_summary,
     loop_status_payload,
     read_supervisor_heartbeat,
@@ -327,13 +328,13 @@ async def agent_runs_page() -> str:
 
 
 @app.get("/agent-runs/status", response_class=HTMLResponse)
-async def agent_runs_human_status() -> str:
-    return _agent_runs_human_status_html(_agent_runs_status_payload())
+async def agent_runs_human_status(show_archived: bool = False) -> str:
+    return _agent_runs_human_status_html(_agent_runs_status_payload(show_archived=show_archived))
 
 
 @app.get("/agent-runs/api/status")
-async def agent_runs_status() -> dict[str, Any]:
-    return _agent_runs_status_payload()
+async def agent_runs_status(show_archived: bool = False) -> dict[str, Any]:
+    return _agent_runs_status_payload(show_archived=show_archived)
 
 
 @app.post("/agent-runs/api/jobs")
@@ -372,11 +373,11 @@ async def agent_runs_submit_job(request: AgentRunSubmitRequest) -> dict[str, Any
 
 
 @app.get("/agent-runs/events")
-async def agent_runs_events() -> StreamingResponse:
+async def agent_runs_events(show_archived: bool = False) -> StreamingResponse:
     async def event_stream():
         last_payload = ""
         while True:
-            payload = json.dumps(_agent_runs_status_payload(), sort_keys=True, default=str)
+            payload = json.dumps(_agent_runs_status_payload(show_archived=show_archived), sort_keys=True, default=str)
             if payload != last_payload:
                 yield f"event: status\ndata: {payload}\n\n"
                 last_payload = payload
@@ -392,6 +393,8 @@ async def agent_runs_start_job(job_id: str) -> dict[str, Any]:
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before starting.")
     if job.status != CloydSmithJobStatus.QUEUED:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only queued jobs can be started manually.")
     store.add_event(job_id, "operator_start_requested", {"source": "agent-runs-page", "previous_status": job.status.value})
@@ -428,6 +431,8 @@ async def agent_runs_retry_job(job_id: str) -> dict[str, Any]:
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before retrying.")
     if job.status not in {CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STALE, CloydSmithJobStatus.STOPPED}:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only blocked, stale, or stopped jobs can be retried.")
     expected_alias = expected_smith_alias(job)
@@ -522,6 +527,8 @@ async def agent_runs_mark_done(job_id: str) -> dict[str, Any]:
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before marking done.")
     if job.status != CloydSmithJobStatus.NEEDS_REVIEW:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only needs_review jobs can be marked done from the monitor.")
     store.add_event(job_id, "operator_mark_done", {"source": "agent-runs-page"})
@@ -556,38 +563,61 @@ async def agent_runs_clear_done_job(job_id: str) -> dict[str, Any]:
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
-    if job.status != CloydSmithJobStatus.DONE:
-        raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only done jobs can be cleared from the monitor.")
-    metadata = dict(job.metadata)
+    clearable_statuses = {
+        CloydSmithJobStatus.VERIFIED,
+        CloydSmithJobStatus.DONE,
+        CloydSmithJobStatus.STOPPED,
+    }
+    if job.status not in clearable_statuses:
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only verified, done, or stopped jobs can be cleared from the monitor.")
+    metadata = _archived_agent_run_metadata(job, source="agent-runs-page", bulk=False)
+    store.add_event(job_id, "operator_archive", {"source": "agent-runs-page", "previous_status": job.status.value})
+    updated = store.update(job_id, CloydSmithJobUpdate(metadata=metadata))
+    return {"ok": True, "action": "clear", "job": updated.model_dump(mode="json")}
+
+
+@app.post("/agent-runs/api/jobs/{job_id}/restore")
+async def agent_runs_restore_job(job_id: str) -> dict[str, Any]:
+    store = CloydSmithJobStore()
+    try:
+        job = store.get(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if not job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is not archived.")
+    metadata = dict(job.metadata or {})
+    archive = dict(metadata.get("agent_runs_archive") or {})
+    archive.update(
+        {
+            "archived": False,
+            "restored_at": datetime.now(UTC).isoformat(),
+            "restored_by": "agent-runs-page",
+            "restored_status": job.status.value,
+        }
+    )
+    metadata["agent_runs_archive"] = archive
+    store.add_event(job_id, "operator_restore_archive", {"source": "agent-runs-page", "previous_status": job.status.value})
+    updated = store.update(job_id, CloydSmithJobUpdate(metadata=metadata))
+    return {"ok": True, "action": "restore", "job": updated.model_dump(mode="json")}
+
+
+def _archived_agent_run_metadata(job: Any, *, source: str, bulk: bool) -> dict[str, Any]:
+    metadata = dict(job.metadata or {})
+    metadata["agent_runs_archive"] = {
+        "archived": True,
+        "source": source,
+        "archived_at": datetime.now(UTC).isoformat(),
+        "previous_status": job.status.value,
+        "bulk": bulk,
+    }
     metadata["cleared_from_monitor"] = {
         "source": "agent-runs-page",
-        "cleared_at": datetime.now(UTC).isoformat(),
+        "cleared_at": metadata["agent_runs_archive"]["archived_at"],
         "previous_status": job.status.value,
+        "archived": True,
+        "bulk": bulk,
     }
-    store.add_event(job_id, "operator_clear_done", {"source": "agent-runs-page", "previous_status": job.status.value})
-    updated = store.update(
-        job_id,
-        CloydSmithJobUpdate(
-            status=CloydSmithJobStatus.STOPPED,
-            next_action="cleared_from_monitor",
-            last_evidence={"operator_action": "cleared_done"},
-            metadata=metadata,
-        ),
-    )
-    store.record_heartbeat(
-        AgentRunHeartbeat(
-            job_id=job_id,
-            agent="smith",
-            alias=job.smith_alias,
-            state="stopped",
-            phase="cleared",
-            last_action="operator_clear_done",
-            last_message="Cleared done job from Agent Runs monitor.",
-            working_directory="",
-            stop_reason="cleared_from_monitor",
-        )
-    )
-    return {"ok": True, "action": "clear", "job": updated.model_dump(mode="json")}
+    return metadata
 
 
 @app.post("/agent-runs/api/jobs/{job_id}/block")
@@ -597,6 +627,8 @@ async def agent_runs_mark_blocked(job_id: str, request: AgentRunBlockRequest | N
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before marking blocked.")
     if job.status not in {CloydSmithJobStatus.NEEDS_REVIEW, CloydSmithJobStatus.QUEUED, CloydSmithJobStatus.RUNNING, CloydSmithJobStatus.STALE}:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only active or needs-review jobs can be marked blocked from the monitor.")
     heartbeat = store.get_heartbeat(job_id)
@@ -640,6 +672,8 @@ async def agent_runs_follow_up_job(job_id: str, request: AgentRunFollowUpRequest
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before follow-up.")
     if job.status not in {CloydSmithJobStatus.NEEDS_REVIEW, CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STALE}:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only needs-review, blocked, or stale jobs can receive a follow-up from the monitor.")
     follow_up_prompt = request.prompt.strip()
@@ -698,6 +732,8 @@ async def agent_runs_create_replacement_job(job_id: str, request: AgentRunReplac
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before replacing.")
     if job.status != CloydSmithJobStatus.BLOCKED:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only blocked jobs can be replaced from the monitor.")
     prompt_text = request.prompt.strip()
@@ -785,6 +821,8 @@ async def agent_runs_queue_suggested_replacement_job(job_id: str) -> dict[str, A
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before replacing.")
     if job.status != CloydSmithJobStatus.BLOCKED:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only blocked jobs can be replaced from the monitor.")
     heartbeat = store.get_heartbeat(job_id)
@@ -879,6 +917,8 @@ async def agent_runs_stop_job(job_id: str) -> dict[str, Any]:
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before stopping.")
     if job.status not in {CloydSmithJobStatus.QUEUED, CloydSmithJobStatus.RUNNING, CloydSmithJobStatus.STOPPING}:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only queued, running, or stopping jobs can be stopped from the monitor.")
     store.add_event(job_id, "operator_stop", {"source": "agent-runs-page", "previous_status": job.status.value})
@@ -1008,6 +1048,8 @@ async def agent_runs_stop_after_current_turn_job(job_id: str) -> dict[str, Any]:
         job = store.get(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown Cloyd-Smith job: {job_id}") from None
+    if job_is_archived(job):
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is archived; restore it before stopping.")
     if job.status != CloydSmithJobStatus.RUNNING:
         raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status.value}; only running jobs can stop after the current turn.")
     store.add_event(job_id, "operator_stop_after_current_turn", {"source": "agent-runs-page", "previous_status": job.status.value})
@@ -1047,6 +1089,8 @@ async def agent_runs_requeue_incomplete_jobs() -> dict[str, Any]:
     updated_ids: list[str] = []
     now = datetime.now(UTC)
     for job in jobs:
+        if job_is_archived(job):
+            continue
         metadata = dict(job.metadata or {})
         bulk = dict(metadata.get("bulk_requeue") or {})
         attempts = int(bulk.get("attempts") or 0) + 1
@@ -1131,45 +1175,22 @@ async def agent_runs_clear_old_jobs() -> dict[str, Any]:
         if job.status not in clearable_statuses:
             skipped_jobs += 1
             continue
+        if job_is_archived(job):
+            skipped_jobs += 1
+            continue
         summary = job_status_summary(job, heartbeat=store.get_heartbeat(job.job_id), now=now)
         if _agent_run_is_hidden_terminal(summary):
             skipped_jobs += 1
             continue
-        metadata = dict(job.metadata or {})
-        metadata["cleared_from_monitor"] = {
-            "source": "agent-runs-page",
-            "cleared_at": now.isoformat(),
-            "previous_status": job.status.value,
-            "bulk": True,
-        }
+        metadata = _archived_agent_run_metadata(job, source="agent-runs-page", bulk=True)
         store.add_event(
             job.job_id,
-            "operator_clear_old",
+            "operator_archive",
             {"source": "agent-runs-page", "previous_status": job.status.value},
         )
         store.update(
             job.job_id,
-            CloydSmithJobUpdate(
-                status=CloydSmithJobStatus.STOPPED,
-                phase="cleared",
-                next_action="cleared_from_monitor",
-                last_evidence={"operator_action": "clear_old", "previous_status": job.status.value},
-                metadata=metadata,
-            ),
-        )
-        store.record_heartbeat(
-            AgentRunHeartbeat(
-                job_id=job.job_id,
-                agent="smith",
-                alias=job.smith_alias,
-                session_id=job.session_id,
-                state="stopped",
-                phase="cleared",
-                last_action="operator_clear_old",
-                last_message="Cleared old job from Agent Runs monitor.",
-                working_directory="",
-                stop_reason="cleared_from_monitor",
-            )
+            CloydSmithJobUpdate(metadata=metadata),
         )
         updated_ids.append(job.job_id)
     return {"ok": True, "action": "clear-old", "updated_jobs": updated_ids, "skipped_jobs": skipped_jobs}
@@ -1190,6 +1211,8 @@ def _incomplete_agent_run_jobs(store: CloydSmithJobStore) -> list[Any]:
         CloydSmithJobStatus.STALE,
     }
     for job in [*store.list_active(limit=200), *store.list_recent_terminal(limit=200)]:
+        if job_is_archived(job):
+            continue
         if job.status in incomplete_statuses:
             jobs[job.job_id] = job
     return list(jobs.values())
@@ -1443,8 +1466,8 @@ def _record_runtime_reset_on_busy_timeout_jobs(
     return updated_job_ids
 
 
-def _agent_runs_status_payload() -> dict[str, Any]:
-    return enrich_loop_status_with_runtime(loop_status_payload(), opencode_health(alias="freyja-code", timeout_seconds=5))
+def _agent_runs_status_payload(*, show_archived: bool = False) -> dict[str, Any]:
+    return enrich_loop_status_with_runtime(loop_status_payload(show_archived=show_archived), opencode_health(alias="freyja-code", timeout_seconds=5))
 
 
 def _endpoint_directory_html() -> str:
@@ -1528,7 +1551,7 @@ def _agent_runs_human_status_html(payload: dict[str, Any]) -> str:
     <section><h2>Controls</h2><div class="actions">
       <button type="button" data-bulk-action="requeue-incomplete">Requeue Incomplete Work</button>
       <button type="button" data-bulk-action="stop-all">Stop All Work</button>
-      <button type="button" data-bulk-action="clear-old">Clear Old Jobs From Screen</button>
+      <button type="button" data-bulk-action="clear-old">Clear All Finished</button>
     </div></section>
     <p><a href="/agent-runs">Open live monitor</a> · <a href="/agent-runs/api/status">JSON API</a></p>
   </main>
@@ -1541,7 +1564,7 @@ def _agent_runs_human_status_html(payload: dict[str, Any]) -> str:
       const message = action === 'stop-all'
         ? 'Stop all incomplete work and abort the OpenCode runtime?'
         : action === 'clear-old'
-          ? 'Hide old verified, done, and stopped jobs from this screen? The ledger and evidence stay intact.'
+          ? 'Archive all visible verified, done, and stopped jobs? Active jobs stay visible and evidence stays intact.'
         : 'Requeue all incomplete work and restart it through the durable loop?';
       if (!confirm(message)) return;
       button.disabled = true;
@@ -1579,6 +1602,11 @@ def _html_attr(value: Any) -> str:
 
 
 def _agent_run_is_hidden_terminal(run: dict[str, Any]) -> bool:
+    if run.get("archived") is True:
+        return True
+    archive = run.get("archive")
+    if isinstance(archive, dict) and archive.get("archived") is True:
+        return True
     if run.get("job_status") != "stopped":
         return False
     if run.get("phase") == "cleared" or run.get("stop_reason") == "cleared_from_monitor":
@@ -1819,8 +1847,8 @@ def _agent_runs_html() -> str:
       resize: vertical;
     }
     .copybar {
-      display: grid;
-      grid-template-columns: 1fr auto auto auto auto auto;
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       align-items: center;
       margin: 12px 0;
@@ -1840,6 +1868,8 @@ def _agent_runs_html() -> str:
       margin: 14px 0 0;
     }
     .jobid {
+      flex: 1 1 260px;
+      min-width: 220px;
       color: #d2d8dd;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 13px;
@@ -1856,6 +1886,7 @@ def _agent_runs_html() -> str:
       font-size: 13px;
       cursor: pointer;
       min-height: 34px;
+      min-width: 88px;
     }
     button:hover { border-color: var(--accent); }
     a.button-link {
@@ -1885,6 +1916,10 @@ def _agent_runs_html() -> str:
       border-color: var(--accent);
       background: #15191d;
     }
+    .run.archived {
+      border-style: dashed;
+      opacity: .88;
+    }
     .current-label {
       color: var(--accent);
       font-size: 12px;
@@ -1907,7 +1942,8 @@ def _agent_runs_html() -> str:
     .event { color: var(--muted); border-left: 3px solid var(--line); padding: 7px 0 7px 10px; font-size: 13px; }
     .empty { color: var(--muted); padding: 28px 0; }
     @media (max-width: 620px) {
-      .copybar { grid-template-columns: 1fr; }
+      .copybar { display: grid; grid-template-columns: 1fr; }
+      .jobid { min-width: 0; }
       button { width: 100%; }
     }
   </style>
@@ -1925,6 +1961,8 @@ def _agent_runs_html() -> str:
     <section class="toolbar">
       <button type="button" data-bulk-action="requeue-incomplete">Requeue Incomplete Work</button>
       <button type="button" data-bulk-action="stop-all">Stop All Work</button>
+      <button type="button" data-bulk-action="clear-old">Clear All Finished</button>
+      <button type="button" id="archive-toggle" data-toggle-archived="true">Show Archived</button>
     </section>
     <section class="smith-panels" aria-live="polite">
       <div id="terminal-smith-panel">
@@ -1945,7 +1983,7 @@ def _agent_runs_html() -> str:
     <section id="diagnostics" class="diagnostics"></section>
     <section id="runs" class="grid"></section>
     <section class="toolbar bottom-toolbar">
-      <button type="button" data-bulk-action="clear-old">Clear Old Jobs From Screen</button>
+      <button type="button" data-bulk-action="clear-old">Clear All Finished</button>
     </section>
     <section class="feed">
       <h2>Live Feed</h2>
@@ -1960,8 +1998,11 @@ def _agent_runs_html() -> str:
     const workerOutputEl = document.getElementById('worker-output-panel');
     const feedEl = document.getElementById('feed');
     const connectionEl = document.getElementById('connection');
+    const archiveToggleEl = document.getElementById('archive-toggle');
     const seen = new Map();
     let latestPayload = {};
+    let showArchived = false;
+    let events = null;
     let terminalSmithHealthInFlight = false;
     let terminalSmithHealthLastFetchMs = 0;
     let terminalSmithHealthLastRendered = '';
@@ -1981,6 +2022,8 @@ def _agent_runs_html() -> str:
 
     function render(payload) {
       latestPayload = payload || {};
+      showArchived = Boolean(payload.show_archived);
+      archiveToggleEl.textContent = showArchived ? 'Hide Archived' : 'Show Archived';
       const queue = payload.queue || {};
       const supervisor = payload.supervisor || {};
       connectionEl.textContent = `live - ${payload.active_count} active - ${payload.attention_count || 0} need attention`;
@@ -1997,7 +2040,8 @@ def _agent_runs_html() -> str:
         metric('Stale', queue.stale || 0, 'stale'),
         metric('Queued', queue.queued || 0, ''),
         metric('Stopping', queue.stopping || 0, 'blocked'),
-        metric('Done', queue.done || 0, '')
+        metric('Done', queue.done || 0, ''),
+        metric('Archived', payload.archived_count || 0, '')
       ].join('');
       const preservedHealthPanels = document.getElementById('runtime-health')?.outerHTML || '';
       diagnosticsEl.innerHTML = preservedHealthPanels + (payload.diagnostics || []).map(item => `
@@ -2007,8 +2051,9 @@ def _agent_runs_html() -> str:
         </div>
       `).join('');
       renderSupervisor(supervisor);
-      if (!payload.runs.length) {
-        runsEl.innerHTML = '<div class="empty">No active or recent agent runs.</div>';
+      const payloadRuns = payload.runs || [];
+      if (!payloadRuns.length) {
+        runsEl.innerHTML = `<div class="empty">${showArchived ? 'No archived agent runs.' : 'No active or recent agent runs.'}</div>`;
         currentWorkerRun = null;
         updateRuntimeHealth();
         updateTerminalSmithHealth();
@@ -2016,12 +2061,13 @@ def _agent_runs_html() -> str:
         return;
       }
       const terminalStates = new Set(['done', 'verified', 'stopped']);
-      currentWorkerRun = payload.runs.find(run => run.session_id && !terminalStates.has(run.job_status || run.state || '')) || payload.runs.find(run => run.session_id) || null;
-      const currentJobId = (currentWorkerRun || payload.runs[0] || {}).job_id;
-      const renderedRuns = [...payload.runs].sort((left, right) => (left.job_id === currentJobId ? -1 : 0) - (right.job_id === currentJobId ? -1 : 0));
+      currentWorkerRun = payloadRuns.find(run => run.session_id && !run.archived && !terminalStates.has(run.job_status || run.state || '')) || payloadRuns.find(run => run.session_id && !run.archived) || null;
+      const currentJobId = (currentWorkerRun || payloadRuns.find(run => !run.archived) || payloadRuns[0] || {}).job_id;
+      const renderedRuns = [...payloadRuns].sort((left, right) => (left.job_id === currentJobId ? -1 : 0) - (right.job_id === currentJobId ? -1 : 0));
       runsEl.innerHTML = renderedRuns.map(run => `
-        <article class="run ${run.job_id === currentJobId ? 'current' : ''}">
-          ${run.job_id === currentJobId ? '<div class="current-label">Current task</div>' : ''}
+        <article class="run ${run.job_id === currentJobId && !run.archived ? 'current' : ''} ${run.archived ? 'archived' : ''}">
+          ${run.job_id === currentJobId && !run.archived ? '<div class="current-label">Current task</div>' : ''}
+          ${run.archived ? '<div class="current-label">Archived</div>' : ''}
           <div class="top">
             <div class="state ${run.state}">${run.state}</div>
             <div class="pill">${run.alias}</div>
@@ -2037,6 +2083,7 @@ def _agent_runs_html() -> str:
 	            ${actionButton(run, 'retry', 'Resume/Retry')}
 	            ${actionButton(run, 'done', 'Mark Done')}
 	            ${actionButton(run, 'clear', 'Clear')}
+	            ${actionButton(run, 'restore', 'Restore')}
 	            ${actionButton(run, 'follow-up', 'Follow Up')}
             ${actionButton(run, 'replace', 'Create Replacement')}
             ${actionButton(run, 'block', 'Mark Blocked')}
@@ -2066,6 +2113,7 @@ def _agent_runs_html() -> str:
             <dt>Retries</dt><dd>${run.retry_attempts || 0}</dd>
             <dt>Follow-ups</dt><dd>${run.follow_up_attempts || 0}</dd>
             <dt>Repairs</dt><dd>${run.repair_attempts || 0}</dd>
+            <dt>Archive</dt><dd>${run.archived ? escapeHtml(`archived ${run.archived_at || ''}`) : 'visible'}</dd>
             <dt>Stale</dt><dd>${run.is_stale ? 'yes' : 'no'}</dd>
             <dt>Workdir</dt><dd>${escapeHtml(run.working_directory || '')}</dd>
           </dl>
@@ -2073,7 +2121,7 @@ def _agent_runs_html() -> str:
         </article>
       `).join('');
 
-      for (const run of payload.runs) {
+      for (const run of payloadRuns) {
         const key = `${run.job_id}:${run.state}:${run.phase}:${run.last_action}:${run.last_message}:${run.next_action}`;
         if (seen.get(run.job_id) === key) continue;
         seen.set(run.job_id, key);
@@ -2110,16 +2158,17 @@ def _agent_runs_html() -> str:
 	    function actionButton(run, action, label) {
       const status = run.job_status || run.state || '';
       const enabled = (
-		        (action === 'start' && status === 'queued') ||
-		        (action === 'retry' && ['blocked', 'stale', 'stopped'].includes(status)) ||
-		        (action === 'done' && status === 'needs_review') ||
-		        (action === 'clear' && status === 'done') ||
-		        (action === 'follow-up' && ['needs_review', 'blocked', 'stale'].includes(status) && !run.follow_up_attempts) ||
-		        (action === 'queue-replacement' && status === 'blocked' && !!run.replacement_prompt) ||
-		        (action === 'replace' && status === 'blocked' && !!run.suggested_prompt) ||
-		        (action === 'block' && ['needs_review', 'queued', 'running', 'stale'].includes(status)) ||
-		        (action === 'stop-after-current-turn' && status === 'running' && run.stop_intent !== 'after_current_turn') ||
-		        (action === 'stop' && ['queued', 'running', 'stopping'].includes(status))
+		        (action === 'start' && !run.archived && status === 'queued') ||
+		        (action === 'retry' && !run.archived && ['blocked', 'stale', 'stopped'].includes(status)) ||
+		        (action === 'done' && !run.archived && status === 'needs_review') ||
+		        (action === 'clear' && !run.archived && ['verified', 'done', 'stopped'].includes(status)) ||
+		        (action === 'restore' && run.archived) ||
+		        (action === 'follow-up' && !run.archived && ['needs_review', 'blocked', 'stale'].includes(status) && !run.follow_up_attempts) ||
+		        (action === 'queue-replacement' && !run.archived && status === 'blocked' && !!run.replacement_prompt) ||
+		        (action === 'replace' && !run.archived && status === 'blocked' && !!run.suggested_prompt) ||
+		        (action === 'block' && !run.archived && ['needs_review', 'queued', 'running', 'stale'].includes(status)) ||
+		        (action === 'stop-after-current-turn' && !run.archived && status === 'running' && run.stop_intent !== 'after_current_turn') ||
+		        (action === 'stop' && !run.archived && ['queued', 'running', 'stopping'].includes(status))
 	      );
 	      if (!enabled) return '';
 	      return `<button type="button" data-action="${action}" data-job-id="${escapeAttr(run.job_id)}">${label}</button>`;
@@ -2302,7 +2351,12 @@ def _agent_runs_html() -> str:
 	          ]
 	        });
 	      }
-      if (!confirm(`${label} ${jobId}?`)) return;
+      const confirmText = action === 'clear'
+        ? `Archive ${jobId}? Logs and verification evidence stay in the ledger.`
+        : action === 'restore'
+          ? `Restore ${jobId} to the visible Agent Runs list?`
+          : `${label} ${jobId}?`;
+      if (!confirm(confirmText)) return;
       button.disabled = true;
       button.textContent = 'Working...';
       try {
@@ -2314,7 +2368,7 @@ def _agent_runs_html() -> str:
         const body = await response.json();
         if (!response.ok || !body.ok) throw new Error(body.detail || body.error || 'Action failed');
         button.textContent = 'Done';
-        const status = await fetch('/agent-runs/api/status').then(item => item.json());
+        const status = await fetch(statusUrl()).then(item => item.json());
         render(status);
       } catch (error) {
         button.disabled = false;
@@ -2332,7 +2386,7 @@ def _agent_runs_html() -> str:
       const message = action === 'stop-all'
         ? 'Stop all incomplete work and abort the OpenCode runtime?'
         : action === 'clear-old'
-          ? 'Hide old verified, done, and stopped jobs from this screen? The ledger and evidence stay intact.'
+          ? 'Archive all visible verified, done, and stopped jobs? Active jobs stay visible and evidence stays intact.'
         : 'Requeue all incomplete work and restart it through the durable loop?';
       if (!confirm(message)) return;
       button.disabled = true;
@@ -2342,7 +2396,7 @@ def _agent_runs_html() -> str:
         const body = await response.json();
         if (!response.ok || !body.ok) throw new Error(body.detail || body.error || 'Bulk action failed');
         button.textContent = 'Done';
-        const status = await fetch('/agent-runs/api/status').then(item => item.json());
+        const status = await fetch(statusUrl()).then(item => item.json());
         render(status);
         setTimeout(() => { button.disabled = false; button.textContent = label; }, 1200);
       } catch (error) {
@@ -2553,9 +2607,30 @@ def _agent_runs_html() -> str:
 	      return JSON.stringify(state);
 	    }
 
-    const events = new EventSource('/agent-runs/events');
-    events.addEventListener('status', event => render(JSON.parse(event.data)));
-    events.onerror = () => { connectionEl.textContent = 'reconnecting...'; };
+    archiveToggleEl.addEventListener('click', async () => {
+      showArchived = !showArchived;
+      archiveToggleEl.textContent = showArchived ? 'Hide Archived' : 'Show Archived';
+      connectEvents();
+      const status = await fetch(statusUrl()).then(item => item.json());
+      render(status);
+    });
+
+    function statusUrl() {
+      return `/agent-runs/api/status${showArchived ? '?show_archived=1' : ''}`;
+    }
+
+    function eventsUrl() {
+      return `/agent-runs/events${showArchived ? '?show_archived=1' : ''}`;
+    }
+
+    function connectEvents() {
+      if (events) events.close();
+      events = new EventSource(eventsUrl());
+      events.addEventListener('status', event => render(JSON.parse(event.data)));
+      events.onerror = () => { connectionEl.textContent = 'reconnecting...'; };
+    }
+
+    connectEvents();
   </script>
 </body>
 </html>"""

@@ -15,6 +15,10 @@ services:
       PRIMARY_API_KEY_FILE: ${OPENAI_PRIMARY_API_KEY_FILE_CONTAINER:-/run/secrets/nexus-token}
       PRIMARY_OLLAMA_BASE_URL: ${OPENAI_PRIMARY_OLLAMA_BASE_URL:-http://100.94.80.21:11434}
       PRIMARY_MODEL_ALIASES: ${OPEN_WEBUI_PRIMARY_MODEL_ALIASES:-qwen3.8:27b=external-ollama/qwen3.8:27b,qwen2.5vl:72b=external-ollama/qwen2.5vl:72b,qwen3:30b-a3b=external-ollama/qwen3:30b-a3b,qwen3-coder-next:q4_K_M=external-ollama/qwen3-coder-next:q4_K_M,gpt-oss:20b=external-ollama/gpt-oss:20b,gpt-oss:120b=external-ollama/gpt-oss:120b}
+      CODER_BASE_URL: ${OPENAI_CODER_BASE_URL:-http://100.94.80.21:11436/v1}
+      CODER_API_KEY: ${OPENAI_CODER_API_KEY:-not-needed}
+      CODER_OLLAMA_BASE_URL: ${OPENAI_CODER_OLLAMA_BASE_URL:-http://100.94.80.21:11436}
+      CODER_MODELS: ${OPEN_WEBUI_CODER_MODELS:-qwen3-coder-next:q4_K_M}
       FALLBACK_BASE_URL: ${OPENAI_FALLBACK_BASE_URL:-http://100.115.228.56:11434/v1}
       FALLBACK_API_KEY: ${OPENAI_FALLBACK_API_KEY:-not-needed}
       FREYJA5_BASE_URL: ${OPEN_WEBUI_FREYJA5_BASE_URL:-http://100.94.80.21:8512/v1}
@@ -30,7 +34,7 @@ services:
       GARBAGE_GUARD_MODELS: ${OPEN_WEBUI_GARBAGE_GUARD_MODELS:-gpt-oss:120b,gpt-oss-freyja:20b-analysis-prefill}
       GARBAGE_GUARD_MIN_TOKENS: ${OPEN_WEBUI_GARBAGE_GUARD_MIN_TOKENS:-512}
       VISION_MODELS: ${OPEN_WEBUI_VISION_MODELS:-qwen2.5vl:72b}
-      TEXT_MODEL: ${OPEN_WEBUI_TEXT_MODEL:-qwen2.5vl:72b}
+      TEXT_MODEL: ${OPEN_WEBUI_TEXT_MODEL:-qwen3.8:27b}
       TOOL_MODEL: ${OPEN_WEBUI_TOOL_MODEL:-qwen3.8:27b}
     volumes:
       - ./model-proxy.py:/app/model-proxy.py:ro
@@ -54,7 +58,7 @@ services:
       ENABLE_OLLAMA_API: ${ENABLE_OLLAMA_API:-false}
       OLLAMA_BASE_URLS: ${OLLAMA_BASE_URLS:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
-      DEFAULT_MODELS: ${DEFAULT_MODELS:-qwen2.5vl:72b}
+      DEFAULT_MODELS: ${DEFAULT_MODELS:-qwen3.8:27b}
       RAG_EMBEDDING_ENGINE: ${RAG_EMBEDDING_ENGINE:-}
       RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-}
       RAG_EMBEDDING_MODEL_AUTO_UPDATE: ${RAG_EMBEDDING_MODEL_AUTO_UPDATE:-false}

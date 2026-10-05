@@ -27,9 +27,11 @@ class TerminalSmithConfig:
     qwen_bin: str = "/opt/homebrew/bin/qwen"
     qwen_home: str = str(Path.home() / ".local" / "state" / "freyja" / "gateway-remote" / "qwen-smith")
     token_file: str = str(Path.home() / ".local" / "state" / "freyja" / "gateway-remote" / "msty-nexus-token")
-    base_url: str = "http://100.94.80.21:3939/v1"
-    model: str = "@preset/freyja-coder"
-    workdir: str = str(Path.home())
+    base_url: str = "http://100.94.80.21:11436/v1"
+    model: str = "qwen3-coder-next:q4_K_M"
+    fallback_model: str = ""
+    workdir: str = "/Users/freyja/freyja-os"
+    context_window_size: int = 16384
     capture_dir: str = "logs/smith-session-captures"
     terminal_url: str = "https://iris.tail3995b4.ts.net/"
     timeout_seconds: float = 8.0
@@ -48,7 +50,9 @@ class TerminalSmithConfig:
             token_file=os.environ.get("FREYJA_GATEWAY_REMOTE_NEXUS_TOKEN_FILE", cls.token_file),
             base_url=os.environ.get("FREYJA_GATEWAY_REMOTE_VULCAN_MODEL_BASE_URL", cls.base_url),
             model=os.environ.get("FREYJA_GATEWAY_REMOTE_VULCAN_MODEL", cls.model),
-            workdir=os.environ.get("AGENT_SMITH_WORKDIR", cls.workdir),
+            fallback_model=os.environ.get("FREYJA_GATEWAY_REMOTE_VULCAN_FALLBACK_MODEL", cls.fallback_model),
+            workdir=os.environ.get("AGENT_SMITH_WORKDIR") or str(repository_root or cls.workdir),
+            context_window_size=_positive_int(os.environ.get("AGENT_SMITH_CONTEXT_WINDOW"), cls.context_window_size),
             capture_dir=capture_dir or cls.capture_dir,
             terminal_url=terminal_url,
         )
@@ -68,6 +72,7 @@ class TerminalSmithController:
             "session": session,
             "state": "running" if exists.returncode == 0 else "missing",
             "model": self.config.model,
+            "fallback_model": self.config.fallback_model,
             "base_url": self.config.base_url,
             "workdir": self.config.workdir,
             "terminal_url": self.config.terminal_url,
@@ -169,7 +174,7 @@ class TerminalSmithController:
         while time.monotonic() < deadline:
             capture = self.capture_pane(lines=120)
             last_output = capture.get("output", "")
-            if response_marker in last_output:
+            if response_marker in last_output or last_output.count(expected) >= 2:
                 return {"ok": True, "action": "ping", "expected": expected, "status": self.status(include_output=True)}
             time.sleep(2.0)
         return {
@@ -219,11 +224,17 @@ class TerminalSmithController:
         return {**metadata, "path": str(path)}
 
     def launcher_command(self) -> str:
-        return shlex.join([self.config.qwen_bin, "--model", self.config.model])
+        args = [self.config.qwen_bin, "--model", self.config.model]
+        if self.config.fallback_model:
+            args.extend(["--fallback-model", self.config.fallback_model])
+        return shlex.join(args)
 
     def _write_qwen_settings(self) -> None:
         qwen_home = Path(self.config.qwen_home).expanduser()
         qwen_home.mkdir(parents=True, exist_ok=True)
+        models = [self.config.model]
+        if self.config.fallback_model and self.config.fallback_model not in models:
+            models.append(self.config.fallback_model)
         settings = {
             "$version": 4,
             "general": {"enableAutoUpdate": False},
@@ -232,15 +243,19 @@ class TerminalSmithController:
                 "openai": [
                     {
                         "id": self.config.model,
-                        "name": "Vulcan Nexus",
+                        "name": "Vulcan Coder",
                         "baseUrl": self.config.base_url,
                         "envKey": "OPENAI_API_KEY",
-                        "generationConfig": {"contextWindowSize": 128000},
-                        "models": [self.config.model],
+                        "generationConfig": {"contextWindowSize": self.config.context_window_size},
+                        "models": models,
                     }
                 ]
             },
             "security": {"auth": {"baseUrl": self.config.base_url, "selectedType": "openai"}},
+            "memory": {
+                "enableManagedAutoMemory": False,
+                "enableManagedAutoDream": False,
+            },
             "ui": {"autoModeAcknowledged": True},
         }
         (qwen_home / "settings.json").write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
@@ -260,6 +275,8 @@ class TerminalSmithController:
                 "OPENAI_BASE_URL": self.config.base_url,
                 "OPENAI_API_KEY": token_path.read_text(encoding="utf-8").strip(),
                 "FREYJA_GATEWAY_REMOTE_VULCAN_MODEL": self.config.model,
+                "FREYJA_GATEWAY_REMOTE_VULCAN_FALLBACK_MODEL": self.config.fallback_model,
+                "AGENT_SMITH_CONTEXT_WINDOW": str(self.config.context_window_size),
             }
         )
         return env
@@ -286,6 +303,16 @@ def _int_or_none(value: str) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _positive_int(value: str | None, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
 
 
 def _discover_tailscale_serve_url() -> str | None:

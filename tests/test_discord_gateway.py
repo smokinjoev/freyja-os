@@ -145,7 +145,7 @@ async def test_discord_gateway_routes_approved_dm_to_bound_agent() -> None:
     assert reply.agent_id == "agent-47"
     assert captured["url"] == "http://director.test/canonical/route"
     assert captured["headers"]["X-Freyja-Agent-Id"] == "agent-47"
-    assert captured["headers"]["X-Freyja-Agent-Display-Name"] == "Agent 44"
+    assert captured["headers"]["X-Freyja-Agent-Display-Name"] == "Agent 47"
     assert captured["headers"]["X-Freyja-Client-Type"] == "discord"
     assert captured["json"]["resolved_agent_id"] == "agent-47"
     assert captured["json"]["channel_metadata"]["discord_channel_type"] == "dm"

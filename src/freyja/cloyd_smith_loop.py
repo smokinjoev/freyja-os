@@ -107,6 +107,20 @@ class AgentRunHeartbeat(BaseModel):
     stop_reason: str | None = None
 
 
+def job_archive_info(job: CloydSmithJob) -> dict[str, Any]:
+    metadata = job.metadata if isinstance(job.metadata, dict) else {}
+    archive = metadata.get("agent_runs_archive")
+    if isinstance(archive, dict):
+        return archive
+    if metadata.get("archived") is True:
+        return {"archived": True}
+    return {}
+
+
+def job_is_archived(job: CloydSmithJob) -> bool:
+    return job_archive_info(job).get("archived") is True
+
+
 def default_cloyd_smith_database_path() -> Path:
     configured = getattr(settings, "cloyd_smith_loop_database_path", "")
     if configured:
@@ -228,7 +242,7 @@ class CloydSmithJobStore:
             raise KeyError(job_id)
         return _job_from_row(row)
 
-    def list_active(self, *, limit: int = 50) -> list[CloydSmithJob]:
+    def list_active(self, *, limit: int = 50, include_archived: bool = False) -> list[CloydSmithJob]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -250,9 +264,12 @@ class CloydSmithJobStore:
                     max(1, min(limit, 500)),
                 ),
             ).fetchall()
-        return [_job_from_row(row) for row in rows]
+        jobs = [_job_from_row(row) for row in rows]
+        if not include_archived:
+            jobs = [job for job in jobs if not job_is_archived(job)]
+        return jobs[: max(1, min(limit, 500))]
 
-    def list_recent_terminal(self, *, limit: int = 10) -> list[CloydSmithJob]:
+    def list_recent_terminal(self, *, limit: int = 10, include_archived: bool = False) -> list[CloydSmithJob]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -269,7 +286,10 @@ class CloydSmithJobStore:
                     max(1, min(limit, 100)),
                 ),
             ).fetchall()
-        return [_job_from_row(row) for row in rows]
+        jobs = [_job_from_row(row) for row in rows]
+        if not include_archived:
+            jobs = [job for job in jobs if not job_is_archived(job)]
+        return jobs[: max(1, min(limit, 100))]
 
     def update(self, job_id: str, update: CloydSmithJobUpdate) -> CloydSmithJob:
         current = self.get(job_id)
@@ -456,9 +476,19 @@ class CloydSmithJobStore:
             warnings.append(updated)
         return warnings
 
-    def status_rows(self, *, active_limit: int = 50, recent_limit: int = 10, now: datetime | None = None) -> list[dict[str, Any]]:
+    def status_rows(
+        self,
+        *,
+        active_limit: int = 50,
+        recent_limit: int = 10,
+        now: datetime | None = None,
+        include_archived: bool = False,
+    ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
-        for job in [*self.list_active(limit=active_limit), *self.list_recent_terminal(limit=recent_limit)]:
+        for job in [
+            *self.list_active(limit=active_limit, include_archived=include_archived),
+            *self.list_recent_terminal(limit=recent_limit, include_archived=include_archived),
+        ]:
             heartbeat = self.get_heartbeat(job.job_id)
             rows.append(job_status_summary(job, heartbeat=heartbeat, now=now))
         return rows
@@ -824,6 +854,8 @@ def job_status_summary(
     repair_attempts = repair.get("attempts", 0) if isinstance(repair, dict) else 0
     runtime_reset = job.metadata.get("runtime_reset") if isinstance(job.metadata, dict) else {}
     runtime_reset_attempts = runtime_reset.get("attempts", 0) if isinstance(runtime_reset, dict) else 0
+    archive = job_archive_info(job)
+    archived = archive.get("archived") is True
     expected_alias = expected_smith_alias(job)
     alias_mismatch = bool(expected_alias and expected_alias != job.smith_alias)
     if retry_attempts >= 3:
@@ -897,6 +929,9 @@ def job_status_summary(
         "check_commands": job.check_commands,
         "revision_evidence": job.revision_evidence,
         "metadata": job.metadata,
+        "archived": archived,
+        "archive": archive,
+        "archived_at": archive.get("archived_at") if archived else None,
         "retry_attempts": retry_attempts,
         "follow_up_attempts": follow_up_attempts,
         "repair_attempts": repair_attempts,
@@ -909,13 +944,17 @@ def job_status_summary(
     }
 
 
-def loop_status_payload(store: CloydSmithJobStore | None = None) -> dict[str, Any]:
+def loop_status_payload(store: CloydSmithJobStore | None = None, *, show_archived: bool = False) -> dict[str, Any]:
     """Return the canonical operator status for the Cloyd-Smith loop."""
     store = store or CloydSmithJobStore()
     store.mark_stale_runs()
-    all_runs = store.status_rows(active_limit=50, recent_limit=10)
-    hidden_terminal_count = sum(1 for run in all_runs if agent_run_is_hidden_terminal(run))
-    runs = [run for run in all_runs if not agent_run_is_hidden_terminal(run)]
+    all_runs = store.status_rows(active_limit=50, recent_limit=100, include_archived=True)
+    archived_count = sum(1 for run in all_runs if agent_run_is_archived(run))
+    hidden_terminal_count = sum(1 for run in all_runs if agent_run_is_archived(run) or agent_run_is_hidden_terminal(run))
+    if show_archived:
+        runs = [run for run in all_runs if agent_run_is_archived(run) or not agent_run_is_hidden_terminal(run)]
+    else:
+        runs = [run for run in all_runs if not agent_run_is_archived(run) and not agent_run_is_hidden_terminal(run)]
     supervisor = read_supervisor_heartbeat(store.database_path)
     visible_statuses = [_visible_run_status(run) for run in runs]
     queue = {
@@ -956,6 +995,8 @@ def loop_status_payload(store: CloydSmithJobStore | None = None) -> dict[str, An
         "attention_count": attention_count,
         "terminal_count": terminal_count,
         "hidden_terminal_count": hidden_terminal_count,
+        "archived_count": archived_count,
+        "show_archived": show_archived,
         "queue": queue,
         "diagnostics": agent_runs_diagnostics(runs, supervisor=supervisor),
         "runs": runs,
@@ -1059,6 +1100,8 @@ def _visible_run_status(run: dict[str, Any]) -> str:
 
 
 def agent_run_is_hidden_terminal(run: dict[str, Any]) -> bool:
+    if agent_run_is_archived(run):
+        return True
     if run.get("job_status") != "stopped":
         return False
     if run.get("phase") == "cleared" or run.get("stop_reason") == "cleared_from_monitor":
@@ -1066,6 +1109,13 @@ def agent_run_is_hidden_terminal(run: dict[str, Any]) -> bool:
     if run.get("phase") == "superseded" or run.get("stop_reason") == "superseded":
         return True
     return str(run.get("next_action") or "").startswith("superseded_by:")
+
+
+def agent_run_is_archived(run: dict[str, Any]) -> bool:
+    if run.get("archived") is True:
+        return True
+    archive = run.get("archive")
+    return isinstance(archive, dict) and archive.get("archived") is True
 
 
 def agent_runs_diagnostics(runs: list[dict[str, Any]], *, supervisor: dict[str, Any] | None = None) -> list[dict[str, str]]:

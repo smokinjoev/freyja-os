@@ -30,6 +30,7 @@ def test_inference_policy_audit_is_secret_free_and_complete() -> None:
     assert checks["model_profiles_complete"]["ok"] is True
     assert checks["model_profiles_local_only"]["ok"] is True
     assert checks["unloads_other_primary_models"]["ok"] is True
+    assert checks["dedicated_coder_runtime_configured"]["ok"] is True
     assert checks["cloud_fallback_disabled_for_open_webui_path"]["ok"] is True
 
 
@@ -37,8 +38,7 @@ def test_inference_policy_audit_lists_required_model_profiles() -> None:
     profiles = _module().build_audit()["model_profiles"]
 
     assert set(profiles) == {"coding", "fast_chat", "strong_reasoning", "vision_documents"}
-    assert profiles["coding"] == "qwen3-coder-next:q4_K_M"
-    assert profiles["vision_documents"] == "qwen2.5vl:72b"
+    assert set(profiles.values()) == {"qwen3.8:27b"}
 
 
 def test_inference_policy_audit_writes_report(tmp_path: Path, capsys) -> None:

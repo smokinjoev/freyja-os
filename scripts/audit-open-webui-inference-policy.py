@@ -70,6 +70,20 @@ def build_audit() -> dict[str, Any]:
             "ok": "100.94.80.21:11434" in proxy_env.get("PRIMARY_OLLAMA_BASE_URL", "") or "OPENAI_PRIMARY_OLLAMA_BASE_URL=http://100.94.80.21:11434" in env_example,
         },
         {
+            "name": "dedicated_coder_runtime_configured",
+            "ok": (
+                "100.94.80.21:11436/v1" in proxy_env.get("CODER_BASE_URL", "")
+                and "100.94.80.21:11436" in proxy_env.get("CODER_OLLAMA_BASE_URL", "")
+                and "qwen3-coder-next:q4_K_M" in proxy_env.get("CODER_MODELS", "")
+                and "CODER_MODELS" in source
+            ),
+            "evidence": {
+                "coder_base_url": proxy.CODER_BASE_URL,
+                "coder_ollama_base_url": proxy.CODER_OLLAMA_BASE_URL,
+                "coder_models": sorted(proxy.CODER_MODELS),
+            },
+        },
+        {
             "name": "nexus_is_primary_model_authority",
             "ok": "100.94.80.21:3939/v1" in proxy_env.get("PRIMARY_BASE_URL", "") and bool(proxy.PRIMARY_MODEL_ALIASES),
         },
@@ -87,12 +101,8 @@ def build_audit() -> dict[str, Any]:
             "ok": "_unload_other_primary_models(requested_model)" in source and "keep_alive\": 0" in source,
         },
         {
-            "name": "compatible_qwen_resident_pair_configured",
-            "ok": (
-                "qwen3.8:27b" in proxy_env.get("COMPATIBLE_RESIDENT_MODELS", "")
-                and "qwen3-coder-next:q4_K_M" in proxy_env.get("COMPATIBLE_RESIDENT_MODELS", "")
-                and "COMPATIBLE_RESIDENT_MODELS" in source
-            ),
+            "name": "qwen27_resident_model_configured",
+            "ok": "qwen3.8:27b" in proxy_env.get("COMPATIBLE_RESIDENT_MODELS", "") and "COMPATIBLE_RESIDENT_MODELS" in source,
             "evidence": {"compatible_residents": sorted(proxy.COMPATIBLE_RESIDENT_MODELS)},
         },
         {

@@ -112,7 +112,7 @@ class AgentHierarchy:
         AgentName.FREYJA: "Freyja",
         AgentName.CLOYD_GIBBLER: "Cloyd Gibbler",
         AgentName.BENEDICT: "Benedict",
-        AgentName.AGENT_44: "Agent 44",
+        AgentName.AGENT_44: "Agent 47",
         AgentName.AGENT_47: "Agent 47",
         AgentName.JENNA: "JennaCide",
         AgentName.JENNACIDE: "JennaCide",

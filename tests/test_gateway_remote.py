@@ -163,17 +163,20 @@ def test_launchagent_runs_ttyd_terminal_for_agent_smith() -> None:
     assert args[args.index("--ping-interval") + 1] == "30"
     assert "disableReconnect=true" not in args
     assert "/Users/freyja/freyja-os/scripts/run-agent-smith-qwen.sh" in args
-    assert plist["EnvironmentVariables"]["AGENT_SMITH_WORKDIR"] == "/Users/freyja"
+    assert plist["EnvironmentVariables"]["AGENT_SMITH_WORKDIR"] == "/Users/freyja/freyja-os"
+    assert plist["EnvironmentVariables"]["AGENT_SMITH_CONTEXT_WINDOW"] == "16384"
+    assert plist["WorkingDirectory"] == "/Users/freyja/freyja-os"
 
 
 def test_qwen_launcher_points_agent_smith_at_vulcan_only() -> None:
     body = QWEN_LAUNCHER.read_text(encoding="utf-8")
 
-    assert "http://100.94.80.21:3939/v1" in body
-    assert "@preset/freyja-coder" in body
+    assert "http://100.94.80.21:11436/v1" in body
+    assert "qwen3-coder-next:q4_K_M" in body
     assert "msty-nexus-token" in body
     assert '"enableAutoUpdate": False' in body
     assert 'unset OPENROUTER_API_KEY' in body
     assert 'TMUX_SESSION="${AGENT_SMITH_TMUX_SESSION:-agent-smith}"' in body
+    assert 'AGENT_SMITH_CONTEXT_WINDOW="${AGENT_SMITH_CONTEXT_WINDOW:-16384}"' in body
     assert 'exec "$TMUX_BIN" new-session -A -s "$TMUX_SESSION"' in body
     assert 'printf "%q " "$QWEN_BIN" --model "$FREYJA_GATEWAY_REMOTE_VULCAN_MODEL"' in body
