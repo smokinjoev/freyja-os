@@ -73,7 +73,7 @@ agents:
     owner: person:liam
     home_machine: atlas
     aliases: [agent 44, agent_44, agent 47, agent_47, liam]
-    logical_display_name: Agent 44
+    logical_display_name: Agent 47
     memory: [person:liam, family, system]
     mcp_tool_grants:
       - browser.control

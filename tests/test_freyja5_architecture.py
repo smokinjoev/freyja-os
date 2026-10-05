@@ -377,7 +377,7 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
     assert agent_evidence["benedict-paralegal"]["owner"] == "enclave:paralegal"
     assert agent_evidence["benedict-paralegal"]["private_memory_scope"] == "enclave:paralegal"
     assert agent_evidence["benedict-paralegal"]["cloud_egress_policy"] == "paralegal-local-only"
-    assert agent_evidence["agent-47"]["logical_display_name"] == "Agent 44"
+    assert agent_evidence["agent-47"]["logical_display_name"] == "Agent 47"
     assert agent_evidence["jennacide"]["logical_display_name"] == "Jenna agent"
     expected_planes = freyja5_plane_evidence()
     assert all(

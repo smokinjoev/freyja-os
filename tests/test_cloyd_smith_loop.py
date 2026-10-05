@@ -2189,7 +2189,8 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
 
     assert page.status_code == 200
     assert "Agent Runs" in page.text
-    assert "EventSource('/agent-runs/events')" in page.text
+    assert "new EventSource(eventsUrl())" in page.text
+    assert "show_archived=1" in page.text
     assert "Copy ID" in page.text
     assert "Copy Cloyd Prompt" in page.text
     assert "Current task" in page.text
@@ -2209,7 +2210,10 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
     assert "action === 'queue-replacement'" in page.text
     assert "Clear" in page.text
     assert "action === 'clear'" in page.text
-    assert "Clear Old Jobs From Screen" in page.text
+    assert "Clear All Finished" in page.text
+    assert "Show Archived" in page.text
+    assert "Restore" in page.text
+    assert "action === 'restore'" in page.text
     assert "clear-old" in page.text
     assert "Reset Runtime Session" in page.text
     assert "data-runtime-action=\"reset\"" in page.text
@@ -2235,6 +2239,7 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
     body = status.json()
     assert body["canonical_ledger"] == str(database)
     assert body["active_count"] == 1
+    assert body["archived_count"] == 0
     assert body["attention_count"] == 0
     assert body["terminal_count"] == 0
     assert body["supervisor"]["ok"] is True
@@ -2808,23 +2813,51 @@ def test_agent_runs_api_can_clear_done_job_from_monitor(tmp_path, monkeypatch) -
     store = CloydSmithJobStore(database)
     job = store.create(CloydSmithJobCreate(objective="Completed work.", current_prompt="Report."))
     store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.NEEDS_REVIEW, next_action="cloyd_review_evidence"))
-    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.DONE, next_action="operator_reviewed_done"))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.DONE,
+            next_action="operator_reviewed_done",
+            revision_evidence={"head": "abc123", "check_results": [{"command": "pytest -q", "exit_code": 0}]},
+        ),
+    )
 
     response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/clear")
 
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert body["job"]["status"] == "stopped"
-    assert body["job"]["next_action"] == "cleared_from_monitor"
+    assert body["job"]["status"] == "done"
+    assert body["job"]["next_action"] == "operator_reviewed_done"
+    assert body["job"]["revision_evidence"]["check_results"][0]["exit_code"] == 0
+    assert store.get(job.job_id).metadata["agent_runs_archive"]["archived"] is True
     assert store.get(job.job_id).metadata["cleared_from_monitor"]["previous_status"] == "done"
-    assert store.get_heartbeat(job.job_id).phase == "cleared"
 
     status = TestClient(freyja_main.app).get("/agent-runs/api/status").json()
     assert status["runs"] == []
     assert status["queue"]["done"] == 0
     assert status["queue"]["stopped"] == 0
     assert status["hidden_terminal_count"] == 1
+    assert status["archived_count"] == 1
+
+    restarted_client = TestClient(freyja_main.app)
+    after_restart = restarted_client.get("/agent-runs/api/status").json()
+    assert after_restart["runs"] == []
+    shown = restarted_client.get("/agent-runs/api/status?show_archived=1").json()
+    assert shown["runs"][0]["job_id"] == job.job_id
+    assert shown["runs"][0]["archived"] is True
+    assert shown["runs"][0]["job_status"] == "done"
+
+    retry = restarted_client.post(f"/agent-runs/api/jobs/{job.job_id}/retry")
+    assert retry.status_code == 409
+    assert "archived" in retry.json()["detail"]
+
+    restored = restarted_client.post(f"/agent-runs/api/jobs/{job.job_id}/restore")
+    assert restored.status_code == 200
+    assert restored.json()["job"]["metadata"]["agent_runs_archive"]["archived"] is False
+    visible = restarted_client.get("/agent-runs/api/status").json()
+    assert visible["runs"][0]["job_id"] == job.job_id
+    assert visible["runs"][0]["archived"] is False
 
 
 def test_agent_runs_api_rejects_clear_for_unfinished_job(tmp_path, monkeypatch) -> None:
@@ -2837,6 +2870,30 @@ def test_agent_runs_api_rejects_clear_for_unfinished_job(tmp_path, monkeypatch) 
     response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/clear")
 
     assert response.status_code == 409
+
+
+def test_agent_runs_api_can_clear_stopped_job_without_rewriting_status(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+    store = CloydSmithJobStore(database)
+    job = store.create(CloydSmithJobCreate(objective="Stopped work.", current_prompt="Report."))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.STOPPED,
+            phase="operator_stopped",
+            last_evidence={"runtime_stop": {"ok": True}},
+        ),
+    )
+
+    response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/clear")
+
+    assert response.status_code == 200
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.STOPPED
+    assert loaded.phase == "operator_stopped"
+    assert loaded.last_evidence == {"runtime_stop": {"ok": True}}
+    assert loaded.metadata["agent_runs_archive"]["previous_status"] == "stopped"
 
 
 def test_agent_runs_api_can_clear_old_terminal_jobs_from_monitor(tmp_path, monkeypatch) -> None:
@@ -2860,13 +2917,14 @@ def test_agent_runs_api_can_clear_old_terminal_jobs_from_monitor(tmp_path, monke
     assert body["ok"] is True
     assert body["action"] == "clear-old"
     assert set(body["updated_jobs"]) == {verified.job_id, done.job_id, stopped.job_id}
-    assert store.get(verified.job_id).status == CloydSmithJobStatus.STOPPED
-    assert store.get(done.job_id).status == CloydSmithJobStatus.STOPPED
-    assert store.get(stopped.job_id).next_action == "cleared_from_monitor"
+    assert store.get(verified.job_id).status == CloydSmithJobStatus.VERIFIED
+    assert store.get(done.job_id).status == CloydSmithJobStatus.DONE
+    assert store.get(stopped.job_id).status == CloydSmithJobStatus.STOPPED
+    assert store.get(stopped.job_id).next_action == "operator_stopped_all_work"
     assert store.get(blocked.job_id).status == CloydSmithJobStatus.BLOCKED
     assert store.get(queued.job_id).status == CloydSmithJobStatus.QUEUED
-    assert store.get_heartbeat(done.job_id).phase == "cleared"
-    assert store.get(done.job_id).metadata["cleared_from_monitor"]["bulk"] is True
+    assert store.get(done.job_id).metadata["agent_runs_archive"]["bulk"] is True
+    assert store.get(done.job_id).metadata["cleared_from_monitor"]["archived"] is True
 
     status = TestClient(freyja_main.app).get("/agent-runs/api/status").json()
     visible_ids = {run["job_id"] for run in status["runs"]}
@@ -2874,6 +2932,14 @@ def test_agent_runs_api_can_clear_old_terminal_jobs_from_monitor(tmp_path, monke
     assert status["queue"]["blocked"] == 1
     assert status["queue"]["queued"] == 1
     assert status["hidden_terminal_count"] == 3
+    assert status["archived_count"] == 3
+
+    restarted_status = TestClient(freyja_main.app).get("/agent-runs/api/status").json()
+    assert {run["job_id"] for run in restarted_status["runs"]} == {queued.job_id, blocked.job_id}
+    shown = TestClient(freyja_main.app).get("/agent-runs/api/status?show_archived=1").json()
+    shown_ids = {run["job_id"] for run in shown["runs"]}
+    assert {verified.job_id, done.job_id, stopped.job_id, blocked.job_id, queued.job_id}.issubset(shown_ids)
+    assert shown["show_archived"] is True
 
 
 def test_agent_runs_api_can_mark_timeout_review_job_blocked(tmp_path, monkeypatch) -> None:
@@ -3301,10 +3367,18 @@ def test_agent_runs_requeue_incomplete_jobs(tmp_path, monkeypatch) -> None:
     running = store.create(CloydSmithJobCreate(objective="Running work.", current_prompt="Do it."))
     review = store.create(CloydSmithJobCreate(objective="Review work.", current_prompt="Review it."))
     blocked = store.create(CloydSmithJobCreate(objective="Blocked work.", current_prompt="Blocked."))
+    archived_blocked = store.create(
+        CloydSmithJobCreate(
+            objective="Archived blocked work.",
+            current_prompt="Do not requeue.",
+            metadata={"agent_runs_archive": {"archived": True, "archived_at": datetime.now(UTC).isoformat()}},
+        )
+    )
     done = store.create(CloydSmithJobCreate(objective="Done work.", current_prompt="Done."))
     store.update(running.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING))
     store.update(review.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.NEEDS_REVIEW))
     store.update(blocked.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.BLOCKED, error="blocked"))
+    store.update(archived_blocked.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.BLOCKED, error="archived"))
     store.update(done.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.DONE))
 
     response = TestClient(freyja_main.app).post("/agent-runs/api/jobs/requeue-incomplete")
@@ -3317,6 +3391,7 @@ def test_agent_runs_requeue_incomplete_jobs(tmp_path, monkeypatch) -> None:
     assert store.get(running.job_id).status == CloydSmithJobStatus.QUEUED
     assert store.get(review.job_id).status == CloydSmithJobStatus.QUEUED
     assert store.get(blocked.job_id).status == CloydSmithJobStatus.QUEUED
+    assert store.get(archived_blocked.job_id).status == CloydSmithJobStatus.BLOCKED
     assert store.get(done.job_id).status == CloydSmithJobStatus.DONE
     assert store.get_heartbeat(blocked.job_id).phase == "operator_bulk_requeued"
 

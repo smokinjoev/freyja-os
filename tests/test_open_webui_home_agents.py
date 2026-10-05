@@ -131,8 +131,7 @@ def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
     assert len(text) < 2500
     assert "Cloyd is Joe's technical brain" in text
     assert "single active Iris OpenCode worker" in text
-    assert "qwen3:30b-a3b" in text
-    assert "qwen3-coder-next:q4_K_M" in text
+    assert "qwen3.8:27b" in text
     assert "http://100.115.228.56:4097" in text
     assert "cloyd-dashboard-web" in text
     assert "/home/joe/cloyd-services/dashboard/index.html" in text

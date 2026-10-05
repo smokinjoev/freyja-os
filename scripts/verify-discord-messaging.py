@@ -23,7 +23,7 @@ EXPECTED_AGENTS = {
     "freyja": "Freyja",
     "cloyd-gibbler": "Cloyd Gibbler",
     "benedict": "Benedict",
-    "agent-47": "Agent 44",
+    "agent-47": "Agent 47",
     "smith": "Agent Smith",
 }
 

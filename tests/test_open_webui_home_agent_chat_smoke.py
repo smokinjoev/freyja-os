@@ -136,4 +136,4 @@ def test_chat_smoke_live_report_redacts_auth_and_requires_response(monkeypatch) 
             "max_tokens": 32,
         }
     ]
-    assert report["checks"][0]["expected_vulcan_model"] == "qwen3:30b-a3b"
+    assert report["checks"][0]["expected_vulcan_model"] == "qwen3.8:27b"

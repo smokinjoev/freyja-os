@@ -12,6 +12,9 @@ PRIMARY_BASE_URL = os.environ.get("PRIMARY_BASE_URL", "http://100.94.80.21:3939/
 PRIMARY_API_KEY = os.environ.get("PRIMARY_API_KEY", "not-needed")
 PRIMARY_API_KEY_FILE = os.environ.get("PRIMARY_API_KEY_FILE", "").strip()
 PRIMARY_OLLAMA_BASE_URL = os.environ.get("PRIMARY_OLLAMA_BASE_URL", "http://100.94.80.21:11434").rstrip("/")
+CODER_BASE_URL = os.environ.get("CODER_BASE_URL", "http://100.94.80.21:11436/v1").rstrip("/")
+CODER_API_KEY = os.environ.get("CODER_API_KEY", "not-needed")
+CODER_OLLAMA_BASE_URL = os.environ.get("CODER_OLLAMA_BASE_URL", "http://100.94.80.21:11436").rstrip("/")
 FALLBACK_BASE_URL = os.environ.get("FALLBACK_BASE_URL", "http://100.115.228.56:11434/v1").rstrip("/")
 FALLBACK_API_KEY = os.environ.get("FALLBACK_API_KEY", "not-needed")
 FREYJA5_BASE_URL = os.environ.get("FREYJA5_BASE_URL", "http://host.docker.internal:8500/v1").rstrip("/")
@@ -35,6 +38,11 @@ APPROVED_MODELS = {
 FALLBACK_MODELS = {
     model.strip()
     for model in os.environ.get("FALLBACK_MODELS", "qwen2.5:7b").split(",")
+    if model.strip()
+}
+CODER_MODELS = {
+    model.strip()
+    for model in os.environ.get("CODER_MODELS", "qwen3-coder-next:q4_K_M").split(",")
     if model.strip()
 }
 FREYJA5_AGENT_MODELS = {
@@ -78,7 +86,7 @@ VISION_MODELS = {
     for model in os.environ.get("VISION_MODELS", "qwen2.5vl:72b").split(",")
     if model.strip()
 }
-TEXT_MODEL = os.environ.get("TEXT_MODEL", "qwen2.5vl:72b").strip()
+TEXT_MODEL = os.environ.get("TEXT_MODEL", "qwen3.8:27b").strip()
 TOOL_MODEL = os.environ.get("TOOL_MODEL", "qwen3.8:27b").strip()
 PRIMARY_MODEL_ALIASES = {
     source.strip(): target.strip()
@@ -113,6 +121,7 @@ class Handler(BaseHTTPRequestHandler):
         models: dict[str, dict] = {}
         for base_url, api_key, allowed_models in (
             (PRIMARY_BASE_URL, PRIMARY_API_KEY, APPROVED_MODELS),
+            (CODER_BASE_URL, CODER_API_KEY, CODER_MODELS),
             (FALLBACK_BASE_URL, FALLBACK_API_KEY, FALLBACK_MODELS),
             (FREYJA5_BASE_URL, FREYJA5_API_KEY, FREYJA5_AGENT_MODELS),
             (FREYJA_CORE_BASE_URL, FREYJA_CORE_API_KEY, FREYJA_CORE_MODELS),
@@ -156,6 +165,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.command == "POST" and self.path.split("?", 1)[0] == "/v1/chat/completions":
             if (
                 requested_model not in APPROVED_MODELS
+                and requested_model not in CODER_MODELS
                 and requested_model not in FALLBACK_MODELS
                 and requested_model not in FREYJA5_AGENT_MODELS
                 and requested_model not in FREYJA_CORE_MODELS
@@ -190,6 +200,18 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 self._send(status, headers, response_body)
                 return
+            if requested_model in CODER_MODELS:
+                status, headers, response_body = self._upstream(
+                    CODER_BASE_URL,
+                    CODER_API_KEY,
+                    self.command,
+                    self.path.removeprefix("/v1"),
+                    body,
+                )
+                if status == 200:
+                    response_body = self._adapt_chat_completion_response(response_body)
+                self._send(status, headers, response_body)
+                return
             routed_model = self._routed_chat_model(payload)
             if routed_model != requested_model:
                 payload["model"] = routed_model
@@ -222,6 +244,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
         for base_url, api_key, allowed_models in (
             (PRIMARY_BASE_URL, PRIMARY_API_KEY, APPROVED_MODELS),
+            (CODER_BASE_URL, CODER_API_KEY, CODER_MODELS),
             (FALLBACK_BASE_URL, FALLBACK_API_KEY, FALLBACK_MODELS),
         ):
             if requested_model and requested_model not in allowed_models:

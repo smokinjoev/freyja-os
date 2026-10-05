@@ -77,10 +77,10 @@ The family-facing agent set is:
 | Freyja | Household | Primary household assistant, coordinator, memory/tool boundary |
 | Cloyd | Joe | Technical/coding/infrastructure agent |
 | Benedict | Beth | Beth personal and paralegal assistant, local-only for restricted work |
-| Agent 44 | Liam | Study/pilot-training agent with memory and tutoring style |
+| Agent 47 | Liam | Study/pilot-training agent with memory and tutoring style |
 | Jenna | Jenna | Age-appropriate personal assistant |
 
-Agent 44 should use at least 20B for study. The 7B Iris reflex model can answer
+Agent 47 should use at least 20B for study. The 7B Iris reflex model can answer
 simple status or recall questions, but it should not teach aviation concepts,
 explain procedures, or handle college-level reasoning. For Liam's pilot path,
 `qwen2.5vl:72b` is the preferred deep model because it can handle PDFs, charts,

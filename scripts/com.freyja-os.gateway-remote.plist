@@ -36,17 +36,19 @@
         <key>FREYJA_GATEWAY_REMOTE_QWEN_BIN</key>
         <string>/opt/homebrew/bin/qwen</string>
         <key>FREYJA_GATEWAY_REMOTE_VULCAN_MODEL_BASE_URL</key>
-        <string>http://100.94.80.21:3939/v1</string>
+        <string>http://100.94.80.21:11436/v1</string>
         <key>FREYJA_GATEWAY_REMOTE_VULCAN_MODEL</key>
-        <string>@preset/freyja-coder</string>
+        <string>qwen3-coder-next:q4_K_M</string>
         <key>FREYJA_GATEWAY_REMOTE_NEXUS_TOKEN_FILE</key>
         <string>/Users/freyja/.local/state/freyja/gateway-remote/msty-nexus-token</string>
         <key>AGENT_SMITH_WORKDIR</key>
-        <string>/Users/freyja</string>
+        <string>/Users/freyja/freyja-os</string>
+        <key>AGENT_SMITH_CONTEXT_WINDOW</key>
+        <string>16384</string>
     </dict>
 
     <key>WorkingDirectory</key>
-    <string>/Users/freyja</string>
+    <string>/Users/freyja/freyja-os</string>
 
     <key>StandardOutPath</key>
     <string>/Users/freyja/freyja-os/logs/gateway-remote.log</string>

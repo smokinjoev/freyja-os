@@ -41,7 +41,7 @@ AGENTS = {
         "gateway_model": "agent/benedict",
     },
     "agent-44": {
-        "name": "Agent 44",
+        "name": "Agent 47",
         "bot_id": "agent-47",
         "model": "@preset/freyja-fast-local",
         "gateway_model": "agent/agent-47",

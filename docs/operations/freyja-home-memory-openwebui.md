@@ -68,7 +68,7 @@ dynamic per-agent headers. Examples:
 - Cloyd: `x-freyja-client-subject: agent:cloyd`
 - Freyja: `x-freyja-client-subject: agent:freyja`
 - Benedict: `x-freyja-client-subject: agent:benedict`
-- Agent 44: `x-freyja-client-subject: agent:agent-44`
+- Agent 47: `x-freyja-client-subject: agent:agent-44`
 - Jenna: `x-freyja-client-subject: agent:jenna`
 
 ## Scope Policy
@@ -78,7 +78,7 @@ Readable scopes:
 - Freyja: `household`, `project:freyja-os`
 - Cloyd: `personal:joe`, `household`, `project:freyja-os`
 - Benedict: `personal:beth`, `restricted:benedict`
-- Agent 44: `personal:liam`, `household`
+- Agent 47: `personal:liam`, `household`
 - Jenna: `personal:jenna`, `household`
 
 Writable scopes:

@@ -4,8 +4,8 @@ This Compose target runs Open WebUI as a user-facing web UI on Atlas while
 keeping Atlas Freyja as the control-plane authority and Vulcan as compute.
 
 Policy: Open WebUI lists the approved model catalog. The backend keeps Vulcan
-residency conservative by default, but allows the daily chat Qwen and coding
-Qwen to stay resident together when Vulcan has enough memory.
+residency conservative by default, while allowing the daily qwen 27B model and
+the qwen coder model to stay resident together.
 
 Planned model catalog:
 
@@ -19,7 +19,7 @@ Planned model catalog:
 | GPT OSS large | `gpt-oss:120b` |
 
 Open WebUI may show these models in its picker. The intentionally hot resident
-chat model is `qwen3.8:27b`; the compatible coding resident is
+chat/tool model is `qwen3.8:27b`; the compatible coding resident is
 `qwen3-coder-next:q4_K_M`. Larger or specialized models stay available on
 demand but should not remain resident accidentally.
 
@@ -61,17 +61,22 @@ http://<atlas-tailscale-host>:3001
 ## Provider
 
 The default `.env.example` points Open WebUI to the local Atlas model-proxy.
-The model-proxy uses Vulcan Nexus as the primary model authority, matching
-Terminal Smith, and maps familiar Ollama model names to Nexus canonical IDs:
+The model-proxy uses Vulcan Nexus as the primary family/chat model authority
+and maps familiar Ollama model names to Nexus canonical IDs. Coding traffic is
+routed to the dedicated Vulcan coder runtime so it cannot evict the family chat
+model:
 
 ```text
 OPENAI_API_BASE_URL=http://model-proxy:8080/v1
 OPENAI_API_KEY=not-needed
-DEFAULT_MODELS=qwen2.5vl:72b
+DEFAULT_MODELS=qwen3.8:27b
 OPEN_WEBUI_APPROVED_MODELS=qwen3.8:27b,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b
 OPEN_WEBUI_FALLBACK_MODELS=qwen2.5:7b
 OPENAI_PRIMARY_BASE_URL=http://100.94.80.21:3939/v1
 OPENAI_PRIMARY_API_KEY_FILE=/Users/freyja/.local/state/freyja/gateway-remote/msty-nexus-token
+OPENAI_CODER_BASE_URL=http://100.94.80.21:11436/v1
+OPENAI_CODER_OLLAMA_BASE_URL=http://100.94.80.21:11436
+OPEN_WEBUI_CODER_MODELS=qwen3-coder-next:q4_K_M
 ```
 
 `DEFAULT_MODELS` only controls the initial Open WebUI default. Runtime model
@@ -79,11 +84,13 @@ choice belongs to Open WebUI; the proxy preserves the selected request model
 and unloads non-compatible resident Vulcan models before forwarding chat.
 
 Vulcan policy: Ollama is the canonical model runtime. Msty Nexus is the shared
-preset/routing layer over Ollama for OpenWebUI and Terminal Smith. Ollama is
+preset/routing layer over the primary family/chat Ollama service. Ollama is
 configured conservatively, with qwen3.8 warmed by `freyja-hot-model-warm.timer`.
-`OPEN_WEBUI_COMPATIBLE_RESIDENT_MODELS` lets `qwen3.8:27b` and
-`qwen3-coder-next:q4_K_M` coexist instead of evicting each other. The Ollama
-context cap is `16384` for normal serving so OpenAI-compatible calls do not
+Smith and direct coding traffic use the separate `freyja-ollama-multi` runtime
+on Vulcan port `11436`; that split lets `qwen3.8:27b` and
+`qwen3-coder-next:q4_K_M` stay resident without fighting one scheduler's system
+RAM guard. The Ollama context cap is `16384` for normal serving so
+OpenAI-compatible calls do not
 accidentally allocate the full 262k context. Vulcan exposes an AMD
 Strix/Krackan/Strix Halo NPU at `/dev/accel0` with the `amdxdna` driver, but
 normal LLM serving remains on the Radeon GPU.
@@ -128,9 +135,9 @@ docker compose --env-file deploy/compose/open-webui/.env \
 curl http://100.94.80.21:8088/api/ps
 ```
 
-If more than the compatible resident pair is present, or if qwen3.8 is not the
-hot resident model after normal use, unload the unwanted model from Vulcan
-before continuing:
+If anything outside the compatible resident pair is present, or if qwen3.8 is
+not hot after normal use, unload the unwanted model from Vulcan before
+continuing:
 
 ```bash
 scripts/vulcan-operator.py loaded

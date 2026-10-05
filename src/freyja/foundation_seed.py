@@ -200,7 +200,7 @@ PERSISTENT_AGENTS: tuple[PersistentAgent, ...] = (
     PersistentAgent(
         agent_id="agent-47",
         display_name="Agent 47",
-        logical_display_name="Agent 44",
+        logical_display_name="Agent 47",
         owner="person:liam",
         security_domain_id=SecurityDomainId.PERSON_LIAM,
         home_machine_id="atlas",

@@ -28,6 +28,7 @@ def test_terminal_smith_restart_captures_interrupts_and_recreates_only_smith(tmp
         base_url="http://vulcan.test/v1",
         model="@preset/freyja-coder",
         workdir=str(workdir),
+        context_window_size=16384,
         capture_dir=str(tmp_path / "captures"),
         terminal_url="http://iris.test:8010/",
     )
@@ -71,8 +72,16 @@ def test_terminal_smith_restart_captures_interrupts_and_recreates_only_smith(tmp
     settings = json.loads((qwen_home / "settings.json").read_text(encoding="utf-8"))
     assert settings["model"]["baseUrl"] == "http://vulcan.test/v1"
     assert settings["model"]["name"] == "@preset/freyja-coder"
+    assert settings["modelProviders"]["openai"][0]["models"] == ["@preset/freyja-coder"]
+    assert settings["modelProviders"]["openai"][0]["generationConfig"]["contextWindowSize"] == 16384
+    assert settings["memory"] == {
+        "enableManagedAutoMemory": False,
+        "enableManagedAutoDream": False,
+    }
     assert start_env["OPENAI_BASE_URL"] == "http://vulcan.test/v1"
     assert start_env["OPENAI_API_KEY"] == "secret-token"
+    assert start_env["FREYJA_GATEWAY_REMOTE_VULCAN_FALLBACK_MODEL"] == ""
+    assert start_env["AGENT_SMITH_CONTEXT_WINDOW"] == "16384"
     assert "OPENROUTER_API_KEY" not in start_env
 
 
@@ -126,6 +135,19 @@ def test_terminal_smith_config_prefers_tailscale_serve_url(monkeypatch) -> None:
     config = TerminalSmithConfig.from_environment(repository_root="/repo")
 
     assert config.terminal_url == "https://iris.tail3995b4.ts.net/"
+    assert config.workdir == "/repo"
+    assert config.context_window_size == 16384
+
+
+def test_terminal_smith_config_allows_context_override(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_SMITH_CONTEXT_WINDOW", "32768")
+    monkeypatch.setenv("AGENT_SMITH_WORKDIR", "/tmp/smith-work")
+    monkeypatch.setenv("AGENT_SMITH_TERMINAL_URL", "http://terminal.test/")
+
+    config = TerminalSmithConfig.from_environment(repository_root="/repo")
+
+    assert config.context_window_size == 32768
+    assert config.workdir == "/tmp/smith-work"
 
 
 def test_agent_runs_page_exposes_terminal_smith_controls() -> None:

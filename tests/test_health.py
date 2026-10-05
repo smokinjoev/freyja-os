@@ -368,7 +368,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "mcp_tool_count": 3,
         "cloud_egress_policy": "paralegal-local-only",
     }
-    assert agents["agent-47"]["logical_display_name"] == "Agent 44"
+    assert agents["agent-47"]["logical_display_name"] == "Agent 47"
     assert agents["jennacide"]["logical_display_name"] == "Jenna agent"
 
 
@@ -536,7 +536,7 @@ def test_agent_gateway_models_exposes_only_scoped_agent(monkeypatch) -> None:
     assert response.status_code == 200
     data = response.json()["data"]
     assert [model["id"] for model in data] == ["agent/agent-47"]
-    assert data[0]["freyja"]["logical_display_name"] == "Agent 44"
+    assert data[0]["freyja"]["logical_display_name"] == "Agent 47"
 
 
 def test_agent_gateway_models_rejects_unknown_gateway(monkeypatch) -> None:
