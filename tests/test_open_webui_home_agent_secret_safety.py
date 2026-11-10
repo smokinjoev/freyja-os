@@ -17,16 +17,20 @@ def _module():
     return module
 
 
-def test_secret_safety_audit_scans_current_home_agent_artifacts() -> None:
+def test_secret_safety_audit_fails_closed_when_live_evidence_is_absent() -> None:
     report = _module().build_report()
 
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
     assert isinstance(report["generated_at_unix"], int)
     assert report["git_head"]
-    assert report["ok"] is True
-    assert report["artifact_count"] == 67
-    assert report["missing_artifacts"] == []
+    assert report["ok"] is False
+    assert set(report["missing_artifacts"]) == {
+        "certification/reports/freyja-channels-readiness-atlas.json",
+        "certification/reports/open-webui-home-agent-deliverable.json",
+        "certification/reports/open-webui-home-agent-deliverable.md",
+        "certification/reports/open-webui-home-agent-readiness-summary.md",
+    }
     assert report["secret_pattern_findings"] == []
     assert report["json_flag_failures"] == []
     assert "certification/reports/open-webui-home-agent-deliverable.md" in _module().TEXT_ARTIFACTS
@@ -51,7 +55,7 @@ def test_secret_safety_text_scanner_detects_key_material(tmp_path: Path) -> None
 def test_secret_safety_audit_writes_report(tmp_path: Path, capsys) -> None:
     output = tmp_path / "secret-safety.json"
 
-    assert _module().main(["--output", str(output)]) == 0
+    assert _module().main(["--output", str(output)]) == 1
 
     written = json.loads(output.read_text(encoding="utf-8"))
     printed = json.loads(capsys.readouterr().out)

@@ -15,6 +15,7 @@ INSTALL_SCRIPT = REPO_ROOT / "scripts" / "install-macagent.sh"
 STATUS_SCRIPT = REPO_ROOT / "scripts" / "status-macagent.sh"
 RESTART_SCRIPT = REPO_ROOT / "scripts" / "restart-macagent.sh"
 REMOVE_SCRIPT = REPO_ROOT / "scripts" / "remove-macagent.sh"
+IRIS_REPO_ROOT = pathlib.Path("/Users/freyja/freyja-os")
 
 
 def _load_plist() -> dict:
@@ -32,10 +33,10 @@ def test_macagent_plist_runs_macagent_script() -> None:
     data = _load_plist()
 
     assert data["ProgramArguments"] == [
-        str(REPO_ROOT / ".venv" / "bin" / "python"),
-        str(REPO_ROOT / "scripts" / "run-macagent.py"),
+        str(IRIS_REPO_ROOT / ".venv" / "bin" / "python"),
+        str(IRIS_REPO_ROOT / "scripts" / "run-macagent.py"),
     ]
-    assert pathlib.Path(data["WorkingDirectory"]) == REPO_ROOT
+    assert pathlib.Path(data["WorkingDirectory"]) == IRIS_REPO_ROOT
 
 
 def test_macagent_plist_sets_environment() -> None:
@@ -45,13 +46,13 @@ def test_macagent_plist_sets_environment() -> None:
     assert env["HOME"] == "/Users/freyja"
     assert env["USER"] == "freyja"
     assert env["LOGNAME"] == "freyja"
-    assert env["PYTHONPATH"] == f"{REPO_ROOT / 'src'}:{REPO_ROOT}"
+    assert env["PYTHONPATH"] == f"{IRIS_REPO_ROOT / 'src'}:{IRIS_REPO_ROOT}"
     assert "/opt/homebrew/bin" in env["PATH"]
 
 
 def test_macagent_plist_logs_to_runtime_log_file() -> None:
     data = _load_plist()
-    expected_log = REPO_ROOT / "logs" / "macagent.log"
+    expected_log = IRIS_REPO_ROOT / "logs" / "macagent.log"
 
     assert pathlib.Path(data["StandardOutPath"]) == expected_log
     assert pathlib.Path(data["StandardErrorPath"]) == expected_log
