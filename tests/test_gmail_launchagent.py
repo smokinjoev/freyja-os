@@ -14,6 +14,7 @@ PLIST_SRC = REPO_ROOT / "scripts" / "com.freyja-os.gmail-connector.plist"
 INSTALL_SCRIPT = REPO_ROOT / "scripts" / "install-gmail-connector.sh"
 STATUS_SCRIPT = REPO_ROOT / "scripts" / "status-gmail-connector.sh"
 RUN_SCRIPT = REPO_ROOT / "scripts" / "run-gmail-connector.py"
+IRIS_REPO_ROOT = pathlib.Path("/Users/freyja/freyja-os")
 
 
 def _load_plist() -> dict:
@@ -32,10 +33,10 @@ def test_gmail_plist_runs_connector_from_main_checkout() -> None:
     data = _load_plist()
 
     assert data["ProgramArguments"] == [
-        str(REPO_ROOT / ".venv" / "bin" / "python"),
-        str(REPO_ROOT / "scripts" / "run-gmail-connector.py"),
+        str(IRIS_REPO_ROOT / ".venv" / "bin" / "python"),
+        str(IRIS_REPO_ROOT / "scripts" / "run-gmail-connector.py"),
     ]
-    assert pathlib.Path(data["WorkingDirectory"]) == REPO_ROOT
+    assert pathlib.Path(data["WorkingDirectory"]) == IRIS_REPO_ROOT
 
 
 def test_gmail_plist_sets_environment() -> None:
@@ -45,14 +46,14 @@ def test_gmail_plist_sets_environment() -> None:
     assert env["HOME"] == "/Users/freyja"
     assert env["USER"] == "freyja"
     assert env["LOGNAME"] == "freyja"
-    assert str(REPO_ROOT / "src") in env["PYTHONPATH"]
-    assert str(REPO_ROOT) in env["PYTHONPATH"]
+    assert str(IRIS_REPO_ROOT / "src") in env["PYTHONPATH"]
+    assert str(IRIS_REPO_ROOT) in env["PYTHONPATH"]
     assert "/opt/homebrew/bin" in env["PATH"]
 
 
 def test_gmail_plist_logs_to_connector_log_file() -> None:
     data = _load_plist()
-    expected_log = REPO_ROOT / "logs" / "gmail-connector.log"
+    expected_log = IRIS_REPO_ROOT / "logs" / "gmail-connector.log"
 
     assert pathlib.Path(data["StandardOutPath"]) == expected_log
     assert pathlib.Path(data["StandardErrorPath"]) == expected_log

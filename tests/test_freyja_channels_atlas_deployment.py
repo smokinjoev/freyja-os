@@ -22,6 +22,12 @@ def _module():
 def test_atlas_channel_deployment_verifier_reports_secret_free_ready_artifacts(monkeypatch) -> None:
     module = _module()
     monkeypatch.setattr(module, "_compose_config_ok", lambda: True)
+    monkeypatch.setattr(module, "_load_json", lambda _path: {
+        "secrets_included": False,
+        "open_webui_client": {"api_key_configured": True},
+        "telegram": {"missing_configuration": ["TELEGRAM_ALLOWED_USER_IDS", "TELEGRAM_BOT_TOKEN", "TELEGRAM_IDENTITY_MAP"]},
+        "signal": {"missing_configuration": ["SIGNAL_ALLOWED_SENDERS", "SIGNAL_ACCOUNT_NUMBER", "SIGNAL_IDENTITY_MAP", "SIGNAL_REST_API_URL"]},
+    })
 
     report = module.verify()
 
@@ -44,6 +50,12 @@ def test_atlas_channel_deployment_verifier_reports_secret_free_ready_artifacts(m
 def test_atlas_channel_deployment_verifier_writes_report(tmp_path: Path, capsys, monkeypatch) -> None:
     module = _module()
     monkeypatch.setattr(module, "_compose_config_ok", lambda: True)
+    monkeypatch.setattr(module, "_load_json", lambda _path: {
+        "secrets_included": False,
+        "open_webui_client": {"api_key_configured": True},
+        "telegram": {"missing_configuration": ["TELEGRAM_ALLOWED_USER_IDS", "TELEGRAM_BOT_TOKEN", "TELEGRAM_IDENTITY_MAP"]},
+        "signal": {"missing_configuration": ["SIGNAL_ALLOWED_SENDERS", "SIGNAL_ACCOUNT_NUMBER", "SIGNAL_IDENTITY_MAP", "SIGNAL_REST_API_URL"]},
+    })
     output = tmp_path / "atlas-channels.json"
 
     assert module.main(["--output", str(output)]) == 0
