@@ -10,7 +10,7 @@ working tree as the shared baseline.
 | Host | Runtime source | State | Migration rule |
 | --- | --- | --- | --- |
 | Atlas | `/home/joe/freyja-os` | Canonical checkout, deployed through the Director and Signal compose projects | Update only by fast-forwarding the consolidation branch, rebuilding affected services, and checking health plus runtime-data mounts. |
-| Iris | `/Users/freyja/freyja-os-canonical-staging` | MacAgent, the iMessage runtime manifest, Director, OpenAI-compatible API, Cloyd/Smith workers, Core-MCP, and both Discord DM connectors run canonical staging | Keep the canonical staging checkout clean, validate authenticated MacAgent and Director health, require zero iMessage manifest drift plus a single managed connector, and check Core-MCP and both Discord workers after every service change. The dirty legacy checkout remains a recovery overlay until it is separately archived. |
+| Iris | `/Users/freyja/freyja-os-canonical-staging` | MacAgent, the iMessage runtime manifest, Director, OpenAI-compatible API, Cloyd/Smith workers, Core-MCP, and both Discord DM connectors run canonical staging | Keep the canonical staging checkout clean, validate authenticated MacAgent and Director health, require zero iMessage manifest drift plus a single managed connector, and check Core-MCP and both Discord workers after every service change. The former dirty checkout is retained only as a dated recovery archive. |
 | Vulcan | `/home/joe/freyja-os-consolidation` | Active Paralegal Director runs the clean canonical checkout | Update only after focused and full-suite validation, then restart the systemd user service and check its health. The prior dirty Paralegal checkout is retained in a dated recovery location. |
 
 ## Host-specific overlays
@@ -29,7 +29,9 @@ DM connectors.  Their LaunchAgent definitions and credentials are host
 configuration: Core-MCP and the Freyja-specific Discord connector load their
 private environment from external, owner-only files.  The checkout-relative
 wrappers are tested in the shared branch, so the staged services no longer
-depend on the legacy checkout path.
+depend on the legacy checkout path.  After the full Iris service audit passed,
+the former dirty checkout and inactive legacy LaunchAgent stubs were moved to
+dated recovery locations rather than deleted.
 
 ## Required migration gate
 
