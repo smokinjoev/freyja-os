@@ -1,7 +1,9 @@
 #!/bin/zsh
 set -euo pipefail
 
-repo_root="/Users/freyja/freyja-os"
+# Resolve the checkout from this wrapper so a host can run its canonical
+# staging checkout without editing source-controlled runtime code.
+repo_root="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 export PYTHONPATH="${repo_root}/src:${repo_root}"
 export FREYJA_CORE_MCP_HOST="100.115.228.56"
 export FREYJA_CORE_MCP_PORT="8766"
