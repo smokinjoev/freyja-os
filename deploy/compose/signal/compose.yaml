@@ -4,7 +4,6 @@ services:
   signal-api:
     image: ${SIGNAL_REST_API_IMAGE:-bbernhard/signal-cli-rest-api:0.101}
     restart: unless-stopped
-    user: "${FREYJA_DATA_UID:-1000}:${FREYJA_DATA_GID:-1000}"
     environment:
       MODE: native
     expose:
