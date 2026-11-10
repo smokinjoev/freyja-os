@@ -525,8 +525,8 @@ def test_freyja5_certification_provider_exercises_gateway_runtime() -> None:
         "raw_payload_included": False,
         "requested_route": "vision",
         "vision_route_selected": True,
-            "actual_model": "qwen3.8:27b",
-            "actual_runtime": "ollama",
+            "actual_model": "@preset/freyja-vision-docs",
+            "actual_runtime": "nexus",
     }
     enclave_case = next(case for case in report.cases if case.name == "f-benedict-enclave-local-only")
     enclave_tools = enclave_case.runtime_context["rev2_evidence"]["freyja5_tools"]
