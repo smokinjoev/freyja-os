@@ -589,6 +589,11 @@ def test_daemon_run_once_writes_heartbeat_transitions(tmp_path, monkeypatch) -> 
             "result": "started",
         }
 
+    async def fake_start(request):
+        assert request.arguments["alias"] == "freyja-code"
+        return {"ok": True, "session": "ses_daemon"}
+
+    monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
 
     result = asyncio.run(module._run_once(store))
@@ -610,12 +615,16 @@ def test_daemon_harvests_output_after_send_timeout_when_session_idle(tmp_path, m
     async def fake_send(request):
         return {"ok": False, "error": "timed out"}
 
+    async def fake_start(request):
+        return {"ok": True, "session": "ses_daemon"}
+
     async def fake_status(request):
         return {"ok": True, "session": "ses_daemon", "state": "idle", "working_directory": "/repo"}
 
     async def fake_output(request):
         return {"ok": True, "session": "ses_daemon", "result": "I inspected the file and found evidence."}
 
+    monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
     monkeypatch.setattr(module, "_opencode_status", fake_status)
     monkeypatch.setattr(module, "_opencode_output", fake_output)
@@ -643,6 +652,9 @@ def test_daemon_keeps_job_running_after_send_timeout_when_session_busy(tmp_path,
     async def fake_send(request):
         return {"ok": False, "error": "timed out"}
 
+    async def fake_start(request):
+        return {"ok": True, "session": "ses_daemon"}
+
     async def fake_status(request):
         return {
             "ok": True,
@@ -652,6 +664,7 @@ def test_daemon_keeps_job_running_after_send_timeout_when_session_busy(tmp_path,
             "recent_action": {"tool": "bash", "status": "running"},
         }
 
+    monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
     monkeypatch.setattr(module, "_opencode_status", fake_status)
 
