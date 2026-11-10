@@ -168,6 +168,37 @@ async def test_self_message_is_not_forwarded_or_replied_to():
 
 
 @pytest.mark.asyncio
+async def test_sent_sync_echo_is_not_forwarded_again():
+    gateway = AsyncMock()
+    timestamp = 1_721_908_800_999
+    sync_event = {
+        "account": ACCOUNT,
+        "envelope": {
+            "syncMessage": {
+                "sentMessage": {"timestamp": timestamp, "message": "Echo", "attachments": []}
+            }
+        },
+    }
+    requests: list[str] = []
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        requests.append(request.method)
+        if request.method == "POST":
+            return httpx.Response(201, json={"timestamp": timestamp}, request=request)
+        return httpx.Response(200, json=[sync_event], request=request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle_request))
+    transport = SignalRestTransport(gateway, transport_settings(), client)
+
+    await transport.send(OutboundResponse(recipient=SENDER, text="Reply"))
+    assert await transport.poll_once() == []
+
+    gateway.handle.assert_not_awaited()
+    assert requests == ["POST", "GET"]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_receive_http_failure_raises_transport_error():
     gateway = AsyncMock()
 
