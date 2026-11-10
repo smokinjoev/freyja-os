@@ -10,7 +10,7 @@ working tree as the shared baseline.
 | Host | Runtime source | State | Migration rule |
 | --- | --- | --- | --- |
 | Atlas | `/home/joe/freyja-os` | Canonical checkout, deployed through the Director and Signal compose projects | Update only by fast-forwarding the consolidation branch, rebuilding affected services, and checking health plus runtime-data mounts. |
-| Iris | `/Users/freyja/freyja-os-canonical-staging` for MacAgent, the iMessage runtime manifest, Director, and the OpenAI-compatible API; `/Users/freyja/freyja-os` for remaining background workers | The interactive Apple and API services run canonical staging; coding, Discord, and Core-MCP workers remain on the preserved dirty overlay | Preserve and review the overlay before redirecting each background worker. Keep the canonical staging checkout clean, validate authenticated MacAgent and Director health, and require zero manifest drift plus a single managed iMessage connector after every service change. |
+| Iris | `/Users/freyja/freyja-os-canonical-staging` | MacAgent, the iMessage runtime manifest, Director, OpenAI-compatible API, Cloyd/Smith workers, Core-MCP, and both Discord DM connectors run canonical staging | Keep the canonical staging checkout clean, validate authenticated MacAgent and Director health, require zero iMessage manifest drift plus a single managed connector, and check Core-MCP and both Discord workers after every service change. The dirty legacy checkout remains a recovery overlay until it is separately archived. |
 | Vulcan | `/home/joe/freyja-os-consolidation` | Active Paralegal Director runs the clean canonical checkout | Update only after focused and full-suite validation, then restart the systemd user service and check its health. The prior dirty Paralegal checkout is retained in a dated recovery location. |
 
 ## Host-specific overlays
@@ -21,6 +21,15 @@ paths.  Code may move into the canonical branch only with focused tests and a
 clear owner.  In particular, the Iris OpenWebUI-to-Apple bridge must not be
 promoted as generic code while it contains deployment-specific authenticated
 identity mappings or SSH transport assumptions.
+
+## Iris migration record
+
+The canonical staging migration includes the Core-MCP server and both Discord
+DM connectors.  Their LaunchAgent definitions and credentials are host
+configuration: Core-MCP and the Freyja-specific Discord connector load their
+private environment from external, owner-only files.  The checkout-relative
+wrappers are tested in the shared branch, so the staged services no longer
+depend on the legacy checkout path.
 
 ## Required migration gate
 
