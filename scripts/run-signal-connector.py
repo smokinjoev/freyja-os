@@ -7,6 +7,8 @@ import asyncio
 import logging
 import signal
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +25,9 @@ from connectors.signal.transport import (  # noqa: E402
     SignalRestTransport,
     SignalTransportError,
 )
+from connectors.gmail.reminders import ReminderStore  # noqa: E402
+from connectors.signal.reminder_notifier import EmailReminderNotifier  # noqa: E402
+from connectors.signal.scheduled_reminders import ScheduledReminderNotifier, ScheduledReminderStore  # noqa: E402
 
 logger = logging.getLogger("signal_connector_runner")
 
@@ -56,6 +61,20 @@ async def main() -> int:
     connector_settings = SignalSettings()
     gateway = SignalGateway()
     transport = SignalRestTransport(gateway, connector_settings)
+    notifier = None
+    scheduled_notifier = None
+    if connector_settings.signal_reminder_notifications_enabled:
+        notifier = EmailReminderNotifier(
+            store=ReminderStore(connector_settings.gmail_reminder_store_path),
+            transport=transport,
+            recipient=connector_settings.signal_reminder_notification_recipient,
+            max_message_chars=connector_settings.signal_max_message_chars,
+        )
+        scheduled_notifier = ScheduledReminderNotifier(
+            store=ScheduledReminderStore(connector_settings.gmail_reminder_store_path),
+            transport=transport,
+            recipient=connector_settings.signal_reminder_notification_recipient,
+        )
 
     try:
         shutdown_event = asyncio.Event()
@@ -84,9 +103,24 @@ async def main() -> int:
 
         logger.info("Signal connector started")
         backoff_seconds = _INITIAL_BACKOFF_SECONDS
+        next_notification_check = 0.0
+        next_scheduled_check = 0.0
 
         while not shutdown_event.is_set():
             try:
+                now = time.monotonic()
+                if notifier is not None and now >= next_notification_check:
+                    result = await notifier.dispatch_pending()
+                    if result["sent"]:
+                        logger.info("Email reminder digest sent", extra={"candidate_count": result["candidate_count"]})
+                    next_notification_check = now + max(
+                        60, connector_settings.signal_reminder_notification_interval_seconds
+                    )
+                if scheduled_notifier is not None and now >= next_scheduled_check:
+                    sent = await scheduled_notifier.dispatch_due(datetime.now().astimezone())
+                    if sent:
+                        logger.info("Scheduled Signal reminder sent", extra={"reminder_count": sent})
+                    next_scheduled_check = now + 30
                 replies = await transport.poll_once()
                 if replies:
                     logger.info(
