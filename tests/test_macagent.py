@@ -294,7 +294,7 @@ def test_macagent_app_lists_calendar_events(monkeypatch) -> None:
             assert kwargs["calendar_ids"] == ["iCloud::Family"]
             return [event]
 
-    with patch("freyja.macagent_app.AppleCalendarProvider", return_value=Provider()):
+    with patch("freyja.macagent_app.AppleCalendarProvider", return_value=Provider()) as provider_class:
         response = test_client.post(
             f"/capabilities/{request.capability}",
             headers={"Authorization": "Bearer secret"},
@@ -302,6 +302,7 @@ def test_macagent_app_lists_calendar_events(monkeypatch) -> None:
         )
 
     assert response.status_code == 200
+    assert provider_class.call_args.kwargs["timeout_seconds"] == 20.0
     data = response.json()
     assert data["ok"] is True
     assert data["output"]["events"][0]["event_id"] == "event-1"
@@ -651,6 +652,7 @@ def test_macagent_app_music_write_plays_query_after_approval(monkeypatch) -> Non
         "destination": "HomePod",
     }
     assert "every AirPlay device whose name contains targetDestination" in script.await_args.args[0]
+    assert "must match exactly one available device" in script.await_args.args[0]
 
 
 def test_macagent_app_reads_browser_front_tab(monkeypatch) -> None:
