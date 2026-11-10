@@ -1,0 +1,424 @@
+{
+  "all_disabled_by_default": true,
+  "blocked": [
+    {
+      "destination": "open-webui",
+      "job_id": "calendar_conflict_warning",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "calendar_conflict_warning:joe:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "calendar_conflict_warning",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "calendar_conflict_warning:joe:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "calendar_conflict_warning",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "calendar_conflict_warning:joe:signal"
+    },
+    {
+      "destination": "open-webui",
+      "job_id": "calendar_conflict_warning",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "calendar_conflict_warning:beth:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "calendar_conflict_warning",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "calendar_conflict_warning:beth:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "calendar_conflict_warning",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "calendar_conflict_warning:beth:signal"
+    },
+    {
+      "destination": "open-webui",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "reminder_followup:joe:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "reminder_followup:joe:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "reminder_followup:joe:signal"
+    },
+    {
+      "destination": "open-webui",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "reminder_followup:beth:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "reminder_followup:beth:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "reminder_followup:beth:signal"
+    },
+    {
+      "destination": "open-webui",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "liam",
+      "schedule_id": "reminder_followup:liam:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "liam",
+      "schedule_id": "reminder_followup:liam:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "liam",
+      "schedule_id": "reminder_followup:liam:signal"
+    },
+    {
+      "destination": "open-webui",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "jenna",
+      "schedule_id": "reminder_followup:jenna:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "jenna",
+      "schedule_id": "reminder_followup:jenna:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "reminder_followup",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "jenna",
+      "schedule_id": "reminder_followup:jenna:signal"
+    },
+    {
+      "destination": "open-webui",
+      "job_id": "scheduled_briefing",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "scheduled_briefing:joe:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "scheduled_briefing",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "scheduled_briefing:joe:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "scheduled_briefing",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "scheduled_briefing:joe:signal"
+    },
+    {
+      "destination": "open-webui",
+      "job_id": "scheduled_briefing",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "scheduled_briefing:beth:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "scheduled_briefing",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "scheduled_briefing:beth:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "scheduled_briefing",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "beth",
+      "schedule_id": "scheduled_briefing:beth:signal"
+    },
+    {
+      "destination": "open-webui",
+      "job_id": "system_health_notification",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "system_health_notification:joe:open-webui"
+    },
+    {
+      "destination": "telegram",
+      "job_id": "system_health_notification",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "system_health_notification:joe:telegram"
+    },
+    {
+      "destination": "signal",
+      "job_id": "system_health_notification",
+      "reasons": [
+        "job_disabled",
+        "chat_not_stable",
+        "recipient_not_verified",
+        "destination_not_verified",
+        "schedule_not_approved",
+        "dry_run_required"
+      ],
+      "recipient": "joe",
+      "schedule_id": "system_health_notification:joe:signal"
+    }
+  ],
+  "blocked_by_job": {
+    "calendar_conflict_warning": 6,
+    "reminder_followup": 12,
+    "scheduled_briefing": 6,
+    "system_health_notification": 3
+  },
+  "blocked_reason_counts": {
+    "chat_not_stable": 27,
+    "destination_not_verified": 27,
+    "dry_run_required": 27,
+    "job_disabled": 27,
+    "recipient_not_verified": 27,
+    "schedule_not_approved": 27
+  },
+  "candidate_count": 27,
+  "enablement_gate": {
+    "chat_stable": "required",
+    "destinations_verified": "required",
+    "dry_run_first": "required",
+    "per_schedule_approval": "required",
+    "recipients_verified": "required"
+  },
+  "generated_at_unix": 1788577836,
+  "git_head": "f3dcdca",
+  "job_candidate_counts": {
+    "calendar_conflict_warning": 6,
+    "reminder_followup": 12,
+    "scheduled_briefing": 6,
+    "system_health_notification": 3
+  },
+  "ok": true,
+  "private_content_included": false,
+  "prohibitions": {
+    "enable_globally_by_default": true,
+    "infer_unverified_destination": true,
+    "message_children_without_parent_policy": true,
+    "run_destructive_tools": true
+  },
+  "ready_schedule_ids": [],
+  "report_type": "freyja-proactive-readiness",
+  "secrets_included": false
+}

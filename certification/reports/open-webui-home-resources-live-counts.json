@@ -1,0 +1,25 @@
+{
+  "counts": {
+    "function": 0,
+    "knowledge": 0,
+    "knowledge_file": 0,
+    "memory": 0,
+    "tool": 0
+  },
+  "db": "/app/backend/data/webui.db",
+  "dry_run_snapshot": {
+    "container": "freyja-open-webui-atlas-open-webui-1",
+    "source": "/app/backend/data/webui.db",
+    "wal_and_shm_attempted": true
+  },
+  "generated_at_unix": 1788577835,
+  "git_head": "f3dcdca",
+  "ok": true,
+  "pending": [
+    "open_webui_owner_user_missing",
+    "authenticated_resource_import_missing"
+  ],
+  "private_content_included": false,
+  "report_type": "open-webui-home-resources-live-counts",
+  "secrets_included": false
+}

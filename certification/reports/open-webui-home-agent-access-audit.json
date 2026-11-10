@@ -1,0 +1,130 @@
+{
+  "checks": [
+    {
+      "evidence": {
+        "expected": [
+          "beth",
+          "joe"
+        ],
+        "group_ids": [
+          "beth",
+          "joe"
+        ]
+      },
+      "name": "agent/freyja:read_groups",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "is_active": true
+      },
+      "name": "agent/freyja:active",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "expected": [
+          "joe"
+        ],
+        "group_ids": [
+          "joe"
+        ]
+      },
+      "name": "agent/cloyd-gibbler:read_groups",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "is_active": true
+      },
+      "name": "agent/cloyd-gibbler:active",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "expected": [
+          "beth"
+        ],
+        "group_ids": [
+          "beth"
+        ]
+      },
+      "name": "agent/benedict:read_groups",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "is_active": true
+      },
+      "name": "agent/benedict:active",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "expected": [
+          "beth",
+          "joe",
+          "liam"
+        ],
+        "group_ids": [
+          "beth",
+          "joe",
+          "liam"
+        ]
+      },
+      "name": "agent/agent-47:read_groups",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "is_active": true
+      },
+      "name": "agent/agent-47:active",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "expected": [
+          "beth",
+          "jenna",
+          "joe"
+        ],
+        "group_ids": [
+          "beth",
+          "jenna",
+          "joe"
+        ]
+      },
+      "name": "agent/jennacide:read_groups",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "is_active": true
+      },
+      "name": "agent/jennacide:active",
+      "ok": true
+    }
+  ],
+  "db": "/var/folders/x4/q2ds78n51xg25t1jz3_w1vqw0000gr/T/open-webui-home-agent-refresh-m0g67fs8/webui.db",
+  "generated_at_unix": 1788577835,
+  "git_head": "f3dcdca",
+  "group_count": 0,
+  "missing_model_ids": [],
+  "model_ids": [
+    "agent/agent-47",
+    "agent/benedict",
+    "agent/cloyd-gibbler",
+    "agent/freyja",
+    "agent/jennacide"
+  ],
+  "ok": true,
+  "pending": [
+    "open_webui_users_missing",
+    "open_webui_groups_missing"
+  ],
+  "private_content_included": false,
+  "report_type": "open-webui-home-agent-access-audit",
+  "secrets_included": false,
+  "user_count": 0
+}

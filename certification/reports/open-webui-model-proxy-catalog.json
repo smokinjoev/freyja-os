@@ -1,0 +1,70 @@
+{
+  "agent_models_missing": [],
+  "agent_models_present": [
+    "agent/agent-47",
+    "agent/benedict",
+    "agent/benedict-paralegal",
+    "agent/cloyd-gibbler",
+    "agent/freyja",
+    "agent/jennacide"
+  ],
+  "agent_profile_map": {
+    "agent/agent-47": {
+      "agent_id": "agent-44",
+      "keep_local": true,
+      "local_model": "gpt-oss-freyja:20b-analysis-prefill",
+      "model_profile": "fast_chat",
+      "provider": "vulcan_ollama"
+    },
+    "agent/benedict": {
+      "agent_id": "benedict",
+      "keep_local": true,
+      "local_model": "qwen3:30b-a3b",
+      "model_profile": "strong_reasoning",
+      "provider": "vulcan_ollama"
+    },
+    "agent/benedict-paralegal": {
+      "agent_id": "benedict-paralegal",
+      "keep_local": true,
+      "local_model": "qwen3:30b-a3b",
+      "model_profile": "strong_reasoning",
+      "provider": "vulcan_ollama"
+    },
+    "agent/cloyd-gibbler": {
+      "agent_id": "cloyd",
+      "keep_local": true,
+      "local_model": "qwen3-coder-next:q4_K_M",
+      "model_profile": "coding",
+      "provider": "vulcan_ollama"
+    },
+    "agent/freyja": {
+      "agent_id": "freyja",
+      "keep_local": true,
+      "local_model": "qwen3:30b-a3b",
+      "model_profile": "strong_reasoning",
+      "provider": "vulcan_ollama"
+    },
+    "agent/jennacide": {
+      "agent_id": "jenna",
+      "keep_local": true,
+      "local_model": "gpt-oss-freyja:20b-analysis-prefill",
+      "model_profile": "fast_chat",
+      "provider": "vulcan_ollama"
+    }
+  },
+  "agent_profiles_missing": [],
+  "agent_profiles_non_local": [],
+  "container": "freyja-open-webui-atlas-open-webui-1",
+  "error_class": null,
+  "generated_at_unix": 1789051952,
+  "git_head": "3d386a1",
+  "http_status": 200,
+  "model_count": 14,
+  "ok": true,
+  "private_content_included": false,
+  "probe": "container",
+  "report_type": "open-webui-model-proxy-catalog",
+  "secrets_included": false,
+  "timestamp_unix": 1789051952,
+  "url": "http://model-proxy:8080/v1/models"
+}

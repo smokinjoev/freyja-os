@@ -1,0 +1,135 @@
+{
+  "baseline_tag": "freyja-4.1-baseline-before-5.0-20260831-161448",
+  "checks": [
+    {
+      "evidence": {
+        "tag": "freyja-4.1-baseline-before-5.0-20260831-161448"
+      },
+      "name": "baseline_tag_present",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "freyja-open-webui-atlas-model-proxy-1": {
+          "present": false,
+          "running": false,
+          "status": null
+        },
+        "freyja-open-webui-atlas-open-webui-1": {
+          "present": false,
+          "running": false,
+          "status": null
+        },
+        "freyja3-agent-gateway-1": {
+          "present": true,
+          "running": true,
+          "status": "Up 2 days (healthy)"
+        },
+        "freyja3-litellm-1": {
+          "present": true,
+          "running": true,
+          "status": "Up 2 days (healthy)"
+        }
+      },
+      "name": "protected_containers_running",
+      "ok": false
+    },
+    {
+      "evidence": {
+        "checks": [
+          {
+            "evidence": {
+              "auth_required": false,
+              "endpoint_count": null,
+              "error": null,
+              "healthy": false,
+              "ok_json": null,
+              "service": "freyja3-agent-gateway",
+              "status": 200,
+              "url": "http://127.0.0.1:8300/"
+            },
+            "name": "freyja3_agent_gateway_root",
+            "ok": true
+          },
+          {
+            "evidence": {
+              "auth_required": false,
+              "endpoint_count": null,
+              "error": null,
+              "healthy": true,
+              "ok_json": null,
+              "service": null,
+              "status": 200,
+              "url": "http://127.0.0.1:8300/health"
+            },
+            "name": "freyja3_agent_gateway_health",
+            "ok": true
+          },
+          {
+            "evidence": {
+              "auth_required": false,
+              "endpoint_count": 7,
+              "error": null,
+              "healthy": false,
+              "ok_json": true,
+              "service": null,
+              "status": 200,
+              "url": "http://127.0.0.1:8300/freyja3/inference/health"
+            },
+            "name": "freyja3_inference_health",
+            "ok": true
+          },
+          {
+            "evidence": {
+              "auth_required": true,
+              "endpoint_count": null,
+              "error": null,
+              "healthy": false,
+              "ok_json": null,
+              "service": null,
+              "status": 401,
+              "url": "http://127.0.0.1:4001/health"
+            },
+            "name": "freyja3_litellm_health_auth_boundary",
+            "ok": true
+          }
+        ]
+      },
+      "name": "protected_legacy_endpoints_respond",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "freyja5-gateway-1": "Up 16 hours (healthy)"
+      },
+      "name": "freyja5_side_by_side",
+      "ok": true
+    },
+    {
+      "evidence": {
+        ".codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch": true,
+        ".codex-checkpoints/pre-open-webui-home-agent-status-20260904T133828-0400.txt": true,
+        "logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz": true
+      },
+      "name": "rollback_artifacts_present",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "contract": "protected legacy Freyja3 gateway on port 8300",
+        "inference_health": "http://127.0.0.1:8300/freyja3/inference/health",
+        "note": "no separately named Freyja 4.1 endpoint is defined in current repo evidence",
+        "root": "http://127.0.0.1:8300/"
+      },
+      "name": "dedicated_freyja41_endpoint_contract_known",
+      "ok": true
+    }
+  ],
+  "generated_at_unix": 1788629598,
+  "git_head": "2772093",
+  "ok": false,
+  "pending": [],
+  "private_content_included": false,
+  "report_type": "freyja41-preservation-audit",
+  "secrets_included": false
+}

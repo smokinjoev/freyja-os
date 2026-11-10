@@ -1,0 +1,42 @@
+{
+  "artifacts": {
+    "atlas_readiness": "certification/reports/freyja-channels-readiness-atlas.json",
+    "compose": "deploy/compose/freyja-channels/compose.yaml",
+    "dockerfile": "deploy/docker/freyja-channels.Dockerfile",
+    "env_example": "deploy/compose/freyja-channels/.env.example",
+    "runbook": "deploy/compose/freyja-channels/README.md"
+  },
+  "checks": {
+    "atlas_readiness_open_webui_key_file_ok": true,
+    "atlas_readiness_secret_free": true,
+    "atlas_readiness_signal_scoped_or_waiting_for_credentials": true,
+    "atlas_readiness_telegram_scoped_or_waiting_for_credentials": true,
+    "compose_config_valid": true,
+    "compose_exists": true,
+    "dockerfile_copies_package_sources": true,
+    "dockerfile_exists": true,
+    "env_defaults_deny_all_allowlists": true,
+    "env_defaults_disable_live_services": true,
+    "env_example_exists": true,
+    "env_uses_key_file": true,
+    "no_published_ports": true,
+    "open_webui_key_file_secret": true,
+    "operator_profiles_present": true,
+    "profiles_gate_live_services": true,
+    "required_services_present": true,
+    "runbook_documents_deny_all": true,
+    "runbook_documents_no_public_ports": true,
+    "runbook_exists": true,
+    "signal_on_signal_private_network": true,
+    "signal_private_network_configured": true,
+    "state_bind_mount_configured": true,
+    "telegram_not_on_signal_private_network": true,
+    "telegram_timeout_env_passthrough": true
+  },
+  "generated_at_unix": 1788622277,
+  "git_head": "ec26aeb",
+  "ok": true,
+  "private_content_included": false,
+  "report_type": "freyja-channels-atlas-deployment",
+  "secrets_included": false
+}

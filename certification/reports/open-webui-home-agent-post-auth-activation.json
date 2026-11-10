@@ -1,0 +1,127 @@
+{
+  "dry_run_snapshot": {
+    "container": "freyja-open-webui-atlas-open-webui-1",
+    "source": "/app/backend/data/webui.db",
+    "wal_and_shm_attempted": true
+  },
+  "generated_at_unix": 1788577836,
+  "git_head": "f3dcdca",
+  "mode": "dry-run",
+  "next_actions": [
+    "Create/sign in Open WebUI users for: beth, jenna, joe, liam.",
+    "Complete first-account onboarding, or pass --owner-user-id when multiple Open WebUI users exist."
+  ],
+  "plan": {
+    "access": {
+      "generated_at_unix": 1788577836,
+      "git_head": "f3dcdca",
+      "grant_insert_count": 10,
+      "grant_inserts": [
+        {
+          "permission": "read",
+          "principal_id": "joe",
+          "principal_type": "group",
+          "resource_id": "agent/freyja",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "beth",
+          "principal_type": "group",
+          "resource_id": "agent/freyja",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "joe",
+          "principal_type": "group",
+          "resource_id": "agent/cloyd-gibbler",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "beth",
+          "principal_type": "group",
+          "resource_id": "agent/benedict",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "liam",
+          "principal_type": "group",
+          "resource_id": "agent/agent-47",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "joe",
+          "principal_type": "group",
+          "resource_id": "agent/agent-47",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "beth",
+          "principal_type": "group",
+          "resource_id": "agent/agent-47",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "jenna",
+          "principal_type": "group",
+          "resource_id": "agent/jennacide",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "joe",
+          "principal_type": "group",
+          "resource_id": "agent/jennacide",
+          "resource_type": "model"
+        },
+        {
+          "permission": "read",
+          "principal_id": "beth",
+          "principal_type": "group",
+          "resource_id": "agent/jennacide",
+          "resource_type": "model"
+        }
+      ],
+      "group_inserts": [
+        "joe",
+        "beth",
+        "liam",
+        "jenna"
+      ],
+      "member_insert_count": 0,
+      "member_inserts": [],
+      "missing_models": [],
+      "missing_users": [
+        "beth",
+        "jenna",
+        "joe",
+        "liam"
+      ],
+      "private_content_included": false,
+      "ready": false,
+      "report_type": "open-webui-home-agent-access-bind",
+      "secrets_included": false
+    },
+    "ready": false,
+    "resources": {
+      "knowledge_count": 3,
+      "memory_policy_count": 4,
+      "owner_resolution_policy": "auto_single_user_only",
+      "owner_user_id_resolved": false,
+      "ready": false,
+      "reason": "missing or ambiguous Open WebUI owner user",
+      "tool_count": 6,
+      "user_count": 0
+    }
+  },
+  "private_content_included": false,
+  "ready": false,
+  "report_type": "open-webui-home-agent-post-auth-activation",
+  "secrets_included": false
+}

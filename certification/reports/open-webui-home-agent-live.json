@@ -1,0 +1,152 @@
+{
+  "auth_required_checks_pending": [
+    "open_webui_authenticated_models"
+  ],
+  "checks": [
+    {
+      "evidence": {
+        "error": null,
+        "status": 200,
+        "version": "0.11.3"
+      },
+      "name": "open_webui_version",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "error": null,
+        "status": 200
+      },
+      "name": "open_webui_auth_enabled",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "error": null,
+        "status": 200
+      },
+      "name": "freyja5_health",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "error": null,
+        "missing": [
+          "agent/agent-47",
+          "agent/benedict",
+          "agent/benedict-paralegal",
+          "agent/cloyd-gibbler",
+          "agent/freyja",
+          "agent/jennacide"
+        ],
+        "status": 401
+      },
+      "name": "freyja5_agent_models",
+      "ok": false
+    },
+    {
+      "evidence": {
+        "container": "freyja-open-webui-atlas-model-proxy-1",
+        "error": null,
+        "missing": [],
+        "status": 200
+      },
+      "name": "model_proxy_agent_models",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "error": null,
+        "missing": [
+          "forget",
+          "recent-events",
+          "record-decision",
+          "remember",
+          "search",
+          "update"
+        ],
+        "status": 401
+      },
+      "name": "home_memory_operations",
+      "ok": false
+    },
+    {
+      "evidence": {
+        "error": null,
+        "status": 401
+      },
+      "name": "home_memory_joe_write",
+      "ok": false
+    },
+    {
+      "evidence": {
+        "error": null,
+        "record_count": 0,
+        "status": 401
+      },
+      "name": "home_memory_joe_read",
+      "ok": false
+    },
+    {
+      "evidence": {
+        "error": null,
+        "record_count": 0,
+        "status": 401
+      },
+      "name": "home_memory_recent_events",
+      "ok": false
+    },
+    {
+      "evidence": {
+        "error": null,
+        "status": 401
+      },
+      "name": "home_memory_beth_denied_joe_scope",
+      "ok": false
+    },
+    {
+      "evidence": {
+        "error": false,
+        "present": true,
+        "tag": "freyja-4.1-baseline-before-5.0-20260831-161448"
+      },
+      "name": "freyja41_baseline_tag_present",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "error": false,
+        "missing": [],
+        "observed": {
+          "freyja-open-webui-atlas-model-proxy-1": "Up 37 hours",
+          "freyja-open-webui-atlas-open-webui-1": "Up 24 hours (healthy)",
+          "freyja3-agent-gateway-1": "Up 6 days (healthy)",
+          "freyja3-litellm-1": "Up 6 days (healthy)"
+        },
+        "unhealthy": []
+      },
+      "name": "protected_side_by_side_services_running",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "reason": "credential not supplied",
+        "status": "skipped"
+      },
+      "name": "open_webui_authenticated_models",
+      "ok": false
+    }
+  ],
+  "freyja_url": "http://127.0.0.1:8500",
+  "generated_at_unix": 1789566027,
+  "git_head": "9a3af18",
+  "model_proxy_container": "freyja-open-webui-atlas-model-proxy-1",
+  "model_proxy_url": null,
+  "ok": false,
+  "open_webui_url": "http://100.119.235.114:3001",
+  "optional_checks_pending": [],
+  "private_content_included": false,
+  "report_type": "open-webui-home-agent-live-verification",
+  "secrets_included": false,
+  "timestamp_unix": 1789566027
+}
