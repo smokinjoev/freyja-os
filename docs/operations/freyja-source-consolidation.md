@@ -10,7 +10,7 @@ working tree as the shared baseline.
 | Host | Runtime source | State | Migration rule |
 | --- | --- | --- | --- |
 | Atlas | `/home/joe/freyja-os` | Canonical checkout, deployed through the Director and Signal compose projects | Update only by fast-forwarding the consolidation branch, rebuilding affected services, and checking health plus runtime-data mounts. |
-| Iris | `/Users/freyja/freyja-os-canonical-staging` for MacAgent; `/Users/freyja/freyja-os` for Director and iMessage | MacAgent runs the clean canonical staging checkout; the remaining active services use the preserved dirty overlay | Preserve and review the overlay before redirecting each remaining LaunchAgent. Keep the canonical staging checkout clean and validate authenticated MacAgent health after every service change. |
+| Iris | `/Users/freyja/freyja-os-canonical-staging` for MacAgent and the iMessage runtime manifest; `/Users/freyja/freyja-os` for Director | MacAgent runs the clean canonical staging checkout and the iMessage runtime is synchronized only from its manifest; Director remains on the preserved dirty overlay | Preserve and review the overlay before redirecting Director. Keep the canonical staging checkout clean, validate authenticated MacAgent health, and require zero manifest drift plus a single managed iMessage connector after every service change. |
 | Vulcan | `/home/joe/freyja-os-consolidation` | Active Paralegal Director runs the clean canonical checkout | Update only after focused and full-suite validation, then restart the systemd user service and check its health. The prior dirty Paralegal checkout is retained in a dated recovery location. |
 
 ## Host-specific overlays
