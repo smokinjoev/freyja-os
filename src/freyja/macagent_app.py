@@ -109,7 +109,7 @@ def _requires_approval(request: MacAgentOperationRequest) -> bool:
 async def _calendar_read(request: MacAgentOperationRequest) -> dict[str, Any]:
     if request.operation != "list_events":
         raise ValueError("unsupported apple.calendar.read operation")
-    provider = AppleCalendarProvider(timeout_seconds=settings.macagent_timeout_seconds)
+    provider = AppleCalendarProvider(timeout_seconds=max(20.0, settings.apple_calendar_timeout_seconds))
     events = await provider.list_events(
         calendar_ids=_string_list(request.arguments.get("calendar_selectors") or request.arguments.get("calendar_ids")),
         start=_required_datetime(request.arguments.get("start"), "start"),
@@ -119,7 +119,7 @@ async def _calendar_read(request: MacAgentOperationRequest) -> dict[str, Any]:
 
 
 async def _calendar_write(request: MacAgentOperationRequest) -> dict[str, Any]:
-    provider = AppleCalendarProvider(timeout_seconds=settings.macagent_timeout_seconds)
+    provider = AppleCalendarProvider(timeout_seconds=max(20.0, settings.apple_calendar_timeout_seconds))
     if request.operation == "create_event":
         event = CalendarEvent(
             event_id="",
@@ -344,9 +344,8 @@ tell application "Music"
   set targetDestination to {destination_text}
   if targetDestination is not "" then
     set matchingDevices to (every AirPlay device whose name contains targetDestination)
-    if (count of matchingDevices) > 0 then
-      set current AirPlay devices to matchingDevices
-    end if
+    if (count of matchingDevices) is not 1 then error "AirPlay destination must match exactly one available device"
+    set current AirPlay devices to matchingDevices
   end if
 
   set searchText to {query_text}
