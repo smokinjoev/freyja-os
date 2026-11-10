@@ -1,0 +1,123 @@
+{
+  "credential_policy": {
+    "locations_only": true,
+    "secret_env_names_redacted": true,
+    "values_recorded": false
+  },
+  "endpoints": {
+    "freyja5_gateway": "http://127.0.0.1:8500",
+    "freyja_home_memory": "http://127.0.0.1:8500/freyja-home-memory",
+    "iris_duplicate_open_webui": "http://100.115.228.56:3001",
+    "iris_fallback": "http://100.115.228.56:11434/v1",
+    "model_proxy_internal": "http://model-proxy:8080/v1",
+    "open_webui": "http://100.119.235.114:3001",
+    "open_webui_tailnet": "http://100.119.235.114:3001",
+    "vulcan_ollama": "http://100.94.80.21:11434",
+    "vulcan_openai": "http://100.94.80.21:8088/v1"
+  },
+  "generated_at_unix": 1788615832,
+  "git_head": "e2fa354",
+  "hosts": {
+    "atlas": {
+      "credential_locations": [
+        "deploy/compose/open-webui/.env",
+        "deploy/compose/freyja5/.env",
+        "deploy/compose/freyja-channels/.env",
+        "deploy/compose/signal/.env"
+      ],
+      "current_services": {
+        "freyja-signal-atlas-signal-api-1": {
+          "image": "bbernhard/signal-cli-rest-api:0.100",
+          "ports": "8080/tcp",
+          "status": "Up 2 days (healthy)"
+        },
+        "freyja3-agent-gateway-1": {
+          "image": "freyja3-agent-gateway",
+          "ports": "0.0.0.0:8300->8300/tcp",
+          "status": "Up 2 days (healthy)"
+        },
+        "freyja3-litellm-1": {
+          "image": "ghcr.io/berriai/litellm:main-stable",
+          "ports": "0.0.0.0:4001->4000/tcp",
+          "status": "Up 2 days (healthy)"
+        },
+        "freyja5-gateway-1": {
+          "image": "freyja5-gateway",
+          "ports": "0.0.0.0:8500->8500/tcp",
+          "status": "Up 12 hours (healthy)"
+        }
+      },
+      "current_services_note": "Docker service inventory is local to the machine running this script; Atlas service truth is the tailnet HTTP probe unless the script is run on Atlas.",
+      "open_webui_public_config": {
+        "auth_enabled": true,
+        "auth_trusted_header": false,
+        "login_form_enabled": true,
+        "oauth_provider_count": 0,
+        "onboarding": false,
+        "private_content_included": false,
+        "reachable": true,
+        "secrets_included": false,
+        "signup_enabled": false,
+        "status": true,
+        "version": "0.11.3"
+      },
+      "open_webui_url": "http://100.119.235.114:3001",
+      "role": "always-on Open WebUI, shared memory, messaging adapters, non-Apple services"
+    },
+    "hera": {
+      "role": "future voice/avatar interface",
+      "status": "future"
+    },
+    "iris": {
+      "duplicate_open_webui": {
+        "public_config": {
+          "error_class": "URLError",
+          "private_content_included": false,
+          "reachable": false,
+          "secrets_included": false
+        },
+        "status": "disabled_expected",
+        "url": "http://100.115.228.56:3001"
+      },
+      "endpoint": "http://100.115.228.56:11434/v1",
+      "mcp_host": "iris",
+      "role": "Apple capability server for Calendar, Reminders, iMessage, Shortcuts, HomePod actions"
+    },
+    "vulcan": {
+      "endpoints": {
+        "ollama": "http://100.94.80.21:11434",
+        "openai": "http://100.94.80.21:8088/v1"
+      },
+      "nexus_required": false,
+      "role": "local inference through Ollama/OpenAI-compatible endpoints"
+    }
+  },
+  "open_webui_next_action_hint": "Use the existing Atlas Open WebUI admin account to generate/provide an admin API key or authenticated session, then rerun post-auth activation.",
+  "open_webui_public_config": {
+    "auth_enabled": true,
+    "auth_trusted_header": false,
+    "login_form_enabled": true,
+    "oauth_provider_count": 0,
+    "onboarding": false,
+    "private_content_included": false,
+    "reachable": true,
+    "secrets_included": false,
+    "signup_enabled": false,
+    "status": true,
+    "version": "0.11.3"
+  },
+  "private_content_included": false,
+  "report_type": "open-webui-home-agent-platform-inventory",
+  "secrets_included": false,
+  "source_topology": {
+    "atlas_recoverable_fallback_tag": "freyja-4.1-baseline-before-5.0-20260831-161448",
+    "home_resources": "config/open-webui-home-resources.yaml",
+    "mcp": "config/freyja-5.0-mcp-topology.yaml",
+    "mcp_hosts": [
+      "atlas",
+      "iris"
+    ],
+    "planes": "config/freyja-5.0-planes.yaml",
+    "resource_tool_count": 6
+  }
+}

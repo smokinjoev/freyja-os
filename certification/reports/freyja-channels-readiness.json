@@ -1,0 +1,85 @@
+{
+  "audit_store": {
+    "backend": "jsonl",
+    "denied_attempts_logged": true,
+    "message_body_logged": false,
+    "path": "data/freyja-channels/audit.jsonl",
+    "raw_sender_logged": false,
+    "response_failures_logged": true
+  },
+  "deterministic_gateway_only": true,
+  "generated_at_unix": 1788629384,
+  "git_head": "2772093",
+  "independent_agent_intelligence_prohibited": true,
+  "model_routing_prohibited": true,
+  "open_webui_client": {
+    "api_key_configured": false,
+    "endpoint": "http://127.0.0.1:3001/api/chat/completions",
+    "secrets_included": false
+  },
+  "private_content_included": false,
+  "report_type": "freyja-channels-readiness",
+  "secrets_included": false,
+  "signal": {
+    "allowlist_configured": false,
+    "allowlist_count": 0,
+    "allowlist_identity_map_complete": false,
+    "empty_allowlist": "deny_all",
+    "identity_map_configured": false,
+    "identity_map_count": 0,
+    "missing_configuration": [
+      "SIGNAL_ALLOWED_SENDERS",
+      "SIGNAL_ACCOUNT_NUMBER",
+      "SIGNAL_IDENTITY_MAP",
+      "OPEN_WEBUI_API_KEY",
+      "SIGNAL_REST_API_URL"
+    ],
+    "next_actions": [
+      "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+      "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+      "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
+      "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+      "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control.",
+      "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after the signal live round-trip registration path is healthy."
+    ],
+    "ready_for_live_round_trip": false,
+    "status": "configured_when_registered",
+    "transport": "signal-cli-rest-api",
+    "transport_adapter": "SignalCliRestTransport",
+    "transport_configured": false
+  },
+  "telegram": {
+    "allowlist_configured": true,
+    "allowlist_count": 1,
+    "allowlist_identity_map_complete": false,
+    "empty_allowlist": "deny_all",
+    "identity_map_configured": false,
+    "identity_map_count": 0,
+    "missing_configuration": [
+      "TELEGRAM_IDENTITY_MAP",
+      "OPEN_WEBUI_API_KEY",
+      "TELEGRAM_IDENTITY_MAP:missing_allowlist_entries"
+    ],
+    "next_actions": [
+      "Stop any other Telegram getUpdates poller before running the live pilot.",
+      "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+      "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control.",
+      "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
+    ],
+    "ready_for_live_round_trip": false,
+    "status": "pilot",
+    "transport": "bot_api_long_polling",
+    "transport_adapter": "TelegramLongPollingTransport",
+    "transport_configured": true
+  },
+  "thread_persistence_store": {
+    "backend": "file",
+    "path": "data/freyja-channels/threads.json",
+    "raw_sender_logged": false
+  },
+  "whatsapp": {
+    "ready_for_live_round_trip": false,
+    "reason": "secured_public_webhook_not_approved",
+    "status": "disabled"
+  }
+}

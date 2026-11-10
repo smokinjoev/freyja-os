@@ -1,0 +1,100 @@
+{
+  "checks": [
+    {
+      "name": "open_webui_uses_model_proxy",
+      "ok": true
+    },
+    {
+      "name": "primary_vulcan_nexus_endpoint_configured",
+      "ok": true
+    },
+    {
+      "name": "vulcan_ollama_unload_endpoint_configured",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "coder_base_url": "http://100.94.80.21:11436/v1",
+        "coder_models": [
+          "qwen3-coder-next:q4_K_M"
+        ],
+        "coder_ollama_base_url": "http://100.94.80.21:11436"
+      },
+      "name": "dedicated_coder_runtime_configured",
+      "ok": true
+    },
+    {
+      "name": "nexus_is_primary_model_authority",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "profiles": [
+          "coding",
+          "fast_chat",
+          "strong_reasoning",
+          "vision_documents"
+        ]
+      },
+      "name": "model_profiles_complete",
+      "ok": true
+    },
+    {
+      "name": "model_profiles_local_only",
+      "ok": true
+    },
+    {
+      "name": "unloads_other_primary_models",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "compatible_residents": [
+          "qwen3-coder-next:q4_K_M",
+          "qwen3.8:27b"
+        ]
+      },
+      "name": "qwen27_resident_model_configured",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "guarded_model_count": 2,
+        "min_tokens": 512
+      },
+      "name": "large_model_guard_enabled",
+      "ok": true
+    },
+    {
+      "evidence": {
+        "agent_models_present": [
+          "agent/agent-47",
+          "agent/benedict",
+          "agent/benedict-paralegal",
+          "agent/cloyd-gibbler",
+          "agent/freyja",
+          "agent/jennacide"
+        ],
+        "auth_required": false
+      },
+      "name": "agent_models_in_proxy_catalog",
+      "ok": true
+    },
+    {
+      "name": "cloud_fallback_disabled_for_open_webui_path",
+      "ok": true
+    }
+  ],
+  "generated_at_unix": 1794323174,
+  "git_head": "89b6b9f",
+  "model_profiles": {
+    "coding": "qwen3.8:27b",
+    "fast_chat": "qwen3.8:27b",
+    "strong_reasoning": "qwen3.8:27b",
+    "vision_documents": "qwen3.8:27b"
+  },
+  "ok": true,
+  "private_content_included": false,
+  "report_type": "open-webui-inference-policy-audit",
+  "secrets_included": false
+}

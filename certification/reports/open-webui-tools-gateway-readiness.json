@@ -1,0 +1,53 @@
+{
+  "agent_count": 6,
+  "checks": {
+    "benedict_can_analyze_image": true,
+    "benedict_can_analyze_pdf": true,
+    "benedict_can_read_beth_files": true,
+    "benedict_cannot_read_household_files": true,
+    "calendar_create_requires_confirmation": true,
+    "children_can_analyze_image": true,
+    "children_can_analyze_pdf": true,
+    "children_can_use_weather": true,
+    "children_cannot_use_admin_tools": true,
+    "cloyd_cannot_read_beth_files": true,
+    "confirmed_writes_do_not_execute_without_adapter": true,
+    "iris_write_requires_confirmation": true,
+    "pdf_image_analysis_are_dry_run_only": true,
+    "read_only_operations_are_dry_run_only": true,
+    "unknown_operation_denied": true
+  },
+  "child_allowed_operations": [
+    "image.analyze",
+    "pdf.analyze",
+    "recent-events",
+    "search",
+    "weather.read"
+  ],
+  "confirmation_required": [
+    "apple.messages.send",
+    "apple.music.write",
+    "calendar.create",
+    "forget",
+    "shortcuts.run",
+    "update"
+  ],
+  "destructive_default_all_deny": true,
+  "execution_statuses": {
+    "confirmed_write": "confirmed_not_configured",
+    "image_analysis": "dry_run_available",
+    "pdf_analysis": "dry_run_available",
+    "read_only": "dry_run_available"
+  },
+  "extra_operations": [],
+  "generated_at_unix": 1794323280,
+  "git_head": "89b6b9f",
+  "live_side_effects_invoked": false,
+  "missing_operations": [],
+  "ok": true,
+  "operation_count": 24,
+  "private_content_included": false,
+  "report_type": "open-webui-tools-gateway-readiness",
+  "secrets_included": false,
+  "timestamp_unix": 1794323280
+}

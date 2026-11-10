@@ -1,0 +1,85 @@
+{
+  "backup": {
+    "config_like_entries": [
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/.no_exist/3edf6d7de0faa426b09780416fe61009f26ae589/adapter_config.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/.no_exist/3edf6d7de0faa426b09780416fe61009f26ae589/preprocessor_config.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/.no_exist/3edf6d7de0faa426b09780416fe61009f26ae589/processor_config.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/.no_exist/3edf6d7de0faa426b09780416fe61009f26ae589/video_preprocessor_config.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/1_Pooling/config.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/added_tokens.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/config.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/config_sentence_transformers.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/modules.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/sentence_bert_config.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/special_tokens_map.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/tokenizer.json",
+      "cache/embedding/models/models--TaylorAI--bge-micro-v2/snapshots/3edf6d7de0faa426b09780416fe61009f26ae589/tokenizer_config.json",
+      "cache/embedding/models/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/adapter_config.json",
+      "cache/embedding/models/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/added_tokens.json",
+      "cache/embedding/models/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/preprocessor_config.json",
+      "cache/embedding/models/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/processor_config.json",
+      "cache/embedding/models/models--sentence-transformers--all-MiniLM-L6-v2/.no_exist/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/video_preprocessor_config.json",
+      "cache/embedding/models/models--sentence-transformers--all-MiniLM-L6-v2/snapshots/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/1_Pooling/config.json",
+      "cache/embedding/models/models--sentence-transformers--all-MiniLM-L6-v2/snapshots/1110a243fdf4706b3f48f1d95db1a4f5529b4d41/config.json"
+    ],
+    "contains_upload_or_cache_dirs": true,
+    "contains_webui_db": true,
+    "directory_count": 44,
+    "exists": true,
+    "member_count": 150,
+    "path": "logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz",
+    "regular_file_count": 79,
+    "sha256": "44b3dd287665387a843e0068e1b69a1e459744b4a23f20cf6fcc311fa5187f21",
+    "size_bytes": 249759176,
+    "sqlite_like_entries": [
+      "vector_db/chroma.sqlite3",
+      "webui.db"
+    ],
+    "tar_gzip_readable": true
+  },
+  "backup_scope": {
+    "archive_contains_user_uploaded_or_vector_content": true,
+    "archive_handling": "treat_as_sensitive_do_not_commit_or_print_contents",
+    "archive_may_contain_private_content": true,
+    "report_sanitized": true
+  },
+  "errors": [],
+  "generated_at_unix": 1788581517,
+  "git_head": "5471e98",
+  "ok": true,
+  "private_content_included": false,
+  "report_type": "open-webui-backup-rollback-audit",
+  "rollback_documentation": {
+    "compose_file": {
+      "exists": true,
+      "path": "deploy/compose/open-webui/compose.yaml",
+      "readable": true
+    },
+    "exists": true,
+    "missing_required_phrases": [],
+    "path": "docs/operations/open-webui-home-agent.md",
+    "steps": [
+      {
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/compose.yaml down",
+        "step": "stop_open_webui"
+      },
+      {
+        "command": "git apply .codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch",
+        "step": "restore_source_checkpoint"
+      },
+      {
+        "command": "tar -xzf logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz -C <restored-open-webui-data-volume>",
+        "step": "restore_open_webui_volume"
+      },
+      {
+        "command": "docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/compose.yaml up -d",
+        "step": "start_open_webui"
+      },
+      {
+        "command": "curl -fsS --max-time 10 http://100.119.235.114:3001/api/version",
+        "step": "verify_open_webui"
+      }
+    ]
+  },
+  "secrets_included": false
+}

@@ -1,0 +1,92 @@
+{
+  "all_ready": false,
+  "completion_status_counts": {
+    "complete": 13,
+    "credential_gated": 1,
+    "partial": 1
+  },
+  "exact_next_action": "Stop any other Telegram getUpdates poller before running the live pilot.",
+  "gates": [
+    {
+      "command": "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
+      "evidence": "certification/reports/open-webui-home-agent-db-verification.json",
+      "evidence_generated_at_unix": 1788614386,
+      "evidence_git_head": null,
+      "gate_id": "post_auth_activation",
+      "label": "Open WebUI resource/access activation",
+      "next_action": null,
+      "next_actions": [],
+      "ready": true
+    },
+    {
+      "command": "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
+      "evidence": "certification/reports/open-webui-home-agent-chat-smoke.json",
+      "evidence_generated_at_unix": 1788614608,
+      "evidence_git_head": "b99dc8c",
+      "gate_id": "authenticated_chat_smoke",
+      "label": "Five-agent authenticated Open WebUI chat smoke",
+      "next_action": null,
+      "next_actions": [],
+      "ready": true
+    },
+    {
+      "command": "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
+      "evidence": "certification/reports/freyja-channels-telegram-pilot.json",
+      "evidence_generated_at_unix": 1788621799,
+      "evidence_git_head": null,
+      "gate_id": "telegram_pilot",
+      "label": "Telegram Joe pilot round trip",
+      "next_action": "Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.",
+      "next_actions": [
+        "Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.",
+        "Stop any other Telegram getUpdates poller before running the live pilot.",
+        "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+        "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control.",
+        "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot."
+      ],
+      "ready": false
+    },
+    {
+      "command": "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json",
+      "evidence": "certification/reports/freyja-channels-signal-pilot.json",
+      "evidence_generated_at_unix": 1788629475,
+      "evidence_git_head": "2772093",
+      "gate_id": "signal_pilot",
+      "label": "Signal round trip",
+      "next_action": "Run the Signal live round-trip pilot and require handled > 0.",
+      "next_actions": [
+        "Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.",
+        "Send a message from an allowed Signal sender and archive a report with handled > 0.",
+        "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+        "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+        "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
+        "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+        "Set OPEN_WEBUI_API_KEY or OPEN_WEBUI_API_KEY_FILE outside source control.",
+        "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after the signal live round-trip registration path is healthy."
+      ],
+      "ready": false
+    }
+  ],
+  "generated_at_unix": 1788629488,
+  "git_head": "2772093",
+  "private_content_included": false,
+  "report_type": "open-webui-home-agent-readiness-summary",
+  "required_next_actions": [
+    "Stop any other Telegram getUpdates poller before running the live pilot.",
+    "Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.",
+    "Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.",
+    "Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot.",
+    "Run the Signal live round-trip pilot and require handled > 0.",
+    "Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.",
+    "Send a message from an allowed Signal sender and archive a report with handled > 0.",
+    "Set SIGNAL_REST_API_URL for the existing signal-cli-rest-api endpoint.",
+    "Set SIGNAL_ACCOUNT_NUMBER for the registered dedicated Signal account.",
+    "Set SIGNAL_ALLOWED_SENDERS with reviewed E.164 family senders; keep an empty allowlist as deny-all.",
+    "Map every allowed Signal sender to an approved Freyja identity in SIGNAL_IDENTITY_MAP.",
+    "Run scripts/run-freyja-channels-signal-pilot.py --dry-run after the signal live round-trip registration path is healthy."
+  ],
+  "secrets_included": false,
+  "signal_checks": {},
+  "status": "pending_external_auth_or_credentials",
+  "telegram_checks": {}
+}

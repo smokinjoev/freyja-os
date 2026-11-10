@@ -1,0 +1,314 @@
+{
+  "export_type": "open-webui-home-resources",
+  "generated_at_unix": 1789253962,
+  "git_head": "27d146b",
+  "knowledge": [
+    {
+      "data": {
+        "source": "freyja-open-webui-home-resources"
+      },
+      "description": "Stable family, device, procedure, and household logistics information.",
+      "id": "freyja_household",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "freyja",
+            "agent-44",
+            "jenna"
+          ],
+          "excluded_agents": [
+            "benedict"
+          ],
+          "owner_group": "household",
+          "scope": "household",
+          "seed_policy": {
+            "private_messages": "forbidden",
+            "secrets": "forbidden",
+            "source": "curated_documents_only"
+          },
+          "sensitivity": "internal"
+        }
+      },
+      "name": "Freyja Household"
+    },
+    {
+      "data": {
+        "source": "freyja-open-webui-home-resources"
+      },
+      "description": "Freyja OS architecture, operations, runbooks, and project decisions.",
+      "id": "freyja_projects",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "freyja",
+            "cloyd"
+          ],
+          "excluded_agents": [
+            "benedict",
+            "agent-44",
+            "jenna"
+          ],
+          "owner_group": "joe",
+          "scope": "project:freyja-os",
+          "seed_policy": {
+            "private_messages": "forbidden",
+            "secrets": "forbidden",
+            "source": "repository_docs_and_runbooks"
+          },
+          "sensitivity": "internal"
+        }
+      },
+      "name": "Freyja Projects"
+    },
+    {
+      "data": {
+        "source": "freyja-open-webui-home-resources"
+      },
+      "description": "Beth-authorized local paralegal knowledge only.",
+      "id": "benedict_restricted",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "benedict"
+          ],
+          "excluded_agents": [
+            "freyja",
+            "cloyd",
+            "agent-44",
+            "jenna"
+          ],
+          "owner_group": "beth",
+          "scope": "restricted:benedict",
+          "seed_policy": {
+            "cloud_sync": "forbidden",
+            "private_messages": "forbidden",
+            "secrets": "forbidden",
+            "source": "beth_authorized_local_documents_only"
+          },
+          "sensitivity": "restricted"
+        }
+      },
+      "name": "Benedict Restricted"
+    }
+  ],
+  "native_memory": {
+    "mode": "per_user",
+    "policy": {
+      "benedict_cloud_fallback": "forbidden",
+      "children_admin_memory": "forbidden",
+      "cross_user_reads": "forbidden"
+    },
+    "private_preferences": {
+      "beth": "personal:beth",
+      "jenna": "personal:jenna",
+      "joe": "personal:joe",
+      "liam": "personal:liam"
+    }
+  },
+  "ok": true,
+  "private_content_included": false,
+  "readiness": {
+    "requires_authenticated_import": true,
+    "requires_open_webui_owner_user": true,
+    "safe_for_source_control": true
+  },
+  "report_type": "open-webui-home-resources-export",
+  "schema_version": 1,
+  "secrets_included": false,
+  "tools": [
+    {
+      "boundary": "openapi",
+      "id": "freyja_home_memory",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "freyja",
+            "cloyd",
+            "smith",
+            "benedict",
+            "agent-44",
+            "jenna"
+          ],
+          "base_url": "http://freyja5-gateway:8500/freyja-home-memory",
+          "children_allowed_operations": [
+            "search",
+            "recent-events"
+          ],
+          "confirmation_required": [
+            "forget",
+            "update"
+          ],
+          "destructive_default": "deny",
+          "host": null,
+          "openapi_schema_report": "certification/reports/open-webui-tools-openapi.json",
+          "remote_capabilities": {}
+        }
+      },
+      "name": "Freyja Home Memory",
+      "operations": [
+        "search",
+        "remember",
+        "update",
+        "forget",
+        "record-decision",
+        "recent-events"
+      ]
+    },
+    {
+      "boundary": "mcp",
+      "id": "iris_apple",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "freyja",
+            "cloyd"
+          ],
+          "base_url": null,
+          "children_allowed_operations": [],
+          "confirmation_required": [
+            "calendar.create",
+            "reminders.create",
+            "imessage.send.approved",
+            "shortcuts.run"
+          ],
+          "destructive_default": "deny",
+          "host": "iris",
+          "openapi_schema_report": null,
+          "remote_capabilities": {
+            "approved_writes": [
+              "calendar.create",
+              "reminders.create",
+              "imessage.send.approved",
+              "shortcuts.run"
+            ],
+            "homepod_path": "shortcuts.run",
+            "read_only": [
+              "calendar.read",
+              "reminders.read"
+            ],
+            "remote_endpoint_policy": "tailnet_or_atlas_only",
+            "requires_active_macos_user_session": true
+          }
+        }
+      },
+      "name": "Iris Apple Capabilities",
+      "operations": [
+        "calendar.read",
+        "calendar.create",
+        "reminders.read",
+        "reminders.create",
+        "imessage.send.approved",
+        "shortcuts.run"
+      ]
+    },
+    {
+      "boundary": "openapi",
+      "id": "home_assistant",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "freyja",
+            "cloyd"
+          ],
+          "base_url": null,
+          "children_allowed_operations": [],
+          "confirmation_required": [
+            "home.device_action"
+          ],
+          "destructive_default": "deny",
+          "host": null,
+          "openapi_schema_report": "certification/reports/open-webui-tools-openapi.json",
+          "remote_capabilities": {}
+        }
+      },
+      "name": "Home Assistant",
+      "operations": [
+        "home.status",
+        "home.device_action"
+      ]
+    },
+    {
+      "boundary": "openapi",
+      "id": "household_analysis",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "freyja",
+            "cloyd",
+            "benedict",
+            "agent-44",
+            "jenna"
+          ],
+          "base_url": null,
+          "children_allowed_operations": [
+            "pdf.analyze",
+            "image.analyze"
+          ],
+          "confirmation_required": [],
+          "destructive_default": "deny",
+          "host": null,
+          "openapi_schema_report": "certification/reports/open-webui-tools-openapi.json",
+          "remote_capabilities": {}
+        }
+      },
+      "name": "Household Files And Analysis",
+      "operations": [
+        "files.household.read",
+        "files.beth.read",
+        "pdf.analyze",
+        "image.analyze"
+      ]
+    },
+    {
+      "boundary": "openapi",
+      "id": "infrastructure_health",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "freyja",
+            "cloyd"
+          ],
+          "base_url": null,
+          "children_allowed_operations": [],
+          "confirmation_required": [],
+          "destructive_default": "deny",
+          "host": null,
+          "openapi_schema_report": "certification/reports/open-webui-tools-openapi.json",
+          "remote_capabilities": {}
+        }
+      },
+      "name": "Infrastructure Health",
+      "operations": [
+        "infrastructure.health"
+      ]
+    },
+    {
+      "boundary": "openapi",
+      "id": "weather",
+      "meta": {
+        "freyja": {
+          "allowed_agents": [
+            "freyja",
+            "cloyd",
+            "agent-44",
+            "jenna"
+          ],
+          "base_url": null,
+          "children_allowed_operations": [
+            "weather.read"
+          ],
+          "confirmation_required": [],
+          "destructive_default": "deny",
+          "host": null,
+          "openapi_schema_report": "certification/reports/open-webui-tools-openapi.json",
+          "remote_capabilities": {}
+        }
+      },
+      "name": "Weather",
+      "operations": [
+        "weather.read"
+      ]
+    }
+  ],
+  "validation_errors": []
+}

@@ -1,0 +1,25 @@
+{
+  "failure": {
+    "exception_type": "ChannelTransportError",
+    "http_status": null,
+    "reason": "signal_live_run_failed"
+  },
+  "generated_at_unix": 1788629475,
+  "git_head": "2772093",
+  "live_round_trip_complete": false,
+  "mode": "run",
+  "next_actions": [
+    "Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.",
+    "Send a message from an allowed Signal sender and archive a report with handled > 0."
+  ],
+  "private_content_included": false,
+  "ready": false,
+  "report_type": "freyja-channels-signal-pilot",
+  "secrets_included": false,
+  "totals": {
+    "denied_or_client_failed": 0,
+    "failed": 1,
+    "handled": 0,
+    "messages": 0
+  }
+}

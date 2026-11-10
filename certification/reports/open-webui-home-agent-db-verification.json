@@ -1,0 +1,57 @@
+{
+  "config": {
+    "auth.enable_api_keys": "true",
+    "features.api_keys": null
+  },
+  "counts": {
+    "api_key": 2,
+    "auth": 3,
+    "knowledge": 3,
+    "memory": 4,
+    "model": 7,
+    "tool": 7,
+    "user": 3
+  },
+  "db": "/app/backend/data/webui.db",
+  "generated_at_unix": 1788614386,
+  "git_head": null,
+  "knowledge_present": {
+    "benedict_restricted": true,
+    "freyja_household": true,
+    "freyja_projects": true
+  },
+  "managed_tool_specs_are_lists": true,
+  "memory_policies_present": {
+    "freyja_native_memory_policy:beth": true,
+    "freyja_native_memory_policy:jenna": true,
+    "freyja_native_memory_policy:joe": true,
+    "freyja_native_memory_policy:liam": true
+  },
+  "models_present": {
+    "agent/agent-47": true,
+    "agent/benedict": true,
+    "agent/cloyd-gibbler": true,
+    "agent/freyja": true,
+    "agent/jennacide": true
+  },
+  "ok": true,
+  "private_content_included": false,
+  "report_type": "open-webui-home-agent-db-verification",
+  "secrets_included": false,
+  "tool_spec_types": {
+    "freyja_home_memory": "list",
+    "home_assistant": "list",
+    "household_analysis": "list",
+    "infrastructure_health": "list",
+    "iris_apple": "list",
+    "weather": "list"
+  },
+  "tools_present": {
+    "freyja_home_memory": true,
+    "home_assistant": true,
+    "household_analysis": true,
+    "infrastructure_health": true,
+    "iris_apple": true,
+    "weather": true
+  }
+}
