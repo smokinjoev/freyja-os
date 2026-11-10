@@ -185,6 +185,10 @@ async def _contacts_read(request: MacAgentOperationRequest) -> dict[str, Any]:
 
 
 async def _mail_read(request: MacAgentOperationRequest) -> dict[str, Any]:
+    if request.operation == "search_messages":
+        return await _mail_search_messages(request)
+    if request.operation == "read_message":
+        return await _mail_read_message(request)
     if request.operation != "mailbox_counts":
         raise ValueError("unsupported apple.mail.read operation")
     script = """
@@ -205,6 +209,52 @@ end tell
         }
     except RuntimeError:
         return await asyncio.to_thread(_mail_index_mailbox_counts)
+
+
+async def _mail_search_messages(request: MacAgentOperationRequest) -> dict[str, Any]:
+    query = _required_string(request.arguments.get("query"), "query")
+    limit = min(max(int(request.arguments.get("limit") or 10), 1), 25)
+    script = f"""
+set queryText to {json.dumps(query)}
+set resultRows to {{}}
+tell application "Mail"
+  repeat with theMessage in messages of inbox
+    if (count of resultRows) is greater than or equal to {limit} then exit repeat
+    set subjectText to subject of theMessage as text
+    set senderText to sender of theMessage as text
+    ignoring case
+      if subjectText contains queryText or senderText contains queryText then
+        set end of resultRows to ((id of theMessage as text) & "||FREYJA||" & subjectText & "||FREYJA||" & senderText & "||FREYJA||" & (date received of theMessage as text))
+      end if
+    end ignoring
+  end repeat
+end tell
+set AppleScript's text item delimiters to "||FREYJA-ROW||"
+return resultRows as text
+"""
+    output = await _osascript(script, timeout=settings.macagent_timeout_seconds)
+    messages = []
+    for row in output.split("||FREYJA-ROW||"):
+        parts = row.split("||FREYJA||")
+        if len(parts) == 4:
+            messages.append({"message_id": parts[0], "subject": parts[1], "sender": parts[2], "received_at": parts[3]})
+    return {"mailbox": "INBOX", "query": query, "messages": messages, "source": "apple_mail_automation"}
+
+
+async def _mail_read_message(request: MacAgentOperationRequest) -> dict[str, Any]:
+    message_id = _required_string(request.arguments.get("message_id"), "message_id")
+    script = f"""
+set messageId to {json.dumps(message_id)}
+tell application "Mail"
+  set theMessage to first message of inbox whose id as text is messageId
+  return (id of theMessage as text) & "||FREYJA||" & (subject of theMessage as text) & "||FREYJA||" & (sender of theMessage as text) & "||FREYJA||" & (date received of theMessage as text) & "||FREYJA||" & (content of theMessage as text)
+end tell
+"""
+    output = await _osascript(script, timeout=settings.macagent_timeout_seconds)
+    parts = output.split("||FREYJA||", 4)
+    if len(parts) != 5:
+        raise RuntimeError("Apple Mail returned an invalid message record")
+    return {"message_id": parts[0], "subject": parts[1], "sender": parts[2], "received_at": parts[3], "content": parts[4], "source": "apple_mail_automation"}
 
 
 def _mail_index_mailbox_counts(mail_root: Path | None = None) -> dict[str, Any]:
