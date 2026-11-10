@@ -4,7 +4,7 @@ import pytest
 
 import freyja.agent_runtime_v3
 from freyja.agent_gateway import AgentGateway, GatewayRequest
-from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError, _endpoint_supports_images, inference_role_alias
+from freyja.agent_runtime_v3 import AgentRuntimeV3, MemoryBoundaryError, _endpoint_supports_images, bounded_conversation_history, inference_role_alias
 from freyja.family_agents import CHILD_HOMEWORK_POLICY_MODES, family_route_config, family_tool_policy, resolve_family_agent_alias
 from freyja.foundation_models import AgentExecutionResult, GatewaySender, InferenceEndpoint, MemoryClassification, MemoryScope, SecurityDomainId, SemanticEvent
 from freyja.freyja3_memory import Freyja3MemoryStore, Freyja3MemoryWrite
@@ -1350,6 +1350,18 @@ def test_temporal_context_is_included_in_inference_prompt() -> None:
     assert "Add Family Basement Cleanup this weekend." in prompt
 
 
+def test_bounded_conversation_history_keeps_recent_dialogue_only() -> None:
+    history = bounded_conversation_history([
+        {"role": "system", "content": "ignore"},
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "second"},
+        {"role": "user", "content": "x" * 2500},
+    ])
+
+    assert [item["role"] for item in history] == ["user", "assistant", "user"]
+    assert history[-1]["content"] == "x" * 2000
+
+
 def test_calendar_write_relative_weekend_asks_for_specific_time() -> None:
     handoff = AgentGateway().handle(
         GatewayRequest(
@@ -1597,7 +1609,7 @@ def test_iris_apple_and_atlas_home_assistant_capabilities_are_agent_selected() -
     assert "browser.control" in apple_read_result.selected_tools
     assert "music.control" in apple_read_result.selected_tools
     assert "macagent.apple" in apple_read_result.selected_tools
-    assert "apple_mailbox_counts" in executed_tools
+    assert "apple_mail_search" in executed_tools
     assert "apple_browser_front_tab" in executed_tools
     assert "apple_music_current_track" in executed_tools
     assert "macagent_health" in executed_tools

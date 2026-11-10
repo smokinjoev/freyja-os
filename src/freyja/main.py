@@ -24,7 +24,7 @@ from freyja.agents.approval_provider import PersistentApprovalProvider
 from freyja.agents.models import ApprovalStoreError, WritePilotResultWithApprovals
 from freyja.agents.runtime import SmithRuntime
 from freyja.agent_gateway import AgentGateway, GatewayAuthenticationError, GatewayPermissionError, GatewayRequest
-from freyja.agent_runtime_v3 import AgentRuntimeV3, home_assistant_focus_for_text
+from freyja.agent_runtime_v3 import AgentRuntimeV3, bounded_conversation_history, home_assistant_focus_for_text
 from freyja.cloyd_smith_loop import (
     AgentRunHeartbeat,
     CloydSmithJobCreate,
@@ -3703,6 +3703,21 @@ def _openai_temporal_context() -> dict[str, str]:
     }
 
 
+def _openai_chat_history(messages: list["OpenAIChatMessage"]) -> list[dict[str, str]]:
+    latest_user = next(
+        (index for index in range(len(messages) - 1, -1, -1)
+         if messages[index].role.strip().lower() == "user"
+         and _openai_message_content_text(messages[index].content)),
+        None,
+    )
+    if latest_user is None:
+        return []
+    return bounded_conversation_history([
+        {"role": message.role, "content": _openai_message_content_text(message.content)}
+        for message in messages[:latest_user]
+    ])
+
+
 def _openai_permissions_for_freyja5(objective: str) -> frozenset[str]:
     lowered = objective.lower()
     if "approve" in lowered and ("calendar" in lowered or "adding it" in lowered):
@@ -4155,6 +4170,7 @@ async def openai_compatible_chat_completions(
                         "model": request.model,
                         "originating_channel": portal,
                         "temporal_context": _openai_temporal_context(),
+                        "conversation_history": _openai_chat_history(request.messages),
                     },
                 )
             )
