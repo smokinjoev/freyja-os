@@ -412,6 +412,14 @@ _BUILTIN_TOOL_NAMES = (
     "home_assistant_inventory_changes",
     "home_assistant_control_state",
     "memory_recall_shared",
+    "email_reminder_candidates",
+    "email_reminder_resolve",
+    "email_reminder_apply_feedback",
+    "email_reminder_mark_junk",
+    "scheduled_reminder_list",
+    "scheduled_reminder_create",
+    "scheduled_reminder_update",
+    "scheduled_reminder_stop",
     "opencode_start",
     "opencode_send",
     "opencode_shell",
@@ -449,6 +457,13 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         return
     register_local_host_tools(registry)
     register_calendar_tools(registry)
+    # These modules depend on connector settings, which in turn import agent
+    # policy.  Loading them here avoids a package-import cycle during startup.
+    from freyja.tools.email_reminders import register_email_reminder_tools
+    from freyja.tools.scheduled_reminders import register_scheduled_reminder_tools
+
+    register_email_reminder_tools(registry)
+    register_scheduled_reminder_tools(registry)
     register_identity_tools(registry)
     register_home_assistant_tools(registry)
     register_opencode_tools(registry)
