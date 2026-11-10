@@ -1,0 +1,38 @@
+# Freyja Source Consolidation
+
+The shared integration branch, `codex/freyja-consolidation`, is the reviewed
+source for changes that have passed the repository test suite.  Promotion to
+`main` remains an explicit review step; no host should treat an unreviewed
+working tree as the shared baseline.
+
+## Current host boundary
+
+| Host | Runtime source | State | Migration rule |
+| --- | --- | --- | --- |
+| Atlas | `/home/joe/freyja-os` | Canonical checkout, deployed through the Director and Signal compose projects | Update only by fast-forwarding the consolidation branch, rebuilding affected services, and checking health plus runtime-data mounts. |
+| Iris | `/Users/freyja/freyja-os` | Active Apple services use a dirty host overlay | Preserve and review the overlay before redirecting a LaunchAgent. A clean canonical staging checkout may exist beside it, but is not runtime authority until Apple service checks pass. |
+| Vulcan | `/home/joe/freyja-os-paralegal` | Active Paralegal Director uses a dirty host overlay | Preserve and review the overlay before redirecting the systemd user service. The integration checkout is the source for shared changes, not the live service yet. |
+
+## Host-specific overlays
+
+Host-specific configuration belongs outside the shared checkout: service unit
+files, LaunchAgent environment files, runtime data, credentials, and machine
+paths.  Code may move into the canonical branch only with focused tests and a
+clear owner.  In particular, the Iris OpenWebUI-to-Apple bridge must not be
+promoted as generic code while it contains deployment-specific authenticated
+identity mappings or SSH transport assumptions.
+
+## Required migration gate
+
+Before replacing a live overlay:
+
+1. Inventory tracked and untracked changes, including the active service path.
+2. Integrate or explicitly retain each unique capability with tests.
+3. Create or verify a clean canonical checkout on the host.
+4. Rebuild or restart only the affected service.
+5. Verify service health, source/runtime-data mounts, and recent logs.
+6. Rename the old checkout to a dated recovery location only after the new
+   runtime is healthy.
+
+This keeps one reviewed source of truth without losing machine-specific
+capabilities during migration.
