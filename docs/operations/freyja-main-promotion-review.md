@@ -9,8 +9,7 @@ cleanup.  Promote only reviewed slices, in this order.
 
 | Slice | Commits | Scope | Required gate before promotion |
 | --- | --- | --- | --- |
-| Smith runtime | `9ad7391` through `89b6b9f` | Smith/Cloyd runtime stabilization, feedback, OpenCode control, and acceptance coverage | Focused Smith/Cloyd tests plus the full suite |
-| Open WebUI policy | `31e360b` | Apple tool policy and certification alignment | Open WebUI policy and certification tests plus the full suite |
+| Smith runtime and prerequisites | `9ad7391` through `89b6b9f`, `c6ca3a5`, `31e360b`, `6a02894` | Smith/Cloyd runtime stabilization, clean-checkout validation, Open WebUI Apple policy alignment, and sanitized certification baselines | Focused Smith/Cloyd tests plus the full suite |
 | Messaging reminders | `df0f31e` through `09cd0f1` | Gmail reminder monitor and Signal scheduled-reminder delivery, Compose wiring, and ownership | Gmail/Signal focused tests, Atlas compose validation, then a healthy deployed monitor and connector |
 | Apple and portal safety | `7c8146d`, `3e27384`, `c6ca3a5`, `f678581` | Constrained Apple Mail tools, bounded portal context, source-checkout testability, and MacAgent routing safeguards | Apple/MacAgent focused tests, full suite, and authenticated Iris health checks |
 | Runtime portability | `33f6f3b`, `7d6a2aa` | Checkout-relative Core-MCP and Discord wrappers | Wrapper-focused tests, full suite, and Iris Core-MCP/Discord process audit |
@@ -33,14 +32,11 @@ cleanup.  Promote only reviewed slices, in this order.
 ## Current evidence
 
 - The full suite passed at `7d6a2aa`: 1,971 passed, 6 skipped.
-- An isolated Smith candidate was prepared from current `main` by cherry-picking
-  `9ad7391` through `89b6b9f`; its Smith-focused gate passed (139 tests).
-  Its full-suite gate is not yet promotion-ready: clean-checkout Open WebUI
-  deliverable tests still require ignored local evidence artifacts.  Adding
-  `c6ca3a5` fixed the Atlas verifier dependency but exposed 13 remaining
-  Open WebUI evidence-fixture failures.  Resolve that clean-checkout test
-  contract before opening the Smith promotion for review; do not treat the
-  focused pass as sufficient for a `main` merge.
+- An isolated candidate from current `main` cherry-picked the Smith range plus
+  `c6ca3a5`, `31e360b`, and `6a02894`. Its Smith-focused gate passed (139
+  tests) and its full suite passed: 1,948 passed, 6 skipped. The Open WebUI
+  policy alignment and sanitized certification baselines are therefore
+  required prerequisites for this promotion slice, not optional follow-ups.
 - Iris runs its eight managed services from canonical staging; Director,
   OpenAI API, and Core-MCP health checks passed before the legacy checkout was
   moved to a dated recovery archive.
