@@ -234,7 +234,7 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["proxy_agent_profiles_missing"] == []
     assert bundle["evidence_summary"]["proxy_agent_profiles_non_local"] == []
     assert bundle["evidence_summary"]["proxy_agent_profile_map"]["agent/freyja"]["provider"] == "vulcan_ollama"
-    assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 20
+    assert bundle["evidence_summary"]["tools_gateway_operation_count"] == 24
     assert bundle["evidence_summary"]["tools_gateway_destructive_default_all_deny"] is True
     assert bundle["evidence_summary"]["tools_gateway_live_side_effects_invoked"] is False
     assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["read_only"] == "dry_run_available"
@@ -242,8 +242,8 @@ def test_bundle_contains_required_deliverable_sections() -> None:
     assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["image_analysis"] == "dry_run_available"
     assert bundle["evidence_summary"]["tools_gateway_execution_statuses"]["confirmed_write"] == "confirmed_not_configured"
     assert "calendar.create" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
-    assert "home.device_action" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
-    assert "imessage.send.approved" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
+    assert "apple.messages.send" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
+    assert "apple.music.write" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
     assert "shortcuts.run" in bundle["evidence_summary"]["tools_gateway_confirmation_required"]
     assert "weather.read" in bundle["evidence_summary"]["tools_gateway_child_allowed_operations"]
     assert "infrastructure.health" not in bundle["evidence_summary"]["tools_gateway_child_allowed_operations"]
@@ -402,7 +402,7 @@ def test_bundle_markdown_renders_high_signal_summary() -> None:
     assert "`home_memory_beth_denied_joe_scope_ok`: `False`" in text
     assert "## Tool Authorization" in text
     assert "`confirmation_required`" in text
-    assert "imessage.send.approved" in text
+    assert "apple.messages.send" in text
     assert "`child_allowed_operations`" in text
     assert "weather.read" in text
     assert "pdf_analysis" in text
