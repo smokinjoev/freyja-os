@@ -222,6 +222,30 @@ async def _apple_mailbox_counts_implementation(request: ToolExecutionRequest) ->
     return result.output if result.ok else {"error": result.error or "MacAgent Mail read failed."}
 
 
+async def _apple_mail_search_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    metadata = request.metadata if isinstance(request.metadata, dict) else {}
+    result = await MacAgentClient().invoke(MacAgentOperationRequest(
+        capability="apple.mail.read", operation="search_messages",
+        arguments={"query": str(args.get("query") or ""), "limit": int(args.get("limit") or 10)},
+        request_id=request.request_id, actor=request.actor or "atlas_director", director_authorized=True,
+        required_permission="apple.mail.read", principal=metadata.get("memory_principal"), person=metadata.get("person"),
+    ))
+    return result.output if result.ok else {"error": result.error or "MacAgent Mail search failed."}
+
+
+async def _apple_mail_read_message_implementation(request: ToolExecutionRequest) -> dict:
+    args = request.arguments or {}
+    metadata = request.metadata if isinstance(request.metadata, dict) else {}
+    result = await MacAgentClient().invoke(MacAgentOperationRequest(
+        capability="apple.mail.read", operation="read_message",
+        arguments={"message_id": str(args.get("message_id") or "")},
+        request_id=request.request_id, actor=request.actor or "atlas_director", director_authorized=True,
+        required_permission="apple.mail.read", principal=metadata.get("memory_principal"), person=metadata.get("person"),
+    ))
+    return result.output if result.ok else {"error": result.error or "MacAgent Mail read failed."}
+
+
 async def _apple_music_current_track_implementation(request: ToolExecutionRequest) -> dict:
     metadata = request.metadata if isinstance(request.metadata, dict) else {}
     result = await MacAgentClient().invoke(
@@ -386,6 +410,8 @@ _BUILTIN_TOOL_NAMES = (
     "apple_messages_recent",
     "apple_messages_send",
     "apple_mailbox_counts",
+    "apple_mail_search",
+    "apple_mail_read_message",
     "apple_music_current_track",
     "apple_music_play_query",
     "apple_browser_front_tab",
@@ -715,6 +741,30 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             tags=["macagent", "iris", "apple", "mail", "email", "read-only"],
         ),
         _apple_mailbox_counts_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_mail_search",
+            description="Search Apple Mail inbox messages by sender or subject.",
+            version="1.0.0",
+            input_schema={"type": "object", "required": ["query"], "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}},
+            output_schema={"type": "object"}, risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="iris.macagent", required_permission="apple.mail.read", enabled=True,
+            timeout_seconds=15, tags=["macagent", "iris", "apple", "mail", "search", "read-only"],
+        ),
+        _apple_mail_search_implementation,
+    )
+    registry.register(
+        ToolDefinition(
+            name="apple_mail_read_message",
+            description="Read one Apple Mail inbox message returned by apple_mail_search.",
+            version="1.0.0",
+            input_schema={"type": "object", "required": ["message_id"], "properties": {"message_id": {"type": "string"}}},
+            output_schema={"type": "object"}, risk_level=ToolRiskLevel.READ_ONLY,
+            host_service="iris.macagent", required_permission="apple.mail.read", enabled=True,
+            timeout_seconds=15, tags=["macagent", "iris", "apple", "mail", "read-only"],
+        ),
+        _apple_mail_read_message_implementation,
     )
     registry.register(
         ToolDefinition(
