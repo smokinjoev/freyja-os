@@ -26,7 +26,7 @@ def test_tool_gateway_readiness_report_proves_fail_closed_policy() -> None:
     assert report["git_head"]
     assert report["secrets_included"] is False
     assert report["private_content_included"] is False
-    assert report["operation_count"] == 20
+    assert report["operation_count"] == 24
     assert report["missing_operations"] == []
     assert report["destructive_default_all_deny"] is True
     assert report["live_side_effects_invoked"] is False
@@ -35,8 +35,8 @@ def test_tool_gateway_readiness_report_proves_fail_closed_policy() -> None:
     assert report["execution_statuses"]["image_analysis"] == "dry_run_available"
     assert report["execution_statuses"]["confirmed_write"] == "confirmed_not_configured"
     assert "calendar.create" in report["confirmation_required"]
-    assert "home.device_action" in report["confirmation_required"]
-    assert "imessage.send.approved" in report["confirmation_required"]
+    assert "apple.messages.send" in report["confirmation_required"]
+    assert "apple.music.write" in report["confirmation_required"]
     assert "shortcuts.run" in report["confirmation_required"]
     assert report["child_allowed_operations"] == [
         "image.analyze",

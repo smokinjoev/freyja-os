@@ -47,21 +47,31 @@ def test_tool_boundaries_are_narrow_and_children_are_not_admins() -> None:
     payload = _module().build_export()
     tools = {item["id"]: item for item in payload["tools"]}
 
-    assert tools["iris_apple"]["boundary"] == "mcp"
+    assert tools["iris_apple"]["boundary"] == "authenticated_openwebui_ssh_adapter"
     assert tools["iris_apple"]["meta"]["freyja"]["host"] == "iris"
     assert tools["iris_apple"]["meta"]["freyja"]["children_allowed_operations"] == []
     iris_remote = tools["iris_apple"]["meta"]["freyja"]["remote_capabilities"]
-    assert iris_remote["read_only"] == ["calendar.read", "reminders.read"]
+    assert set(iris_remote["read_only"]) == {
+        "macagent.health",
+        "calendar.read",
+        "apple.contacts.read",
+        "apple.messages.read",
+        "apple.mail.read",
+        "apple.music.read",
+        "apple.browser.read",
+    }
     assert iris_remote["approved_writes"] == [
         "calendar.create",
-        "reminders.create",
-        "imessage.send.approved",
+        "apple.messages.send",
+        "apple.music.write",
         "shortcuts.run",
     ]
-    assert iris_remote["homepod_path"] == "shortcuts.run"
+    assert iris_remote["homepod_music_path"] == "apple.music.write"
+    assert iris_remote["household_device_route"] == "home_assistant"
     assert iris_remote["requires_active_macos_user_session"] is True
     assert iris_remote["remote_endpoint_policy"] == "tailnet_or_atlas_only"
-    assert tools["home_assistant"]["meta"]["freyja"]["confirmation_required"] == ["home.device_action"]
+    assert tools["home_assistant"]["operations"] == ["home.status"]
+    assert tools["home_assistant"]["meta"]["freyja"]["confirmation_required"] == []
     assert tools["home_assistant"]["meta"]["freyja"]["openapi_schema_report"] == "certification/reports/open-webui-tools-openapi.json"
     assert tools["infrastructure_health"]["meta"]["freyja"]["children_allowed_operations"] == []
     assert all(tool["meta"]["freyja"]["destructive_default"] == "deny" for tool in tools.values())

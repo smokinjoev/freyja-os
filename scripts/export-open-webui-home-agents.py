@@ -26,8 +26,8 @@ AGENT_MODEL_IDS = {
 REQUIRED_AGENT_IDS = {"freyja", "cloyd", "smith", "benedict", "agent-44", "jenna"}
 CHILD_AGENT_IDS = {"agent-44", "jenna"}
 OPENWEBUI_TOOL_IDS = {
-    "freyja": ["opencode_runtime", "cloyd_smith_loop", "freyja_home_memory"],
-    "cloyd": ["opencode_runtime", "cloyd_smith_loop", "freyja_home_memory", "atlas_internal_fetch"],
+    "freyja": ["opencode_runtime", "cloyd_smith_loop", "freyja_home_memory", "iris_apple", "home_assistant", "weather", "atlas_status", "vulcan_agent"],
+    "cloyd": ["opencode_runtime", "cloyd_smith_loop", "freyja_home_memory", "atlas_internal_fetch", "weather", "iris_apple", "home_assistant"],
     "smith": ["opencode_runtime", "cloyd_smith_loop"],
 }
 
@@ -233,15 +233,13 @@ def validate_export(export: dict[str, Any]) -> list[str]:
         "children.admin",
         "cloud_fallback",
         "unrestricted_shell",
-        "calendar.create",
         "reminders.create",
-        "shortcuts.run",
         "home.device_action",
     ):
         if required not in cloyd_denied:
             errors.append(f"Cloyd must deny {required}")
-    if set(cloyd_tools.get("confirm") or []):
-        errors.append("Cloyd must not have confirmable household/schedule write tools")
+    if set(cloyd_tools.get("confirm") or []) != {"calendar.create", "apple.music.write", "apple.messages.send", "shortcuts.run"}:
+        errors.append("Cloyd must require explicit approval for Apple actions")
     if set(cloyd_meta.get("toolIds") or []) < set(OPENWEBUI_TOOL_IDS["cloyd"]):
         errors.append("Cloyd must retain OpenWebUI OpenCode, Cloyd-Smith, memory, and Atlas tools")
     if (cloyd_meta.get("capabilities") or {}).get("builtin_tools") is not False:

@@ -136,17 +136,19 @@ def validate_export(payload: dict[str, Any]) -> list[str]:
         if CHILD_AGENT_IDS & set(meta.get("allowed_agents") or []) and not child_operations:
             errors.append(f"{tool['id']} allows child agents but grants no child-safe operations")
     iris = tools.get("iris_apple", {})
-    if iris.get("boundary") != "mcp" or iris.get("meta", {}).get("freyja", {}).get("host") != "iris":
-        errors.append("Iris tool boundary must be MCP on Iris")
+    if iris.get("boundary") != "authenticated_openwebui_ssh_adapter" or iris.get("meta", {}).get("freyja", {}).get("host") != "iris":
+        errors.append("Iris tool boundary must use the authenticated OpenWebUI SSH adapter on Iris")
     iris_remote = iris.get("meta", {}).get("freyja", {}).get("remote_capabilities") or {}
-    if set(iris_remote.get("read_only") or []) != {"calendar.read", "reminders.read"}:
-        errors.append("Iris read-only remote capabilities must be Calendar and Reminders reads")
-    if not {"calendar.create", "reminders.create", "imessage.send.approved", "shortcuts.run"} <= set(
-        iris_remote.get("approved_writes") or []
-    ):
-        errors.append("Iris approved remote writes must include Calendar, Reminders, iMessage, and Shortcuts")
-    if iris_remote.get("homepod_path") != "shortcuts.run":
-        errors.append("Iris HomePod path must remain Shortcuts-based")
+    reads = {"macagent.health", "calendar.read", "apple.contacts.read", "apple.messages.read", "apple.mail.read", "apple.music.read", "apple.browser.read"}
+    writes = {"calendar.create", "apple.messages.send", "apple.music.write", "shortcuts.run"}
+    if set(iris_remote.get("read_only") or []) != reads:
+        errors.append("Iris read capabilities must match the implemented Apple adapter")
+    if set(iris_remote.get("approved_writes") or []) != writes:
+        errors.append("Iris approved writes must match the implemented Apple adapter")
+    if set(iris.get("meta", {}).get("freyja", {}).get("confirmation_required") or []) != writes:
+        errors.append("Every Iris action must require explicit confirmation")
+    if iris_remote.get("homepod_music_path") != "apple.music.write" or iris_remote.get("household_device_route") != "home_assistant":
+        errors.append("Music must use MacAgent and household devices must use Home Assistant")
     if iris_remote.get("requires_active_macos_user_session") is not True:
         errors.append("Iris remote actions must require an active macOS user session")
     if tools.get("freyja_home_memory", {}).get("boundary") != "openapi":

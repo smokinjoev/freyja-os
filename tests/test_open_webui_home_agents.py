@@ -117,12 +117,15 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
         "children.admin",
         "cloud_fallback",
         "unrestricted_shell",
-        "calendar.create",
         "reminders.create",
-        "shortcuts.run",
         "home.device_action",
     }.issubset(set(cloyd["tools"]["deny"]))
-    assert cloyd["tools"]["confirm"] == []
+    assert set(cloyd["tools"]["confirm"]) == {
+        "calendar.create",
+        "apple.messages.send",
+        "apple.music.write",
+        "shortcuts.run",
+    }
 
 
 def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:

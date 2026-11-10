@@ -63,6 +63,11 @@ FREYJA_CORE_MODELS = {
     for model in os.environ.get("FREYJA_CORE_MODELS", "freyja-core").split(",")
     if model.strip()
 }
+WORKSPACE_MODEL_IDS = {
+    model.strip()
+    for model in os.environ.get("WORKSPACE_MODEL_IDS", "").split(",")
+    if model.strip()
+}
 PROBE_MODELS = {
     model.strip()
     for model in os.environ.get("PROBE_MODELS", "gpt-oss:120b").split(",")
@@ -147,6 +152,9 @@ class Handler(BaseHTTPRequestHandler):
                             aliased = dict(model)
                             aliased["id"] = alias
                             models.setdefault(alias, aliased)
+        # A provider ID shadows the matching Open WebUI workspace preset.
+        for model_id in WORKSPACE_MODEL_IDS:
+            models.pop(model_id, None)
         if models:
             payload = {"object": "list", "data": [models[model_id] for model_id in sorted(models)]}
             self._send(200, {"content-type": "application/json"}, json.dumps(payload).encode("utf-8"))

@@ -63,25 +63,28 @@ resources:
       children_allowed_operations: [search, recent-events]
     - id: iris_apple
       name: Iris Apple Capabilities
-      boundary: mcp
+      boundary: authenticated_openwebui_ssh_adapter
       host: iris
-      operations: [calendar.read, calendar.create, reminders.read, reminders.create, imessage.send.approved, shortcuts.run]
+      operations: [macagent.health, calendar.read, calendar.create, apple.contacts.read, apple.messages.read, apple.messages.send, apple.mail.read, apple.music.read, apple.music.write, apple.browser.read, shortcuts.run]
       remote_capabilities:
-        read_only: [calendar.read, reminders.read]
-        approved_writes: [calendar.create, reminders.create, imessage.send.approved, shortcuts.run]
-        homepod_path: shortcuts.run
+        read_only: [macagent.health, calendar.read, apple.contacts.read, apple.messages.read, apple.mail.read, apple.music.read, apple.browser.read]
+        approved_writes: [calendar.create, apple.messages.send, apple.music.write, shortcuts.run]
+        homepod_music_path: apple.music.write
+        household_device_route: home_assistant
+        shared_read_scope: [macagent.health, calendar.read, apple.music.read]
+        personal_apple_account_owner: joe
         requires_active_macos_user_session: true
         remote_endpoint_policy: tailnet_or_atlas_only
       allowed_agents: [freyja, cloyd]
-      confirmation_required: [calendar.create, reminders.create, imessage.send.approved, shortcuts.run]
+      confirmation_required: [calendar.create, apple.messages.send, apple.music.write, shortcuts.run]
       destructive_default: deny
       children_allowed_operations: []
     - id: home_assistant
       name: Home Assistant
       boundary: openapi
-      operations: [home.status, home.device_action]
+      operations: [home.status]
       allowed_agents: [freyja, cloyd]
-      confirmation_required: [home.device_action]
+      confirmation_required: []
       destructive_default: deny
       children_allowed_operations: []
     - id: household_analysis

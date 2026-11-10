@@ -20,12 +20,16 @@ def test_open_webui_tool_catalog_is_manifest_driven_and_fail_closed() -> None:
         "recent-events",
         "calendar.read",
         "calendar.create",
-        "reminders.read",
-        "reminders.create",
-        "imessage.send.approved",
+        "macagent.health",
+        "apple.contacts.read",
+        "apple.messages.read",
+        "apple.messages.send",
+        "apple.mail.read",
+        "apple.music.read",
+        "apple.music.write",
+        "apple.browser.read",
         "shortcuts.run",
         "home.status",
-        "home.device_action",
         "files.household.read",
         "files.beth.read",
         "pdf.analyze",
@@ -36,7 +40,8 @@ def test_open_webui_tool_catalog_is_manifest_driven_and_fail_closed() -> None:
     assert all(policy.destructive_default == "deny" for policy in policies.values())
     assert policies["calendar.create"].confirmation_required is True
     assert policies["weather.read"].children_allowed is True
-    assert policies["home.device_action"].children_allowed is False
+    assert policies["apple.messages.send"].confirmation_required is True
+    assert policies["apple.music.write"].confirmation_required is True
 
 
 def test_authorization_denies_unknown_or_unassigned_operations() -> None:

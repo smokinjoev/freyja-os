@@ -892,9 +892,11 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"confirm_tools=`{agent_policy['benedict_confirm_tools']}`",
     ]
     for agent_id, policy in sorted(agent_policy["child_agents"].items()):
+        policy = policy or {}
+        tools = policy.get("tools") if isinstance(policy.get("tools"), dict) else policy
         lines.append(
-            f"- Child `{agent_id}`: allow=`{', '.join(policy['allow'])}`, "
-            f"deny=`{', '.join(policy['deny'])}`, confirm=`{policy['confirm']}`"
+            f"- Child `{agent_id}`: allow=`{', '.join(tools.get('allow') or [])}`, "
+            f"deny=`{', '.join(tools.get('deny') or [])}`, confirm=`{tools.get('confirm') or []}`"
         )
     lines += [
         "",
