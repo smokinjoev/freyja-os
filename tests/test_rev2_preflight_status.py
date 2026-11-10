@@ -1,4 +1,5 @@
 import json
+import os
 import tomllib
 from pathlib import Path
 
@@ -443,8 +444,8 @@ def test_latest_readiness_report_uses_mtime(tmp_path: Path) -> None:
     newer = tmp_path / "newer-rev2-readiness.json"
     _write_report(older, passed=True, checks=[])
     _write_report(newer, passed=True, checks=[])
-    older.touch()
-    newer.touch()
+    os.utime(older, ns=(1, 1))
+    os.utime(newer, ns=(2, 2))
 
     assert preflight.latest_readiness_report(tmp_path) == newer
 
