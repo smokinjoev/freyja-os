@@ -33,6 +33,14 @@ cleanup.  Promote only reviewed slices, in this order.
 ## Current evidence
 
 - The full suite passed at `7d6a2aa`: 1,971 passed, 6 skipped.
+- An isolated Smith candidate was prepared from current `main` by cherry-picking
+  `9ad7391` through `89b6b9f`; its Smith-focused gate passed (139 tests).
+  Its full-suite gate is not yet promotion-ready: clean-checkout Open WebUI
+  deliverable tests still require ignored local evidence artifacts.  Adding
+  `c6ca3a5` fixed the Atlas verifier dependency but exposed 13 remaining
+  Open WebUI evidence-fixture failures.  Resolve that clean-checkout test
+  contract before opening the Smith promotion for review; do not treat the
+  focused pass as sufficient for a `main` merge.
 - Iris runs its eight managed services from canonical staging; Director,
   OpenAI API, and Core-MCP health checks passed before the legacy checkout was
   moved to a dated recovery archive.
