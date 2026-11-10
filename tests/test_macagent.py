@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
@@ -731,7 +732,25 @@ async def test_macagent_osascript_timeout_reports_concrete_error(monkeypatch) ->
     from freyja.config import settings
     from freyja.macagent_app import _osascript
 
+    class SlowProcess:
+        returncode = None
+
+        def __init__(self) -> None:
+            self.killed = False
+
+        def kill(self) -> None:
+            self.killed = True
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            if not self.killed:
+                await asyncio.sleep(1)
+            return b"", b""
+
+    async def create_slow_process(*_args, **_kwargs) -> SlowProcess:
+        return SlowProcess()
+
     monkeypatch.setattr(settings, "macagent_timeout_seconds", 0.01)
+    monkeypatch.setattr(macagent_app_module.asyncio, "create_subprocess_exec", create_slow_process)
 
     with pytest.raises(RuntimeError, match="osascript timed out"):
         await _osascript('delay 2\nreturn "done"')

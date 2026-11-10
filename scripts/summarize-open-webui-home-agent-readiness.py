@@ -23,6 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _load(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"secrets_included": False, "missing_report": path.name}
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("secrets_included") is not False:
         raise ValueError(f"report is not marked secret-free: {path}")
