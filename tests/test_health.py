@@ -809,7 +809,8 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatc
     assert data["object"] == "chat.completion"
     assert data["model"] == "freyja-5"
     content = data["choices"][0]["message"]["content"]
-    assert "I completed the local processing" in content
+    assert "I ran local coding tooling" in content
+    assert "Tool feedback:" in content
     assert "Trace:" not in content
     assert data["freyja"]["smith_mode"] == "freyja5"
     assert data["freyja"]["trace_id"] == data["freyja"]["trace"]["trace_id"]
