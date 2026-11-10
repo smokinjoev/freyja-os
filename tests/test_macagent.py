@@ -479,6 +479,27 @@ def test_macagent_app_reads_mailbox_counts(monkeypatch) -> None:
     }
 
 
+def test_macagent_app_searches_and_reads_mail_messages(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "macagent_token", "secret")
+    test_client = TestClient(macagent_app)
+    request = MacAgentOperationRequest(
+        capability="apple.mail.read", operation="search_messages", arguments={"query": "dentist", "limit": 5},
+        request_id="req-mail-search", actor="atlas_director", director_authorized=True,
+    )
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(return_value="123||FREYJA||Dentist appointment||FREYJA||Office <office@example.com>||FREYJA||Friday")):
+        response = test_client.post(f"/capabilities/{request.capability}", headers={"Authorization": "Bearer secret"}, json=request.model_dump(mode="json"))
+    assert response.status_code == 200
+    assert response.json()["output"]["messages"][0]["message_id"] == "123"
+
+    read_request = request.model_copy(update={"operation": "read_message", "arguments": {"message_id": "123"}})
+    with patch("freyja.macagent_app._osascript", new=AsyncMock(return_value="123||FREYJA||Dentist appointment||FREYJA||Office <office@example.com>||FREYJA||Friday||FREYJA||Your appointment is Tuesday.")):
+        response = test_client.post(f"/capabilities/{read_request.capability}", headers={"Authorization": "Bearer secret"}, json=read_request.model_dump(mode="json"))
+    assert response.status_code == 200
+    assert response.json()["output"]["content"] == "Your appointment is Tuesday."
+
+
 def test_macagent_app_falls_back_to_mail_index_counts(tmp_path, monkeypatch) -> None:
     from freyja.config import settings
 

@@ -1226,6 +1226,8 @@ class AgentRuntimeV3:
             for capability_id, tool_name in _CONCRETE_TOOL_BY_CAPABILITY.items()
             if capability_id in allowed_capabilities
         }
+        if "email.read" in allowed_capabilities:
+            allowed_tool_names.add("apple_mail_read_message")
         if {"web.search", "weather.current"}.issubset(allowed_capabilities):
             allowed_tool_names.add("event_weather")
         return [
@@ -1496,7 +1498,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
     "browser.control": "apple_browser_front_tab",
     "calendar.read": "calendar_today_schedule",
     "calendar.write": "calendar_create_event",
-    "email.read": "apple_mailbox_counts",
+    "email.read": "apple_mail_search",
     "macagent.apple": "macagent_health",
     "home-assistant.read": "home_assistant_list_states",
     "home-assistant.control": "home_assistant_control_state",
@@ -1511,6 +1513,7 @@ _CONCRETE_TOOL_BY_CAPABILITY = {
 
 _CAPABILITY_BY_CONCRETE_TOOL = {tool_name: capability_id for capability_id, tool_name in _CONCRETE_TOOL_BY_CAPABILITY.items()}
 _CAPABILITY_BY_CONCRETE_TOOL["event_weather"] = "weather.current"
+_CAPABILITY_BY_CONCRETE_TOOL["apple_mail_read_message"] = "email.read"
 
 _MUTATION_CAPABILITIES = {"messaging.send", "scheduling.create", "home-assistant.control", "calendar.write", "coding.execute"}
 
