@@ -17,6 +17,18 @@ class GmailSettings(BaseSettings):
     gmail_allowed_senders: str = ""
     gmail_max_message_chars: int = 12000
     gmail_request_timeout_seconds: float = 120.0
+    gmail_inbox_monitor_enabled: bool = False
+    gmail_inbox_owner: str = "joe"
+    gmail_imap_app_password: str = ""
+    gmail_inbox_folder: str = "INBOX"
+    gmail_inbox_lookback_days: int = 7
+    gmail_inbox_max_messages: int = 100
+    gmail_inbox_unread_only: bool = False
+    gmail_inbox_poll_interval_seconds: int = 900
+    gmail_reminder_store_path: str = "data/gmail-reminders.sqlite3"
+    # This is deliberately opt-in: the scanner is read-only, while this
+    # action can only label one exact message as Spam and never deletes mail.
+    gmail_inbox_actions_enabled: bool = False
     gmail_poll_interval_seconds: float = 10.0
     gmail_reconnect_max_seconds: float = 60.0
     gmail_imap_host: str = "imap.gmail.com"
@@ -49,6 +61,11 @@ class GmailSettings(BaseSettings):
             and self.gmail_smtp_username.strip()
             and self.gmail_smtp_password
         )
+
+    @property
+    def gmail_inbox_password(self) -> str:
+        """Use the dedicated inbox app password when set, else the IMAP one."""
+        return self.gmail_imap_app_password or self.gmail_imap_password
 
 
 settings = GmailSettings()
