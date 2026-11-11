@@ -16,7 +16,7 @@ from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _VENV_PYTHON = _PROJECT_ROOT / ".venv" / "bin" / "python"
-if _VENV_PYTHON.exists() and Path(sys.executable) != _VENV_PYTHON:
+if __name__ == "__main__" and _VENV_PYTHON.exists() and Path(sys.executable) != _VENV_PYTHON:
     os.execv(str(_VENV_PYTHON), [str(_VENV_PYTHON), *sys.argv])
 
 _SRC_DIR = str(_PROJECT_ROOT / "src")

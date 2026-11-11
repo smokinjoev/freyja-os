@@ -141,7 +141,7 @@ They define five importable/mirrorable agents:
 | Freyja | household | `strong_reasoning` | confirms writes/destructive actions |
 | Cloyd | Joe | `coding` | technical tools for Joe only |
 | Benedict | Beth | `strong_reasoning` | local-only, `restricted:benedict`, no cloud fallback |
-| Agent 44 | Liam | `fast_chat` | no admin, messaging, or device actions |
+| Agent 47 | Liam | `fast_chat` | no admin, messaging, or device actions |
 | Jenna | Jenna | `fast_chat` | no admin, messaging, or device actions |
 
 Use these definitions as the source of truth when creating Open WebUI Model/agent entries. Do not paste secrets into agent prompts, tools, or knowledge descriptions.
@@ -161,7 +161,7 @@ friendly display names and agent IDs in metadata:
 | Freyja | `agent/freyja` |
 | Cloyd | `agent/cloyd-gibbler` |
 | Benedict | `agent/benedict` |
-| Agent 44 | `agent/agent-47` |
+| Agent 47 | `agent/agent-47` |
 | Jenna | `agent/jennacide` |
 
 Output artifact:
@@ -369,7 +369,7 @@ Live database state after import:
 | `agent/freyja` | Freyja |
 | `agent/cloyd-gibbler` | Cloyd |
 | `agent/benedict` | Benedict |
-| `agent/agent-47` | Agent 44 |
+| `agent/agent-47` | Agent 47 |
 | `agent/jennacide` | Jenna |
 
 ## Scoped Memory Service

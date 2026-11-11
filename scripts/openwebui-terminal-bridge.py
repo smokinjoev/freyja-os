@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -29,7 +30,8 @@ DEFAULT_TOKEN_FILE = Path(
     )
 )
 DEFAULT_QWEN_BIN = os.environ.get("FREYJA_GATEWAY_REMOTE_QWEN_BIN", "/opt/homebrew/bin/qwen")
-TMUX_BIN = os.environ.get("OPENWEBUI_TERMINAL_BRIDGE_TMUX_BIN", "/opt/homebrew/bin/tmux")
+TMUX_BIN = os.environ.get("OPENWEBUI_TERMINAL_BRIDGE_TMUX_BIN") or shutil.which("tmux") or "/opt/homebrew/bin/tmux"
+SHELL_BIN = shutil.which("zsh") or "/bin/sh"
 DEFAULT_PATH = "/opt/homebrew/bin:/Users/freyja/.local/npm/bin:/Users/freyja/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
@@ -112,16 +114,16 @@ def _qwen_command() -> list[str]:
     command = (
         "unset OPENROUTER_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY GOOGLE_API_KEY DASHSCOPE_API_KEY; "
         f"{prefix} {shlex.quote(DEFAULT_QWEN_BIN)} --model {shlex.quote(DEFAULT_MODEL)}; "
-        "status=$?; printf '\\n[openwebui-terminal-bridge] qwen exited with status %s\\n' \"$status\"; exec /bin/zsh -f"
+        f"status=$?; printf '\\n[openwebui-terminal-bridge] qwen exited with status %s\\n' \"$status\"; exec {shlex.quote(SHELL_BIN)} -f"
     )
-    return ["/bin/zsh", "-lc", command]
+    return [SHELL_BIN, "-lc", command]
 
 
 def _agent_command(agent: str) -> list[str]:
     if agent == "qwen":
         return _qwen_command()
     if agent == "shell-test":
-        return ["/bin/zsh", "-lc", "printf 'bridge shell-test ready\\n'; exec /bin/zsh -f"]
+        return [SHELL_BIN, "-lc", f"printf 'bridge shell-test ready\\n'; exec {shlex.quote(SHELL_BIN)} -f"]
     raise SystemExit("unsupported agent; use qwen")
 
 

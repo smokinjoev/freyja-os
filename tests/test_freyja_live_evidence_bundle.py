@@ -28,7 +28,8 @@ def test_bundle_defaults_to_repo_venv_python_when_present() -> None:
     module = _load_script()
     args = module.build_parser().parse_args([])
 
-    assert args.python == str(REPO_ROOT / ".venv" / "bin" / "python")
+    expected = REPO_ROOT / ".venv" / "bin" / "python"
+    assert args.python == str(expected if expected.exists() else Path(os.sys.executable))
 
 
 def test_bundle_reexecs_under_repo_venv_for_direct_execution() -> None:

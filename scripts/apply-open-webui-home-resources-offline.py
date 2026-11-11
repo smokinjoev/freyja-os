@@ -217,6 +217,7 @@ def upsert(conn: sqlite3.Connection, rows: dict[str, list[dict[str, Any]]]) -> N
             meta=excluded.meta,
             valves=excluded.valves,
             updated_at=excluded.updated_at
+        WHERE tool.content IS NULL OR tool.content LIKE '# Freyja managed tool boundary.%'
         """,
         rows["tool"],
     )

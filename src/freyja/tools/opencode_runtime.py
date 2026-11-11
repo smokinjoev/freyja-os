@@ -6,6 +6,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,11 @@ from freyja.tools.models import ToolDefinition, ToolExecutionRequest, ToolRiskLe
 from freyja.tools.registry import ToolRegistry
 
 
-MODEL = {"providerID": "vulcan-nexus", "modelID": "@preset/freyja-coder"}
+# The OpenCode worker needs a model whose OpenAI-compatible tool-call loop
+# survives a tool result.  Keep general Qwen on the coordinator lane; route
+# repository work to the dedicated coder runtime.
+MODEL = {"providerID": "vulcan-coder", "modelID": "qwen3-coder-next:q4_K_M"}
+DEFAULT_FIRST_RESPONSE_TIMEOUT_SECONDS = "900"
 PROMPT_GUARDRAILS = (
     "OpenCode safety guardrails: stay in the configured working directory; "
     "do not use nonexistent Linux paths such as /home/joe/freyja-config on this Mac; "
@@ -53,7 +58,7 @@ def _request(
             request.add_header("authorization", "Basic " + base64.b64encode(credentials).decode("ascii"))
         if body is not None:
             request.add_header("content-type", "application/json")
-        timeout = timeout_seconds if timeout_seconds is not None else float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
+        timeout = timeout_seconds if timeout_seconds is not None else float(os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", DEFAULT_FIRST_RESPONSE_TIMEOUT_SECONDS))
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read()
     except urllib.error.HTTPError as exc:
@@ -210,7 +215,12 @@ def _valid_directory(directory: str) -> tuple[bool, str]:
 def _guard_prompt(prompt: str) -> str:
     if PROMPT_GUARDRAILS in prompt:
         return prompt
-    return f"{PROMPT_GUARDRAILS}\n\n{prompt}"
+    workspace = str(Path(settings.repository_root).expanduser())
+    workspace_rule = (
+        f"Your repository is {workspace}. Use relative paths from that directory; "
+        f"never invent or access another /Users/... project path."
+    )
+    return f"{PROMPT_GUARDRAILS}\n{workspace_rule}\n\n{prompt}"
 
 
 async def _opencode_start(request: ToolExecutionRequest) -> dict[str, Any]:
@@ -259,7 +269,11 @@ async def _opencode_send(request: ToolExecutionRequest) -> dict[str, Any]:
     args = request.arguments or {}
     alias = str(args.get("alias") or "coder").strip()
     prompt = str(args.get("prompt") or "").strip()
-    timeout_seconds = float(args.get("timeout_seconds") or os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", "300"))
+    timeout_seconds = float(
+        args.get("timeout_seconds")
+        or os.environ.get("CLOYD_SMITH_FIRST_RESPONSE_BUDGET_SECONDS")
+        or os.environ.get("OPENCODE_REQUEST_TIMEOUT_SECONDS", DEFAULT_FIRST_RESPONSE_TIMEOUT_SECONDS)
+    )
     session_config = _session_config(alias)
     if not session_config:
         directory = str(args.get("directory") or settings.repository_root).strip()
@@ -279,10 +293,17 @@ async def _opencode_send(request: ToolExecutionRequest) -> dict[str, Any]:
         _save_aliases(aliases)
         session_config = {"session": start_result["id"]}
     session_id = session_config["session"]
+    message_id = str(args.get("submission_id") or args.get("message_id") or f"msg_{uuid.uuid4().hex}")
     result = _request(
         "POST",
-        f"/session/{session_id}/message",
-        {"model": MODEL, "agent": "build", "parts": [{"type": "text", "text": _guard_prompt(prompt)}]},
+        f"/session/{session_id}/prompt_async",
+        {
+            "messageID": message_id,
+            "model": MODEL,
+            "agent": "build",
+            "tools": {"task": False, "subagent": False},
+            "parts": [{"type": "text", "text": _guard_prompt(prompt)}],
+        },
         base_url=session_config.get("base_url"),
         username=session_config.get("username"),
         password_file=session_config.get("password_file"),
@@ -290,7 +311,23 @@ async def _opencode_send(request: ToolExecutionRequest) -> dict[str, Any]:
     )
     if not result.get("ok", True):
         return result
-    return {"ok": True, **_summarize_message(session_id, result)}
+    session = _request(
+        "GET",
+        f"/session/{session_id}",
+        base_url=session_config.get("base_url"),
+        username=session_config.get("username"),
+        password_file=session_config.get("password_file"),
+        timeout_seconds=10,
+    )
+    return {
+        "ok": True,
+        "session": session_id,
+        "submission_id": message_id,
+        "message": message_id,
+        "state": "submitted",
+        "agent": "build",
+        "working_directory": session.get("directory") if isinstance(session, dict) else None,
+    }
 
 
 async def _opencode_shell(request: ToolExecutionRequest) -> dict[str, Any]:
@@ -405,7 +442,16 @@ def register_opencode_tools(registry: ToolRegistry) -> None:
             ToolDefinition(
                 name="opencode_send",
                 description="Send a natural-language coding prompt to an OpenCode session, starting it first if needed.",
-                input_schema={"type": "object", "required": ["prompt"], "properties": {"alias": {"type": "string"}, "prompt": {"type": "string"}, "directory": {"type": "string"}}},
+                input_schema={
+                    "type": "object",
+                    "required": ["prompt"],
+                    "properties": {
+                        "alias": {"type": "string"},
+                        "prompt": {"type": "string"},
+                        "directory": {"type": "string"},
+                        "timeout_seconds": {"type": "number"},
+                    },
+                },
                 output_schema={"type": "object", "properties": {}},
                 risk_level=ToolRiskLevel.CONTROLLED_WRITE,
                 host_service="opencode",

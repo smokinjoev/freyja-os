@@ -1,0 +1,27 @@
+{
+  "applied": false,
+  "db": "/app/backend/data/webui.db",
+  "dry_run_snapshot": {
+    "container": "freyja-open-webui-atlas-open-webui-1",
+    "source": "/app/backend/data/webui.db",
+    "wal_and_shm_attempted": true
+  },
+  "generated_at_unix": 1788577835,
+  "git_head": "f3dcdca",
+  "import_json": "/Users/freyja/freyja-os/certification/reports/open-webui-home-resources-export.json",
+  "knowledge_count": 3,
+  "memory_policy_count": 4,
+  "mode": "dry-run",
+  "owner_user_id_resolved": false,
+  "private_content_included": false,
+  "ready": false,
+  "reason": "missing or ambiguous Open WebUI owner user",
+  "report_type": "open-webui-home-resources-offline-import",
+  "secrets_included": false,
+  "tool_count": 6,
+  "touched_tables": [
+    "knowledge",
+    "tool",
+    "memory"
+  ]
+}

@@ -7,7 +7,7 @@ Verified completion: `86.7%` (13/15 requirements)
 
 - Focused tests: `133 passed, 1 warning`
 - Full tests: `1582 passed, 1 skipped, 1 warning`
-- Live verifier ok: `True`
+- Live verifier ok: `False`
 - Backup rollback audit ok: `True`
 - Secret safety audit ok: `True`
 - Access metadata audit ok: `True`
@@ -29,18 +29,19 @@ Verified completion: `86.7%` (13/15 requirements)
 
 ## Inference
 
-- `coding`: `qwen3-coder-next:q4_K_M`
-- `fast_chat`: `gpt-oss-freyja:20b-analysis-prefill`
-- `strong_reasoning`: `qwen3:30b-a3b`
-- `vision_documents`: `qwen2.5vl:72b`
+- `coding`: `qwen3.8:27b`
+- `fast_chat`: `qwen3.8:27b`
+- `strong_reasoning`: `qwen3.8:27b`
+- `vision_documents`: `qwen3.8:27b`
 - `agent_models_in_proxy_catalog`: `True`
 - `cloud_fallback_disabled_for_open_webui_path`: `True`
 - `large_model_guard_enabled`: `True`
 - `model_profiles_complete`: `True`
 - `model_profiles_local_only`: `True`
-- `nexus_not_required`: `True`
+- `nexus_is_primary_model_authority`: `True`
 - `open_webui_uses_model_proxy`: `True`
-- `primary_vulcan_endpoint_configured`: `True`
+- `primary_vulcan_nexus_endpoint_configured`: `True`
+- `qwen27_resident_model_configured`: `True`
 - `unloads_other_primary_models`: `True`
 - `vulcan_ollama_unload_endpoint_configured`: `True`
 
@@ -73,8 +74,8 @@ Verified completion: `86.7%` (13/15 requirements)
 
 ## Agent Policy
 
-- Agents: `agent-44, benedict, cloyd, freyja, jenna`
-- Runtime models: `agent/agent-47, agent/benedict, agent/cloyd-gibbler, agent/freyja, agent/jennacide`
+- Agents: `agent-44, benedict, cloyd, freyja, jenna, smith`
+- Runtime models: `agent/agent-47, agent/benedict, agent/cloyd-gibbler, agent/freyja, agent/freyja-coder, agent/jennacide`
 - Benedict: groups=`beth`, cloud_fallback=`forbidden`, knowledge=`personal:beth, restricted:benedict`, confirm_tools=`[]`
 - Child `agent-44`: allow=`weather.read, calendar.read, pdf.analyze, image.analyze`, deny=`admin, messaging.send, home.device_action, cloud_fallback`, confirm=`[]`
 - Child `jenna`: allow=`weather.read, calendar.read, pdf.analyze, image.analyze`, deny=`admin, messaging.send, home.device_action, cloud_fallback`, confirm=`[]`
@@ -82,11 +83,11 @@ Verified completion: `86.7%` (13/15 requirements)
 ## Memory
 
 - Native Open WebUI memory: `per_user`
-- `home_memory_operations_ok`: `True`
-- `home_memory_joe_write_ok`: `True`
-- `home_memory_joe_read_ok`: `True`
-- `home_memory_recent_events_ok`: `True`
-- `home_memory_beth_denied_joe_scope_ok`: `True`
+- `home_memory_operations_ok`: `False`
+- `home_memory_joe_write_ok`: `False`
+- `home_memory_joe_read_ok`: `False`
+- `home_memory_recent_events_ok`: `False`
+- `home_memory_beth_denied_joe_scope_ok`: `False`
 
 ## Tool Authorization
 
@@ -106,7 +107,7 @@ Verified completion: `86.7%` (13/15 requirements)
 - `model_routing_prohibited`: `True`
 - `independent_agent_intelligence_prohibited`: `True`
 - `telegram_empty_allowlist_policy`: `deny_all`
-- `telegram_allowlist_count`: `0`
+- `telegram_allowlist_count`: `1`
 - `telegram_identity_map_count`: `0`
 - `signal_empty_allowlist_policy`: `deny_all`
 - `signal_allowlist_count`: `0`
@@ -127,16 +128,21 @@ Verified completion: `86.7%` (13/15 requirements)
 
 ## Required Next Actions
 
+- Stop any other Telegram getUpdates poller before running the live pilot.
 - Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.
+- Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.
+- Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot.
+- Run the Signal live round-trip pilot and require handled > 0.
 - Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.
 - Send a message from an allowed Signal sender and archive a report with handled > 0.
+- Run scripts/run-freyja-channels-signal-pilot.py --dry-run after the signal live round-trip registration path is healthy.
 
 ## Rollback
 
 - `source_checkpoint`: `.codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch`
 - `source_status`: `.codex-checkpoints/pre-open-webui-home-agent-status-20260904T133828-0400.txt`
 - `open_webui_volume_backup`: `logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz`
-- `offline_model_db_backup`: `None`
+- `offline_model_db_backup`: `/app/backend/data/webui.db.backup-before-home-agents-20261004T161218Z`
 - `runbook`: `docs/operations/open-webui-home-agent.md`
 - `compose_file`: `{'exists': True, 'path': 'deploy/compose/open-webui/compose.yaml', 'readable': True}`
 - `stop_open_webui`: `docker compose --env-file deploy/compose/open-webui/.env -f deploy/compose/open-webui/compose.yaml down`
@@ -161,13 +167,17 @@ Verified completion: `86.7%` (13/15 requirements)
 - `authenticated_chat_smoke`: ready - Five-agent authenticated Open WebUI chat smoke
   Command: `OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json`
 - `telegram_pilot`: pending - Telegram Joe pilot round trip
-  Next: Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.
+  Next: Stop any other Telegram getUpdates poller before running the live pilot.
   Action: Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.
+  Action: Stop any other Telegram getUpdates poller before running the live pilot.
+  Action: Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.
+  Action: Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot.
   Command: `scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json`
 - `signal_pilot`: pending - Signal round trip
-  Next: Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.
+  Next: Run the Signal live round-trip pilot and require handled > 0.
   Action: Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.
   Action: Send a message from an allowed Signal sender and archive a report with handled > 0.
+  Action: Run scripts/run-freyja-channels-signal-pilot.py --dry-run after the signal live round-trip registration path is healthy.
   Command: `scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json`
 
 ## Requirement Audit
@@ -189,8 +199,12 @@ Verified completion: `86.7%` (13/15 requirements)
 - `messaging_channels`: `credential_gated`
   Blocker: Telegram/Signal live round trip is not yet proven with handled > 0.
   Action: Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.
+  Action: Stop any other Telegram getUpdates poller before running the live pilot.
+  Action: Map every allowed Telegram sender to an approved Freyja identity in TELEGRAM_IDENTITY_MAP.
+  Action: Run scripts/run-freyja-channels-telegram-pilot.py --dry-run before enabling the long-polling pilot.
   Action: Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.
   Action: Send a message from an allowed Signal sender and archive a report with handled > 0.
+  Action: Run scripts/run-freyja-channels-signal-pilot.py --dry-run after the signal live round-trip registration path is healthy.
   Command: `scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json`
   Command: `scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json`
 - `proactive_behavior`: `complete`
@@ -206,4 +220,4 @@ Verified completion: `86.7%` (13/15 requirements)
 
 ## Exact Next Action
 
-Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.
+Stop any other Telegram getUpdates poller before running the live pilot.

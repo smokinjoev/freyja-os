@@ -1,0 +1,25 @@
+{
+  "backup": "/app/backend/data/webui.db.backup-before-home-agents-20261004T161218Z",
+  "db": "/app/backend/data/webui.db",
+  "generated_at_unix": 1791130338,
+  "git_head": null,
+  "import_json": "/tmp/open-webui-home-agents-import.json",
+  "insert_count": 0,
+  "mode": "apply",
+  "model_count": 6,
+  "model_ids": [
+    "agent/freyja",
+    "agent/cloyd-gibbler",
+    "agent/freyja-coder",
+    "agent/benedict",
+    "agent/agent-47",
+    "agent/jennacide"
+  ],
+  "private_content_included": false,
+  "report_type": "open-webui-home-agent-offline-import",
+  "secrets_included": false,
+  "touched_tables": [
+    "model"
+  ],
+  "update_count": 6
+}

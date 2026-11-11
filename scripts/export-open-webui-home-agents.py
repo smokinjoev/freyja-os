@@ -25,6 +25,11 @@ AGENT_MODEL_IDS = {
 }
 REQUIRED_AGENT_IDS = {"freyja", "cloyd", "smith", "benedict", "agent-44", "jenna"}
 CHILD_AGENT_IDS = {"agent-44", "jenna"}
+OPENWEBUI_TOOL_IDS = {
+    "freyja": ["opencode_runtime", "cloyd_smith_loop", "freyja_home_memory", "iris_apple", "home_assistant", "weather", "atlas_status", "vulcan_agent"],
+    "cloyd": ["opencode_runtime", "cloyd_smith_loop", "freyja_home_memory", "atlas_internal_fetch", "weather", "iris_apple", "home_assistant"],
+    "smith": ["opencode_runtime", "cloyd_smith_loop"],
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,13 +75,11 @@ def build_export(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
                 "meta": {
                     "profile_image_url": "/static/favicon.png",
                     "description": str(agent["purpose"]),
-                    "capabilities": {
-                        "vision": profile_id == "vision_documents" or "image.analyze" in _tool_list(agent, "allow"),
-                        "citations": True,
-                        "usage": True,
-                    },
+                    "capabilities": _open_webui_capabilities(agent, profile_id),
+                    "knowledge": None,
                     "suggestion_prompts": [],
                     "tags": ["freyja", "home-agent", profile_id],
+                    **_open_webui_tool_metadata(agent_id),
                 },
                 "params": {
                     "system": str(agent["system_prompt"]).strip(),
@@ -143,6 +146,32 @@ def _tool_list(agent: dict[str, Any], key: str) -> list[str]:
     return [str(value) for value in values or []]
 
 
+def _open_webui_capabilities(agent: dict[str, Any], profile_id: str) -> dict[str, Any]:
+    agent_id = str(agent.get("id") or "")
+    tool_ids = OPENWEBUI_TOOL_IDS.get(agent_id) or []
+    return {
+        "vision": profile_id == "vision_documents" or "image.analyze" in _tool_list(agent, "allow"),
+        "citations": True,
+        "usage": True,
+        "file_context": False,
+        "file_upload": False,
+        "web_search": False,
+        "image_generation": False,
+        "code_interpreter": False,
+        "terminal": False,
+        "status_updates": bool(tool_ids),
+        "memory": agent_id in {"freyja", "cloyd", "smith"},
+        "builtin_tools": False,
+        "function_calling": bool(tool_ids),
+        "tools": bool(tool_ids),
+    }
+
+
+def _open_webui_tool_metadata(agent_id: str) -> dict[str, Any]:
+    tool_ids = OPENWEBUI_TOOL_IDS.get(agent_id)
+    return {"toolIds": list(tool_ids)} if tool_ids else {}
+
+
 def validate_export(export: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     records = {record.get("freyja", {}).get("agent_id"): record for record in export.get("records") or []}
@@ -178,9 +207,11 @@ def validate_export(export: dict[str, Any]) -> list[str]:
         errors.append("Benedict must not have confirmable write tools")
 
     cloyd = records.get("cloyd") or {}
+    cloyd_meta = cloyd.get("meta") or {}
     cloyd_tools = (cloyd.get("freyja") or {}).get("tools") or {}
     cloyd_denied = set(cloyd_tools.get("deny") or [])
     for required in (
+        "opencode.run",
         "opencode.start",
         "opencode.send",
         "opencode.shell",
@@ -188,6 +219,11 @@ def validate_export(export: dict[str, Any]) -> list[str]:
         "cloyd_smith.submit",
         "cloyd_smith.record",
         "cloyd_smith.stop",
+        "cloyd_smith.retry",
+        "cloyd_smith.mark_done",
+        "cloyd_smith.mark_blocked",
+        "cloyd_smith.follow_up",
+        "cloyd_smith.replace",
     ):
         if required not in set(cloyd_tools.get("coding") or []):
             errors.append(f"Cloyd must be able to command {required}")
@@ -197,17 +233,20 @@ def validate_export(export: dict[str, Any]) -> list[str]:
         "children.admin",
         "cloud_fallback",
         "unrestricted_shell",
-        "calendar.create",
         "reminders.create",
-        "shortcuts.run",
         "home.device_action",
     ):
         if required not in cloyd_denied:
             errors.append(f"Cloyd must deny {required}")
-    if set(cloyd_tools.get("confirm") or []):
-        errors.append("Cloyd must not have confirmable household/schedule write tools")
+    if set(cloyd_tools.get("confirm") or []) != {"calendar.create", "apple.music.write", "apple.messages.send", "shortcuts.run"}:
+        errors.append("Cloyd must require explicit approval for Apple actions")
+    if set(cloyd_meta.get("toolIds") or []) < set(OPENWEBUI_TOOL_IDS["cloyd"]):
+        errors.append("Cloyd must retain OpenWebUI OpenCode, Cloyd-Smith, memory, and Atlas tools")
+    if (cloyd_meta.get("capabilities") or {}).get("builtin_tools") is not False:
+        errors.append("Cloyd must disable crashing OpenWebUI builtin tools")
 
     smith = records.get("smith") or {}
+    smith_meta = smith.get("meta") or {}
     smith_freyja = smith.get("freyja") or {}
     smith_tools = smith_freyja.get("tools") or {}
     if smith.get("id") != "agent/freyja-coder":
@@ -221,6 +260,8 @@ def validate_export(export: dict[str, Any]) -> list[str]:
             errors.append(f"Agent Smith must deny {prohibited}")
     if set(smith_tools.get("confirm") or []):
         errors.append("Agent Smith must not have household confirm tools")
+    if set(smith_meta.get("toolIds") or []) < set(OPENWEBUI_TOOL_IDS["smith"]):
+        errors.append("Agent Smith must retain OpenWebUI OpenCode and Cloyd-Smith tools")
 
     for agent_id in CHILD_AGENT_IDS:
         child = records.get(agent_id) or {}

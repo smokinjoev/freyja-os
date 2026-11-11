@@ -31,6 +31,37 @@ def test_health() -> None:
     assert response.json() == {"status": "healthy"}
 
 
+def test_root_exposes_agent_runs_home_links() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["release"] == "freyja-6.4"
+    assert body["home"] == "/endpoints"
+    assert body["agent_runs"] == "/agent-runs"
+    assert body["agent_runs_status"] == "/agent-runs/api/status"
+    assert body["agent_runs_worker_output"] == "/agent-runs/api/worker-output"
+    assert body["agent_runs_cleanup"] == "/agent-runs/api/jobs/clear-old"
+
+
+def test_endpoint_directory_exposes_agent_runs_cleanup_links() -> None:
+    response = client.get("/endpoints")
+
+    assert response.status_code == 200
+    assert "/agent-runs" in response.text
+    assert "/agent-runs/api/worker-output" in response.text
+    assert "/agent-runs/api/jobs/clear-old" in response.text
+
+
+def test_endpoint_directory_remains_public_when_connector_auth_is_enabled(monkeypatch) -> None:
+    from freyja.config import settings
+
+    monkeypatch.setattr(settings, "freyja_connector_token", "test-connector-token")
+    response = client.get("/endpoints")
+    assert response.status_code == 200
+    assert "/agent-runs" in response.text
+
+
 def test_health_remains_public_when_connector_auth_is_enabled(monkeypatch) -> None:
     from freyja.config import settings
 
@@ -337,7 +368,7 @@ def test_freyja5_readiness_reports_source_controlled_architecture(monkeypatch) -
         "mcp_tool_count": 3,
         "cloud_egress_policy": "paralegal-local-only",
     }
-    assert agents["agent-47"]["logical_display_name"] == "Agent 44"
+    assert agents["agent-47"]["logical_display_name"] == "Agent 47"
     assert agents["jennacide"]["logical_display_name"] == "Jenna agent"
 
 
@@ -505,7 +536,7 @@ def test_agent_gateway_models_exposes_only_scoped_agent(monkeypatch) -> None:
     assert response.status_code == 200
     data = response.json()["data"]
     assert [model["id"] for model in data] == ["agent/agent-47"]
-    assert data[0]["freyja"]["logical_display_name"] == "Agent 44"
+    assert data[0]["freyja"]["logical_display_name"] == "Agent 47"
 
 
 def test_agent_gateway_models_rejects_unknown_gateway(monkeypatch) -> None:
@@ -778,7 +809,8 @@ def test_openai_chat_completion_freyja5_uses_gateway_runtime_response(monkeypatc
     assert data["object"] == "chat.completion"
     assert data["model"] == "freyja-5"
     content = data["choices"][0]["message"]["content"]
-    assert "I completed the local processing" in content
+    assert "I ran local coding tooling" in content
+    assert "Tool feedback:" in content
     assert "Trace:" not in content
     assert data["freyja"]["smith_mode"] == "freyja5"
     assert data["freyja"]["trace_id"] == data["freyja"]["trace"]["trace_id"]

@@ -1,0 +1,20 @@
+{
+  "generated_at_unix": 1788621799,
+  "git_head": null,
+  "iterations": 1,
+  "live_round_trip_complete": false,
+  "mode": "run",
+  "next_actions": [
+    "Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0."
+  ],
+  "private_content_included": false,
+  "ready": false,
+  "report_type": "freyja-channels-telegram-pilot",
+  "secrets_included": false,
+  "totals": {
+    "denied_or_client_failed": 0,
+    "failed": 0,
+    "handled": 0,
+    "updates": 0
+  }
+}

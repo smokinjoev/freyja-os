@@ -81,6 +81,27 @@ async def test_freyja_core_mcp_wrapper_delegates_to_core_call_tool(monkeypatch) 
     ]
 
 
+async def test_freyja_core_mcp_opencode_send_defaults_to_first_response_budget(monkeypatch) -> None:
+    module = _load_server_module()
+    calls = []
+
+    async def fake_core(tool: str, arguments: dict | None = None, ctx=None) -> str:
+        calls.append((tool, arguments or {}))
+        return json.dumps({"ok": True, "tool": tool, "arguments": arguments or {}})
+
+    monkeypatch.setattr(module, "_core", fake_core)
+
+    result = json.loads(await module.opencode_send(alias="freyja-code", prompt="Build one small thing."))
+
+    assert result["ok"] is True
+    assert calls == [
+        (
+            "opencode.send",
+            {"alias": "freyja-code", "prompt": "Build one small thing.", "timeout_seconds": 900},
+        )
+    ]
+
+
 async def test_mcp_route_identity_overrides_client_memory_principal(monkeypatch) -> None:
     module = _load_server_module()
     captured = {}

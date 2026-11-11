@@ -105,7 +105,7 @@ def build_audit(
         ),
         _requirement(
             "persistent-agents",
-            "Freyja, Cloyd, Benedict, Agent 44, Jenna agent, and Benedict Paralegal are source-controlled logical agents.",
+            "Freyja, Cloyd, Benedict, Agent 47, Jenna agent, and Benedict Paralegal are source-controlled logical agents.",
             "complete" if {agent["id"] for agent in freyja5_agent_evidence()} >= {"freyja", "cloyd-gibbler", "benedict", "agent-47", "jennacide", "benedict-paralegal"} else "partial",
             ["src/freyja/foundation_seed.py", "config/freyja-5.0-agents.yaml"],
         ),

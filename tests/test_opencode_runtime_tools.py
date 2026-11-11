@@ -32,6 +32,8 @@ def test_builtin_registry_includes_opencode_control_tools() -> None:
         assert definition is not None
         assert definition.risk_level == risk
         assert definition.host_service == "opencode"
+    send_schema = registry.get_tool("opencode_send").input_schema
+    assert "timeout_seconds" in send_schema["properties"]
 
 
 def test_opencode_alias_registry_accepts_remote_session_entries(tmp_path: Path, monkeypatch) -> None:
@@ -63,15 +65,13 @@ def test_opencode_send_passes_request_timeout(tmp_path: Path, monkeypatch) -> No
     registry_path = tmp_path / "controller-sessions.json"
     registry_path.write_text('{"atlas-dashboard": {"base_url": "http://atlas.test", "session": "ses_remote", "username": "joe"}}', encoding="utf-8")
     monkeypatch.setattr("freyja.tools.opencode_runtime.settings.opencode_session_registry_path", str(registry_path))
-    captured = {}
+    calls = []
 
     def fake_request(method, path, body=None, **kwargs):
-        captured.update({"method": method, "path": path, "body": body, **kwargs})
-        return {
-            "ok": True,
-            "parts": [{"type": "text", "text": "sent"}],
-            "info": {"time": {"completed": 1}, "path": {"cwd": "/repo"}, "id": "msg_1"},
-        }
+        calls.append({"method": method, "path": path, "body": body, **kwargs})
+        if path.endswith("/prompt_async"):
+            return {"ok": True}
+        return {"ok": True, "directory": "/repo"}
 
     monkeypatch.setattr("freyja.tools.opencode_runtime._request", fake_request)
 
@@ -86,9 +86,43 @@ def test_opencode_send_passes_request_timeout(tmp_path: Path, monkeypatch) -> No
     )
 
     assert result["ok"] is True
-    assert captured["timeout_seconds"] == 45
-    assert captured["base_url"] == "http://atlas.test"
-    assert captured["body"]["parts"][0]["text"].startswith(PROMPT_GUARDRAILS)
+    assert result["state"] == "submitted"
+    submit = calls[0]
+    assert submit["path"] == "/session/ses_remote/prompt_async"
+    assert submit["timeout_seconds"] == 45
+    assert submit["base_url"] == "http://atlas.test"
+    assert submit["body"]["tools"]["task"] is False
+    assert submit["body"]["parts"][0]["text"].startswith(PROMPT_GUARDRAILS)
+
+
+def test_opencode_send_defaults_to_long_first_response_timeout(tmp_path: Path, monkeypatch) -> None:
+    registry_path = tmp_path / "controller-sessions.json"
+    registry_path.write_text('{"freyja-code": {"session": "ses_local"}}', encoding="utf-8")
+    monkeypatch.setattr("freyja.tools.opencode_runtime.settings.opencode_session_registry_path", str(registry_path))
+    monkeypatch.delenv("CLOYD_SMITH_FIRST_RESPONSE_BUDGET_SECONDS", raising=False)
+    monkeypatch.delenv("OPENCODE_REQUEST_TIMEOUT_SECONDS", raising=False)
+    calls = []
+
+    def fake_request(method, path, body=None, **kwargs):
+        calls.append({"method": method, "path": path, "body": body, **kwargs})
+        if path.endswith("/prompt_async"):
+            return {"ok": True}
+        return {"ok": True, "directory": "/repo"}
+
+    monkeypatch.setattr("freyja.tools.opencode_runtime._request", fake_request)
+
+    result = asyncio.run(
+        _opencode_send(
+            ToolExecutionRequest(
+                tool_name="opencode_send",
+                arguments={"alias": "freyja-code", "prompt": "Wait for Vulcan if needed."},
+                actor="test",
+            )
+        )
+    )
+
+    assert result["ok"] is True
+    assert calls[0]["timeout_seconds"] == 900
 
 
 def test_opencode_start_rejects_missing_directory(tmp_path: Path, monkeypatch) -> None:
@@ -178,6 +212,51 @@ def test_agent_runtime_prioritizes_non_adjacent_opencode_status_words() -> None:
     assert handoff is not None
     runtime = AgentRuntimeV3()
     assert runtime.choose_tools(runtime._agent("cloyd-gibbler"), handoff.prompt, handoff.available_tools) == ["opencode.status"]
+
+
+def test_agent_runtime_surfaces_coding_tool_feedback_when_inference_is_empty() -> None:
+    handoff = AgentGateway().handle(
+        GatewayRequest(
+            sender=GatewaySender(sender_id="person:joe", display_name="Joe", security_domain_id=SecurityDomainId.PERSON_JOE),
+            target_agent="cloyd-gibbler",
+            prompt="Use OpenCode to look around and learn Freyja network endpoints.",
+            conversation_id="test-cloyd-opencode-feedback",
+            channel="open-webui",
+        )
+    ).handoff
+
+    assert handoff is not None
+    runtime = AgentRuntimeV3()
+    response = runtime._compose_response(
+        runtime._agent("cloyd-gibbler"),
+        handoff,
+        ["coding.execute"],
+        [
+            {
+                "capability_id": "coding.execute",
+                "tool_name": "opencode_send",
+                "success": True,
+                "output": {
+                    "session": "ses_feedback",
+                    "submission_id": "msg_feedback",
+                    "state": "submitted",
+                    "working_directory": "/Users/freyja/freyja-os",
+                },
+            }
+        ],
+        [],
+        [],
+        "vulcan-nexus-coder",
+        None,
+        False,
+    )
+
+    assert "I ran local coding tooling" in response
+    assert "opencode_send succeeded" in response
+    assert "session=ses_feedback" in response
+    assert "submission=msg_feedback" in response
+    assert "Direct OpenCode tool calls are not durable Agent Runs jobs" in response
+    assert "http://100.115.228.56:8000/agent-runs" in response
 
 
 def test_opencode_start_reuses_existing_alias_connection_config(tmp_path: Path, monkeypatch) -> None:

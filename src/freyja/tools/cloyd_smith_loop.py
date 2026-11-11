@@ -12,6 +12,7 @@ from freyja.cloyd_smith_loop import (
     enrich_loop_status_with_runtime,
     expected_smith_alias,
     heartbeat_summary,
+    job_is_archived,
     job_status_summary,
     loop_status_payload,
     read_supervisor_heartbeat,
@@ -77,11 +78,16 @@ async def _cloyd_smith_submit(request: ToolExecutionRequest) -> dict[str, Any]:
     criteria = args.get("acceptance_criteria") or []
     if isinstance(criteria, str):
         criteria = [item.strip() for item in criteria.splitlines() if item.strip()]
+    check_commands = args.get("check_commands") or []
+    if isinstance(check_commands, str):
+        check_commands = [item.strip() for item in check_commands.splitlines() if item.strip()]
     job = CloydSmithJobStore().create(
         CloydSmithJobCreate(
             objective=objective,
             smith_alias=str(args.get("smith_alias") or args.get("alias") or "freyja-code").strip(),
+            scope=str(args.get("scope") or "").strip(),
             acceptance_criteria=[str(item) for item in criteria],
+            check_commands=[str(item) for item in check_commands],
             current_prompt=prompt,
             created_by=str(args.get("created_by") or request.actor or "joe"),
             metadata={"conversation_id": request.conversation_id, **(args.get("metadata") or {})},
@@ -200,6 +206,8 @@ async def _cloyd_smith_follow_up(request: ToolExecutionRequest) -> dict[str, Any
     store = CloydSmithJobStore()
     try:
         job = store.get(job_id)
+        if job_is_archived(job):
+            return {"ok": False, "error": f"Job {job_id} is archived; restore it from Agent Runs before follow-up."}
         if job.status not in {CloydSmithJobStatus.NEEDS_REVIEW, CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STALE}:
             return {"ok": False, "error": f"Job {job_id} is {job.status.value}; only needs_review, blocked, or stale jobs can receive a bounded follow-up."}
         metadata = dict(job.metadata or {})
@@ -222,7 +230,9 @@ async def _cloyd_smith_follow_up(request: ToolExecutionRequest) -> dict[str, Any
             job_id,
             CloydSmithJobUpdate(
                 status=CloydSmithJobStatus.QUEUED,
+                phase="operator_follow_up_queued",
                 current_prompt=prompt,
+                submission_id="",
                 next_action="send_to_smith",
                 last_evidence={"operator_action": "follow_up", "attempt": attempts},
                 metadata=metadata,
@@ -256,6 +266,8 @@ async def _cloyd_smith_retry(request: ToolExecutionRequest) -> dict[str, Any]:
     store = CloydSmithJobStore()
     try:
         job = store.get(job_id)
+        if job_is_archived(job):
+            return {"ok": False, "error": f"Job {job_id} is archived; restore it from Agent Runs before retrying."}
         if job.status not in {CloydSmithJobStatus.BLOCKED, CloydSmithJobStatus.STALE, CloydSmithJobStatus.STOPPED}:
             return {"ok": False, "error": f"Job {job_id} is {job.status.value}; only blocked, stale, or stopped jobs can be retried."}
         expected_alias = expected_smith_alias(job)
@@ -310,6 +322,8 @@ async def _cloyd_smith_retry(request: ToolExecutionRequest) -> dict[str, Any]:
             job_id,
             CloydSmithJobUpdate(
                 status=CloydSmithJobStatus.QUEUED,
+                phase="operator_requeued",
+                submission_id="",
                 next_action="send_to_smith",
                 last_evidence={"operator_action": "retry", "attempt": attempts, "runtime": runtime},
                 metadata=metadata,
@@ -428,7 +442,7 @@ async def _cloyd_smith_stop(request: ToolExecutionRequest) -> dict[str, Any]:
         store.add_event(job_id, "stopped", {"actor": request.actor})
         job = store.update(
             job_id,
-            CloydSmithJobUpdate(status=CloydSmithJobStatus.STOPPED, next_action="stopped_by_user"),
+            CloydSmithJobUpdate(status=CloydSmithJobStatus.STOPPED, phase="stopped", stop_intent="immediate", next_action="stopped_by_user"),
         )
     except KeyError:
         return {"ok": False, "error": f"Unknown Cloyd Smith job: {job_id}"}
@@ -533,7 +547,9 @@ def register_cloyd_smith_loop_tools(registry: ToolRegistry) -> None:
                         "objective": {"type": "string"},
                         "prompt": {"type": "string"},
                         "smith_alias": {"type": "string"},
+                        "scope": {"type": "string"},
                         "acceptance_criteria": {"type": "array"},
+                        "check_commands": {"type": "array"},
                         "metadata": {"type": "object"},
                     },
                 },

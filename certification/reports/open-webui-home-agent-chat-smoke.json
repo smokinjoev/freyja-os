@@ -1,0 +1,85 @@
+{
+  "checks": [
+    {
+      "agent_id": "freyja",
+      "display_name": "Freyja",
+      "elapsed_seconds": 2.671,
+      "error_class": null,
+      "expected_vulcan_model": "qwen3.8:27b",
+      "http_status": 200,
+      "model_profile": "strong_reasoning",
+      "ok": true,
+      "open_webui_model_id": "agent/freyja",
+      "response_present": true
+    },
+    {
+      "agent_id": "cloyd",
+      "display_name": "Cloyd",
+      "elapsed_seconds": 4.646,
+      "error_class": null,
+      "expected_vulcan_model": "qwen3.8:27b",
+      "http_status": 200,
+      "model_profile": "strong_reasoning",
+      "ok": true,
+      "open_webui_model_id": "agent/cloyd-gibbler",
+      "response_present": true
+    },
+    {
+      "agent_id": "smith",
+      "display_name": "Agent Smith",
+      "elapsed_seconds": 2.913,
+      "error_class": null,
+      "expected_vulcan_model": "qwen3.8:27b",
+      "http_status": 200,
+      "model_profile": "coding",
+      "ok": true,
+      "open_webui_model_id": "agent/freyja-coder",
+      "response_present": true
+    },
+    {
+      "agent_id": "benedict",
+      "display_name": "Benedict",
+      "elapsed_seconds": 3.511,
+      "error_class": null,
+      "expected_vulcan_model": "qwen3.8:27b",
+      "http_status": 200,
+      "model_profile": "strong_reasoning",
+      "ok": true,
+      "open_webui_model_id": "agent/benedict",
+      "response_present": true
+    },
+    {
+      "agent_id": "agent-44",
+      "display_name": "Agent 47",
+      "elapsed_seconds": 2.485,
+      "error_class": null,
+      "expected_vulcan_model": "qwen3.8:27b",
+      "http_status": 200,
+      "model_profile": "fast_chat",
+      "ok": true,
+      "open_webui_model_id": "agent/agent-47",
+      "response_present": true
+    },
+    {
+      "agent_id": "jenna",
+      "display_name": "Jenna",
+      "elapsed_seconds": 3.49,
+      "error_class": null,
+      "expected_vulcan_model": "qwen3.8:27b",
+      "http_status": 200,
+      "model_profile": "fast_chat",
+      "ok": true,
+      "open_webui_model_id": "agent/jennacide",
+      "response_present": true
+    }
+  ],
+  "complete": true,
+  "generated_at_unix": 1791156146,
+  "git_head": "0abf3a8",
+  "open_webui_url": "http://127.0.0.1:3001",
+  "private_content_included": false,
+  "report_type": "open-webui-home-agent-chat-smoke",
+  "secrets_included": false,
+  "status": "complete",
+  "timestamp_unix": 1791156146
+}

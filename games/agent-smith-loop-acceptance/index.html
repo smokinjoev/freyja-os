@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Smith Loop</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        h1 {
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .game-container {
+            position: relative;
+        }
+        canvas {
+            border: 2px solid #0f0;
+            background: #001100;
+            display: block;
+        }
+        .ui-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 600px;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #002200;
+            border: 1px solid #0f0;
+        }
+        .stat {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            font-family: inherit;
+            font-size: 16px;
+            font-weight: bold;
+            background: #0f0;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #3f3;
+        }
+        button:disabled {
+            background: #444;
+            cursor: not-allowed;
+            color: #888;
+        }
+        .status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 4px #000;
+            pointer-events: none;
+        }
+        .status.hidden {
+            display: none;
+        }
+        .instructions {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #8f8;
+        }
+    </style>
+</head>
+<body>
+    <h1>Agent Smith: Loop Acceptance</h1>
+
+    <div class="ui-panel">
+        <div class="stats">
+            <span class="stat">Score: <span id="score">0</span></span>
+            <span class="stat">Lives: <span id="lives">3</span></span>
+        </div>
+        <div class="controls">
+            <button id="startBtn">Start</button>
+            <button id="restartBtn" disabled>Restart</button>
+        </div>
+    </div>
+
+    <div class="game-container">
+        <canvas id="gameCanvas" width="600" height="500"></canvas>
+        <div id="status" class="status hidden">GAME OVER</div>
+    </div>
+
+    <div class="instructions">
+        Use <strong>Left/Right Arrow Keys</strong> to move • Collect green orbs • Avoid falling red blocks
+    </div>
+
+    <script>
+        // Game constants
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const livesEl = document.getElementById('lives');
+        const statusEl = document.getElementById('status');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+
+        // Game state
+        let player = { x: 280, y: 550, w: 40, h: 40, speed: 5 };
+        let keys = {};
+        let collectibles = [];
+        let fallingBlocks = [];
+        let score = 0;
+        let lives = 3;
+        let gameRunning = false;
+        let gameOver = false;
+        let difficulty = 1;
+        let keys = {};
+
+        // Input handling
+        window.addEventListener('keydown', (e) => keys[e.key] = true);
+        window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        // Initialize player position
+        function initPlayer() {
+            player.x = canvas.width / 2 - player.w / 2;
+            player.y = canvas.height - 60;
+        }
+
+        function spawnCollectible() {
+            const size = 20;
+            collectibles.push({
+                x: Math.random() * (canvas.width - size),
+                y: -size,
+                w: size,
+                h: size,
+                speed: 3 + Math.random() * difficulty * 0.5
+            });
+        }
+
+        function spawnBlock() {
+            const size = 30;
+            fallingBlocks.push({
+                x: Math.random() * (canvas.width - size),
+                y: -size,
+                w: size,
+                h: size,
+                speed: 2 + Math.random() * difficulty
+            });
+        }
+
+        function update() {
+            // Player movement
+            if (keys['ArrowLeft'] && player.x > 0) {
+                player.x -= player.speed;
+            }
+            if (keys['ArrowRight'] && player.x < canvas.width - player.w) {
+                player.x += player.speed;
+            }
+
+            // Spawn collectibles
+            if (Math.random() < 0.02) spawnCollectible();
+
+            // Spawn falling blocks
+            if (Math.random() < 0.015) spawnBlock();
+
+            // Update collectibles
+            for (let i = collectibles.length - 1; i >= 0; i--) {
+                let c = collectibles[i];
+                c.y += c.speed;
+
+                // Collision detection
+                if (player.x < c.x + c.w &&
+                    player.x + player.w > c.x &&
+                    player.y < c.y + c.h &&
+                    player.y + player.h > c.y) {
+                    score += 10;
+                    collectibles.splice(i, 1);
+                    scoreEl.textContent = score;
+                } else if (c.y > canvas.height) {
+                    collectibles.splice(i, 1);
+                }
+            }
+
+            // Update falling blocks
+            for (let i = fallingBlocks.length - 1; i >= 0; i--) {
+                let b = fallingBlocks[i];
+                b.y += b.speed;
+
+                // Collision detection (blocks hurt player)
+                if (player.x < b.x + b.w &&
+                    player.x + player.w > b.x &&
+                    player.y < b.y + b.h &&
+                    player.y + player.h > b.y) {
+                    fallingBlocks.splice(i, 1);
+                    lives--;
+                    livesEl.textContent = lives;
+                    if (lives <= 0) {
+                        endGame();
+                    }
+                } else if (b.y > canvas.height) {
+                    fallingBlocks.splice(i, 1);
+                }
+            }
+
+            // Increase difficulty over score
+            difficulty = 1 + Math.floor(score / 100);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw player (green rectangle)
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(player.x, player.y, player.w, player.h);
+
+            // Draw collectibles (cyan circles)
+            ctx.fillStyle = '#0ff';
+            for (let c of collectibles) {
+                ctx.beginPath();
+                ctx.arc(c.x + c.w/2, c.y + c.h/2, c.w/2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw falling blocks (red rectangles)
+            ctx.fillStyle = '#f00';
+            for (let b of fallingBlocks) {
+                ctx.fillRect(b.x, b.y, b.w, b.h);
+            }
+        }
+
+        function gameLoop() {
+            if (!gameRunning || gameOver) return;
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            if (gameRunning) return;
+            reset();
+            gameRunning = true;
+            gameOver = false;
+            startBtn.disabled = true;
+            restartBtn.disabled = false;
+            statusEl.classList.add('hidden');
+            gameLoop();
+        }
+
+        function endGame() {
+            gameOver = true;
+            gameRunning = false;
+            statusEl.classList.add('hidden');
+            startBtn.disabled = false;
+            restartBtn.disabled = false;
+        }
+
+        function reset() {
+            score = 0;
+            lives = 3;
+            collectibles = [];
+            fallingBlocks = [];
+            initPlayer();
+            scoreEl.textContent = score;
+            livesEl.textContent = lives;
+        }
+
+        function restartGame() {
+            reset();
+            gameRunning = false;
+            gameOver = false;
+            statusEl.classList.remove('hidden');
+            startBtn.disabled = false;
+            restartBtn.disabled = true;
+        }
+
+        // Event listeners
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', restartGame);
+
+        // Initialize
+        initPlayer();
+
+        // Test harness exposed globally
+        window.agentSmithGameTest = {
+            state: function() {
+                return {
+                    score: score,
+                    lives: lives,
+                    phase: gameRunning ? 'playing' : gameOver ? 'gameover' : 'ready',
+                    playerX: player.x,
+                    playerY: player.y,
+                    collectibles: collectibles.length,
+                    blocks: fallingBlocks.length,
+                    difficulty: difficulty
+                };
+            },
+            start: function() {
+                startGame();
+            },
+            forceCollect: function() {
+                score += 10;
+                scoreEl.textContent = score;
+            },
+            forceGameOver: function() {
+                lives = 0;
+                livesEl.textContent = lives;
+                endGame();
+            },
+            restart: function() {
+                restartGame();
+            }
+        };
+    // Initialize test harness after DOM is ready
+    window.addEventListener('DOMContentLoaded', function() {
+        window.agentSmithGameTest = {
+            state: function() {
+                return {
+                    score: score,
+                    lives: lives,
+                    phase: gameRunning ? 'playing' : gameOver ? 'gameover' : 'ready',
+                    playerX: player.x,
+                    playerY: player.y,
+                    collectibles: collectibles.length,
+                    blocks: fallingBlocks.length,
+                    difficulty: difficulty
+                };
+            },
+            start: function() {
+                startGame();
+            },
+            forceCollect: function() {
+                score += 10;
+                scoreEl.textContent = score;
+            },
+            forceGameOver: function() {
+                lives = 0;
+                livesEl.textContent = lives;
+                endGame();
+            },
+            restart: function() {
+                restartGame();
+            }
+        };
+    });
+    </script>
+</body>
+</html>

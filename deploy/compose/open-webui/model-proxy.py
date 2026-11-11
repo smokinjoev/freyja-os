@@ -8,9 +8,13 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-PRIMARY_BASE_URL = os.environ.get("PRIMARY_BASE_URL", "http://100.94.80.21:8088/v1").rstrip("/")
+PRIMARY_BASE_URL = os.environ.get("PRIMARY_BASE_URL", "http://100.94.80.21:3939/v1").rstrip("/")
 PRIMARY_API_KEY = os.environ.get("PRIMARY_API_KEY", "not-needed")
+PRIMARY_API_KEY_FILE = os.environ.get("PRIMARY_API_KEY_FILE", "").strip()
 PRIMARY_OLLAMA_BASE_URL = os.environ.get("PRIMARY_OLLAMA_BASE_URL", "http://100.94.80.21:11434").rstrip("/")
+CODER_BASE_URL = os.environ.get("CODER_BASE_URL", "http://100.94.80.21:11436/v1").rstrip("/")
+CODER_API_KEY = os.environ.get("CODER_API_KEY", "not-needed")
+CODER_OLLAMA_BASE_URL = os.environ.get("CODER_OLLAMA_BASE_URL", "http://100.94.80.21:11436").rstrip("/")
 FALLBACK_BASE_URL = os.environ.get("FALLBACK_BASE_URL", "http://100.115.228.56:11434/v1").rstrip("/")
 FALLBACK_API_KEY = os.environ.get("FALLBACK_API_KEY", "not-needed")
 FREYJA5_BASE_URL = os.environ.get("FREYJA5_BASE_URL", "http://host.docker.internal:8500/v1").rstrip("/")
@@ -36,6 +40,11 @@ FALLBACK_MODELS = {
     for model in os.environ.get("FALLBACK_MODELS", "qwen2.5:7b").split(",")
     if model.strip()
 }
+CODER_MODELS = {
+    model.strip()
+    for model in os.environ.get("CODER_MODELS", "qwen3-coder-next:q4_K_M").split(",")
+    if model.strip()
+}
 FREYJA5_AGENT_MODELS = {
     model.strip()
     for model in os.environ.get(
@@ -54,9 +63,19 @@ FREYJA_CORE_MODELS = {
     for model in os.environ.get("FREYJA_CORE_MODELS", "freyja-core").split(",")
     if model.strip()
 }
+WORKSPACE_MODEL_IDS = {
+    model.strip()
+    for model in os.environ.get("WORKSPACE_MODEL_IDS", "").split(",")
+    if model.strip()
+}
 PROBE_MODELS = {
     model.strip()
     for model in os.environ.get("PROBE_MODELS", "gpt-oss:120b").split(",")
+    if model.strip()
+}
+COMPATIBLE_RESIDENT_MODELS = {
+    model.strip()
+    for model in os.environ.get("COMPATIBLE_RESIDENT_MODELS", "qwen3.8:27b,qwen3-coder-next:q4_K_M").split(",")
     if model.strip()
 }
 MODEL_LIST_TIMEOUT_SECONDS = float(os.environ.get("MODEL_LIST_TIMEOUT_SECONDS", "5"))
@@ -72,8 +91,23 @@ VISION_MODELS = {
     for model in os.environ.get("VISION_MODELS", "qwen2.5vl:72b").split(",")
     if model.strip()
 }
-TEXT_MODEL = os.environ.get("TEXT_MODEL", "qwen2.5vl:72b").strip()
+TEXT_MODEL = os.environ.get("TEXT_MODEL", "qwen3.8:27b").strip()
 TOOL_MODEL = os.environ.get("TOOL_MODEL", "qwen3.8:27b").strip()
+PRIMARY_MODEL_ALIASES = {
+    source.strip(): target.strip()
+    for item in os.environ.get(
+        "PRIMARY_MODEL_ALIASES",
+        "qwen3.8:27b=external-ollama/qwen3.8:27b,"
+        "qwen2.5vl:72b=external-ollama/qwen2.5vl:72b,"
+        "qwen3:30b-a3b=external-ollama/qwen3:30b-a3b,"
+        "qwen3-coder-next:q4_K_M=external-ollama/qwen3-coder-next:q4_K_M,"
+        "gpt-oss:20b=external-ollama/gpt-oss:20b,"
+        "gpt-oss:120b=external-ollama/gpt-oss:120b",
+    ).split(",")
+    if item.strip() and "=" in item
+    for source, target in [item.split("=", 1)]
+    if source.strip() and target.strip()
+}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -92,6 +126,7 @@ class Handler(BaseHTTPRequestHandler):
         models: dict[str, dict] = {}
         for base_url, api_key, allowed_models in (
             (PRIMARY_BASE_URL, PRIMARY_API_KEY, APPROVED_MODELS),
+            (CODER_BASE_URL, CODER_API_KEY, CODER_MODELS),
             (FALLBACK_BASE_URL, FALLBACK_API_KEY, FALLBACK_MODELS),
             (FREYJA5_BASE_URL, FREYJA5_API_KEY, FREYJA5_AGENT_MODELS),
             (FREYJA_CORE_BASE_URL, FREYJA_CORE_API_KEY, FREYJA_CORE_MODELS),
@@ -111,6 +146,15 @@ class Handler(BaseHTTPRequestHandler):
                 model_id = model.get("id")
                 if model_id in allowed_models:
                     models.setdefault(model_id, model)
+                if base_url == PRIMARY_BASE_URL:
+                    for alias, target in PRIMARY_MODEL_ALIASES.items():
+                        if alias in allowed_models and model_id == target:
+                            aliased = dict(model)
+                            aliased["id"] = alias
+                            models.setdefault(alias, aliased)
+        # A provider ID shadows the matching Open WebUI workspace preset.
+        for model_id in WORKSPACE_MODEL_IDS:
+            models.pop(model_id, None)
         if models:
             payload = {"object": "list", "data": [models[model_id] for model_id in sorted(models)]}
             self._send(200, {"content-type": "application/json"}, json.dumps(payload).encode("utf-8"))
@@ -129,6 +173,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.command == "POST" and self.path.split("?", 1)[0] == "/v1/chat/completions":
             if (
                 requested_model not in APPROVED_MODELS
+                and requested_model not in CODER_MODELS
                 and requested_model not in FALLBACK_MODELS
                 and requested_model not in FREYJA5_AGENT_MODELS
                 and requested_model not in FREYJA_CORE_MODELS
@@ -163,6 +208,18 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 self._send(status, headers, response_body)
                 return
+            if requested_model in CODER_MODELS:
+                status, headers, response_body = self._upstream(
+                    CODER_BASE_URL,
+                    CODER_API_KEY,
+                    self.command,
+                    self.path.removeprefix("/v1"),
+                    body,
+                )
+                if status == 200:
+                    response_body = self._adapt_chat_completion_response(response_body)
+                self._send(status, headers, response_body)
+                return
             routed_model = self._routed_chat_model(payload)
             if routed_model != requested_model:
                 payload["model"] = routed_model
@@ -195,13 +252,16 @@ class Handler(BaseHTTPRequestHandler):
                     return
         for base_url, api_key, allowed_models in (
             (PRIMARY_BASE_URL, PRIMARY_API_KEY, APPROVED_MODELS),
+            (CODER_BASE_URL, CODER_API_KEY, CODER_MODELS),
             (FALLBACK_BASE_URL, FALLBACK_API_KEY, FALLBACK_MODELS),
         ):
             if requested_model and requested_model not in allowed_models:
                 continue
-            if requested_model and not self._model_available(base_url, api_key, requested_model):
+            upstream_model = self._upstream_model_for(base_url, requested_model)
+            if upstream_model and not self._model_available(base_url, api_key, upstream_model):
                 continue
-            status, headers, response_body = self._upstream(base_url, api_key, self.command, self.path.removeprefix("/v1"), body)
+            upstream_body = self._body_with_model_alias(body, upstream_model) if upstream_model != requested_model else body
+            status, headers, response_body = self._upstream(base_url, api_key, self.command, self.path.removeprefix("/v1"), upstream_body)
             if self.command == "POST" and self.path.split("?", 1)[0] == "/v1/chat/completions" and status == 200:
                 response_body = self._adapt_chat_completion_response(response_body)
                 guard_error = self._large_model_response_guard_error(response_body, requested_model)
@@ -235,6 +295,21 @@ class Handler(BaseHTTPRequestHandler):
             return None
         model = payload.get("model")
         return model if isinstance(model, str) else None
+
+    def _upstream_model_for(self, base_url: str, requested_model: str | None) -> str | None:
+        if base_url == PRIMARY_BASE_URL and requested_model:
+            return PRIMARY_MODEL_ALIASES.get(requested_model, requested_model)
+        return requested_model
+
+    def _body_with_model_alias(self, body: bytes, upstream_model: str | None) -> bytes:
+        if not upstream_model:
+            return body
+        payload = self._request_payload(body)
+        if payload is None:
+            return body
+        payload = dict(payload)
+        payload["model"] = upstream_model
+        return json.dumps(payload).encode("utf-8")
 
     def _routed_chat_model(self, payload: dict | None) -> str | None:
         requested_model = self._requested_model_from_payload(payload)
@@ -357,14 +432,29 @@ class Handler(BaseHTTPRequestHandler):
     def _unload_other_primary_models(self, requested_model: str | None) -> None:
         if not requested_model:
             return
+        compatible_models = self._expanded_model_names(COMPATIBLE_RESIDENT_MODELS)
+        requested_models = self._expanded_model_names({requested_model})
         try:
             payload = self._primary_loaded_models()
         except (OSError, json.JSONDecodeError):
             return
         for model in payload:
             model_name = model.get("name") or model.get("model")
-            if model_name and model_name != requested_model:
+            if not model_name:
+                continue
+            loaded_models = self._expanded_model_names({model_name})
+            if requested_models <= compatible_models and loaded_models & compatible_models:
+                continue
+            if not (loaded_models & requested_models):
                 self._unload_primary_model(model_name)
+
+    def _expanded_model_names(self, model_names: set[str]) -> set[str]:
+        expanded = set(model_names)
+        for alias, target in PRIMARY_MODEL_ALIASES.items():
+            if alias in expanded or target in expanded:
+                expanded.add(alias)
+                expanded.add(target)
+        return expanded
 
     def _primary_loaded_models(self) -> list[dict]:
         status, _, body = self._ollama("GET", "/api/ps", b"")
@@ -428,7 +518,7 @@ class Handler(BaseHTTPRequestHandler):
         self, base_url: str, api_key: str, method: str, path: str, body: bytes, timeout: float = 120
     ) -> tuple[int, dict[str, str], bytes]:
         headers = {
-            "authorization": f"Bearer {api_key}",
+            "authorization": f"Bearer {self._api_key(api_key)}",
             "content-type": self.headers.get("content-type", "application/json"),
         }
         for header in (
@@ -461,6 +551,16 @@ class Handler(BaseHTTPRequestHandler):
                 {"content-type": "application/json"},
                 json.dumps({"error": f"upstream connection failed: {exc}"}).encode("utf-8"),
             )
+
+    def _api_key(self, fallback: str) -> str:
+        if PRIMARY_API_KEY_FILE and fallback == PRIMARY_API_KEY:
+            try:
+                secret = open(PRIMARY_API_KEY_FILE, encoding="utf-8").read().strip()
+            except OSError:
+                secret = ""
+            if secret:
+                return secret
+        return fallback
 
     def _send(self, status: int, headers: dict[str, str], body: bytes) -> None:
         self.send_response(status)

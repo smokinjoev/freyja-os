@@ -28,14 +28,24 @@ def test_open_webui_defaults_stay_on_model_proxy_until_freyja5_cutover() -> None
     env_example = OPEN_WEBUI_ENV_EXAMPLE.read_text(encoding="utf-8")
 
     assert environment["OPENAI_API_BASE_URL"] == "${OPENAI_API_BASE_URL:-http://model-proxy:8080/v1}"
-    assert environment["DEFAULT_MODELS"] == "${DEFAULT_MODELS:-qwen2.5vl:72b}"
+    assert environment["DEFAULT_MODELS"] == "${DEFAULT_MODELS:-qwen3.8:27b}"
     assert "OPENAI_API_BASE_URL=http://model-proxy:8080/v1" in env_example
-    assert "DEFAULT_MODELS=qwen2.5vl:72b" in env_example
-    assert "OPEN_WEBUI_FREYJA5_BASE_URL=http://host.docker.internal:8500/v1" in env_example
+    assert "DEFAULT_MODELS=qwen3.8:27b" in env_example
+    assert proxy_environment["PRIMARY_BASE_URL"] == "${OPENAI_PRIMARY_BASE_URL:-http://100.94.80.21:3939/v1}"
+    assert proxy_environment["PRIMARY_API_KEY_FILE"] == "${OPENAI_PRIMARY_API_KEY_FILE_CONTAINER:-/run/secrets/nexus-token}"
+    assert proxy_environment["CODER_BASE_URL"] == "${OPENAI_CODER_BASE_URL:-http://100.94.80.21:11436/v1}"
+    assert proxy_environment["CODER_OLLAMA_BASE_URL"] == "${OPENAI_CODER_OLLAMA_BASE_URL:-http://100.94.80.21:11436}"
+    assert proxy_environment["CODER_MODELS"] == "${OPEN_WEBUI_CODER_MODELS:-qwen3-coder-next:q4_K_M}"
+    assert "OPENAI_PRIMARY_BASE_URL=http://100.94.80.21:3939/v1" in env_example
+    assert "OPENAI_PRIMARY_API_KEY_FILE=/Users/freyja/.local/state/freyja/gateway-remote/msty-nexus-token" in env_example
+    assert "OPENAI_CODER_BASE_URL=http://100.94.80.21:11436/v1" in env_example
+    assert "OPEN_WEBUI_CODER_MODELS=qwen3-coder-next:q4_K_M" in env_example
+    assert "OPEN_WEBUI_PRIMARY_MODEL_ALIASES=qwen3.8:27b=external-ollama/qwen3.8:27b" in env_example
+    assert "OPEN_WEBUI_FREYJA5_BASE_URL=http://100.94.80.21:8512/v1" in env_example
     assert "OPEN_WEBUI_FREYJA5_AGENT_MODELS=agent/freyja,agent/cloyd-gibbler,agent/freyja-coder,agent/benedict,agent/benedict-paralegal,agent/agent-47,agent/jennacide" in env_example
     assert "OPEN_WEBUI_FREYJA_CORE_BASE_URL=http://100.115.228.56:8510/v1" in env_example
     assert "OPEN_WEBUI_FREYJA_CORE_MODELS=freyja-core" in env_example
-    assert proxy_environment["FREYJA5_BASE_URL"] == "${OPEN_WEBUI_FREYJA5_BASE_URL:-http://host.docker.internal:8500/v1}"
+    assert proxy_environment["FREYJA5_BASE_URL"] == "${OPEN_WEBUI_FREYJA5_BASE_URL:-http://100.94.80.21:8512/v1}"
     assert proxy_environment["FREYJA_CORE_BASE_URL"] == "${OPEN_WEBUI_FREYJA_CORE_BASE_URL:-http://100.115.228.56:8510/v1}"
     assert "DEFAULT_MODELS=freyja-5" not in env_example
     assert "qwen2.5:72b" not in proxy_environment["APPROVED_MODELS"]
@@ -43,6 +53,48 @@ def test_open_webui_defaults_stay_on_model_proxy_until_freyja5_cutover() -> None
     approved_line = next(line for line in env_example.splitlines() if line.startswith("OPEN_WEBUI_APPROVED_MODELS="))
     assert "qwen2.5:72b" not in approved_line
     assert "qwen3.5:122b-a10b" not in approved_line
+
+
+def test_proxy_aliases_openwebui_model_ids_to_nexus_model_ids() -> None:
+    proxy = load_proxy_module()
+    handler = proxy.Handler.__new__(proxy.Handler)
+    handler.headers = {"content-type": "application/json"}
+    sent = {}
+
+    responses = iter(
+        (
+            (
+                200,
+                {"content-type": "application/json"},
+                json.dumps({"data": [{"id": "external-ollama/qwen3.8:27b", "object": "model"}]}).encode("utf-8"),
+            ),
+            (
+                200,
+                {"content-type": "application/json"},
+                json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8"),
+            ),
+        )
+    )
+    calls = []
+
+    def fake_upstream(base_url, api_key, method, path, body, **kwargs):
+        calls.append((base_url, api_key, method, path, json.loads(body.decode("utf-8")) if body else None))
+        return next(responses)
+
+    body = json.dumps({"model": "qwen3.8:27b", "messages": [{"role": "user", "content": "hi"}]}).encode("utf-8")
+    handler.command = "POST"
+    handler.path = "/v1/chat/completions"
+    handler.rfile = type("Reader", (), {"read": lambda _self, _length: body})()
+    handler.headers = {"content-length": str(len(body)), "content-type": "application/json"}
+    handler._upstream = fake_upstream
+    handler._send = lambda status, headers, body: sent.update({"status": status, "body": json.loads(body.decode("utf-8"))})
+    handler._unload_other_primary_models = lambda _model: None
+
+    handler._proxy()
+
+    assert sent["status"] == 200
+    assert calls[0][3] == "/models"
+    assert calls[1][4]["model"] == "external-ollama/qwen3.8:27b"
 
 
 def test_open_webui_compose_runs_open_terminal_internally() -> None:
@@ -69,6 +121,7 @@ def test_proxy_model_listing_skips_invalid_upstream_json() -> None:
     responses = iter(
         (
             (200, {"content-type": "application/json"}, b"not-json"),
+            (599, {"content-type": "application/json"}, b"{}"),
             (
                 200,
                 {"content-type": "application/json"},
@@ -105,7 +158,7 @@ def test_proxy_model_listing_uses_bounded_upstream_timeout() -> None:
     handler._proxy_models()
 
     assert sent["status"] == 503
-    assert len(calls) == 4
+    assert len(calls) == 5
     assert all(call[-1]["timeout"] == proxy.MODEL_LIST_TIMEOUT_SECONDS for call in calls)
 
 
@@ -117,6 +170,7 @@ def test_proxy_model_listing_includes_reachable_freyja5_agent_models() -> None:
     responses = iter(
         (
             (200, {"content-type": "application/json"}, json.dumps({"data": [{"id": "qwen3.8:27b"}]}).encode("utf-8")),
+            (200, {"content-type": "application/json"}, json.dumps({"data": [{"id": "qwen3-coder-next:q4_K_M"}]}).encode("utf-8")),
             (200, {"content-type": "application/json"}, json.dumps({"data": [{"id": "qwen2.5:7b"}]}).encode("utf-8")),
             (
                 200,
@@ -147,6 +201,7 @@ def test_proxy_model_listing_includes_reachable_freyja5_agent_models() -> None:
     model_ids = {model["id"] for model in sent["body"]["data"]}
     assert sent["status"] == 200
     assert "qwen3.8:27b" in model_ids
+    assert "qwen3-coder-next:q4_K_M" in model_ids
     assert "qwen2.5:7b" in model_ids
     assert "agent/freyja" in model_ids
     assert "freyja-core" in model_ids
@@ -201,7 +256,7 @@ def test_proxy_routes_tool_enabled_freyja5_agent_chat_to_tool_model() -> None:
         return 200, {"content-type": "application/json"}, json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
 
     handler._upstream = fake_upstream
-    handler._model_available = lambda base_url, api_key, model: model == proxy.TOOL_MODEL
+    handler._model_available = lambda base_url, api_key, model: model == proxy.PRIMARY_MODEL_ALIASES[proxy.TOOL_MODEL]
     handler._unload_other_primary_models = lambda requested_model: None
     handler._send = lambda status, headers, response_body: sent.update(
         {"status": status, "headers": headers, "body": json.loads(response_body.decode("utf-8"))}
@@ -216,7 +271,43 @@ def test_proxy_routes_tool_enabled_freyja5_agent_chat_to_tool_model() -> None:
             proxy.PRIMARY_API_KEY,
             "POST",
             "/chat/completions",
-            {**payload, "model": proxy.TOOL_MODEL},
+            {**payload, "model": proxy.PRIMARY_MODEL_ALIASES[proxy.TOOL_MODEL]},
+        )
+    ]
+
+
+def test_proxy_routes_coder_model_to_dedicated_runtime_without_primary_unload() -> None:
+    proxy = load_proxy_module()
+    handler = proxy.Handler.__new__(proxy.Handler)
+    handler.command = "POST"
+    handler.path = "/v1/chat/completions"
+    payload = {"model": "qwen3-coder-next:q4_K_M", "messages": [{"role": "user", "content": "code"}]}
+    body = json.dumps(payload).encode("utf-8")
+    handler.headers = {"content-type": "application/json", "content-length": str(len(body))}
+    handler.rfile = type("Reader", (), {"read": lambda self, length: body})()
+    sent = {}
+    upstream_calls = []
+
+    def fake_upstream(base_url, api_key, method, path, request_body, timeout=120):
+        upstream_calls.append((base_url, api_key, method, path, json.loads(request_body.decode("utf-8"))))
+        return 200, {"content-type": "application/json"}, json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
+
+    handler._upstream = fake_upstream
+    handler._unload_other_primary_models = lambda requested_model: (_ for _ in ()).throw(AssertionError("coder must not unload primary qwen"))
+    handler._send = lambda status, headers, response_body: sent.update(
+        {"status": status, "headers": headers, "body": json.loads(response_body.decode("utf-8"))}
+    )
+
+    handler._proxy()
+
+    assert sent["status"] == 200
+    assert upstream_calls == [
+        (
+            proxy.CODER_BASE_URL,
+            proxy.CODER_API_KEY,
+            "POST",
+            "/chat/completions",
+            payload,
         )
     ]
 
@@ -277,6 +368,59 @@ def test_probe_failure_unloads_loaded_primary_model() -> None:
     handler._unload_primary_model("gpt-oss:120b")
 
     assert ("POST", "/api/generate", {"model": "gpt-oss:120b", "prompt": "", "stream": False, "keep_alive": 0}, 30) in calls
+
+
+def test_unload_preserves_compatible_chat_and_coder_residents() -> None:
+    proxy = load_proxy_module()
+    calls = []
+
+    def fake_ollama(method: str, path: str, body: bytes, timeout: float = 30):
+        calls.append((method, path, json.loads(body.decode("utf-8")) if body else {}, timeout))
+        if path == "/api/ps":
+            return 200, {}, json.dumps(
+                {
+                    "models": [
+                        {"name": "qwen3.8:27b"},
+                        {"name": "qwen3-coder-next:q4_K_M"},
+                    ]
+                }
+            ).encode("utf-8")
+        return 200, {}, json.dumps({"done": True}).encode("utf-8")
+
+    handler = proxy.Handler.__new__(proxy.Handler)
+    handler._ollama = fake_ollama
+
+    handler._unload_other_primary_models("qwen3.8:27b")
+
+    assert all(call[2].get("keep_alive") != 0 for call in calls)
+
+
+def test_unload_still_removes_noncompatible_primary_residents() -> None:
+    proxy = load_proxy_module()
+    calls = []
+
+    def fake_ollama(method: str, path: str, body: bytes, timeout: float = 30):
+        payload = json.loads(body.decode("utf-8")) if body else {}
+        calls.append((method, path, payload, timeout))
+        if path == "/api/ps":
+            return 200, {}, json.dumps(
+                {
+                    "models": [
+                        {"name": "qwen3.8:27b"},
+                        {"name": "qwen2.5vl:72b"},
+                        {"name": "gpt-oss:20b"},
+                    ]
+                }
+            ).encode("utf-8")
+        return 200, {}, json.dumps({"done": True}).encode("utf-8")
+
+    handler = proxy.Handler.__new__(proxy.Handler)
+    handler._ollama = fake_ollama
+
+    handler._unload_other_primary_models("qwen2.5vl:72b")
+
+    unloaded = {call[2]["model"] for call in calls if call[2].get("keep_alive") == 0}
+    assert unloaded == {"qwen3.8:27b", "gpt-oss:20b"}
 
 
 def test_probe_success_accepts_completed_generation() -> None:
@@ -348,7 +492,7 @@ def test_routes_tool_payload_away_from_vision_model() -> None:
     assert handler._routed_chat_model(payload) == "qwen3.8:27b"
 
 
-def test_keeps_plain_text_payload_on_vision_model() -> None:
+def test_routes_plain_text_payload_to_hot_text_model() -> None:
     proxy = load_proxy_module()
     handler = proxy.Handler.__new__(proxy.Handler)
     payload = {
@@ -356,7 +500,7 @@ def test_keeps_plain_text_payload_on_vision_model() -> None:
         "messages": [{"role": "user", "content": "Write a short greeting."}],
     }
 
-    assert handler._routed_chat_model(payload) == "qwen2.5vl:72b"
+    assert handler._routed_chat_model(payload) == "qwen3.8:27b"
 
 
 def test_routes_image_payload_to_vision_model() -> None:

@@ -1,0 +1,367 @@
+{
+  "all_sends_suppressed": true,
+  "dispatch_count": 27,
+  "dispatches": [
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "calendar_conflict_warning",
+      "recipient": "joe",
+      "required_tools": [
+        "calendar.read"
+      ],
+      "schedule_id": "calendar_conflict_warning:joe:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "calendar_conflict_warning",
+      "recipient": "joe",
+      "required_tools": [
+        "calendar.read"
+      ],
+      "schedule_id": "calendar_conflict_warning:joe:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "calendar_conflict_warning",
+      "recipient": "joe",
+      "required_tools": [
+        "calendar.read"
+      ],
+      "schedule_id": "calendar_conflict_warning:joe:signal",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "calendar_conflict_warning",
+      "recipient": "beth",
+      "required_tools": [
+        "calendar.read"
+      ],
+      "schedule_id": "calendar_conflict_warning:beth:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "calendar_conflict_warning",
+      "recipient": "beth",
+      "required_tools": [
+        "calendar.read"
+      ],
+      "schedule_id": "calendar_conflict_warning:beth:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "calendar_conflict_warning",
+      "recipient": "beth",
+      "required_tools": [
+        "calendar.read"
+      ],
+      "schedule_id": "calendar_conflict_warning:beth:signal",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "reminder_followup",
+      "recipient": "joe",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:joe:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "reminder_followup",
+      "recipient": "joe",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:joe:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "reminder_followup",
+      "recipient": "joe",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:joe:signal",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "reminder_followup",
+      "recipient": "beth",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:beth:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "reminder_followup",
+      "recipient": "beth",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:beth:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "reminder_followup",
+      "recipient": "beth",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:beth:signal",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "reminder_followup",
+      "recipient": "liam",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:liam:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "reminder_followup",
+      "recipient": "liam",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:liam:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "reminder_followup",
+      "recipient": "liam",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:liam:signal",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "reminder_followup",
+      "recipient": "jenna",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:jenna:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "reminder_followup",
+      "recipient": "jenna",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:jenna:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "reminder_followup",
+      "recipient": "jenna",
+      "required_tools": [
+        "reminders.read",
+        "reminders.create"
+      ],
+      "schedule_id": "reminder_followup:jenna:signal",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "scheduled_briefing",
+      "recipient": "joe",
+      "required_tools": [
+        "calendar.read",
+        "reminders.read",
+        "weather.read",
+        "infrastructure.health"
+      ],
+      "schedule_id": "scheduled_briefing:joe:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "scheduled_briefing",
+      "recipient": "joe",
+      "required_tools": [
+        "calendar.read",
+        "reminders.read",
+        "weather.read",
+        "infrastructure.health"
+      ],
+      "schedule_id": "scheduled_briefing:joe:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "scheduled_briefing",
+      "recipient": "joe",
+      "required_tools": [
+        "calendar.read",
+        "reminders.read",
+        "weather.read",
+        "infrastructure.health"
+      ],
+      "schedule_id": "scheduled_briefing:joe:signal",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "scheduled_briefing",
+      "recipient": "beth",
+      "required_tools": [
+        "calendar.read",
+        "reminders.read",
+        "weather.read",
+        "infrastructure.health"
+      ],
+      "schedule_id": "scheduled_briefing:beth:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "scheduled_briefing",
+      "recipient": "beth",
+      "required_tools": [
+        "calendar.read",
+        "reminders.read",
+        "weather.read",
+        "infrastructure.health"
+      ],
+      "schedule_id": "scheduled_briefing:beth:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "scheduled_briefing",
+      "recipient": "beth",
+      "required_tools": [
+        "calendar.read",
+        "reminders.read",
+        "weather.read",
+        "infrastructure.health"
+      ],
+      "schedule_id": "scheduled_briefing:beth:signal",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "open-webui",
+      "job_id": "system_health_notification",
+      "recipient": "joe",
+      "required_tools": [
+        "infrastructure.health"
+      ],
+      "schedule_id": "system_health_notification:joe:open-webui",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "telegram",
+      "job_id": "system_health_notification",
+      "recipient": "joe",
+      "required_tools": [
+        "infrastructure.health"
+      ],
+      "schedule_id": "system_health_notification:joe:telegram",
+      "status": "disabled",
+      "would_send": false
+    },
+    {
+      "delivery_result": "dry_run_only",
+      "destination": "signal",
+      "job_id": "system_health_notification",
+      "recipient": "joe",
+      "required_tools": [
+        "infrastructure.health"
+      ],
+      "schedule_id": "system_health_notification:joe:signal",
+      "status": "disabled",
+      "would_send": false
+    }
+  ],
+  "generated_at_unix": 1788577837,
+  "git_head": "f3dcdca",
+  "private_content_included": false,
+  "report_type": "freyja-proactive-dry-run",
+  "secrets_included": false,
+  "timestamp_unix": 1788577837,
+  "would_send_count": 0
+}

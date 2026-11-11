@@ -1371,8 +1371,13 @@ class AgentRuntimeV3:
             return home_response
         if inference_text:
             return inference_text
+        tool_feedback = _tool_feedback_response(agent, selected_tools, tool_results)
+        if tool_feedback:
+            return tool_feedback
+        tool_context = f" with {', '.join(selected_tools)}" if selected_tools else ""
         return (
-            "I completed the local processing for your request, but the model did not return a usable written answer. "
+            f"{agent.display_name}: I completed the local processing for your request{tool_context}, "
+            "but the model did not return a usable written answer. "
             "Please try once more."
         )
 
@@ -1793,6 +1798,73 @@ def _opencode_status_response(tool_results: list[dict[str, Any]]) -> str | None:
         if lines:
             return "OpenCode status\n" + "\n".join(lines)
     return None
+
+
+_FEEDBACK_CODING_CAPABILITIES = {"coding.execute", "opencode.status"}
+_FEEDBACK_CODING_TOOLS = {
+    "opencode_start",
+    "opencode_send",
+    "opencode_shell",
+    "opencode_status",
+    "opencode_output",
+    "opencode_stop",
+}
+
+
+def _tool_feedback_response(
+    agent: PersistentAgent,
+    selected_tools: list[str],
+    tool_results: list[dict[str, Any]],
+) -> str | None:
+    if not tool_results:
+        return None
+    if not (
+        _FEEDBACK_CODING_CAPABILITIES.intersection(selected_tools)
+        or any(str(result.get("tool_name") or "") in _FEEDBACK_CODING_TOOLS for result in tool_results)
+    ):
+        return None
+
+    summaries = [_feedback_line_for_tool_result(result) for result in tool_results]
+    summaries = [line for line in summaries if line]
+    if not summaries:
+        return None
+
+    lines = [f"{agent.display_name}: I ran local coding tooling, but the model layer did not return a final written answer."]
+    lines.append("Tool feedback:")
+    lines.extend(f"- {line}" for line in summaries[:4])
+    lines.append(
+        "Direct OpenCode tool calls are not durable Agent Runs jobs. For iterative or background coding work, "
+        "Cloyd should submit a Cloyd-Smith job, give you the job id, and point you at http://100.115.228.56:8000/agent-runs."
+    )
+    return "\n".join(lines)
+
+
+def _feedback_line_for_tool_result(result: dict[str, Any]) -> str:
+    tool_name = str(result.get("tool_name") or result.get("capability_id") or "tool")
+    success = result.get("success") is True
+    output = result.get("output") if isinstance(result.get("output"), dict) else {}
+    status = "succeeded" if success else "failed"
+    fields: list[str] = []
+    for key, label in (
+        ("alias", "alias"),
+        ("session", "session"),
+        ("submission_id", "submission"),
+        ("message", "message"),
+        ("state", "state"),
+        ("working_directory", "cwd"),
+        ("error", "error"),
+    ):
+        value = output.get(key)
+        if value in (None, ""):
+            continue
+        text = str(value)
+        if len(text) > 160:
+            text = text[:157] + "..."
+        fields.append(f"{label}={text}")
+    if not fields and result.get("public_error_message"):
+        fields.append(f"error={result['public_error_message']}")
+    detail = "; ".join(fields)
+    return f"{tool_name} {status}" + (f" ({detail})" if detail else "")
 
 
 def _home_assistant_response(objective: str, tool_results: list[dict[str, Any]]) -> str | None:

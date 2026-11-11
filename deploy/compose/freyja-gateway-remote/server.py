@@ -33,8 +33,9 @@ TRACE_FILE = Path(os.environ.get("FREYJA_GATEWAY_REMOTE_TRACE_LOG", STATE_DIR / 
 PORT = int(os.environ.get("FREYJA_GATEWAY_REMOTE_PORT", "8010"))
 HOST = os.environ.get("FREYJA_GATEWAY_REMOTE_HOST", "127.0.0.1")
 QWEN_BIN = os.environ.get("FREYJA_GATEWAY_REMOTE_QWEN_BIN") or shutil.which("qwen") or "/opt/homebrew/bin/qwen"
-VULCAN_MODEL_BASE_URL = os.environ.get("FREYJA_GATEWAY_REMOTE_VULCAN_MODEL_BASE_URL", "http://100.94.80.21:3939/v1").rstrip("/")
-VULCAN_MODEL = os.environ.get("FREYJA_GATEWAY_REMOTE_VULCAN_MODEL", "@preset/freyja-coder")
+VULCAN_MODEL_BASE_URL = os.environ.get("FREYJA_GATEWAY_REMOTE_VULCAN_MODEL_BASE_URL", "http://100.94.80.21:11436/v1").rstrip("/")
+VULCAN_MODEL = os.environ.get("FREYJA_GATEWAY_REMOTE_VULCAN_MODEL", "qwen3-coder-next:q4_K_M")
+SMITH_CONTEXT_WINDOW = int(os.environ.get("AGENT_SMITH_CONTEXT_WINDOW", "16384"))
 SMITH_QWEN_HOME = Path(os.environ.get("FREYJA_GATEWAY_REMOTE_QWEN_HOME", STATE_DIR / "qwen-smith"))
 NEXUS_TOKEN_FILE = Path(os.environ.get("FREYJA_GATEWAY_REMOTE_NEXUS_TOKEN_FILE", STATE_DIR / "msty-nexus-token"))
 ALLOWED_REPOS = tuple(Path(item).expanduser().resolve() for item in os.environ.get("FREYJA_GATEWAY_REMOTE_ALLOWED_REPOS", str(REPO_ROOT)).split(":") if item)
@@ -232,7 +233,7 @@ def ensure_smith_qwen_home() -> None:
                     "baseUrl": VULCAN_MODEL_BASE_URL,
                     "envKey": "OPENAI_API_KEY",
                     "generationConfig": {
-                        "contextWindowSize": 128000,
+                        "contextWindowSize": SMITH_CONTEXT_WINDOW,
                     },
                 }
             ]

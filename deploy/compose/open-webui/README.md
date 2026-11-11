@@ -3,8 +3,9 @@
 This Compose target runs Open WebUI as a user-facing web UI on Atlas while
 keeping Atlas Freyja as the control-plane authority and Vulcan as compute.
 
-Policy: Open WebUI lists the approved model catalog. The backend enforces one
-resident Vulcan model at a time.
+Policy: Open WebUI lists the approved model catalog. The backend keeps Vulcan
+residency conservative by default, while allowing the daily qwen 27B model and
+the qwen coder model to stay resident together.
 
 Planned model catalog:
 
@@ -18,8 +19,9 @@ Planned model catalog:
 | GPT OSS large | `gpt-oss:120b` |
 
 Open WebUI may show these models in its picker. The intentionally hot resident
-model is `qwen3.8:27b`; larger or specialized models stay available on demand
-but should not remain resident accidentally.
+chat/tool model is `qwen3.8:27b`; the compatible coding resident is
+`qwen3-coder-next:q4_K_M`. Larger or specialized models stay available on
+demand but should not remain resident accidentally.
 
 Fallback rule: Iris/Ollama is only a 7B/12B-class fallback tier. The 20B, 30B,
 coder, 72B, and 120B roles are Vulcan-only unless another machine with enough
@@ -58,31 +60,43 @@ http://<atlas-tailscale-host>:3001
 
 ## Provider
 
-The default `.env.example` points Open WebUI to Vulcan's OpenAI-compatible
-endpoint over Tailscale:
+The default `.env.example` points Open WebUI to the local Atlas model-proxy.
+The model-proxy uses Vulcan Nexus as the primary family/chat model authority
+and maps familiar Ollama model names to Nexus canonical IDs. Coding traffic is
+routed to the dedicated Vulcan coder runtime so it cannot evict the family chat
+model:
 
 ```text
 OPENAI_API_BASE_URL=http://model-proxy:8080/v1
 OPENAI_API_KEY=not-needed
-DEFAULT_MODELS=qwen2.5vl:72b
+DEFAULT_MODELS=qwen3.8:27b
 OPEN_WEBUI_APPROVED_MODELS=qwen3.8:27b,qwen2.5vl:72b,qwen3:30b-a3b,qwen3-coder-next:q4_K_M,gpt-oss:20b,gpt-oss-freyja:20b-analysis-prefill,gpt-oss:120b
 OPEN_WEBUI_FALLBACK_MODELS=qwen2.5:7b
+OPENAI_PRIMARY_BASE_URL=http://100.94.80.21:3939/v1
+OPENAI_PRIMARY_API_KEY_FILE=/Users/freyja/.local/state/freyja/gateway-remote/msty-nexus-token
+OPENAI_CODER_BASE_URL=http://100.94.80.21:11436/v1
+OPENAI_CODER_OLLAMA_BASE_URL=http://100.94.80.21:11436
+OPEN_WEBUI_CODER_MODELS=qwen3-coder-next:q4_K_M
 ```
 
 `DEFAULT_MODELS` only controls the initial Open WebUI default. Runtime model
 choice belongs to Open WebUI; the proxy preserves the selected request model
-and unloads other resident Vulcan models before forwarding chat.
+and unloads non-compatible resident Vulcan models before forwarding chat.
 
-Vulcan policy: Ollama is the canonical model runtime. Msty Nexus is the stable
-preset/routing layer over Ollama, not a second model source of truth. Ollama is
-configured for one loaded model and one parallel request, with qwen3.8 warmed
-by `freyja-hot-model-warm.timer`. The Ollama context cap is `16384` for normal
-serving so OpenAI-compatible calls do not accidentally allocate the full 262k
-context. Vulcan exposes an AMD Strix/Krackan/Strix Halo NPU at `/dev/accel0`
-with the `amdxdna` driver, but normal LLM serving remains on the Radeon GPU.
+Vulcan policy: Ollama is the canonical model runtime. Msty Nexus is the shared
+preset/routing layer over the primary family/chat Ollama service. Ollama is
+configured conservatively, with qwen3.8 warmed by `freyja-hot-model-warm.timer`.
+Smith and direct coding traffic use the separate `freyja-ollama-multi` runtime
+on Vulcan port `11436`; that split lets `qwen3.8:27b` and
+`qwen3-coder-next:q4_K_M` stay resident without fighting one scheduler's system
+RAM guard. The Ollama context cap is `16384` for normal serving so
+OpenAI-compatible calls do not
+accidentally allocate the full 262k context. Vulcan exposes an AMD
+Strix/Krackan/Strix Halo NPU at `/dev/accel0` with the `amdxdna` driver, but
+normal LLM serving remains on the Radeon GPU.
 
-The model proxy checks Vulcan first and Iris second. Iris fallback is only for
-7B/12B-class active models installed on Iris. DNS, socket, and other connection
+The model proxy checks Vulcan Nexus first and Iris second. Iris fallback is only
+for 7B/12B-class active models installed on Iris. DNS, socket, and other connection
 failures from any upstream are returned as bounded JSON errors instead of
 disconnecting the Open WebUI client.
 
@@ -121,8 +135,8 @@ docker compose --env-file deploy/compose/open-webui/.env \
 curl http://100.94.80.21:8088/api/ps
 ```
 
-If more than the intended model is resident, or if qwen3.8 is not the hot
-resident model after normal use, unload the unwanted model from Vulcan before
+If anything outside the compatible resident pair is present, or if qwen3.8 is
+not hot after normal use, unload the unwanted model from Vulcan before
 continuing:
 
 ```bash

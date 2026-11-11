@@ -1,0 +1,224 @@
+{
+  "complete": false,
+  "completion_metrics": {
+    "auth_gated_requirements": 0,
+    "complete_requirements": 13,
+    "credential_gated_requirements": 1,
+    "external_gated_requirements": 1,
+    "incomplete_requirements": 2,
+    "partial_requirements": 1,
+    "total_requirements": 15,
+    "verified_completion_percent": 86.7
+  },
+  "exact_next_action": "Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.",
+  "generated_at_unix": 1788622278,
+  "git_head": "ec26aeb",
+  "items": [
+    {
+      "blocker": null,
+      "evidence": [
+        "logs/open-webui-diagnostics/home-agent-20260904T174214Z/",
+        "docs/operations/open-webui-home-agent.md",
+        "certification/reports/open-webui-home-agent-platform-inventory.json"
+      ],
+      "requirement": "Inspect repository, running services, Docker stacks, endpoints, credentials locations, and Open WebUI config",
+      "requirement_id": "preflight_inventory",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "evidence": [
+        "certification/reports/open-webui-home-agent-live.json",
+        "certification/reports/open-webui-model-proxy-catalog.json",
+        "certification/reports/open-webui-home-agent-chat-smoke.json"
+      ],
+      "requirement": "Identify Open WebUI host and Vulcan path",
+      "requirement_id": "open_webui_host_and_vulcan_path",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "evidence": [
+        "logs/open-webui-diagnostics/home-agent-20260904T174214Z/open-webui-data-volume.tgz",
+        "docs/operations/open-webui-home-agent.md",
+        "certification/reports/open-webui-backup-rollback-audit.json"
+      ],
+      "requirement": "Back up Open WebUI data/config/version/image/volumes/database and rollback",
+      "requirement_id": "open_webui_backup_and_rollback",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "evidence": [
+        ".codex-checkpoints/pre-open-webui-home-agent-20260904T133828-0400.patch"
+      ],
+      "requirement": "Create recoverable git checkpoint before repo modifications",
+      "requirement_id": "git_checkpoint",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "evidence": [
+        "certification/reports/open-webui-home-agent-secret-safety.json",
+        "logs/open-webui-diagnostics/home-agent-20260904T174214Z/env.redacted",
+        "logs/open-webui-diagnostics/home-agent-20260904T174214Z/compose-config.redacted"
+      ],
+      "requirement": "Never print or commit secrets, tokens, private messages, or private documents",
+      "requirement_id": "secret_safety",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "command": "OPEN_WEBUI_API_KEY=<redacted> scripts/smoke-open-webui-home-agent-chats.py --output certification/reports/open-webui-home-agent-chat-smoke.json",
+      "evidence": [
+        "deploy/compose/open-webui/model-proxy.py",
+        "certification/reports/open-webui-home-agent-live.json",
+        "certification/reports/open-webui-inference-policy-audit.json",
+        "certification/reports/open-webui-home-agent-chat-smoke.json"
+      ],
+      "requirement": "Keep inference local by default and connect Open WebUI to Vulcan",
+      "requirement_id": "local_inference",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "evidence": [
+        "config/open-webui-home-agents.yaml"
+      ],
+      "requirement": "Define model profiles for fast chat, reasoning, vision/document analysis, and coding",
+      "requirement_id": "model_profiles",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "command": "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
+      "evidence": [
+        "certification/reports/open-webui-home-agents-offline-apply.json",
+        "certification/reports/open-webui-home-agent-db-verification.json",
+        "certification/reports/open-webui-home-agent-chat-smoke.json",
+        "certification/reports/open-webui-home-agent-access-audit.json"
+      ],
+      "requirement": "Create/import five Open WebUI agents",
+      "requirement_id": "five_agents",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "command": "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
+      "evidence": [
+        "src/freyja/home_memory.py",
+        "certification/reports/open-webui-home-resources-offline-dry-run.json",
+        "certification/reports/open-webui-home-agent-db-verification.json",
+        "certification/reports/open-webui-home-agent-live.json"
+      ],
+      "requirement": "Implement three-layer memory with scoped freyja-home-memory service",
+      "requirement_id": "memory_layers",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "command": "scripts/activate-open-webui-home-agent-post-auth.py --resources-json certification/reports/open-webui-home-resources-export.json",
+      "evidence": [
+        "config/open-webui-home-resources.yaml",
+        "src/freyja/open_webui_tools.py",
+        "certification/reports/open-webui-home-resources-export.json",
+        "certification/reports/open-webui-home-agent-db-verification.json",
+        "certification/reports/open-webui-tools-gateway-readiness.json",
+        "certification/reports/open-webui-tools-openapi.json"
+      ],
+      "requirement": "Expose narrow MCP/OpenAPI tools and assign per agent",
+      "requirement_id": "tools",
+      "status": "complete"
+    },
+    {
+      "blocker": "Telegram/Signal live round trip is not yet proven with handled > 0.",
+      "command": "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
+      "commands": [
+        "scripts/run-freyja-channels-telegram-pilot.py --dry-run --output certification/reports/freyja-channels-telegram-pilot.json",
+        "scripts/run-freyja-channels-signal-pilot.py --dry-run --output certification/reports/freyja-channels-signal-pilot.json"
+      ],
+      "evidence": [
+        "src/freyja/channels.py",
+        "certification/reports/freyja-channels-readiness.json",
+        "certification/reports/freyja-channels-readiness-atlas.json",
+        "certification/reports/freyja-channels-signal-pilot.json",
+        "certification/reports/freyja-channels-atlas-deployment.json"
+      ],
+      "next_actions": [
+        "Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.",
+        "Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.",
+        "Send a message from an allowed Signal sender and archive a report with handled > 0."
+      ],
+      "requirement": "Implement deterministic Telegram/Signal channel gateway with WhatsApp disabled",
+      "requirement_id": "messaging_channels",
+      "status": "credential_gated"
+    },
+    {
+      "blocker": null,
+      "evidence": [
+        "src/freyja/proactive.py",
+        "certification/reports/freyja-proactive-readiness.json",
+        "certification/reports/freyja-proactive-dry-run.json"
+      ],
+      "requirement": "Add proactive behavior disabled by default",
+      "requirement_id": "proactive_behavior",
+      "status": "complete"
+    },
+    {
+      "blocker": "Telegram/Signal round trip remains pending.",
+      "command": "scripts/summarize-open-webui-home-agent-readiness.py && scripts/audit-open-webui-home-agent-completion.py",
+      "commands": [
+        "scripts/summarize-open-webui-home-agent-readiness.py",
+        "scripts/audit-open-webui-home-agent-completion.py"
+      ],
+      "evidence": [
+        "tests/",
+        "certification/reports/open-webui-home-agent-live.json",
+        "certification/reports/open-webui-home-agent-chat-smoke.json",
+        "certification/reports/open-webui-home-agent-readiness-summary.json",
+        "certification/reports/open-webui-home-agent-evidence-refresh.json"
+      ],
+      "next_action": "Clear all external readiness gates, then rerun the completion audit.",
+      "next_actions": [
+        "Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.",
+        "Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.",
+        "Send a message from an allowed Signal sender and archive a report with handled > 0."
+      ],
+      "requirement": "Create repeatable verification",
+      "requirement_id": "verification",
+      "status": "partial"
+    },
+    {
+      "blocker": null,
+      "evidence": [
+        "certification/reports/freyja41-preservation-audit.json"
+      ],
+      "requirement": "Preserve Freyja 4.1 fallback",
+      "requirement_id": "freyja41_preservation",
+      "status": "complete"
+    },
+    {
+      "blocker": null,
+      "evidence": [
+        "certification/reports/open-webui-home-agent-deliverable.json",
+        "docs/operations/open-webui-home-agent.md"
+      ],
+      "requirement": "Deliver endpoint map, config inventory, test results, blockers, rollback, and exact next action",
+      "requirement_id": "final_deliverable",
+      "status": "complete"
+    }
+  ],
+  "private_content_included": false,
+  "report_type": "open-webui-home-agent-completion-audit",
+  "required_next_actions": [
+    "Send a message from an allowed Telegram sender and rerun the live Telegram pilot until handled > 0.",
+    "Verify the Signal account is registered and accepted by signal-cli-rest-api, then rerun the live Signal pilot.",
+    "Send a message from an allowed Signal sender and archive a report with handled > 0."
+  ],
+  "secrets_included": false,
+  "status_counts": {
+    "complete": 13,
+    "credential_gated": 1,
+    "partial": 1
+  }
+}

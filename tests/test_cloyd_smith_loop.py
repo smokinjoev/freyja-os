@@ -14,6 +14,7 @@ from freyja.cloyd_smith_loop import (
     CloydSmithJobStatus,
     CloydSmithJobStore,
     CloydSmithJobUpdate,
+    capture_revision_evidence,
     default_cloyd_smith_supervisor_heartbeat_path,
     enrich_loop_status_with_runtime,
     heartbeat_summary,
@@ -81,6 +82,77 @@ def test_cloyd_smith_job_lifecycle_records_status_and_events(tmp_path) -> None:
     assert store.list_active() == []
 
 
+def test_cloyd_smith_job_persists_scope_checks_session_submission_and_revision(tmp_path) -> None:
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    revision = {
+        "head": "abc123",
+        "working_tree_sha256": "tree",
+        "check_commands": ["pytest -q"],
+        "check_results": [{"command": "pytest -q", "exit_code": 0}],
+    }
+    job = store.create(
+        CloydSmithJobCreate(
+            objective="Patch one file.",
+            scope="repo:freyja-os path:src/freyja/cloyd_smith_loop.py",
+            current_prompt="Make one bounded patch.",
+            acceptance_criteria=["diff reviewed"],
+            check_commands=["pytest -q"],
+        )
+    )
+
+    updated = store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.RUNNING,
+            phase="sent_to_smith",
+            session_id="ses_one",
+            submission_id="msg_one",
+            revision_evidence=revision,
+        ),
+    )
+    loaded = store.get(job.job_id)
+    summary = job_status_summary(loaded)
+
+    assert updated.scope == "repo:freyja-os path:src/freyja/cloyd_smith_loop.py"
+    assert loaded.check_commands == ["pytest -q"]
+    assert loaded.session_id == "ses_one"
+    assert loaded.submission_id == "msg_one"
+    assert loaded.iteration == 0
+    assert loaded.phase == "sent_to_smith"
+    assert loaded.revision_evidence == revision
+    assert summary["session_id"] == "ses_one"
+    assert summary["submission_id"] == "msg_one"
+    assert summary["check_commands"] == ["pytest -q"]
+    assert summary["revision_evidence"]["working_tree_sha256"] == "tree"
+
+
+def test_capture_revision_evidence_binds_head_dirty_diff_and_untracked_files(tmp_path) -> None:
+    subprocess_result = __import__("subprocess").run
+    subprocess_result(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess_result(["git", "config", "user.email", "test@example.invalid"], cwd=tmp_path, check=True)
+    subprocess_result(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    tracked = tmp_path / "tracked.txt"
+    tracked.write_text("one\n", encoding="utf-8")
+    subprocess_result(["git", "add", "tracked.txt"], cwd=tmp_path, check=True)
+    subprocess_result(["git", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True)
+    tracked.write_text("two\n", encoding="utf-8")
+    (tmp_path / "new.txt").write_text("new\n", encoding="utf-8")
+
+    evidence = capture_revision_evidence(
+        repository=tmp_path,
+        check_commands=["pytest -q"],
+        check_results=[{"command": "pytest -q", "exit_code": 0}],
+    )
+
+    assert len(evidence["head"]) == 40
+    assert "tracked.txt" in evidence["changed_files"]
+    assert "new.txt" in evidence["untracked_file_sha256"]
+    assert evidence["tracked_diff_sha256"]
+    assert evidence["working_tree_sha256"]
+    assert evidence["check_commands"] == ["pytest -q"]
+    assert evidence["check_results"][0]["exit_code"] == 0
+
+
 def test_heartbeat_create_update_stale_and_summary(tmp_path) -> None:
     store = CloydSmithJobStore(tmp_path / "jobs.db")
     job = store.create(
@@ -112,8 +184,11 @@ def test_heartbeat_create_update_stale_and_summary(tmp_path) -> None:
     assert store.heartbeat_is_stale(loaded, now=started + timedelta(seconds=11))
 
     summary = heartbeat_summary(loaded, now=started + timedelta(seconds=12))
-    assert summary["state"] == "stale"
+    assert summary["state"] == "running"
     assert summary["heartbeat_age_seconds"] == 12
+    assert summary["last_activity_age_seconds"] == 12
+    assert summary["last_activity_at"] == started.isoformat()
+    assert summary["last_verified_progress_at"] is None
     assert summary["elapsed_seconds"] == 12
 
     rows = store.status_rows(now=started + timedelta(seconds=12))
@@ -122,7 +197,7 @@ def test_heartbeat_create_update_stale_and_summary(tmp_path) -> None:
     assert rows[0]["retry_attempts"] == 0
     assert rows[0]["follow_up_attempts"] == 0
     assert rows[0]["metadata"] == {}
-    assert "inspect OpenCode output" in job_status_summary(job, heartbeat=loaded, now=started + timedelta(seconds=12))["next_action"]
+    assert job_status_summary(job, heartbeat=loaded, now=started + timedelta(seconds=12))["next_action"] == "send_to_smith"
 
 
 def test_mark_stale_runs_updates_job_and_heartbeat(tmp_path) -> None:
@@ -143,12 +218,14 @@ def test_mark_stale_runs_updates_job_and_heartbeat(tmp_path) -> None:
         )
     )
 
-    stale = store.mark_stale_runs(now=observed_at + timedelta(seconds=6))
+    warnings = store.mark_stale_runs(now=observed_at + timedelta(seconds=6))
 
-    assert [item.job_id for item in stale] == [job.job_id]
-    assert store.get(job.job_id).status == CloydSmithJobStatus.STALE
-    assert store.get_heartbeat(job.job_id).stop_reason == "stale_timeout"
-    assert store.events(job.job_id)[0]["event_type"] == "run_stale"
+    assert [item.job_id for item in warnings] == [job.job_id]
+    assert store.get(job.job_id).status == CloydSmithJobStatus.RUNNING
+    assert store.get(job.job_id).next_action == "continue observing; warning is not proof of failure"
+    assert store.get_heartbeat(job.job_id).phase == "no_activity_warning"
+    assert store.get_heartbeat(job.job_id).stop_reason is None
+    assert store.events(job.job_id)[0]["event_type"] == "no_activity_warning"
 
 
 def test_supervisor_heartbeat_reader_reports_missing_and_fresh(tmp_path) -> None:
@@ -260,6 +337,37 @@ def test_job_status_summary_gives_timeout_review_action(tmp_path) -> None:
 
     assert "do not mark done" in summary["next_action"]
     assert "bounded follow-up" in summary["next_action"]
+
+
+def test_job_status_summary_uses_revision_capture_as_verified_progress_fallback(tmp_path) -> None:
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    captured_at = "2026-09-14T01:00:00+00:00"
+    job = store.create(CloydSmithJobCreate(objective="Verified before telemetry schema.", current_prompt="Done."))
+    job = store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.VERIFIED,
+            revision_evidence={"captured_at": captured_at, "check_results": [{"command": "true", "exit_code": 0}]},
+        ),
+    )
+    heartbeat = store.record_heartbeat(
+        AgentRunHeartbeat(
+            job_id=job.job_id,
+            agent="smith",
+            alias="freyja-code",
+            state="verified",
+            phase="verified",
+            last_action="verification_recheck",
+            updated_at=datetime(2026, 9, 14, 1, 0, 5, tzinfo=UTC),
+            stop_reason="checks_passed",
+        )
+    )
+    heartbeat = heartbeat.model_copy(update={"last_verified_progress_at": None})
+
+    summary = job_status_summary(job, heartbeat=heartbeat, now=datetime(2026, 9, 14, 1, 0, 12, tzinfo=UTC))
+
+    assert summary["last_verified_progress_at"] == captured_at
+    assert summary["verified_progress_age_seconds"] == 12
 
 
 def test_job_status_summary_gives_retry_limit_action(tmp_path) -> None:
@@ -506,7 +614,7 @@ def test_daemon_run_once_writes_heartbeat_transitions(tmp_path, monkeypatch) -> 
         assert sending.status == CloydSmithJobStatus.RUNNING
         assert sending.next_action == "await_smith_send_result"
         assert request.arguments["timeout_seconds"] == module.DEFAULT_SEND_TIMEOUT_SECONDS
-        assert module.DEFAULT_SEND_TIMEOUT_SECONDS < 90
+        assert module.DEFAULT_SEND_TIMEOUT_SECONDS == 900
         return {
             "ok": True,
             "session": "ses_daemon",
@@ -516,7 +624,13 @@ def test_daemon_run_once_writes_heartbeat_transitions(tmp_path, monkeypatch) -> 
             "result": "started",
         }
 
+    async def fake_start(request):
+        assert request.arguments["alias"] == "freyja-code"
+        return {"ok": True, "session": "ses_daemon"}
+
+    monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
+    monkeypatch.setattr(module, "opencode_health", lambda *, alias=None, timeout_seconds=5: {"ok": True, "session_count": 0})
 
     result = asyncio.run(module._run_once(store))
 
@@ -527,6 +641,7 @@ def test_daemon_run_once_writes_heartbeat_transitions(tmp_path, monkeypatch) -> 
     assert heartbeat.phase == "sent_to_smith"
     assert heartbeat.working_directory == "/repo"
     assert heartbeat.started_at > old
+    assert store.get(job.job_id).iteration == 1
 
 
 def test_daemon_harvests_output_after_send_timeout_when_session_idle(tmp_path, monkeypatch) -> None:
@@ -537,14 +652,19 @@ def test_daemon_harvests_output_after_send_timeout_when_session_idle(tmp_path, m
     async def fake_send(request):
         return {"ok": False, "error": "timed out"}
 
+    async def fake_start(request):
+        return {"ok": True, "session": "ses_daemon"}
+
     async def fake_status(request):
         return {"ok": True, "session": "ses_daemon", "state": "idle", "working_directory": "/repo"}
 
     async def fake_output(request):
         return {"ok": True, "session": "ses_daemon", "result": "I inspected the file and found evidence."}
 
+    monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
     monkeypatch.setattr(module, "_opencode_status", fake_status)
+    monkeypatch.setattr(module, "opencode_health", lambda *, alias=None, timeout_seconds=5: {"ok": True, "session_count": 0})
     monkeypatch.setattr(module, "_opencode_output", fake_output)
 
     result = asyncio.run(module._run_once(store))
@@ -570,6 +690,9 @@ def test_daemon_keeps_job_running_after_send_timeout_when_session_busy(tmp_path,
     async def fake_send(request):
         return {"ok": False, "error": "timed out"}
 
+    async def fake_start(request):
+        return {"ok": True, "session": "ses_daemon"}
+
     async def fake_status(request):
         return {
             "ok": True,
@@ -579,8 +702,10 @@ def test_daemon_keeps_job_running_after_send_timeout_when_session_busy(tmp_path,
             "recent_action": {"tool": "bash", "status": "running"},
         }
 
+    monkeypatch.setattr(module, "_opencode_start", fake_start)
     monkeypatch.setattr(module, "_opencode_send", fake_send)
     monkeypatch.setattr(module, "_opencode_status", fake_status)
+    monkeypatch.setattr(module, "opencode_health", lambda *, alias=None, timeout_seconds=5: {"ok": True, "session_count": 0})
 
     result = asyncio.run(module._run_once(store))
 
@@ -590,6 +715,235 @@ def test_daemon_keeps_job_running_after_send_timeout_when_session_busy(tmp_path,
     heartbeat = store.get_heartbeat(job.job_id)
     assert heartbeat.phase == "smith_busy_after_send_timeout"
     assert heartbeat.last_action == "bash"
+
+
+def test_daemon_blocks_dispatch_when_external_worker_is_busy(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Patch file.", current_prompt="Inspect and patch one file."))
+
+    async def fail_start(request):
+        raise AssertionError("queued work must not start while external worker is busy")
+
+    async def fail_send(request):
+        raise AssertionError("queued work must not send while external worker is busy")
+
+    async def busy_status(request):
+        return {
+            "ok": True,
+            "session": "ses_external",
+            "state": {"type": "busy"},
+            "working_directory": "/repo",
+            "recent_action": {"tool": "bash", "status": "running"},
+        }
+
+    monkeypatch.setattr(module, "opencode_health", lambda *, alias=None, timeout_seconds=5: {"ok": True, "session_count": 1})
+    monkeypatch.setattr(module, "_opencode_status", busy_status)
+    monkeypatch.setattr(module, "_opencode_start", fail_start)
+    monkeypatch.setattr(module, "_opencode_send", fail_send)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "unknown", "action": "dispatch_blocked_external_worker"}]
+    assert store.get(job.job_id).status == CloydSmithJobStatus.QUEUED
+    assert store.get(job.job_id).next_action == "external OpenCode work is active; wait or stop it before dispatch"
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.state == "unknown"
+    assert heartbeat.phase == "external_worker_busy"
+    assert heartbeat.session_id == "ses_external"
+
+
+def test_daemon_reconciles_existing_submission_without_duplicate_send(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Patch file.", current_prompt="Inspect and patch one file."))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.QUEUED,
+            phase="sent_to_smith",
+            session_id="ses_existing",
+            submission_id="msg_existing",
+        ),
+    )
+
+    async def fail_start(request):
+        raise AssertionError("existing submissions must not start another session")
+
+    async def fail_send(request):
+        raise AssertionError("existing submissions must not be sent twice")
+
+    monkeypatch.setattr(module, "_opencode_start", fail_start)
+    monkeypatch.setattr(module, "_opencode_send", fail_send)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "running", "action": "reconciled_existing_submission"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.RUNNING
+    assert loaded.session_id == "ses_existing"
+    assert loaded.submission_id == "msg_existing"
+    assert loaded.phase == "reconciled_existing_submission"
+    assert store.get_heartbeat(job.job_id).phase == "reconciled_existing_submission"
+    assert store.events(job.job_id)[0]["event_type"] == "submission_reconciled"
+
+
+def test_daemon_marks_running_job_unknown_when_telemetry_disappears(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Watch task.", current_prompt="Keep working."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING))
+
+    async def failed_status(request):
+        return {"ok": False, "error": "event stream disconnected"}
+
+    monkeypatch.setattr(module, "_opencode_status", failed_status)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "unknown", "action": "telemetry_unknown"}]
+    assert store.get(job.job_id).status == CloydSmithJobStatus.UNKNOWN
+    assert store.get(job.job_id).next_action == "freeze dispatch and reconcile OpenCode telemetry"
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.state == "unknown"
+    assert heartbeat.phase == "telemetry_unavailable"
+
+
+def test_daemon_reconnects_unknown_job_when_status_returns_busy(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Watch task.", current_prompt="Keep working."))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(status=CloydSmithJobStatus.UNKNOWN, phase="telemetry_unavailable", session_id="ses_reconnect"),
+    )
+
+    async def reconnected_status(request):
+        return {
+            "ok": True,
+            "session": "ses_reconnect",
+            "state": {"type": "busy"},
+            "working_directory": "/repo",
+            "recent_action": {"tool": "bash", "status": "running"},
+        }
+
+    monkeypatch.setattr(module, "_opencode_status", reconnected_status)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "running", "action": "telemetry_reconnected"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.RUNNING
+    assert loaded.phase == "telemetry_reconnected"
+    assert loaded.next_action == "check_smith_output"
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.state == "running"
+    assert heartbeat.phase == "telemetry_reconnected"
+    assert store.events(job.job_id)[0]["event_type"] == "smith_status_after_unknown"
+
+
+def test_daemon_reconnects_unknown_idle_job_and_verifies_output(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(
+        CloydSmithJobCreate(
+            objective="Finish after reconnect.",
+            current_prompt="Do it.",
+            check_commands=["true"],
+        )
+    )
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(status=CloydSmithJobStatus.UNKNOWN, phase="telemetry_unavailable", session_id="ses_reconnect"),
+    )
+
+    async def idle_status(request):
+        return {"ok": True, "session": "ses_reconnect", "state": "idle", "working_directory": str(REPO_ROOT)}
+
+    async def fake_output(request):
+        return {"ok": True, "session": "ses_reconnect", "result": "done"}
+
+    monkeypatch.setattr(module, "_opencode_status", idle_status)
+    monkeypatch.setattr(module, "_opencode_output", fake_output)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "verified", "action": "verified"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.VERIFIED
+    assert loaded.phase == "verified"
+    assert loaded.revision_evidence["check_results"][0]["exit_code"] == 0
+    assert store.get_heartbeat(job.job_id).stop_reason == "checks_passed"
+
+
+def test_daemon_marks_permission_wait_as_waiting_for_input(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Needs approval.", current_prompt="Run command."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING, session_id="ses_wait"))
+
+    async def waiting_status(request):
+        return {
+            "ok": True,
+            "session": "ses_wait",
+            "state": {"type": "busy"},
+            "working_directory": "/repo",
+            "recent_action": {"tool": "bash", "status": "waiting_for_permission", "message": "Waiting for permission to run command"},
+        }
+
+    monkeypatch.setattr(module, "_opencode_status", waiting_status)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "waiting_for_input", "action": "permission_wait"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.WAITING_FOR_INPUT
+    assert loaded.phase == "permission_wait"
+    assert loaded.next_action == "worker is waiting for permission or input; answer in the OpenCode session"
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.state == "waiting_for_input"
+    assert heartbeat.phase == "permission_wait"
+
+
+def test_daemon_reconnects_waiting_for_input_when_permission_resolves(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Needs approval.", current_prompt="Run command."))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(status=CloydSmithJobStatus.WAITING_FOR_INPUT, phase="permission_wait", session_id="ses_wait"),
+    )
+
+    async def busy_status(request):
+        return {
+            "ok": True,
+            "session": "ses_wait",
+            "state": {"type": "busy"},
+            "working_directory": "/repo",
+            "recent_action": {"tool": "bash", "status": "running"},
+        }
+
+    monkeypatch.setattr(module, "_opencode_status", busy_status)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "running", "action": "telemetry_reconnected"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.RUNNING
+    assert loaded.phase == "telemetry_reconnected"
+    assert store.events(job.job_id)[0]["event_type"] == "smith_status_after_waiting_for_input"
+
+
+def test_loop_status_counts_waiting_for_input_as_attention(tmp_path) -> None:
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Needs input.", current_prompt="Ask."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.WAITING_FOR_INPUT, phase="permission_wait"))
+
+    status = loop_status_payload(store)
+
+    assert status["queue"]["waiting_for_input"] == 1
+    assert status["attention_count"] == 1
+    assert status["runs"][0]["next_action"] == "operator or model input required before continuing"
 
 
 def test_daemon_running_idle_captures_output_for_review(tmp_path, monkeypatch) -> None:
@@ -627,6 +981,468 @@ def test_daemon_running_idle_captures_output_for_review(tmp_path, monkeypatch) -
     assert heartbeat.state == "needs_review"
     assert heartbeat.phase == "output_ready"
     assert heartbeat.stop_reason == "smith_idle"
+
+
+def test_daemon_running_idle_verifies_when_recorded_checks_pass(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(
+        CloydSmithJobCreate(
+            objective="Finish task.",
+            current_prompt="Do it.",
+            check_commands=["true"],
+        )
+    )
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING))
+
+    async def fake_status(request):
+        return {"ok": True, "session": "ses_daemon", "state": "idle", "working_directory": str(REPO_ROOT)}
+
+    async def fake_output(request):
+        return {"ok": True, "session": "ses_daemon", "result": "done"}
+
+    monkeypatch.setattr(module, "_opencode_status", fake_status)
+    monkeypatch.setattr(module, "_opencode_output", fake_output)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "verified", "action": "verified"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.VERIFIED
+    assert loaded.phase == "verified"
+    assert loaded.next_action == "report verified evidence"
+    assert loaded.revision_evidence["check_commands"] == ["true"]
+    assert loaded.revision_evidence["check_results"][0]["exit_code"] == 0
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.state == "verified"
+    assert heartbeat.phase == "verified"
+    assert heartbeat.stop_reason == "checks_passed"
+
+
+def test_daemon_running_idle_needs_attention_when_recorded_checks_fail(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(
+        CloydSmithJobCreate(
+            objective="Finish task.",
+            current_prompt="Do it.",
+            check_commands=["false"],
+        )
+    )
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING))
+
+    async def fake_status(request):
+        return {"ok": True, "session": "ses_daemon", "state": "idle", "working_directory": str(REPO_ROOT)}
+
+    async def fake_output(request):
+        return {"ok": True, "session": "ses_daemon", "result": "done"}
+
+    monkeypatch.setattr(module, "_opencode_status", fake_status)
+    monkeypatch.setattr(module, "_opencode_output", fake_output)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "needs_attention", "action": "checks_failed"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.NEEDS_ATTENTION
+    assert loaded.phase == "checks_failed"
+    assert loaded.next_action == "repair failing checks in same Smith session or request input"
+    assert loaded.revision_evidence["check_commands"] == ["false"]
+    assert loaded.revision_evidence["check_results"][0]["exit_code"] == 1
+    assert "'false' failed with exit 1" in loaded.error
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.state == "needs_attention"
+    assert heartbeat.phase == "checks_failed"
+    assert heartbeat.stop_reason == "checks_failed"
+
+
+def test_daemon_queues_same_session_repair_after_failed_checks(tmp_path) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(
+        CloydSmithJobCreate(
+            objective="Repair task.",
+            current_prompt="Do it.",
+            acceptance_criteria=["Checks pass."],
+            check_commands=["false"],
+        )
+    )
+    revision = {
+        "head": "abc123",
+        "working_tree_sha256": "tree1",
+        "tracked_diff_sha256": "diff1",
+        "changed_files": ["src/example.py"],
+        "check_results": [{"command": "false", "exit_code": 1, "timed_out": False, "stdout": "", "stderr": "failed"}],
+    }
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.NEEDS_ATTENTION,
+            phase="checks_failed",
+            session_id="ses_repair",
+            submission_id="old_submission",
+            revision_evidence=revision,
+            error="'false' failed with exit 1",
+        ),
+    )
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "queued", "action": "repair_queued", "attempt": 1}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.QUEUED
+    assert loaded.phase == "repair_queued"
+    assert loaded.session_id == "ses_repair"
+    assert loaded.submission_id == ""
+    assert loaded.metadata["repair"]["attempts"] == 1
+    assert loaded.metadata["repair"]["last_working_tree_sha256"] == "tree1"
+    assert "Repair attempt 1" in loaded.current_prompt
+    assert "'false' -> 1: failed" in loaded.current_prompt
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.state == "queued"
+    assert heartbeat.phase == "repair_queued"
+    assert store.events(job.job_id)[0]["event_type"] == "repair_queued"
+
+
+def test_daemon_repair_reuses_existing_session_without_new_start(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(
+        CloydSmithJobCreate(
+            objective="Repair task.",
+            current_prompt="Repair attempt 1.",
+            check_commands=["true"],
+            metadata={"repair": {"attempts": 1, "session_id": "ses_repair"}},
+        )
+    )
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.QUEUED,
+            phase="repair_queued",
+            session_id="ses_repair",
+            submission_id="",
+        ),
+    )
+    store.record_heartbeat(
+        AgentRunHeartbeat(
+            job_id=job.job_id,
+            agent="smith",
+            alias="freyja-code",
+            session_id="ses_repair",
+            state="queued",
+            phase="repair_queued",
+            last_action="repair_preflight",
+        )
+    )
+
+    async def fail_start(request):
+        raise AssertionError("repair must reuse the existing Smith session")
+
+    async def fake_send(request):
+        assert request.arguments["alias"] == "ses_repair"
+        assert "Repair attempt 1" in request.arguments["prompt"]
+        return {"ok": True, "session": "ses_repair", "submission_id": "msg_repair", "result": "sent"}
+
+    monkeypatch.setattr(module, "opencode_health", lambda *, alias=None, timeout_seconds=5: {"ok": True, "session_count": 0})
+    monkeypatch.setattr(module, "_opencode_start", fail_start)
+    monkeypatch.setattr(module, "_opencode_send", fake_send)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "running", "action": "sent_to_smith"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.RUNNING
+    assert loaded.session_id == "ses_repair"
+    assert loaded.submission_id == "msg_repair"
+
+
+def test_daemon_repeated_repair_failure_without_progress_stays_attention(tmp_path) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Repair task.", current_prompt="Do it.", check_commands=["false"]))
+    check_results = [{"command": "false", "exit_code": 1, "timed_out": False, "stdout": "", "stderr": "failed"}]
+    signature = module._failure_signature(check_results)
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.NEEDS_ATTENTION,
+            phase="checks_failed",
+            session_id="ses_repair",
+            revision_evidence={"working_tree_sha256": "tree1", "check_results": check_results},
+            metadata={"repair": {"attempts": 1, "last_failure_signature": signature, "last_working_tree_sha256": "tree1"}},
+            error="'false' failed with exit 1",
+        ),
+    )
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "needs_attention", "action": "repeated_failure_without_progress"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.NEEDS_ATTENTION
+    assert loaded.metadata["repair"]["attempts"] == 1
+    assert loaded.next_action == "repeated identical check failure without working-tree progress; request attention"
+    assert store.get_heartbeat(job.job_id).phase == "repeated_failure_without_progress"
+
+
+def test_daemon_allows_second_repair_after_progress_then_caps(tmp_path) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Repair task.", current_prompt="Do it.", check_commands=["false"]))
+    check_results = [{"command": "false", "exit_code": 1, "timed_out": False, "stdout": "", "stderr": "failed"}]
+    signature = module._failure_signature(check_results)
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.NEEDS_ATTENTION,
+            phase="checks_failed",
+            session_id="ses_repair",
+            revision_evidence={"working_tree_sha256": "tree2", "check_results": check_results},
+            metadata={"repair": {"attempts": 1, "last_failure_signature": signature, "last_working_tree_sha256": "tree1"}},
+            error="'false' failed with exit 1",
+        ),
+    )
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "queued", "action": "repair_queued", "attempt": 2}]
+    loaded = store.get(job.job_id)
+    assert loaded.metadata["repair"]["attempts"] == 2
+    assert loaded.metadata["repair"]["last_working_tree_sha256"] == "tree2"
+
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.NEEDS_ATTENTION,
+            phase="checks_failed",
+            revision_evidence={"working_tree_sha256": "tree3", "check_results": check_results},
+            metadata=loaded.metadata,
+            error="'false' failed with exit 1",
+        ),
+    )
+
+    capped = asyncio.run(module._run_once(store))
+
+    assert capped == [{"job_id": job.job_id, "status": "needs_attention", "action": "repair_limit_reached"}]
+    assert store.get(job.job_id).metadata["repair"]["attempts"] == 2
+    assert store.get(job.job_id).next_action == "repair limit reached; request operator attention"
+
+
+def test_daemon_leaves_verified_job_when_revision_evidence_is_current(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Already verified.", current_prompt="Done.", check_commands=["true"]))
+    evidence = {"head": "head1", "working_tree_sha256": "tree1", "check_commands": ["true"], "check_results": []}
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(status=CloydSmithJobStatus.VERIFIED, phase="verified", revision_evidence=evidence),
+    )
+
+    monkeypatch.setattr(module, "capture_revision_evidence", lambda **kwargs: dict(evidence))
+    monkeypatch.setattr(module, "_run_check_commands", lambda commands: (_ for _ in ()).throw(AssertionError("current verified evidence must not re-run checks")))
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == []
+    assert store.get(job.job_id).status == CloydSmithJobStatus.VERIFIED
+
+
+def test_daemon_refreshes_verified_evidence_after_working_tree_change_when_checks_pass(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Already verified.", current_prompt="Done.", check_commands=["true"]))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.VERIFIED,
+            phase="verified",
+            revision_evidence={"head": "head1", "working_tree_sha256": "tree1", "check_commands": ["true"], "check_results": []},
+        ),
+    )
+
+    def fake_capture_revision_evidence(*, repository=None, check_commands=None, check_results=None):
+        return {
+            "head": "head2",
+            "working_tree_sha256": "tree2",
+            "tracked_diff_sha256": "diff2",
+            "check_commands": check_commands or [],
+            "check_results": check_results or [],
+        }
+
+    monkeypatch.setattr(module, "capture_revision_evidence", fake_capture_revision_evidence)
+    monkeypatch.setattr(module, "_run_check_commands", lambda commands: [{"command": "true", "exit_code": 0, "timed_out": False, "stdout": "", "stderr": ""}])
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "verified", "action": "verified_rechecked"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.VERIFIED
+    assert loaded.revision_evidence["head"] == "head2"
+    assert loaded.revision_evidence["working_tree_sha256"] == "tree2"
+    assert loaded.revision_evidence["check_results"][0]["exit_code"] == 0
+    assert store.get_heartbeat(job.job_id).phase == "verified"
+    assert store.events(job.job_id)[0]["event_type"] == "verified_recheck_finished"
+
+
+def test_daemon_demotes_verified_after_working_tree_change_when_checks_fail(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Already verified.", current_prompt="Done.", check_commands=["false"]))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.VERIFIED,
+            phase="verified",
+            session_id="ses_verified",
+            revision_evidence={"head": "head1", "working_tree_sha256": "tree1", "check_commands": ["false"], "check_results": []},
+        ),
+    )
+
+    def fake_capture_revision_evidence(*, repository=None, check_commands=None, check_results=None):
+        return {
+            "head": "head2",
+            "working_tree_sha256": "tree2",
+            "tracked_diff_sha256": "diff2",
+            "check_commands": check_commands or [],
+            "check_results": check_results or [],
+        }
+
+    monkeypatch.setattr(module, "capture_revision_evidence", fake_capture_revision_evidence)
+    monkeypatch.setattr(module, "_run_check_commands", lambda commands: [{"command": "false", "exit_code": 1, "timed_out": False, "stdout": "", "stderr": "failed"}])
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "needs_attention", "action": "stale_verification_checks_failed"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.NEEDS_ATTENTION
+    assert loaded.phase == "checks_failed_after_stale_verification"
+    assert loaded.next_action == "repair failing checks in same Smith session or request input"
+    assert loaded.revision_evidence["check_results"][0]["exit_code"] == 1
+    assert store.get_heartbeat(job.job_id).phase == "checks_failed_after_stale_verification"
+
+
+def test_daemon_demotes_verified_without_checks_to_review_after_working_tree_change(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Already verified.", current_prompt="Done."))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.VERIFIED,
+            phase="verified",
+            revision_evidence={"head": "head1", "working_tree_sha256": "tree1", "check_commands": [], "check_results": []},
+        ),
+    )
+    refreshed = {"head": "head2", "working_tree_sha256": "tree2", "check_commands": [], "check_results": []}
+    monkeypatch.setattr(module, "capture_revision_evidence", lambda **kwargs: dict(refreshed))
+    monkeypatch.setattr(module, "_run_check_commands", lambda commands: (_ for _ in ()).throw(AssertionError("no-check verified jobs should not run checks")))
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "needs_review", "action": "verified_stale_after_edit"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.NEEDS_REVIEW
+    assert loaded.phase == "verified_stale_after_edit"
+    assert loaded.revision_evidence["working_tree_sha256"] == "tree2"
+    assert store.get_heartbeat(job.job_id).phase == "verified_stale_after_edit"
+
+
+def test_daemon_stop_after_current_turn_waits_until_idle_then_stops(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Stop after turn.", current_prompt="Keep working.", check_commands=["true"]))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.RUNNING,
+            phase="stop_after_current_turn_requested",
+            session_id="ses_stop",
+            stop_intent="after_current_turn",
+        ),
+    )
+
+    async def fake_status(request):
+        return {"ok": True, "session": "ses_stop", "state": "idle", "working_directory": "/repo"}
+
+    async def fake_output(request):
+        return {"ok": True, "session": "ses_stop", "result": "turn finished"}
+
+    monkeypatch.setattr(module, "_opencode_status", fake_status)
+    monkeypatch.setattr(module, "_opencode_output", fake_output)
+    monkeypatch.setattr(module, "_run_check_commands", lambda commands: (_ for _ in ()).throw(AssertionError("stop-after-turn must not verify")))
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "stopped", "action": "stopped_after_current_turn"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.STOPPED
+    assert loaded.phase == "stopped_after_current_turn"
+    assert loaded.stop_intent == "after_current_turn"
+    assert loaded.last_evidence["result"] == "turn finished"
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.state == "stopped"
+    assert heartbeat.phase == "stopped_after_current_turn"
+    assert heartbeat.stop_reason == "after_current_turn"
+
+
+def test_daemon_stop_after_current_turn_keeps_busy_job_running(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Stop after turn.", current_prompt="Keep working."))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.RUNNING,
+            phase="stop_after_current_turn_requested",
+            session_id="ses_stop",
+            stop_intent="after_current_turn",
+        ),
+    )
+
+    async def fake_status(request):
+        return {"ok": True, "session": "ses_stop", "state": {"type": "busy"}, "working_directory": "/repo"}
+
+    monkeypatch.setattr(module, "_opencode_status", fake_status)
+    monkeypatch.setattr(module, "_summary_text", lambda payload: "busy")
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "running", "action": "still_running"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.RUNNING
+    assert loaded.stop_intent == "after_current_turn"
+    assert loaded.next_action == "waiting for current turn boundary before stopping"
+
+
+def test_daemon_reconciles_stopping_job_by_stopping_runtime(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Stop now.", current_prompt="Stop."))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.STOPPING,
+            phase="operator_immediate_stop_requested",
+            session_id="ses_stop",
+            stop_intent="immediate",
+        ),
+    )
+    stop_calls = []
+
+    async def fake_stop(request):
+        stop_calls.append(request.arguments)
+        return {"ok": True, "session": "ses_stop", "aborted": True}
+
+    monkeypatch.setattr(module, "_opencode_stop", fake_stop)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "stopped", "smith_stop": {"ok": True, "session": "ses_stop", "aborted": True}}]
+    assert stop_calls == [{"alias": "freyja-code"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.STOPPED
+    assert loaded.stop_intent == "immediate"
+    assert store.get_heartbeat(job.job_id).phase == "stopped"
 
 
 def test_daemon_repeated_busy_poll_refreshes_observation_timestamp(tmp_path, monkeypatch) -> None:
@@ -667,15 +1483,19 @@ def test_daemon_repeated_busy_poll_refreshes_observation_timestamp(tmp_path, mon
     assert result == [{"job_id": job.job_id, "status": "running", "action": "still_running"}]
     heartbeat = store.get_heartbeat(job.job_id)
     assert heartbeat.updated_at > meaningful_at
+    assert heartbeat.last_activity_at == meaningful_at
+    summary = job_status_summary(store.get(job.job_id), heartbeat=heartbeat)
+    assert summary["process_heartbeat_at"] == heartbeat.updated_at.isoformat()
+    assert summary["last_activity_at"] == meaningful_at.isoformat()
     assert store.get(job.job_id).next_action == "check_smith_output"
 
 
-def test_daemon_blocks_and_stops_job_after_max_busy_window(tmp_path, monkeypatch) -> None:
+def test_daemon_warns_without_stopping_after_first_response_budget(tmp_path, monkeypatch) -> None:
     module = _daemon_module()
     store = CloydSmithJobStore(tmp_path / "jobs.db")
     job = store.create(CloydSmithJobCreate(objective="Watch busy task.", current_prompt="Keep working."))
     store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING))
-    old = datetime.now(UTC) - timedelta(seconds=module.DEFAULT_MAX_BUSY_SECONDS + 20)
+    old = datetime.now(UTC) - timedelta(seconds=module.DEFAULT_FIRST_RESPONSE_BUDGET_SECONDS + 20)
     store.record_heartbeat(
         AgentRunHeartbeat(
             job_id=job.job_id,
@@ -701,7 +1521,10 @@ def test_daemon_blocks_and_stops_job_after_max_busy_window(tmp_path, monkeypatch
             "working_directory": "/repo",
         }
 
+    stop_calls = []
+
     async def fake_stop(request):
+        stop_calls.append(request.arguments)
         return {"ok": True, "session": "ses_busy", "aborted": True}
 
     monkeypatch.setattr(module, "_summary_text", lambda payload: '{"aborted": true}' if "aborted" in payload else '{"state": {"type": "busy"}}')
@@ -710,16 +1533,63 @@ def test_daemon_blocks_and_stops_job_after_max_busy_window(tmp_path, monkeypatch
 
     result = asyncio.run(module._run_once(store))
 
-    assert result == [{"job_id": job.job_id, "status": "blocked", "action": "blocked_busy_timeout"}]
+    assert {"job_id": job.job_id, "status": "running", "action": "no_activity_warning"} in result
+    assert {"job_id": job.job_id, "status": "running", "action": "first_response_warning"} in result
+    assert stop_calls == []
     updated = store.get(job.job_id)
-    assert updated.status == CloydSmithJobStatus.BLOCKED
-    assert updated.next_action == "inspect_or_queue_suggested_replacement_after_busy_timeout"
-    assert "max busy window" in updated.error
+    assert updated.status == CloydSmithJobStatus.RUNNING
+    assert updated.next_action == "continue observing; first-response warning is not a failure"
+    assert "warning only" in updated.error
     heartbeat = store.get_heartbeat(job.job_id)
-    assert heartbeat.state == "blocked"
-    assert heartbeat.phase == "smith_busy_timeout"
-    assert heartbeat.stop_reason == "smith_busy_timeout"
-    assert store.events(job.job_id)[0]["event_type"] == "smith_busy_timeout_stop"
+    assert heartbeat.state == "running"
+    assert heartbeat.phase == "first_response_warning"
+    assert heartbeat.stop_reason is None
+    assert store.events(job.job_id)[0]["event_type"] == "first_response_warning"
+
+
+def test_daemon_warning_poll_does_not_reset_activity_without_new_evidence(tmp_path, monkeypatch) -> None:
+    module = _daemon_module()
+    store = CloydSmithJobStore(tmp_path / "jobs.db")
+    job = store.create(CloydSmithJobCreate(objective="Watch warned task.", current_prompt="Keep working."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING))
+    old_activity = datetime.now(UTC) - timedelta(seconds=310)
+    recent_process = datetime.now(UTC) - timedelta(seconds=5)
+    store.record_heartbeat(
+        AgentRunHeartbeat(
+            job_id=job.job_id,
+            agent="smith",
+            alias="freyja-code",
+            session_id="ses_busy",
+            state="running",
+            phase="no_activity_warning",
+            last_action="opencode_status",
+            last_message='{"state": {"type": "busy"}}',
+            working_directory="/repo",
+            started_at=old_activity,
+            updated_at=recent_process,
+            last_activity_at=old_activity,
+            stale_after_seconds=300,
+        )
+    )
+
+    async def fake_status(request):
+        return {
+            "ok": True,
+            "session": "ses_busy",
+            "state": {"type": "busy"},
+            "working_directory": "/repo",
+        }
+
+    monkeypatch.setattr(module, "_summary_text", lambda payload: '{"state": {"type": "busy"}}')
+    monkeypatch.setattr(module, "_opencode_status", fake_status)
+
+    result = asyncio.run(module._run_once(store))
+
+    assert result == [{"job_id": job.job_id, "status": "running", "action": "still_running"}]
+    heartbeat = store.get_heartbeat(job.job_id)
+    assert heartbeat.phase == "smith_busy"
+    assert heartbeat.updated_at > recent_process
+    assert heartbeat.last_activity_at == old_activity
 
 
 def test_daemon_recovers_stale_job_when_worker_is_still_busy(tmp_path, monkeypatch) -> None:
@@ -802,7 +1672,14 @@ def test_daemon_status_payload_includes_supervisor_queue_and_runs(tmp_path) -> N
     module = _daemon_module()
     store = CloydSmithJobStore(tmp_path / "jobs.db")
     job = store.create(CloydSmithJobCreate(objective="Review work.", current_prompt="Report."))
-    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.NEEDS_REVIEW))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.NEEDS_REVIEW,
+            session_id="ses_existing",
+            submission_id="msg_old",
+        ),
+    )
     module._write_supervisor_heartbeat(None, store, status="loop_ok", results=[])
 
     payload = module._status_payload(store)
@@ -909,7 +1786,14 @@ def test_cloyd_smith_status_without_job_id_returns_loop_context(tmp_path, monkey
     monkeypatch.setattr("freyja.cloyd_smith_loop.settings.cloyd_smith_loop_database_path", str(tmp_path / "jobs.db"))
     store = CloydSmithJobStore(tmp_path / "jobs.db")
     job = store.create(CloydSmithJobCreate(objective="Review work.", current_prompt="Report."))
-    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.NEEDS_REVIEW))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.NEEDS_REVIEW,
+            session_id="ses_existing",
+            submission_id="msg_old",
+        ),
+    )
 
     status = asyncio.run(
         _cloyd_smith_status(
@@ -933,7 +1817,14 @@ def test_cloyd_smith_follow_up_queues_same_job_once(tmp_path, monkeypatch) -> No
     monkeypatch.setattr("freyja.cloyd_smith_loop.settings.cloyd_smith_loop_database_path", str(tmp_path / "jobs.db"))
     store = CloydSmithJobStore(tmp_path / "jobs.db")
     job = store.create(CloydSmithJobCreate(objective="Review work.", current_prompt="Report."))
-    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.NEEDS_REVIEW))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.NEEDS_REVIEW,
+            session_id="ses_existing",
+            submission_id="msg_old",
+        ),
+    )
 
     result = asyncio.run(
         _cloyd_smith_follow_up(
@@ -948,6 +1839,8 @@ def test_cloyd_smith_follow_up_queues_same_job_once(tmp_path, monkeypatch) -> No
     assert result["ok"] is True
     assert result["job"]["status"] == "queued"
     assert result["job"]["current_prompt"] == "Run one bounded verification pass."
+    assert store.get(job.job_id).session_id == "ses_existing"
+    assert store.get(job.job_id).submission_id == ""
     assert result["job"]["summary"]["follow_up_attempts"] == 1
     assert result["loop"]["queue"]["queued"] == 1
     assert store.get_heartbeat(job.job_id).phase == "operator_follow_up_queued"
@@ -1296,9 +2189,19 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
 
     assert page.status_code == 200
     assert "Agent Runs" in page.text
-    assert "EventSource('/agent-runs/events')" in page.text
+    assert "new EventSource(eventsUrl())" in page.text
+    assert "show_archived=1" in page.text
     assert "Copy ID" in page.text
     assert "Copy Cloyd Prompt" in page.text
+    assert "Current task" in page.text
+    assert "Open Session" in page.text
+    assert "action === 'start'" in page.text
+    assert "Start" in page.text
+    assert "Resume/Retry" in page.text
+    assert "Check results" in page.text
+    assert "Files/diff" in page.text
+    assert "Checked rev" in page.text
+    assert "Blocker" in page.text
     assert "Copy Replacement Prompt" in page.text
     assert "run.replacement_prompt" in page.text
     assert "run.suggested_prompt" in page.text
@@ -1307,6 +2210,11 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
     assert "action === 'queue-replacement'" in page.text
     assert "Clear" in page.text
     assert "action === 'clear'" in page.text
+    assert "Clear All Finished" in page.text
+    assert "Show Archived" in page.text
+    assert "Restore" in page.text
+    assert "action === 'restore'" in page.text
+    assert "clear-old" in page.text
     assert "Reset Runtime Session" in page.text
     assert "data-runtime-action=\"reset\"" in page.text
     assert "Create Replacement" in page.text
@@ -1331,6 +2239,7 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
     body = status.json()
     assert body["canonical_ledger"] == str(database)
     assert body["active_count"] == 1
+    assert body["archived_count"] == 0
     assert body["attention_count"] == 0
     assert body["terminal_count"] == 0
     assert body["supervisor"]["ok"] is True
@@ -1339,6 +2248,32 @@ def test_agent_runs_page_and_api_show_canonical_ledger(tmp_path, monkeypatch) ->
     assert body["queue"]["needs_review"] == 0
     assert body["queue"]["blocked"] == 0
     assert body["runs"][0]["objective"] == "Monitor OpenCode without a terminal."
+
+
+def test_agent_runs_submit_api_creates_durable_job(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+
+    response = TestClient(freyja_main.app).post(
+        "/agent-runs/api/jobs",
+        json={
+            "objective": "Learn Freyja network endpoints.",
+            "prompt": "Inspect Freyja network endpoints and report findings.",
+            "acceptance_criteria": ["List relevant endpoints."],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["monitor"] == "http://100.115.228.56:8000/agent-runs"
+    assert body["job"]["job_id"].startswith("freyja52-")
+    assert body["job"]["status"] == "queued"
+
+    job = CloydSmithJobStore(database).get(body["job"]["job_id"])
+    assert job.objective == "Learn Freyja network endpoints."
+    assert job.current_prompt == "Inspect Freyja network endpoints and report findings."
+    assert job.acceptance_criteria == ["List relevant endpoints."]
 
 
 def test_agent_runs_api_counts_blocked_jobs_as_attention(tmp_path, monkeypatch) -> None:
@@ -1376,6 +2311,26 @@ def test_agent_runs_api_counts_blocked_jobs_as_attention(tmp_path, monkeypatch) 
     assert body["runs"][0]["job_status"] == "blocked"
     assert "OpenCode send failed" in [item["title"] for item in body["diagnostics"]]
     assert "Blocked jobs need review" in [item["title"] for item in body["diagnostics"]]
+
+
+def test_agent_runs_api_can_start_queued_job(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+    store = CloydSmithJobStore(database)
+    job = store.create(CloydSmithJobCreate(objective="Queued work.", current_prompt="Do it."))
+
+    response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/start")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["ok"] is True
+    assert body["action"] == "start"
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.QUEUED
+    assert loaded.phase == "operator_start_requested"
+    assert loaded.next_action == "send_to_smith"
+    assert store.get_heartbeat(job.job_id).phase == "operator_start_requested"
+    assert store.events(job.job_id)[0]["event_type"] == "operator_start_requested"
 
 
 def test_agent_runs_api_reports_work_in_progress_instead_of_loop_quiet(tmp_path, monkeypatch) -> None:
@@ -1858,23 +2813,51 @@ def test_agent_runs_api_can_clear_done_job_from_monitor(tmp_path, monkeypatch) -
     store = CloydSmithJobStore(database)
     job = store.create(CloydSmithJobCreate(objective="Completed work.", current_prompt="Report."))
     store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.NEEDS_REVIEW, next_action="cloyd_review_evidence"))
-    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.DONE, next_action="operator_reviewed_done"))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.DONE,
+            next_action="operator_reviewed_done",
+            revision_evidence={"head": "abc123", "check_results": [{"command": "pytest -q", "exit_code": 0}]},
+        ),
+    )
 
     response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/clear")
 
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert body["job"]["status"] == "stopped"
-    assert body["job"]["next_action"] == "cleared_from_monitor"
+    assert body["job"]["status"] == "done"
+    assert body["job"]["next_action"] == "operator_reviewed_done"
+    assert body["job"]["revision_evidence"]["check_results"][0]["exit_code"] == 0
+    assert store.get(job.job_id).metadata["agent_runs_archive"]["archived"] is True
     assert store.get(job.job_id).metadata["cleared_from_monitor"]["previous_status"] == "done"
-    assert store.get_heartbeat(job.job_id).phase == "cleared"
 
     status = TestClient(freyja_main.app).get("/agent-runs/api/status").json()
     assert status["runs"] == []
     assert status["queue"]["done"] == 0
     assert status["queue"]["stopped"] == 0
     assert status["hidden_terminal_count"] == 1
+    assert status["archived_count"] == 1
+
+    restarted_client = TestClient(freyja_main.app)
+    after_restart = restarted_client.get("/agent-runs/api/status").json()
+    assert after_restart["runs"] == []
+    shown = restarted_client.get("/agent-runs/api/status?show_archived=1").json()
+    assert shown["runs"][0]["job_id"] == job.job_id
+    assert shown["runs"][0]["archived"] is True
+    assert shown["runs"][0]["job_status"] == "done"
+
+    retry = restarted_client.post(f"/agent-runs/api/jobs/{job.job_id}/retry")
+    assert retry.status_code == 409
+    assert "archived" in retry.json()["detail"]
+
+    restored = restarted_client.post(f"/agent-runs/api/jobs/{job.job_id}/restore")
+    assert restored.status_code == 200
+    assert restored.json()["job"]["metadata"]["agent_runs_archive"]["archived"] is False
+    visible = restarted_client.get("/agent-runs/api/status").json()
+    assert visible["runs"][0]["job_id"] == job.job_id
+    assert visible["runs"][0]["archived"] is False
 
 
 def test_agent_runs_api_rejects_clear_for_unfinished_job(tmp_path, monkeypatch) -> None:
@@ -1887,6 +2870,76 @@ def test_agent_runs_api_rejects_clear_for_unfinished_job(tmp_path, monkeypatch) 
     response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/clear")
 
     assert response.status_code == 409
+
+
+def test_agent_runs_api_can_clear_stopped_job_without_rewriting_status(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+    store = CloydSmithJobStore(database)
+    job = store.create(CloydSmithJobCreate(objective="Stopped work.", current_prompt="Report."))
+    store.update(
+        job.job_id,
+        CloydSmithJobUpdate(
+            status=CloydSmithJobStatus.STOPPED,
+            phase="operator_stopped",
+            last_evidence={"runtime_stop": {"ok": True}},
+        ),
+    )
+
+    response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/clear")
+
+    assert response.status_code == 200
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.STOPPED
+    assert loaded.phase == "operator_stopped"
+    assert loaded.last_evidence == {"runtime_stop": {"ok": True}}
+    assert loaded.metadata["agent_runs_archive"]["previous_status"] == "stopped"
+
+
+def test_agent_runs_api_can_clear_old_terminal_jobs_from_monitor(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+    store = CloydSmithJobStore(database)
+    verified = store.create(CloydSmithJobCreate(objective="Verified work.", current_prompt="Verified."))
+    done = store.create(CloydSmithJobCreate(objective="Done work.", current_prompt="Done."))
+    stopped = store.create(CloydSmithJobCreate(objective="Stopped work.", current_prompt="Stopped."))
+    blocked = store.create(CloydSmithJobCreate(objective="Blocked work.", current_prompt="Blocked."))
+    queued = store.create(CloydSmithJobCreate(objective="Queued work.", current_prompt="Queued."))
+    store.update(verified.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.VERIFIED))
+    store.update(done.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.DONE))
+    store.update(stopped.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.STOPPED, next_action="operator_stopped_all_work"))
+    store.update(blocked.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.BLOCKED, error="needs a decision"))
+
+    response = TestClient(freyja_main.app).post("/agent-runs/api/jobs/clear-old")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["action"] == "clear-old"
+    assert set(body["updated_jobs"]) == {verified.job_id, done.job_id, stopped.job_id}
+    assert store.get(verified.job_id).status == CloydSmithJobStatus.VERIFIED
+    assert store.get(done.job_id).status == CloydSmithJobStatus.DONE
+    assert store.get(stopped.job_id).status == CloydSmithJobStatus.STOPPED
+    assert store.get(stopped.job_id).next_action == "operator_stopped_all_work"
+    assert store.get(blocked.job_id).status == CloydSmithJobStatus.BLOCKED
+    assert store.get(queued.job_id).status == CloydSmithJobStatus.QUEUED
+    assert store.get(done.job_id).metadata["agent_runs_archive"]["bulk"] is True
+    assert store.get(done.job_id).metadata["cleared_from_monitor"]["archived"] is True
+
+    status = TestClient(freyja_main.app).get("/agent-runs/api/status").json()
+    visible_ids = {run["job_id"] for run in status["runs"]}
+    assert visible_ids == {queued.job_id, blocked.job_id}
+    assert status["queue"]["blocked"] == 1
+    assert status["queue"]["queued"] == 1
+    assert status["hidden_terminal_count"] == 3
+    assert status["archived_count"] == 3
+
+    restarted_status = TestClient(freyja_main.app).get("/agent-runs/api/status").json()
+    assert {run["job_id"] for run in restarted_status["runs"]} == {queued.job_id, blocked.job_id}
+    shown = TestClient(freyja_main.app).get("/agent-runs/api/status?show_archived=1").json()
+    shown_ids = {run["job_id"] for run in shown["runs"]}
+    assert {verified.job_id, done.job_id, stopped.job_id, blocked.job_id, queued.job_id}.issubset(shown_ids)
+    assert shown["show_archived"] is True
 
 
 def test_agent_runs_api_can_mark_timeout_review_job_blocked(tmp_path, monkeypatch) -> None:
@@ -2314,10 +3367,18 @@ def test_agent_runs_requeue_incomplete_jobs(tmp_path, monkeypatch) -> None:
     running = store.create(CloydSmithJobCreate(objective="Running work.", current_prompt="Do it."))
     review = store.create(CloydSmithJobCreate(objective="Review work.", current_prompt="Review it."))
     blocked = store.create(CloydSmithJobCreate(objective="Blocked work.", current_prompt="Blocked."))
+    archived_blocked = store.create(
+        CloydSmithJobCreate(
+            objective="Archived blocked work.",
+            current_prompt="Do not requeue.",
+            metadata={"agent_runs_archive": {"archived": True, "archived_at": datetime.now(UTC).isoformat()}},
+        )
+    )
     done = store.create(CloydSmithJobCreate(objective="Done work.", current_prompt="Done."))
     store.update(running.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING))
     store.update(review.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.NEEDS_REVIEW))
     store.update(blocked.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.BLOCKED, error="blocked"))
+    store.update(archived_blocked.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.BLOCKED, error="archived"))
     store.update(done.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.DONE))
 
     response = TestClient(freyja_main.app).post("/agent-runs/api/jobs/requeue-incomplete")
@@ -2330,8 +3391,172 @@ def test_agent_runs_requeue_incomplete_jobs(tmp_path, monkeypatch) -> None:
     assert store.get(running.job_id).status == CloydSmithJobStatus.QUEUED
     assert store.get(review.job_id).status == CloydSmithJobStatus.QUEUED
     assert store.get(blocked.job_id).status == CloydSmithJobStatus.QUEUED
+    assert store.get(archived_blocked.job_id).status == CloydSmithJobStatus.BLOCKED
     assert store.get(done.job_id).status == CloydSmithJobStatus.DONE
     assert store.get_heartbeat(blocked.job_id).phase == "operator_bulk_requeued"
+
+
+def test_agent_runs_stop_job_aborts_running_runtime_before_stopped(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+    stop_calls = []
+
+    async def fake_status(request):
+        return {"ok": True, "session": "ses_stop", "state": {"type": "busy"}}
+
+    async def fake_stop(request):
+        stop_calls.append(request.arguments)
+        return {"ok": True, "session": "ses_stop", "aborted": True}
+
+    monkeypatch.setattr(freyja_main, "_opencode_status", fake_status)
+    monkeypatch.setattr(freyja_main, "_opencode_stop", fake_stop)
+    store = CloydSmithJobStore(database)
+    job = store.create(CloydSmithJobCreate(objective="Running work.", current_prompt="Do it."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING, session_id="ses_stop"))
+
+    response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/stop")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["ok"] is True
+    assert body["action"] == "stop"
+    assert body["runtime_stop"]["session"] == "ses_stop"
+    assert stop_calls == [{"alias": "freyja-code"}]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.STOPPED
+    assert loaded.stop_intent == "immediate"
+    assert loaded.phase == "operator_stopped"
+    assert store.get_heartbeat(job.job_id).phase == "operator_stopped"
+    events = [event["event_type"] for event in store.events(job.job_id, limit=5)]
+    assert "operator_stop_runtime" in events
+    assert "operator_stop" in events
+
+
+def test_agent_runs_stop_job_records_active_command_before_abort(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+    calls = []
+
+    async def fake_status(request):
+        calls.append(("status", request.arguments))
+        return {
+            "ok": True,
+            "session": "ses_stop",
+            "state": {"type": "busy"},
+            "recent_action": {"tool": "bash", "status": "running", "command": "sleep 60"},
+        }
+
+    async def fake_stop(request):
+        calls.append(("stop", request.arguments))
+        return {"ok": True, "session": "ses_stop", "aborted": True}
+
+    monkeypatch.setattr(freyja_main, "_opencode_status", fake_status)
+    monkeypatch.setattr(freyja_main, "_opencode_stop", fake_stop)
+    store = CloydSmithJobStore(database)
+    job = store.create(CloydSmithJobCreate(objective="Running shell work.", current_prompt="Do it."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING, session_id="ses_stop"))
+
+    response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/stop")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["ok"] is True
+    assert calls == [
+        ("status", {"alias": "freyja-code"}),
+        ("stop", {"alias": "freyja-code"}),
+    ]
+    loaded = store.get(job.job_id)
+    before_stop = loaded.last_evidence["runtime_status_before_stop"]
+    assert before_stop["recent_action"]["tool"] == "bash"
+    assert before_stop["recent_action"]["status"] == "running"
+    assert before_stop["recent_action"]["command"] == "sleep 60"
+    stop_events = [event for event in store.events(job.job_id, limit=10) if event["event_type"] == "operator_stop_runtime"]
+    assert stop_events
+    assert stop_events[0]["payload"]["runtime_status_before_stop"]["recent_action"]["command"] == "sleep 60"
+
+
+def test_agent_runs_stop_job_attempts_stop_when_status_preflight_fails(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+    calls = []
+
+    async def fake_status(request):
+        calls.append(("status", request.arguments))
+        return {"ok": False, "session": "ses_stop", "error": "status timeout"}
+
+    async def fake_stop(request):
+        calls.append(("stop", request.arguments))
+        return {"ok": True, "session": "ses_stop", "aborted": True}
+
+    monkeypatch.setattr(freyja_main, "_opencode_status", fake_status)
+    monkeypatch.setattr(freyja_main, "_opencode_stop", fake_stop)
+    store = CloydSmithJobStore(database)
+    job = store.create(CloydSmithJobCreate(objective="Running work.", current_prompt="Do it."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING, session_id="ses_stop"))
+
+    response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/stop")
+
+    assert response.status_code == 200
+    assert calls == [
+        ("status", {"alias": "freyja-code"}),
+        ("stop", {"alias": "freyja-code"}),
+    ]
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.STOPPED
+    assert loaded.last_evidence["runtime_status_before_stop"]["error"] == "status timeout"
+
+
+def test_agent_runs_stop_job_keeps_stopping_when_runtime_stop_fails(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+
+    async def fake_status(request):
+        return {"ok": True, "session": "ses_stop", "state": {"type": "busy"}}
+
+    async def fake_stop(request):
+        return {"ok": False, "session": "ses_stop", "error": "permission wait"}
+
+    monkeypatch.setattr(freyja_main, "_opencode_status", fake_status)
+    monkeypatch.setattr(freyja_main, "_opencode_stop", fake_stop)
+    store = CloydSmithJobStore(database)
+    job = store.create(CloydSmithJobCreate(objective="Running work.", current_prompt="Do it."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING, session_id="ses_stop"))
+
+    response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/stop")
+
+    assert response.status_code == 503
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.STOPPING
+    assert loaded.phase == "operator_stop_failed"
+    assert loaded.next_action == "OpenCode stop failed; reconcile runtime before restart"
+    assert store.get_heartbeat(job.job_id).phase == "operator_stop_failed"
+
+
+def test_agent_runs_stop_after_current_turn_persists_intent_without_runtime_stop(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "jobs.db"
+    monkeypatch.setattr(freyja_main.settings, "cloyd_smith_loop_database_path", str(database))
+
+    async def fail_stop(request):
+        raise AssertionError("stop-after-current-turn must not abort the runtime")
+
+    monkeypatch.setattr(freyja_main, "_opencode_stop", fail_stop)
+    store = CloydSmithJobStore(database)
+    job = store.create(CloydSmithJobCreate(objective="Running work.", current_prompt="Do it."))
+    store.update(job.job_id, CloydSmithJobUpdate(status=CloydSmithJobStatus.RUNNING, session_id="ses_stop"))
+
+    response = TestClient(freyja_main.app).post(f"/agent-runs/api/jobs/{job.job_id}/stop-after-current-turn")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["ok"] is True
+    assert body["action"] == "stop-after-current-turn"
+    loaded = store.get(job.job_id)
+    assert loaded.status == CloydSmithJobStatus.RUNNING
+    assert loaded.phase == "stop_after_current_turn_requested"
+    assert loaded.stop_intent == "after_current_turn"
+    assert loaded.next_action == "waiting for current turn boundary before stopping"
+    assert store.get_heartbeat(job.job_id).phase == "stop_after_current_turn_requested"
+    assert store.events(job.job_id)[0]["event_type"] == "operator_stop_after_current_turn"
 
 
 def test_agent_runs_stop_all_incomplete_jobs(tmp_path, monkeypatch) -> None:

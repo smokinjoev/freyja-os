@@ -77,31 +77,29 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
     cloyd = agents["cloyd"]
     assert cloyd["model_profile"] == "strong_reasoning"
     assert "planning brain" in cloyd["system_prompt"]
-    assert "free-running Iris Qwen Code/OpenCode session" in cloyd["system_prompt"]
-    assert "send Qwen Code a precise task prompt" in cloyd["system_prompt"]
+    assert "single active Iris OpenCode worker" in cloyd["system_prompt"]
+    assert "one bounded OpenCode/Cloyd-Smith worker path" in cloyd["system_prompt"]
     assert "family webpage" in cloyd["system_prompt"]
     assert "cloyd-dashboard-web" in cloyd["system_prompt"]
     assert "/home/joe/cloyd-services/dashboard" in cloyd["system_prompt"]
-    assert "Prefer `opencode.send`" in cloyd["system_prompt"]
-    assert "`opencode.shell` only for small diagnostic checks" in cloyd["system_prompt"]
-    assert "docs/operations/cloyd-runtime-contract.md" in cloyd["system_prompt"]
-    assert "Freyja 5.2 durable Cloyd-Smith loop" in cloyd["system_prompt"]
+    assert "Direct OpenCode tools are only for single-turn status" in cloyd["system_prompt"]
+    assert "iterative, exploratory, background" in cloyd["system_prompt"]
+    assert "durable Cloyd-Smith loop" in cloyd["system_prompt"]
+    assert "http://100.115.228.56:8000/agent-runs" in cloyd["system_prompt"]
+    assert "Never leave a direct OpenCode tool call without a visible final answer" in cloyd["system_prompt"]
     assert "may outlive the browser connection" in cloyd["system_prompt"]
     assert "job ledger" in cloyd["system_prompt"]
-    assert "begin monitoring Agents" in cloyd["system_prompt"]
-    assert "monitor opencode" in cloyd["system_prompt"]
-    assert "/agent-runs" in cloyd["system_prompt"]
-    assert "http://0.0.0.0:8000/agent-runs" in cloyd["system_prompt"]
-    assert "`supervisor` heartbeat field" in cloyd["system_prompt"]
-    assert "alive, stale, or missing" in cloyd["system_prompt"]
-    assert "never a `127.0.0.1` localhost URL" in cloyd["system_prompt"]
+    assert "games/<slug>/index.html" in cloyd["system_prompt"]
+    assert "instead of asking through a form" in cloyd["system_prompt"]
+    assert "status telemetry is unknown, say unknown" in cloyd["system_prompt"]
     assert "show the diff" in cloyd["system_prompt"]
     assert "verify the served page" in cloyd["system_prompt"]
+    assert "freyja_home_memory" in cloyd["system_prompt"]
     assert "Never report success from an edit command alone" in cloyd["system_prompt"]
-    assert "cloyd_smith.replace" in cloyd["system_prompt"]
     assert "opencode.status" in cloyd["tools"]["allow"]
     assert "cloyd_smith.status" in cloyd["tools"]["allow"]
     assert set(cloyd["tools"]["coding"]) == {
+        "opencode.run",
         "opencode.start",
         "opencode.send",
         "opencode.shell",
@@ -119,12 +117,15 @@ def test_cloyd_delegates_coding_to_agent_smith() -> None:
         "children.admin",
         "cloud_fallback",
         "unrestricted_shell",
-        "calendar.create",
         "reminders.create",
-        "shortcuts.run",
         "home.device_action",
     }.issubset(set(cloyd["tools"]["deny"]))
-    assert cloyd["tools"]["confirm"] == []
+    assert set(cloyd["tools"]["confirm"]) == {
+        "calendar.create",
+        "apple.messages.send",
+        "apple.music.write",
+        "shortcuts.run",
+    }
 
 
 def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
@@ -132,9 +133,8 @@ def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
 
     assert len(text) < 2500
     assert "Cloyd is Joe's technical brain" in text
-    assert "free-running" in text
-    assert "qwen3:30b-a3b" in text
-    assert "qwen3-coder-next:q4_K_M" in text
+    assert "single active Iris OpenCode worker" in text
+    assert "qwen3.8:27b" in text
     assert "http://100.115.228.56:4097" in text
     assert "cloyd-dashboard-web" in text
     assert "/home/joe/cloyd-services/dashboard/index.html" in text
@@ -142,6 +142,9 @@ def test_cloyd_runtime_contract_is_compact_and_actionable() -> None:
     assert "Every Qwen Code prompt must include a hard action budget" in text
     assert "Default budget for read-only checks: at most 3 runtime actions" in text
     assert "detached supervision" in text
+    assert "iterative or exploratory coding tasks" in text
+    assert "Receipt: answer immediately with the job id and monitor URL" in text
+    assert "Always finish with a visible answer" in text
     assert "not done yet" in text
     assert "browser, iPad, or OpenWebUI stream disconnects" in text
     assert "If output repeats the same conclusion twice" in text

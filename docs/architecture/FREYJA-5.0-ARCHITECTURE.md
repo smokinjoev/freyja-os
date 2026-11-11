@@ -28,7 +28,7 @@ audited by policy.
 Canonical agent configuration is kept in source control via
 `src/freyja/foundation_seed.py` and summarized in
 `config/freyja-5.0-agents.yaml`. Freyja, Cloyd Gibbler, Benedict, Benedict
-Paralegal, Agent 44, and Jenna agent are persistent logical agents with scoped
+Paralegal, Agent 47, and Jenna agent are persistent logical agents with scoped
 memory/tool grants.
 
 ## MCP Topology
@@ -45,7 +45,7 @@ plane behind Nexus semantic routes. Hera is a voice/avatar channel edge and
 publishes semantic events into the Gateway rather than becoming a general tool
 server.
 
-Freyja, Cloyd, Benedict, Benedict Paralegal, Agent 44, and Jenna agent consume
+Freyja, Cloyd, Benedict, Benedict Paralegal, Agent 47, and Jenna agent consume
 MCP tools through scoped grants in `src/freyja/foundation_seed.py`. They do not
 each run duplicated MCP servers unless a future capability requires an
 agent-owned service boundary. This keeps policy, audit, and host-specific

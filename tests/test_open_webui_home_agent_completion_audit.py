@@ -32,13 +32,13 @@ def test_completion_audit_reports_expected_current_gate_statuses() -> None:
     assert audit["status_counts"]["credential_gated"] >= 1
     assert audit["completion_metrics"] == {
         "total_requirements": 15,
-        "complete_requirements": 13,
-        "incomplete_requirements": 2,
+        "complete_requirements": 12,
+        "incomplete_requirements": 3,
         "auth_gated_requirements": 0,
         "credential_gated_requirements": 1,
-        "partial_requirements": 1,
+        "partial_requirements": 2,
         "external_gated_requirements": 1,
-        "verified_completion_percent": 86.7,
+        "verified_completion_percent": 80.0,
     }
     assert audit["exact_next_action"].startswith("Stop any other Telegram getUpdates poller")
     assert audit["required_next_actions"][0].startswith("Stop any other Telegram getUpdates poller")
