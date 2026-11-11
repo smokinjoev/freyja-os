@@ -16,4 +16,7 @@ set -a
 . "$ENV_FILE"
 set +a
 
-exec /Users/freyja/freyja-os/.venv/bin/python /Users/freyja/freyja-os/scripts/run-discord-dm-connector.py
+script_dir="$(cd -- "$(dirname -- "$0")" && pwd -P)"
+repo_root="$(cd -- "${script_dir}/.." && pwd -P)"
+
+exec "${repo_root}/.venv/bin/python" "${repo_root}/scripts/run-discord-dm-connector.py"

@@ -8,6 +8,14 @@ from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER = REPO_ROOT / "scripts" / "freyja-core-mcp-server.py"
+WRAPPER = REPO_ROOT / "scripts" / "run-freyja-core-mcp.sh"
+
+
+def test_freyja_core_mcp_wrapper_resolves_its_checkout() -> None:
+    wrapper = WRAPPER.read_text()
+
+    assert 'repo_root="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"' in wrapper
+    assert 'repo_root="/Users/freyja/freyja-os"' not in wrapper
 
 
 def _load_server_module():

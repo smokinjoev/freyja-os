@@ -22,6 +22,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 VERIFY_SCRIPT = REPO_ROOT / "scripts" / "verify-discord-messaging.py"
 ENV_VALIDATE_SCRIPT = REPO_ROOT / "scripts" / "validate-discord-private-env.py"
 DM_RUNNER_SCRIPT = REPO_ROOT / "scripts" / "run-discord-dm-connector.py"
+DM_ENV_WRAPPER = REPO_ROOT / "scripts" / "run-discord-dm-connector-with-env.sh"
+
+
+def test_discord_dm_env_wrapper_resolves_its_checkout() -> None:
+    wrapper = DM_ENV_WRAPPER.read_text()
+
+    assert 'repo_root="$(cd -- "${script_dir}/.." && pwd -P)"' in wrapper
+    assert '/Users/freyja/freyja-os/.venv/bin/python' not in wrapper
 
 
 def _settings() -> DiscordSettings:
