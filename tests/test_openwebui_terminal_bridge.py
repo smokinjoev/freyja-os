@@ -50,7 +50,10 @@ def test_bridge_lifecycle_sends_literal_keys_and_stops(tmp_path: Path) -> None:
         assert sent["ok"] is True
         deadline = time.monotonic() + 3
         read = _bridge("read", SESSION, "--lines", "80", state_dir=tmp_path)
-        while "BRIDGE_TEST_OK" not in str(read["output"]) and time.monotonic() < deadline:
+        while (
+            "BRIDGE_TEST_OK" not in str(read["output"])
+            or str(REPO_ROOT) not in str(read["output"])
+        ) and time.monotonic() < deadline:
             time.sleep(0.05)
             read = _bridge("read", SESSION, "--lines", "80", state_dir=tmp_path)
         assert read["ok"] is True
