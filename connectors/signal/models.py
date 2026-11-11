@@ -20,6 +20,7 @@ class InboundMessage(BaseModel):
     message_id: str
     timestamp: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
     group_id: str | None = None
+    is_sync_message: bool = False
     attachments: list[SignalAttachment] = Field(default_factory=list)
 
     @property

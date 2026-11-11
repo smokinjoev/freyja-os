@@ -519,8 +519,19 @@ def test_verify_registration_posts_code_without_reporting_secrets(monkeypatch) -
         }
     ]
     assert "+15550000009" not in str(result)
-    assert "123-456" not in str(result)
-    assert "9876" not in str(result)
+    # Do not serialize the complete report for this check: a secret-looking
+    # digit sequence can occur coincidentally in `generated_at` fractional
+    # seconds.  Verify the response contract directly instead.
+    assert "verification_code" not in result
+    assert "code" not in result
+    assert "pin" not in result
+    assert result["plan"] == {
+        "account_number_configured": True,
+        "account_number_hash": result["plan"]["account_number_hash"],
+        "rest_api_url": "http://signal-api:8080",
+        "verification_code_supplied": True,
+        "pin_supplied": True,
+    }
 
 
 def test_verify_http_error_reports_status_without_code(monkeypatch) -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import hashlib
+from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Protocol
 from urllib.parse import quote
@@ -45,6 +46,7 @@ class SignalRestTransport:
         self._account_number = self._settings.signal_account_number.strip()
         self._http_client = http_client
         self._owns_http_client = http_client is None
+        self._sent_timestamps: deque[int] = deque(maxlen=1000)
 
     async def _client(self) -> httpx.AsyncClient:
         if self._http_client is None or self._http_client.is_closed:
@@ -73,10 +75,17 @@ class SignalRestTransport:
             raise UnsupportedSignalEvent("event has no envelope")
 
         data_message = envelope.get("dataMessage")
+        is_sync_message = False
+        if not isinstance(data_message, dict):
+            sync_message = envelope.get("syncMessage")
+            sent_message = sync_message.get("sentMessage") if isinstance(sync_message, dict) else None
+            if isinstance(sent_message, dict):
+                data_message = sent_message
+                is_sync_message = True
         if not isinstance(data_message, dict):
             raise UnsupportedSignalEvent("event is not a data message")
 
-        sender = envelope.get("sourceNumber") or envelope.get("source")
+        sender = envelope.get("sourceNumber") or envelope.get("source") or payload.get("account")
         timestamp_ms = data_message.get("timestamp") or envelope.get("timestamp")
         if not isinstance(sender, str) or not sender.strip():
             raise UnsupportedSignalEvent("data message has no sender")
@@ -106,8 +115,16 @@ class SignalRestTransport:
             message_id=f"{_safe_identifier(sender)}:{timestamp_ms}",
             timestamp=timestamp,
             group_id=group_id,
+            is_sync_message=is_sync_message,
             attachments=attachments,
         )
+
+    def _consume_sent_timestamp(self, timestamp_ms: int) -> bool:
+        try:
+            self._sent_timestamps.remove(timestamp_ms)
+        except ValueError:
+            return False
+        return True
 
     @staticmethod
     def _parse_attachments(data_message: dict[str, Any]) -> list[SignalAttachment]:
@@ -176,7 +193,15 @@ class SignalRestTransport:
                 )
                 continue
 
-            if message.sender == self._account_number:
+            timestamp_ms = int(message.timestamp.timestamp() * 1000) if message.timestamp else 0
+            if message.is_sync_message and self._consume_sent_timestamp(timestamp_ms):
+                logger.info({
+                    "event": "signal_transport_event_rejected",
+                    "reason": "outbound_echo",
+                })
+                continue
+
+            if message.sender == self._account_number and not message.is_sync_message:
                 logger.info(
                     {
                         "event": "signal_transport_event_rejected",
@@ -214,6 +239,12 @@ class SignalRestTransport:
             client = await self._client()
             result = await client.post(f"{self._base_url}/v2/send", json=payload)
             result.raise_for_status()
+            response_payload = result.json()
+            timestamp = response_payload.get("timestamp") if isinstance(response_payload, dict) else None
+            if isinstance(timestamp, str) and timestamp.isdigit():
+                timestamp = int(timestamp)
+            if isinstance(timestamp, int):
+                self._sent_timestamps.append(timestamp)
         except httpx.HTTPError as exc:
             logger.warning(
                 {
