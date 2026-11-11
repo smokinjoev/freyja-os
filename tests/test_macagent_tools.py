@@ -220,6 +220,22 @@ async def test_apple_mailbox_counts_invokes_macagent_envelope(
 
 
 @pytest.mark.asyncio
+async def test_apple_mail_search_invokes_macagent_envelope(registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = {}
+
+    class Client:
+        async def invoke(self, request):
+            captured["request"] = request
+            return MacAgentOperationResult(ok=True, capability="apple.mail.read", operation="search_messages", output={"messages": []})
+
+    monkeypatch.setattr("freyja.tools.builtin.MacAgentClient", Client)
+    result = await registry.execute(ToolExecutionRequest(tool_name="apple_mail_search", arguments={"query": "dentist", "limit": 3}, metadata={"director_authorized": True}))
+    assert result.success is True
+    assert captured["request"].operation == "search_messages"
+    assert captured["request"].arguments == {"query": "dentist", "limit": 3}
+
+
+@pytest.mark.asyncio
 async def test_apple_music_current_track_invokes_macagent_envelope(
     registry: ToolRegistry,
     monkeypatch: pytest.MonkeyPatch,
