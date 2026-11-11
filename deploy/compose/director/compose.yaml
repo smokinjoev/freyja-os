@@ -81,11 +81,19 @@ services:
       MACAGENT_TOKEN: ${MACAGENT_TOKEN:-}
       MACAGENT_TIMEOUT_SECONDS: ${MACAGENT_TIMEOUT_SECONDS:-5.0}
       WEATHER_TOOL_ENABLED: ${WEATHER_TOOL_ENABLED:-false}
+      GMAIL_REMINDER_STORE_PATH: /app/data/gmail-reminders.sqlite3
+      GMAIL_INBOX_OWNER: ${GMAIL_INBOX_OWNER:-joe}
+      GMAIL_INBOX_ACTIONS_ENABLED: ${GMAIL_INBOX_ACTIONS_ENABLED:-false}
+      GMAIL_IMAP_HOST: ${GMAIL_IMAP_HOST:-imap.gmail.com}
+      GMAIL_IMAP_PORT: ${GMAIL_IMAP_PORT:-993}
+      GMAIL_IMAP_USERNAME: ${GMAIL_IMAP_USERNAME:-}
+      GMAIL_IMAP_APP_PASSWORD: ${GMAIL_IMAP_APP_PASSWORD:-}
       REPOSITORY_ROOT: /repo
     ports:
       - "${FREYJA_DIRECTOR_BIND_IP:-127.0.0.1}:${FREYJA_DIRECTOR_HOST_PORT:-8000}:8000"
     volumes:
       - ../../../data:/app/data
+      - ../../../secrets:/app/secrets:ro
       - ../../../.git:/repo/.git:ro
       - ../../../.venv:/repo/.venv:ro
       - ../../../README.md:/repo/README.md:ro
@@ -121,3 +129,33 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  gmail-reminder-monitor:
+    profiles: ["gmail-reminders"]
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/director.Dockerfile
+    restart: unless-stopped
+    user: "1000:1000"
+    command: ["python", "-m", "connectors.gmail.monitor", "--watch"]
+    environment:
+      GMAIL_INBOX_MONITOR_ENABLED: "true"
+      GMAIL_INBOX_OWNER: ${GMAIL_INBOX_OWNER:-joe}
+      GMAIL_IMAP_HOST: ${GMAIL_IMAP_HOST:-imap.gmail.com}
+      GMAIL_IMAP_PORT: ${GMAIL_IMAP_PORT:-993}
+      GMAIL_IMAP_USERNAME: ${GMAIL_IMAP_USERNAME:-}
+      GMAIL_IMAP_APP_PASSWORD: ${GMAIL_IMAP_APP_PASSWORD:-}
+      GMAIL_INBOX_FOLDER: ${GMAIL_INBOX_FOLDER:-INBOX}
+      GMAIL_INBOX_LOOKBACK_DAYS: ${GMAIL_INBOX_LOOKBACK_DAYS:-7}
+      GMAIL_INBOX_MAX_MESSAGES: ${GMAIL_INBOX_MAX_MESSAGES:-100}
+      GMAIL_INBOX_UNREAD_ONLY: ${GMAIL_INBOX_UNREAD_ONLY:-false}
+      GMAIL_INBOX_POLL_INTERVAL_SECONDS: ${GMAIL_INBOX_POLL_INTERVAL_SECONDS:-900}
+      GMAIL_INBOX_ACTIONS_ENABLED: ${GMAIL_INBOX_ACTIONS_ENABLED:-false}
+      GMAIL_REMINDER_STORE_PATH: /app/data/gmail-reminders.sqlite3
+    volumes:
+      - ../../../data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true

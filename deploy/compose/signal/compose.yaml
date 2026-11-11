@@ -2,7 +2,7 @@ name: freyja-signal-atlas
 
 services:
   signal-api:
-    image: ${SIGNAL_REST_API_IMAGE:-bbernhard/signal-cli-rest-api:0.100}
+    image: ${SIGNAL_REST_API_IMAGE:-bbernhard/signal-cli-rest-api:0.101}
     restart: unless-stopped
     environment:
       MODE: native
@@ -25,6 +25,7 @@ services:
       context: ../../..
       dockerfile: deploy/docker/signal-connector.Dockerfile
     restart: unless-stopped
+    user: "${FREYJA_DATA_UID:-1000}:${FREYJA_DATA_GID:-1000}"
     depends_on:
       signal-api:
         condition: service_healthy
@@ -40,6 +41,12 @@ services:
       SIGNAL_REQUEST_TIMEOUT_SECONDS: ${SIGNAL_REQUEST_TIMEOUT_SECONDS:-30}
       SIGNAL_RECONNECT_MAX_SECONDS: ${SIGNAL_RECONNECT_MAX_SECONDS:-60}
       SIGNAL_MAX_MESSAGE_CHARS: ${SIGNAL_MAX_MESSAGE_CHARS:-4000}
+      SIGNAL_REMINDER_NOTIFICATIONS_ENABLED: ${SIGNAL_REMINDER_NOTIFICATIONS_ENABLED:-false}
+      SIGNAL_REMINDER_NOTIFICATION_RECIPIENT: ${SIGNAL_REMINDER_NOTIFICATION_RECIPIENT:-}
+      SIGNAL_REMINDER_NOTIFICATION_INTERVAL_SECONDS: ${SIGNAL_REMINDER_NOTIFICATION_INTERVAL_SECONDS:-900}
+      GMAIL_REMINDER_STORE_PATH: /app/data/gmail-reminders.sqlite3
+    volumes:
+      - ../../../data:/app/data
     networks:
       - signal-private
       - atlas-egress

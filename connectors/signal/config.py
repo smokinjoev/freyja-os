@@ -23,6 +23,10 @@ class SignalSettings(BaseSettings):
     signal_poll_interval_seconds: float = 5.0
     signal_transport_timeout_seconds: float = 60.0
     signal_reconnect_max_seconds: float = 60.0
+    signal_reminder_notifications_enabled: bool = False
+    signal_reminder_notification_recipient: str = ""
+    signal_reminder_notification_interval_seconds: int = 900
+    gmail_reminder_store_path: str = "data/gmail-reminders.sqlite3"
 
     @property
     def allowed_sender_set(self) -> set[str]:
