@@ -1,17 +1,17 @@
 # Freyja Source Consolidation
 
-The shared integration branch, `codex/freyja-consolidation`, is the reviewed
-source for changes that have passed the repository test suite.  Promotion to
-`main` remains an explicit review step; no host should treat an unreviewed
-working tree as the shared baseline.
+`main` is the reviewed shared source for Freyja. The former
+`codex/freyja-consolidation` branch is a historical integration record; its
+reviewed slices were promoted to `main` individually. No host should treat an
+unreviewed working tree as the shared baseline.
 
 ## Current host boundary
 
 | Host | Runtime source | State | Migration rule |
 | --- | --- | --- | --- |
-| Atlas | `/home/joe/freyja-os` | Canonical checkout, deployed through the Director and Signal compose projects | Update only by fast-forwarding the consolidation branch, rebuilding affected services, and checking health plus runtime-data mounts. |
+| Atlas | `/home/joe/freyja-os` | Canonical checkout, deployed through the Director and Signal compose projects | Update from reviewed `main`, rebuild affected services, and check health plus runtime-data mounts. |
 | Iris | `/Users/freyja/freyja-os-canonical-staging` | MacAgent, the iMessage runtime manifest, Director, OpenAI-compatible API, Cloyd/Smith workers, Core-MCP, and both Discord DM connectors run canonical staging | Keep the canonical staging checkout clean, validate authenticated MacAgent and Director health, require zero iMessage manifest drift plus a single managed connector, and check Core-MCP and both Discord workers after every service change. The former dirty checkout is retained only as a dated recovery archive. |
-| Vulcan | `/home/joe/freyja-os-consolidation` | Active Paralegal Director runs the clean canonical checkout | Update only after focused and full-suite validation, then restart the systemd user service and check its health. The prior dirty Paralegal checkout is retained in a dated recovery location. |
+| Vulcan | `/home/joe/freyja-os-consolidation` | Active Paralegal Director runs the clean canonical checkout | Update from reviewed `main` after focused and full-suite validation, then restart the systemd user service and check its health. The prior dirty Paralegal checkout is retained in a dated recovery location. |
 
 ## Host-specific overlays
 
